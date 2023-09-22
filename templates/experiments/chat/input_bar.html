@@ -1,0 +1,24 @@
+<script>
+  function checkInput() {
+    var message = document.querySelector('input[name="message"]').value;
+    if (message.trim() === "") {
+      document.getElementById('message-submit').disabled = true;
+    } else {
+      document.getElementById('message-submit').disabled = false;
+    }
+  }
+</script>
+
+<form class="w-full p-2 bg-gray-300"
+      hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id session.id %}"
+      hx-swap="outerHTML"
+      hx-indicator="#message-submit"
+  >
+  <div class="flex items-center w-full">
+    <input name="message" type="text" placeholder="Type your message..." aria-label="Message" class="input input-bordered input-primary w-full" oninput="checkInput()">
+    <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
+  </div>
+  <div class="w-full mt-2 text-center">
+    <label for="end-experiment-modal" class="btn btn-warning btn-xs" >End Experiment</label>
+  </div>
+</form>

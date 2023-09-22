@@ -1,0 +1,43 @@
+{% load i18n %}
+{% load form_tags %}
+<div id="invitation-form-and-table">
+  {% if request.team_membership.role == 'admin' %}
+  <section class="app-card">
+    <h3 class="pg-subtitle">{% translate "Invite Team Members" %}</h3>
+    <form hx-post="{% url 'single_team:send_invitation' request.team.slug %}" hx-target="#invitation-form-and-table">
+      {% csrf_token %}
+      {% render_form_fields invitation_form %}
+      {{ invitation_form.non_field_errors }}
+      <div class="pg-inline-buttons mt-2">
+        <input class="pg-button-secondary" type="submit" value="{% translate 'Send Invitation' %}">
+      </div>
+    </form>
+  </section>
+  {% endif %}
+  <section class="app-card">
+    {% if pending_invitations.count %}
+      <h3 class='pg-subtitle'>{% translate "Pending Invitations" %}</h3>
+      <div class='table-responsive'>
+        <table class="table pg-table">
+          <thead>
+          <tr>
+            <th>{% translate "Email" %}</th>
+            <th>{% translate "Invited" %}</th>
+            <th>{% translate "Role" %}</th>
+            {% if request.team_membership.role == 'admin' %}<th></th>{% endif %}
+          </tr>
+          </thead>
+          <tbody>
+          {% for invitation in pending_invitations %}
+            {% include 'teams/components/invitation_row.html' %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="my-2 has-text-grey text-muted">
+        {% translate "Any pending invitations will show up here until accepted." %}
+      </p>
+    {% endif %}
+  </section>
+</div>

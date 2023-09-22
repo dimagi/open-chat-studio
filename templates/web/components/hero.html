@@ -1,0 +1,26 @@
+{% load i18n %}
+{% load static %}
+<section class="my-8 mx-4">
+  <div class="container ">
+    <div class="pg-columns pg-align-items-center">
+      <div class="pg-column my-24 mx-12">
+        <img class="img-fluid dark:hidden block" src="{% static 'images/dimagi-logo.png' %}" alt="{% translate "Dimagi" %}">
+        <img class="img-fluid hidden dark:block" src="{% static 'images/dimagi-logo-white.png' %}" alt="{% translate "Dimagi" %}">
+      </div>
+      <div class="pg-column">
+        <h1 class="pg-title">{{project_meta.NAME}}</h1>
+        <h2 class="pg-subtitle">
+          {{project_meta.DESCRIPTION}}
+        </h2>
+        <p class="buttons">
+          <a class="pg-button-primary" href="{% url 'account_signup' %}">
+            {% translate "Create account" %}
+          </a>
+          <a class="pg-button-secondary" href="{% url 'account_login' %}">
+            {% translate "Sign In" %}
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

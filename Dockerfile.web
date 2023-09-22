@@ -1,0 +1,35 @@
+FROM python:3.11-buster
+ENV PYTHONUNBUFFERED=1
+
+# install node/npm
+RUN \
+  echo "deb https://deb.nodesource.com/node_16.x buster main" > /etc/apt/sources.list.d/nodesource.list && \
+  wget -qO- https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
+  apt-get update && \
+  apt-get install -yqq nodejs
+
+# Install FFmpeg dependencies for audio transcriptions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir /code
+WORKDIR /code
+
+COPY requirements requirements/
+COPY requirements.txt requirements.txt
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+COPY . /code/
+
+# build front end files
+RUN npm install
+RUN npm run build
+
+# why this has to be here:
+# https://stackoverflow.com/questions/59719175/where-to-run-collectstatic-when-deploying-django-app-to-heroku-using-docker
+RUN python manage.py collectstatic --noinput --settings=gpt_playground.settings_production
+
+
+# Run gunicorn by default
+CMD exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application

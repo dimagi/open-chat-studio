@@ -1,0 +1,22 @@
+{% load i18n %}
+<input type="checkbox" id="delete-modal" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box w-11/12 max-w-5xl">
+    <h3 class="font-bold text-lg">{% translate "Really delete team?" %}</h3>
+    <p class="py-4">
+      {% blocktranslate with team_name=request.team.name  %}
+      This will permanently delete the <em><strong>{{ team_name }}</strong></em> team and all associated data.
+      <strong>This action cannot be undone.</strong>
+      {% endblocktranslate %}
+    </p>
+    <footer class="modal-card-foot">
+      <div class="modal-action">
+        <form action="{% url 'single_team:delete_team' request.team.slug %} " method="post">
+          {% csrf_token %}
+          <button class="btn btn-error" type="submit">{% translate "I understand, permanently delete this team" %}</button>
+        </form>
+        <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
+      </div>
+    </footer>
+  </div>
+</div>

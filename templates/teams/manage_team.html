@@ -1,0 +1,68 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% load i18n %}
+{% load form_tags %}
+{% block page_head %}
+  <style>
+    /* Adds fade out effect when invitations are canceled */
+    tr.htmx-swapping td {
+      opacity: 0;
+      transition: opacity 1s ease-out;
+    }
+  </style>
+{% endblock %}
+{% block app %}
+<section class="app-card">
+  <h3 class="pg-subtitle">
+    {% translate "Team Details" %}
+  </h3>
+  <form method="post">
+    {% csrf_token %}
+    {% render_form_fields team_form %}
+    {% if create or request.team_membership.role == 'admin' %}
+      <div class="pg-inline-buttons">
+        <input class="pg-button-secondary" type="submit" value="{% translate 'Save Details' %}">
+      </div>
+    {% endif %}
+  </form>
+</section>
+{% if not create %}
+<section class="app-card">
+  <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
+  <div class='table-responsive'>
+    <table class="table pg-table">
+      <thead>
+      <tr>
+        <th>{% translate "Member" %}</th>
+        <th>{% translate "Role" %}</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for membership in team.sorted_memberships.all %}
+        <tr>
+          <td>
+            {% if request.team_membership.is_admin or request.team_membership == membership %}
+              <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
+            {% else %}
+              {{ membership.user }}
+            {% endif %}
+          </td>
+          <td>{{ membership.get_role_display }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% include 'teams/components/team_invitations.html' %}
+{% if request.team_membership.role == 'admin' %}
+  <section class="app-card">
+    <h3 class="pg-subtitle">
+      {% translate "Danger Zone" %}
+    </h3>
+    <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+  </section>
+  {% include 'teams/components/delete_team_modal.html' %}
+{% endif %}
+{% endif %}
+{% endblock %}

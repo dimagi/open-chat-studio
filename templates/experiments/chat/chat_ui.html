@@ -1,0 +1,75 @@
+<div id="message-list" class="chat-pane" data-url="{% url 'experiments:poll_messages' team.slug experiment.id session.id %}">
+  {% if not session.has_display_messages %}
+    {% if session.seed_task_id %}
+      {% with session.seed_task_id as task_id %}
+        {% include 'experiments/chat/chat_message_response.html' %}
+      {% endwith %}
+    {% else %}
+      <div class="chat-message-system flex">
+        {% include "experiments/chat/components/system_icon.html" %}
+        <div class="message-contents">
+          <p>Hello, you can ask me anything you want about {{ experiment.name }}.</p>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+  {% for message in session.get_messages_for_display %}
+    {% with message.content as message_text %}
+      {% with message.created_at_datetime as created_at_datetime %}
+        {% if message.is_ai_message %}
+          {% include 'experiments/chat/ai_message.html' %}
+        {% elif message.is_human_message %}
+          {% include 'experiments/chat/human_message.html' %}
+        {% endif %}
+      {% endwith %}
+    {% endwith %}
+  {% endfor %}
+</div>
+{% include 'experiments/chat/input_bar.html' %}
+{% include 'experiments/chat/end_experiment_modal.html' %}
+<script>
+  function scrollToBottom() {
+    const chatUI = document.getElementById('message-list');
+    chatUI.scrollTop = chatUI.scrollHeight;
+  }
+  
+  function appendMessage(messageHTML) {
+    const messageList = document.getElementById('message-list');
+    const newMessageDiv = document.createElement('div');
+    newMessageDiv.innerHTML = messageHTML;
+    
+    messageList.appendChild(newMessageDiv);
+  }
+  
+  function pollBackend() {
+    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+      // scroll to bottom of chat after every htmx request
+      const chatUI = document.getElementById('message-list');
+      chatUI.scrollTop = chatUI.scrollHeight;
+    });
+    const messageListDiv = document.getElementById('message-list');
+    var url = messageListDiv.getAttribute('data-url');
+    const lastMessage = messageListDiv.lastElementChild
+    const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
+    url = url + "?since=" + lastDateTime
+    console.log(url);
+    fetch(url)
+      .then(response => response.text())
+      .then(data => {
+        if (data && data) {
+          appendMessage(data);
+          console.log(data);
+          scrollToBottom();
+        }
+      });
+  }
+  
+  const pollInterval = 60000;
+  setInterval(pollBackend, pollInterval);
+  
+  // Scroll to the bottom of the chat after initial load
+  window.addEventListener('load', scrollToBottom);
+  
+  // Scroll to the bottom of the chat after every htmx request
+  document.body.addEventListener('htmx:afterOnLoad', scrollToBottom);
+  </script>

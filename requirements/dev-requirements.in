@@ -1,0 +1,7 @@
+-c requirements.txt
+pip-tools
+pre-commit
+black
+isort
+mock
+freezegun

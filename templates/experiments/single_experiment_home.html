@@ -1,0 +1,76 @@
+{% extends 'web/app/app_base.html' %}
+{% block app %}
+<div class="app-card">
+  <h1 class="pg-title">{{ experiment.name }}</h1>
+  <h2 class="pg-subtitle">{{ experiment.description }}</h2>
+  <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="my-2">
+    {% csrf_token %}
+    <input class="pg-button-primary" type="submit" value="New Session" />
+    {% if experiment.is_active %}
+      <a href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" class="pg-button-secondary">Public Experiment Link</a>
+    {% endif %}
+    {% if request.user.is_superuser %}
+      <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}" class="btn btn-outline btn-secondary">Invitations</a>
+      <a href="{% url 'admin:experiments_experiment_change' experiment.id %}" class="btn btn-outline btn-dark">Edit Experiment</a>
+    {% endif %}
+  </form>
+  <h2 class="pg-subtitle">Previous Chat Sessions</h2>
+  <div class="overflow-x-auto">
+    <table class="pg-table">
+    <thead>
+    <tr>
+      <th>Started</th>
+      <th>Last Message</th>
+      <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for session in sessions %}
+      <tr>
+        <td>{{ session.created_at }}</td>
+        <td>{{ session.updated_at }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">Continue Chat</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% if request.user.is_superuser %}
+<div class="app-card">
+  <h2 class="pg-subtitle">All Chat Sessions</h2>
+  <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+    {% csrf_token %}
+    <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+  </form>
+  <div class="overflow-x-auto">
+    <table class="pg-table">
+    <thead>
+    <tr>
+      <th>User</th>
+      <th>Started</th>
+      <th>Last Message</th>
+      <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for session in experiment.sessions.all %}
+      <tr>
+        <td>{{ session.user|default:"-" }}</td>
+        <td>{{ session.created_at }}</td>
+        <td>{{ session.updated_at }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}" class="link">
+            Session Details
+          </a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

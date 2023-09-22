@@ -1,0 +1,52 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+{% load form_tags %}
+{% block app %}
+<nav aria-label="breadcrumbs">
+  <ol class="pg-breadcrumbs">
+    <li class=""><a href="{% url 'single_team:manage_team' request.team.slug %}">{{ request.team.name }}</a></li>
+    <li class="pg-breadcrumb-active" aria-current="page">{{ membership.user.get_display_name }}</li>
+  </ol>
+</nav>
+<section class="app-card">
+  <div class="pg-columns">
+    <div id="profile-picture" class="pg-column-one-quarter">
+      <div>
+        <img class="avatar" src="{{ membership.user.avatar_url }}">
+        <div class="pg-text-centered">{{ membership.user.get_display_name }}</div>
+      </div>
+    </div>
+    <div class="pg-column">
+      <div>
+        <div class="pg-label">{% translate "Email" %}</div>
+        <div class="pg-text-muted">{{ membership.user.email }}</div>
+      </div>
+      <div class="mt-2">
+        <div class="pg-label">{% translate "Date Joined" %}</div>
+        <div class="pg-text-muted">{{ membership.created_at }}</div>
+      </div>
+      <form class="mt-2" method="post">
+        {% csrf_token %}
+        {% render_form_fields membership_form %}
+        {% if not editing_self %}
+          <div class="mt-2">
+            <input type="submit" class="pg-button-secondary" value="{% translate 'Update Role' %}">
+          </div>
+        {% else %}
+          <p class="pg-help">{% translate "You are not allowed to modify your own role." %}</p>
+        {% endif %}
+        <hr class="my-2">
+        <label for="remove-member-modal" class="pg-button-danger modal-button">
+          {% if editing_self %}
+            {% translate 'Leave Team' %}
+          {% else %}
+            {% translate 'Remove from Team' %}
+          {% endif %}
+        </label>
+      </form>
+    </div>
+  </div>
+</section>
+{% include 'teams/components/remove_member_modal.html' %}
+{% endblock %}

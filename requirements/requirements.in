@@ -1,0 +1,29 @@
+boto3
+Django
+django-allauth
+django-allauth-2fa
+django-waffle
+psycopg2-binary
+django-environ
+djangorestframework
+djangorestframework-api-key
+drf-spectacular
+django-anymail[mailgun]  # email services
+django-hijack
+django-storages
+celery-progress
+celery
+celery[redis]
+openai
+sentry-sdk
+whitenoise[brotli]
+langchain==0.0.260
+Markdown
+# unstructured  # langchain loaders
+# chromadb  # langchain queries
+# beautifulsoup4  # web page parsing
+pyTelegramBotAPI==4.12.0
+pydub # Audio transcription
+ffmpeg # Audio transcription
+twilio
+pydantic==1.10.7
