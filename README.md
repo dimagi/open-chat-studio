@@ -1,6 +1,6 @@
-# GPT Playground
+# Open Chat Studio
 
-Experiments with AI, GPT and LLMs
+Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more informaton.
 
 ## Installation
 
@@ -20,6 +20,16 @@ Create a database named `gpt_playground`.
 
 ```
 createdb gpt_playground
+```
+
+or if you're using docker, start the container with
+
+```
+docker run -d --name gpt-postgres -p 5432:5432 -e POSTGRES_PASSWORD=*** -e POSTGRES_USER=postgres -e POSTGRES_DATABASE=gpt_playground postgres:14
+```
+then create the DB
+```
+docker exec -it gpt-postgres createdb -U postgres gpt_playground
 ```
 
 Create database migrations:
@@ -67,6 +77,8 @@ docker run -d -p 6379:6379 --name redis redis
 ## Running Celery
 
 Celery can be used to run background tasks.
+
+**Note:** Celery is required to run in order to get a response from an LLM, so you'll need to run this if you want to test end-to-end conversations.
 
 You can run it using:
 
