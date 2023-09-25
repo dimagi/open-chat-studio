@@ -282,7 +282,7 @@ class TelegramMessageHandler(MessageHandler):
     voice_replies_supported = True
 
     def initialize(self):
-        self.telegram_bot = TeleBot(self.channel.extra_data["bot_token"], parse_mode=None)
+        self.telegram_bot = TeleBot(self.channel.extra_data["bot_token"], threaded=False)
 
     @property
     def chat_id(self) -> int:
