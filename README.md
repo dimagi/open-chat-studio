@@ -2,41 +2,6 @@
 
 Experiments with AI, GPT and LLMs.
 
-## Quick Overview
-![High level overview](docs/overview.svg)
-
-Building a bot requires setting up an `Experiment`. An experiment brings together various features and information that ultimately dictates the behavior and knowlege of the bot. The most basic experiment consists of only a prompt.
-
-### Some Experiment Features
-#### Prompt
-The most basic experiment consists of a prompt. A prompt can be as simple as "You are a simple assistant" or "You are a helpful assistant." This serves as the initial instruction for your bot.
-
-#### Temperature
-The temperature parameter influences the randomness of your bot's responses. For a detailed explanation of how to use and fine-tune the temperature parameter, check out [this article.](https://www.coltsteele.com/tips/understanding-openai-s-temperature-parameter)
-#### Source Material
-If you have specific material that you want your bot to draw knowledge from, you can create source material within your experiment. This allows your bot to answer questions and provide information based on the content you provide.
-
-#### Safety Bots
-The safety layer allows you to review user or bot messages to determine their safety. You can specify a prompt that will be used to assess the safety of the content. If the content is deemed unsafe, the bot will be prompted to formulate an appropriate response.
-
-#### Synthetic voice
-You can specify a synthetic voice for your bot. To set this up, make sure to configure the following environment variables:
-
-```Shell
-AWS_POLLY_ACCESS_KEY_ID
-AWS_POLLY_SECRET_KEY
-AWS_POLLY_REGION
-```
-This allows your bot to use a synthetic voice when responding to voice notes, provided that the user's communication channel supports them. Otherwise, the bot will respond with text.
-
-
-#### No Activity Ping
-Configure the activity settings to determine when your bot should prompt the user to respond. The activity config dictates the timing and frequency of these prompts, ensuring a seamless interaction with the user.
-#### Agents
-See the LangChain page on [Agents](https://docs.langchain.com/docs/components/agents/).
-
-
-
 ## Installation
 
 Setup a virtualenv and install requirements
