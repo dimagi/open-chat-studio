@@ -9,10 +9,10 @@ Building a bot requires setting up an `Experiment`. An experiment brings togethe
 
 ### Some Experiment Features
 #### Prompt
-The temperature parameter influences the randomness of your bot's responses. For a detailed explanation of how to use and fine-tune the temperature parameter, check out [this article.](https://www.coltsteele.com/tips/understanding-openai-s-temperature-parameter)
+The most basic experiment consists of a prompt. A prompt can be as simple as "You are a simple assistant" or "You are a helpful assistant." This serves as the initial instruction for your bot.
 
 #### Temperature
-See [this post](https://ai.plainenglish.io/mastering-the-gpt-3-temperature-parameter-with-ruby-af727cba3b5c) that explains this well
+The temperature parameter influences the randomness of your bot's responses. For a detailed explanation of how to use and fine-tune the temperature parameter, check out [this article.](https://www.coltsteele.com/tips/understanding-openai-s-temperature-parameter)
 #### Source Material
 If you have specific material that you want your bot to draw knowledge from, you can create source material within your experiment. This allows your bot to answer questions and provide information based on the content you provide.
 
