@@ -1,6 +1,6 @@
 # Open Chat Studio
 
-Experiments with AI, GPT and LLMs.
+Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more informaton.
 
 ## Installation
 
@@ -78,7 +78,7 @@ docker run -d -p 6379:6379 --name redis redis
 
 Celery can be used to run background tasks.
 
-**Note:** Celery is needed to get a response from the LLM, so you'll need to run this if you want to test end-to-end conversations.
+**Note:** Celery is required to run in order to get a response from an LLM, so you'll need to run this if you want to test end-to-end conversations.
 
 You can run it using:
 
