@@ -1,0 +1,58 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% load i18n %}
+{% block body %}
+<section class="mt-7 section">
+  <div class= "container">
+    <div class="pg-columns pg-align-items-center">
+      <div class="pg-column-one-third">
+        <img class="img-fluid" src="{% static 'images/undraw/undraw_lighthouse.svg' %}" alt="{% translate "Welcome!" %}">
+      </div>
+      <div class="pg-column">
+        {% if not invitation.is_accepted %}
+          <h1 class="pg-title">{% translate "Accept Invitation?" %}</h1>
+          <h2 class="pg-subtitle">
+            {% blocktranslate with team_name=invitation.team.name by=invitation.invited_by.get_display_name %}
+            You've been invited to join {{ team_name }} by {{ by }}.
+            {% endblocktranslate %}
+          </h2>
+          {% if request.user.is_authenticated %}
+            <form method="post">
+              {% csrf_token %}
+              {% if request.user.email == invitation.email %}
+                <input type="submit" class="pg-button-primary" value="Accept Invitation"/>
+              {% else %}
+                <p >
+                  {% blocktranslate with invite_email=invitation.email user_email=request.user.email  %}
+                  This invitation was sent to {{ invite_email }} but you're logged in as {{ user_email }}.
+                  What would you like to do?
+                  {% endblocktranslate %}
+                </p>
+                <p class="buttons my-3">
+                  <input type="submit" class="pg-button-primary" value="Accept as {{ request.user.email }}"/>
+                  <a class="pg-button-secondary" href="{% url 'account_logout' %}?invitation_id={{ invitation.id }}">
+                    {% translate "Sign out" %}
+                  </a>
+                </p>
+              {% endif %}
+            </form>
+          {% else %}
+            <p class="buttons">
+              <a class="pg-button-primary" href="{% url 'teams:signup_after_invite' invitation.id %}">
+                {% translate "Create Account to Accept" %}
+              </a>
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="pg-subtitle">
+            {% translate "Sorry, it looks like that invitation has already been accepted or expired." %}
+          </p>
+          <p>
+            {% translate "If you think this is a mistake, ask your team administrator to invite you again!" %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

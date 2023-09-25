@@ -1,0 +1,62 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+{% load team_tags %}
+{% block app %}
+<div class="app-card">
+  {% if teams %}
+    <h3 class="pg-subtitle">{% translate "My Teams" %}</h3>
+    <div class="table-responsive">
+      <table class="table pg-table">
+        <thead>
+        <tr>
+          <th>{% translate "Name" %}</th>
+          <th/>
+          <th/>
+        </tr>
+        </thead>
+        <tbody>
+        {% for team in teams %}
+          <tr>
+            <td>{{ team.name }}</td>
+            <td><a class="link" href="{% url 'web_team:home' team.slug %}">{% translate "View Dashboard" %}</a></td>
+            <td class="pg-inline-buttons pg-justify-content-end">
+              <a class="pg-button-secondary mx-1" href="{% url 'single_team:manage_team' team.slug %}">
+                <span class="pg-icon">
+                  <i class="fa fa-gear"></i>
+                </span>
+                <span class="pg-hidden-mobile-inline">{% if  request.user|is_admin_of:team %}{% translate "Edit" %}{% else %}{% translate "View Details" %}{% endif %}</span>
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-2">
+      <a class="pg-button-secondary" href="{% url 'teams:create_team' %}">
+        <span class="pg-icon"><i class="fa fa-plus"></i></span>
+        <span>{% translate "Add Team" %}</span>
+      </a>
+    </div>
+  {% else %}
+    <div>
+      <div class="pg-columns">
+        <div class="pg-column-one-third">
+          <img class="img-fluid" alt="{% translate 'Nothing Here' %}" src="{% static 'images/undraw/undraw_team.svg' %}">
+        </div>
+        <div class="pg-column">
+          <h1 class="pg-title">{% translate "No Teams Yet!" %}</h1>
+          <h2 class="pg-subtitle">{% translate "Create your first team below to get started." %}</h2>
+          <p>
+            <a class="pg-button-primary" href="{% url 'teams:create_team' %}">
+              <span class="pg-icon"><i class="fa fa-plus"></i></span>
+              <span>{% translate "Create Team" %}</span>
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

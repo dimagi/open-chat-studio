@@ -1,0 +1,41 @@
+{% extends "web/base.html" %}
+{% load i18n %}
+{% load static %}
+{% load form_tags %}
+
+{% block body %}
+  <div class="flex justify-center my-8 ">
+    <div class="w-96 px-4 py-4 bg-white">
+      <div>
+        <h2 class="mt-6 text-center text-2xl font-bold text-gray-900">
+          Sign up
+        </h2>
+        <form class="mt-6 space-y-6" method="post">
+          {% csrf_token %}
+          {{ form.non_field_errors }}
+          {% render_field form.email %}
+          {% render_field form.password1 %}
+          {% if project_settings.ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE %}
+          {% render_field form.password2 %}
+          {% endif %}
+          {% if invitation %}
+            <input type="hidden" name="invitation_id" value="{{ invitation.id }}">
+            {{ form.invitation_id.errors }}
+          {% else %}
+            {% render_field form.team_name %}
+          {% endif %}
+          {% render_field form.terms_agreement %}
+          <div>
+            <input class="btn btn-primary btn-block" type="submit" value="{% translate "Sign Up" %}">
+          </div>
+        </form>
+        <div class="text-sm mt-4">
+          {% translate "Already have account?" %}
+          <a href="{% url 'account_login' %}" class="font-medium text-blue-700 hover:text-blue-500">
+            {% translate "Go to sign in." %}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

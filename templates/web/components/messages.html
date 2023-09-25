@@ -1,0 +1,8 @@
+{% if messages %}
+  {% for message in messages %}
+    <div class="notification flex w-full justify-between alert {% if message.tags %}alert-{{ message.level_tag }}{% endif %} shadow-md !rounded-none {{ message.extra_tags }} mb-1" >
+      <div>{{ message }}</div>
+      <button class="delete"><i class="fa fa-times"></i></button>
+    </div>
+  {% endfor %}
+{% endif %}

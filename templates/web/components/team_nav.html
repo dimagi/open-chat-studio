@@ -1,0 +1,28 @@
+{% load i18n %}
+{% load team_tags %}
+{% if request.team %}
+  <li>
+    <a href="{% url 'experiments:experiments_home' request.team.slug %}" {% if active_tab == 'experiments' %}class="active"{% endif %}>
+      <i class="fa fa-flask h-4 w-4"></i>
+      {% translate "Experiments" %}
+    </a>
+  </li>
+  <li>
+    <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>
+      <i class="fa fa-ruler h-4 w-4"></i>
+      {% translate "Prompt Builder" %}
+    </a>
+  </li>
+{#  <li>#}
+{#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
+{#      <i class="fa fa-comments h-4 w-4"></i>#}
+{#      {% translate "Chats" %}#}
+{#    </a>#}
+{#  </li>#}
+  <li>
+    <a href="{% url 'single_team:manage_team' request.team.slug %}" {% if active_tab == 'manage-team' %}class="active"{% endif %}>
+      <i class="fa fa-gear h-4 w-4"></i>
+      {% translate "My Team" %}
+    </a>
+  </li>
+{% endif %}
