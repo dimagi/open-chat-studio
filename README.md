@@ -8,7 +8,7 @@ Setup a virtualenv and install requirements
 (this example uses [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/)):
 
 ```bash
-mkvirtualenv gpt_playground -p python3.11
+python -m venv venv
 pip install -r dev-requirements.txt
 ```
 
@@ -44,12 +44,6 @@ Create database tables:
 ./manage.py migrate
 ```
 
-## Running server
-
-```bash
-./manage.py runserver
-```
-
 ## Building front-end
 
 To build JavaScript and CSS files, first install npm packages:
@@ -64,6 +58,13 @@ Then build (and watch for changes locally):
 npm run dev-watch
 ```
 
+
+## Running server
+
+```bash
+./manage.py runserver
+```
+
 ## Running Redis
 
 Redis is needed by Celery to run background tasks.
@@ -71,7 +72,7 @@ Redis is needed by Celery to run background tasks.
 You can set up Redis in docker using:
 
 ```bash
-docker run -d -p 6379:6379 --name redis redis
+docker run -d -p 6379:6379 --name gpt-redis redis
 ```
 
 ## Running Celery
@@ -162,5 +163,12 @@ You can also run experiments on the command line using:
 python manage.py run_experiment <experiment_pk>
 ```
 
-#### Testing bots through Channels
-Telegram - To test the webhooks, you can use a tool like ngrok to forward webhook data to your local machine.
+### Notes
+#### Signup page
+By default the signup page is `disabled`. To enable it, you should set the `SIGNUP_ENABLED` environment variable to `true`
+
+#### Testing webhooks
+To test the webhooks, you can use a tool like [ngrok](https://ngrok.com/docs/getting-started/) to forward webhook data to your local machine.
+
+
+
