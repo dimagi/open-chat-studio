@@ -169,6 +169,3 @@ By default the signup page is `disabled`. To enable it, you should set the `SIGN
 
 #### Testing webhooks
 To test the webhooks, you can use a tool like [ngrok](https://ngrok.com/docs/getting-started/) to forward webhook data to your local machine.
-
-
-
