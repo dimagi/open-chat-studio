@@ -19,11 +19,7 @@ from apps.channels.const import (
 
 
 class ExperimentChannel(BaseModel):
-    PLATFORM = (
-        (TELEGRAM, TELEGRAM),
-        (WEB, WEB),
-        (WHATSAPP, WHATSAPP)
-    )
+    PLATFORM = ((TELEGRAM, TELEGRAM), (WEB, WEB), (WHATSAPP, WHATSAPP))
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)

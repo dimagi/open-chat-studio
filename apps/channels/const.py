@@ -1,7 +1,6 @@
-
-WEB = 'web'
-TELEGRAM = 'telegram'
-WHATSAPP = 'whatsapp'
+WEB = "web"
+TELEGRAM = "telegram"
+WHATSAPP = "whatsapp"
 
 PLATFORM_DISPLAY_NAME = {
     WEB: "Web",
