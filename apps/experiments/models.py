@@ -322,7 +322,7 @@ class ExperimentSession(BaseModel):
             )
         )
 
-    def get_channel(self) -> str:
+    def get_platform_name(self) -> str:
         return self.channel_session.experiment_channel.channel_display_name
 
     def get_pre_survey_link(self):

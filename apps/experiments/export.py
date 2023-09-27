@@ -14,7 +14,7 @@ def experiment_to_message_export_rows(experiment: Experiment):
                 message.created_at,
                 message.message_type,
                 message.content,
-                session.get_channel(),
+                session.get_platform_name(),
                 message.chat.id,
                 # message.chat.name,
                 str(message.chat.user),
