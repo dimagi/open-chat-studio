@@ -5,13 +5,16 @@ from apps.experiments.models import Experiment
 
 
 def experiment_to_message_export_rows(experiment: Experiment):
-    for session in experiment.sessions.prefetch_related("chat", "chat__messages", "participant"):
+    for session in experiment.sessions.prefetch_related(
+        "chat", "chat__messages", "participant", "channel_session__experiment_channel"
+    ):
         for message in session.chat.messages.all():
             yield [
                 message.id,
                 message.created_at,
                 message.message_type,
                 message.content,
+                session.get_channel(),
                 message.chat.id,
                 # message.chat.name,
                 str(message.chat.user),
@@ -33,6 +36,7 @@ def experiment_to_csv(experiment: Experiment) -> io.StringIO:
             "Message Date",
             "Message Type",
             "Message Content",
+            "Platform",
             "Chat ID",
             "Chat User",
             "Session ID",
