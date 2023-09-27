@@ -322,6 +322,9 @@ class ExperimentSession(BaseModel):
             )
         )
 
+    def get_channel(self) -> str:
+        return self.channel_session.experiment_channel.channel_display_name
+
     def get_pre_survey_link(self):
         return self.experiment.pre_survey.get_link(self.participant, self)
 
