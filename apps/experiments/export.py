@@ -47,6 +47,7 @@ def experiment_to_csv(experiment: Experiment) -> io.StringIO:
             "Participant Public ID",
         ]
     )
+
     for row in experiment_to_message_export_rows(experiment):
         writer.writerow(row)
     return csv_in_memory
