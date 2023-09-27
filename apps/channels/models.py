@@ -10,12 +10,7 @@ from telebot import TeleBot, apihelper
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
-from apps.channels.const import (
-    WEB,
-    TELEGRAM,
-    WHATSAPP,
-    PLATFORM_DISPLAY_NAME,
-)
+from apps.channels.const import PLATFORM_DISPLAY_NAME, TELEGRAM, WEB, WHATSAPP
 
 
 class ExperimentChannel(BaseModel):
