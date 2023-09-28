@@ -38,10 +38,6 @@ class ExperimentChannel(BaseModel):
             token = self.extra_data.get("bot_token", "")
             logging.error(f"Unable set Telegram webhook with token '{token}'")
 
-    @property
-    def platform_display(self):
-        return ExperimentChannel.get_platform_display(self)
-
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     """

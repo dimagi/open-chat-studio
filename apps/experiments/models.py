@@ -323,7 +323,7 @@ class ExperimentSession(BaseModel):
         )
 
     def get_platform_name(self) -> str:
-        return self.channel_session.experiment_channel.platform_display
+        return self.channel_session.experiment_channel.get_platform_display()
 
     def get_pre_survey_link(self):
         return self.experiment.pre_survey.get_link(self.participant, self)
