@@ -10,7 +10,10 @@ from telebot import TeleBot, apihelper
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
-from apps.channels.const import PLATFORM_DISPLAY_NAME, TELEGRAM, WEB, WHATSAPP
+
+WEB = "web"
+TELEGRAM = "telegram"
+WHATSAPP = "whatsapp"
 
 
 class ExperimentChannel(BaseModel):
@@ -34,10 +37,6 @@ class ExperimentChannel(BaseModel):
         except apihelper.ApiTelegramException:
             token = self.extra_data.get("bot_token", "")
             logging.error(f"Unable set Telegram webhook with token '{token}'")
-
-    @property
-    def channel_display_name(self):
-        return PLATFORM_DISPLAY_NAME[self.platform]
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):

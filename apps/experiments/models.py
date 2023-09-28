@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
 
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -323,7 +324,7 @@ class ExperimentSession(BaseModel):
         )
 
     def get_platform_name(self) -> str:
-        return self.channel_session.experiment_channel.channel_display_name
+        return ExperimentChannel.get_platform_display(self.channel_session.experiment_channel.platform)
 
     def get_pre_survey_link(self):
         return self.experiment.pre_survey.get_link(self.participant, self)
