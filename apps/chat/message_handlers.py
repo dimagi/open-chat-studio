@@ -10,6 +10,7 @@ import requests
 from botocore.client import Config
 from django.conf import settings
 from telebot import TeleBot
+from telebot.util import smart_split
 from twilio.rest import Client
 
 from apps.channels import audio
@@ -303,7 +304,8 @@ class TelegramMessageHandler(MessageHandler):
         self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
 
     def send_text_to_user(self, text: str):
-        self.telegram_bot.send_message(chat_id=self.chat_id, text=text)
+        for message_text in smart_split(text):
+            self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
