@@ -21,10 +21,10 @@
                             <div x-bind:class="{'timeline-item-selected': event.history_id == $store.promptBuilder.getCurrentHistoryId(),
                             'bg-green-50': event.history_id == $store.promptBuilder.getCurrentHistoryId(),
                             'hover:bg-gray-50': event.history_id != $store.promptBuilder.getCurrentHistoryId()}"
-                                class="timeline-item rounded-sm before:bg-gray-200 after:border-gray-600  hover:after:border-gray-900 "
+                                class="timeline-item"
                                 @click.stop="$store.promptBuilder.setCurrentHistoryId(event.history_id)">
                                 <div class="timeline-item-header" x-text="event.time"></div>
-                                <div class="timeline-item-content" x-text="event.preview"></div>
+                                <div class="timeline-item-content line-clamp-2" x-text="event.preview"></div>
                             </div>
                         </template>
                     </div>
@@ -36,110 +36,4 @@
         class="w-32 px-6 py-2 text-white transition duration-500 ease-in-out transform bg-blue-600 rounded-lg focus:outline-none focus:ring-2 ring-offset-current ring-offset-2 hover:bg-blue-800"
         @click.stop="$store.promptBuilder.loadSelectedState()">Restore</button>
     </div>
-
 </div>
-
-<style>
-    .timeline-wrapper {
-        flex: 1 1 auto;
-        overflow: auto
-    }
-
-    .timeline-item {
-        /* border-radius: var(--border-radius); */
-        cursor: pointer;
-        display: flex;
-        flex-direction: row;
-        padding: 16px;
-        position: relative;
-    }
-
-    .timeline-item:before {
-        /* background-color: var(--gray-200); */
-        content: "";
-        height: 100%;
-        left: 80px;
-        position: absolute;
-        top: 0;
-        width: 1px;
-    }
-
-    .timeline-item:after {
-        background-color: #fff;
-        border: 1px solid;
-        /* border: 1px solid var(--gray-600); */
-        border-radius: 100%;
-        content: "";
-        height: 5px;
-        left: 78px;
-        position: absolute;
-        top: 22px;
-        width: 5px;
-    }
-
-    .timeline-item-selected:after,
-    .timeline-item:hover:after {
-        border: 2px solid;
-        /* border: 2px solid var(--gray-900); */
-        height: 7px;
-        left: 77px;
-        width: 7px
-    }
-
-    .timeline-item-selected {
-        /* background-color: var(--green-50) */
-    }
-
-    .timeline-item-selected .timeline-item-content {
-        font-weight: 700
-    }
-
-    .timeline-item:hover:not(.timeline-item-selected) {
-        /* background-color:var(--gray-50) */
-    }
-
-    .timeline-latest .timeline-item-content-text {
-        margin-bottom: 0
-    }
-
-    .timeline-latest:before {
-        height: 50%;
-        top: 50%
-    }
-
-    .timeline-item-header {
-        flex-basis: 64px;
-        flex-grow: 0;
-        font-size: 12px;
-        font-weight: 700
-    }
-
-    .timeline-item-content {
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        display: -webkit-box;
-        flex-basis: calc(100% - 60px);
-        flex-grow: 0;
-        font-size: 14px;
-        max-height: 50px;
-        overflow: hidden;
-        padding-left: 20px;
-        text-overflow: ellipsis
-    }
-
-    .timeline-item-content.timeline-item-content-empty {
-        color: var(--gray-400)
-    }
-
-    .timeline-header {
-        font-size: 12px;
-        font-weight: 700;
-        padding: 16px 12px;
-        text-transform: uppercase
-    }
-
-    .icon-indent {
-        align-items: flex-start;
-        display: flex
-    }
-</style>
