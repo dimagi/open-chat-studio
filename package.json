@@ -41,6 +41,7 @@
     "daisyui": "^2.51.5",
     "htmx.org": "^1.9.0",
     "js-cookie": "^3.0.1",
+    "js-tiktoken": "^1.0.7",
     "tailwindcss": "^3.3.1"
   }
 }
