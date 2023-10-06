@@ -65,6 +65,7 @@ THIRD_PARTY_APPS = [
     "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
+    "django_celery_beat",
 ]
 
 # Put your project-specific apps here
