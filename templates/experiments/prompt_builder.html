@@ -51,6 +51,14 @@
     // alpine:init is dispatched on the document
     document.addEventListener('alpine:init', () => {
         Alpine.store('promptBuilder', {
+            init() {
+                Alpine.effect(() => {
+                    if (this.currentState && this.currentState.prompt !== undefined) {
+                        this.promptTokenCount = `(${window.countGPTTokens(this.currentState.prompt).length} tokens)`;
+                    }
+                });
+            },
+
             recalculateCurrentState() {
                 let current = undefined;
                 this.history.find(day => {
