@@ -64,7 +64,7 @@ def _no_activity_pings():
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-        ping_message = _get_appropriate_ping_response(experiment_session, bot_ping_message=bot_ping_message)
+        ping_message = _bot_prompt_for_user(experiment_session, bot_ping_message=bot_ping_message)
         try:
             _try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
@@ -72,14 +72,14 @@ def _no_activity_pings():
             experiment_session.save()
 
 
-def _get_appropriate_ping_response(experiment_session: ExperimentSession, bot_ping_message: str) -> str:
-    """Sends the `bot_ping_message` along with the chat history to the LLM to formulate an appropriate ping
-    message
+def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
+    """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+    message. The response from the bot will be saved to the chat history.
     """
     topic_bot = get_bot_from_experiment(experiment_session.experiment, experiment_session.chat)
-    ping_message = topic_bot.get_response(user_input=bot_ping_message, is_ping_message=True)
+    bot_prompt = topic_bot.get_response(user_input=prompt_instruction, is_prompt_instruction=True)
     topic_bot.save_history()
-    return ping_message
+    return bot_prompt
 
 
 def _try_send_message(experiment_session: ExperimentSession, message: str):
@@ -117,7 +117,7 @@ def _check_future_messages():
     for message in messages:
         try:
             experiment_session = message.experiment_session
-            _add_message_to_chat_history(chat=experiment_session.chat, content=message.message)
+            ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message.message)
             _try_send_message(experiment_session=experiment_session, message=message.message)
             was_last_in_series = message.end_date.replace(second=0, microsecond=0) <= utc_now
             if was_last_in_series:
@@ -128,10 +128,6 @@ def _check_future_messages():
             logging.info(f"Resolving message {message.id} due to repurposed experiment channel")
             message.resolved = True
         message.save()
-
-
-def _add_message_to_chat_history(chat: Chat, content: str):
-    ChatMessage.objects.create(chat=chat, message_type="ai", content=content)
 
 
 def _update_future_message_due_at(future_message: FutureMessage):

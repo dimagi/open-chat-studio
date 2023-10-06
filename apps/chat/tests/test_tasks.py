@@ -9,8 +9,8 @@ from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.exceptions import ExperimentChannelRepurposedException
 from apps.chat.models import ChatMessage, FutureMessage
 from apps.chat.tasks import (
+    _bot_prompt_for_user,
     _check_future_messages,
-    _get_appropriate_ping_response,
     _no_activity_pings,
     _try_send_message,
     _update_future_message_due_at,
@@ -52,7 +52,7 @@ class TasksTest(TestCase):
         create_conversation.return_value = Mock()
         expected_ping_message = "Hey, answer me!"
         _get_response_mock.return_value = expected_ping_message
-        response = _get_appropriate_ping_response(self.experiment_session, "Some message")
+        response = _bot_prompt_for_user(self.experiment_session, "Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
         self.assertEqual(len(messages), 1)
@@ -60,9 +60,9 @@ class TasksTest(TestCase):
         self.assertEqual(response, expected_ping_message)
         self.assertEqual(messages[0].content, expected_ping_message)
 
-    @patch("apps.chat.tasks._get_appropriate_ping_response", return_value="Please answer")
+    @patch("apps.chat.tasks._bot_prompt_for_user", return_value="Please answer")
     @patch("apps.chat.tasks._try_send_message")
-    def test_no_activity_ping_triggered_for_active_sessions(self, _get_appropriate_ping_response, _try_send_message):
+    def test_no_activity_ping_triggered_for_active_sessions(self, _bot_prompt_for_user, _try_send_message):
         second_experiment = Experiment.objects.create(
             owner=self.user,
             name="TestExperiment2",
