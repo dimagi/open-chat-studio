@@ -53,8 +53,10 @@
         Alpine.store('promptBuilder', {
             init() {
                 Alpine.effect(() => {
-                    if (this.currentState && this.currentState.prompt !== undefined) {
-                        this.promptTokenCount = `(${window.countGPTTokens(this.currentState.prompt).length} tokens)`;
+                    if (Alpine.store('promptBuilder').currentState && Alpine.store('promptBuilder').currentState.prompt !== undefined) {
+                        Alpine.store('promptBuilder').promptTokenCount = `(${window.countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)} tokens)`;
+                    } else {
+                        Alpine.store('promptBuilder').promptTokenCount = '';
                     }
                 });
             },
