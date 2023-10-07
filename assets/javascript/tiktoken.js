@@ -5,8 +5,8 @@ const { encodingForModel } = require('js-tiktoken');
 const encoding = encodingForModel("gpt-3.5-turbo");
 
 // Function to count tokens
-function countTokens(string) {
-    const tokens = encoding.encode(string);
+function countTokens(stringToCount) {
+    const tokens = encoding.encode(stringToCount);
     return tokens.length;
 }
 
