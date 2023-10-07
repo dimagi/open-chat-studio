@@ -82,7 +82,7 @@
             visibleSidebar: undefined,
             history: [
                 {
-                    date: "{% now 'l j M Y' %}",
+                    date: "{% now 'l d M Y' %}",
                     events: [
                         {
                             history_id: 0,
@@ -154,7 +154,7 @@
     })
     .then(response => response.json())
     .then(fetchedData => {
-        const currentDate = "{% now 'l j M Y' %}";
+        const currentDate = "{% now 'l d M Y' %}";
         const existingHistory = Alpine.store('promptBuilder').history;
 
         // Save current editor
