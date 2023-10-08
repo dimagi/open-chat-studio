@@ -10,7 +10,7 @@ from apps.channels.models import ChannelSession
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.exceptions import ExperimentChannelRepurposedException
 from apps.chat.message_handlers import MessageHandler
-from apps.chat.models import Chat, ChatMessage, FutureMessage
+from apps.chat.models import Chat, ChatMessage
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
 
