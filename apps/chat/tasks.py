@@ -26,7 +26,6 @@ def periodic_tasks(self):
         if not acquired:
             return
         _no_activity_pings()
-        _check_future_messages()
 
 
 @shared_task
@@ -133,50 +132,3 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
         raise e
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
-
-
-@isolate_task
-def _check_future_messages():
-    """Checks to see if there's any FutureMessages that need to be sent. After sending it, it schedules the
-    next one, depending on the configuration
-    """
-    utc = pytz.timezone("UTC")
-    utc_now = datetime.now().replace(second=0, microsecond=0).astimezone(utc)
-    one_min_from_now = utc_now + timedelta(minutes=1)
-    messages = FutureMessage.objects.filter(
-        resolved=False,
-        due_at__lte=one_min_from_now,
-    ).all()
-    for message in messages:
-        try:
-            experiment_session = message.experiment_session
-            ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message.message)
-            _try_send_message(experiment_session=experiment_session, message=message.message)
-            was_last_in_series = message.end_date.replace(second=0, microsecond=0) <= utc_now
-            if was_last_in_series:
-                message.resolved = True
-            else:
-                _update_future_message_due_at(message)
-        except ExperimentChannelRepurposedException:
-            logging.info(f"Resolving message {message.id} due to repurposed experiment channel")
-            message.resolved = True
-        message.save()
-
-
-def _update_future_message_due_at(future_message: FutureMessage):
-    """Adjusts the due time of a future message based on its interval and missed periods.
-
-    This function calculates the next due time for a future message based on its interval
-    and the number of missed intervals since its original due time. If the future message's
-    interval_minutes is not set, no adjustments are made.
-    """
-    if not future_message.interval_minutes:
-        return
-    utc = pytz.timezone("UTC")
-    now_in_utc = datetime.now().astimezone(utc)
-    due_at_in_utc = future_message.due_at.astimezone(utc)
-    # The due_at is not represented as UTC so we can do UTC operation on it
-    minutes_missed = (now_in_utc - due_at_in_utc).total_seconds() / 60
-    periods_missed = minutes_missed // future_message.interval_minutes
-    next_due_at = future_message.due_at + timedelta(minutes=future_message.interval_minutes) * (periods_missed + 1)
-    future_message.due_at = next_due_at
