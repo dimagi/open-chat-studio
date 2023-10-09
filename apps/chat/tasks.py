@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List
 
 import pytz
 from celery.app import shared_task
@@ -28,7 +28,7 @@ def periodic_tasks(self):
 
 
 @shared_task
-def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: Optional[bool]):
+def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: bool):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
     If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
