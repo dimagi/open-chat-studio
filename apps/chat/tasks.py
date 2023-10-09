@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 import pytz
 from celery.app import shared_task
@@ -28,15 +28,14 @@ def periodic_tasks(self):
 
 
 @shared_task
-def send_bot_message_to_users(*args, **kwargs):
+def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: Optional[bool]):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
     If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
     chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
     response will be saved to the chat history.
     """
-    chat_ids = kwargs.get("chat_ids", [])
-    message = kwargs["message"]
+    print(f"is_bot_instruction: {is_bot_instruction}")
     channel_sessions = (
         ChannelSession.objects.filter(external_chat_id__in=chat_ids)
         .prefetch_related("experiment_session__experiment", "experiment_session__experiment")
@@ -48,7 +47,7 @@ def send_bot_message_to_users(*args, **kwargs):
 
         experiment_session = channel_session.experiment_session
         bot_message_to_user = message
-        if kwargs.get("is_bot_instruction", False):
+        if is_bot_instruction:
             bot_message_to_user = _bot_prompt_for_user(
                 experiment_session=experiment_session, prompt_instruction=message
             )
