@@ -35,7 +35,6 @@ def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruct
     chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
     response will be saved to the chat history.
     """
-    print(f"is_bot_instruction: {is_bot_instruction}")
     channel_sessions = (
         ChannelSession.objects.filter(external_chat_id__in=chat_ids)
         .prefetch_related("experiment_session__experiment", "experiment_session__experiment")

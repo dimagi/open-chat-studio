@@ -84,13 +84,13 @@ Celery can be used to run background tasks.
 You can run it using:
 
 ```bash
-celery -A gpt_playground worker -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+celery -A gpt_playground worker -l INFO
 ```
 
 Or with celery beat (for scheduled tasks):
 
 ```bash
-celery -A gpt_playground worker -l INFO -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
+celery -A gpt_playground worker -l INFO -B
 ```
 
 ## Updating translations
