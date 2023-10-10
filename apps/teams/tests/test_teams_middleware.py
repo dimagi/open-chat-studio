@@ -43,7 +43,7 @@ class TeamsAuthTest(TestCase):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.yanks.slug]))
         self.assertEqual(404, response.status_code)
-        self._assert_team_not_found(response)
+        self._assertRequestHasTeam(response, self.yanks, None, None)
 
     def test_team_admin_view(self):
         self._login(self.sox_admin)
@@ -80,15 +80,6 @@ class TeamsAuthTest(TestCase):
         else:
             # use assertEqual to force setup of the lazy object
             self.assertEqual(membership, None)
-
-    def _assert_team_not_found(self, response):
-        request = response.wsgi_request
-        self.assertTrue(hasattr(request, "team"))
-        with self.assertRaises(Http404):
-            str(request.team)  # force setup of lazy object
-
-        with self.assertRaises(Http404):
-            str(request.team_membership)  # force setup of lazy object
 
 
 def _create_user(username):

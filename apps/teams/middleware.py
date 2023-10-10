@@ -16,11 +16,12 @@ def _get_team(request, view_kwargs):
 
 def _get_team_membership(request):
     if not hasattr(request, "_cached_team_membership"):
-        team = request.team
-        try:
-            team_membership = Membership.objects.get(team=team, user=request.user) if team else None
-        except Membership.DoesNotExist:
-            team_membership = None
+        team_membership = None
+        if request.user.is_authenticated and request.team:
+            try:
+                team_membership = Membership.objects.get(team=request.team, user=request.user)
+            except Membership.DoesNotExist:
+                pass
         request._cached_team_membership = team_membership
     return request._cached_team_membership
 
