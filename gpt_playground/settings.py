@@ -65,6 +65,7 @@ THIRD_PARTY_APPS = [
     "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
+    "django_celery_beat",
 ]
 
 # Put your project-specific apps here
@@ -324,6 +325,7 @@ if REDIS_URL.startswith("rediss"):
     REDIS_URL = f"{REDIS_URL}?ssl_cert_reqs=none"
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 WAGTAILADMIN_BASE_URL = "http://localhost:8000"
 
 # Waffle config

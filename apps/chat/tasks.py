@@ -6,6 +6,7 @@ import pytz
 from celery.app import shared_task
 from django.db.models import OuterRef, Subquery
 
+from apps.channels.models import ChannelSession
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.exceptions import ExperimentChannelRepurposedException
 from apps.chat.message_handlers import MessageHandler
@@ -24,6 +25,34 @@ def periodic_tasks(self):
             return
         _no_activity_pings()
         _check_future_messages()
+
+
+@shared_task
+def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: bool):
+    """This sends `message` to the sessions related to `chat_ids` as the bot.
+
+    If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
+    chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
+    response will be saved to the chat history.
+    """
+    channel_sessions = (
+        ChannelSession.objects.filter(external_chat_id__in=chat_ids)
+        .prefetch_related("experiment_session__experiment", "experiment_session__experiment")
+        .all()
+    )
+    for channel_session in channel_sessions:
+        if channel_session.is_stale():
+            continue
+
+        experiment_session = channel_session.experiment_session
+        bot_message_to_user = message
+        if is_bot_instruction:
+            bot_message_to_user = _bot_prompt_for_user(
+                experiment_session=experiment_session, prompt_instruction=message
+            )
+        else:
+            ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message)
+        _try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
 
 
 @isolate_task
@@ -64,7 +93,7 @@ def _no_activity_pings():
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-        ping_message = _get_appropriate_ping_response(experiment_session, bot_ping_message=bot_ping_message)
+        ping_message = _bot_prompt_for_user(experiment_session, bot_ping_message=bot_ping_message)
         try:
             _try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
@@ -72,14 +101,14 @@ def _no_activity_pings():
             experiment_session.save()
 
 
-def _get_appropriate_ping_response(experiment_session: ExperimentSession, bot_ping_message: str) -> str:
-    """Sends the `bot_ping_message` along with the chat history to the LLM to formulate an appropriate ping
-    message
+def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
+    """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+    message. The response from the bot will be saved to the chat history.
     """
     topic_bot = get_bot_from_experiment(experiment_session.experiment, experiment_session.chat)
-    ping_message = topic_bot.get_response(user_input=bot_ping_message, is_ping_message=True)
+    bot_prompt = topic_bot.get_response(user_input=prompt_instruction, is_prompt_instruction=True)
     topic_bot.save_history()
-    return ping_message
+    return bot_prompt
 
 
 def _try_send_message(experiment_session: ExperimentSession, message: str):
@@ -89,9 +118,8 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
         experiment_channel = channel_session.experiment_channel
         if experiment_channel.experiment != experiment_session.experiment:
             # The experiment channel's experiment might have changed
-            new_experiment_name = experiment_channel.experiment
             raise ExperimentChannelRepurposedException(
-                message=f"Experiment channel is pointing to a new experiment: {new_experiment_name}"
+                message=f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}' whereas the current experiment session points to experiment '{experiment_session.experiment.name}'"
             )
 
         handler = MessageHandler.from_experiment_session(experiment_session)
@@ -117,7 +145,7 @@ def _check_future_messages():
     for message in messages:
         try:
             experiment_session = message.experiment_session
-            _add_message_to_chat_history(chat=experiment_session.chat, content=message.message)
+            ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message.message)
             _try_send_message(experiment_session=experiment_session, message=message.message)
             was_last_in_series = message.end_date.replace(second=0, microsecond=0) <= utc_now
             if was_last_in_series:
@@ -128,10 +156,6 @@ def _check_future_messages():
             logging.info(f"Resolving message {message.id} due to repurposed experiment channel")
             message.resolved = True
         message.save()
-
-
-def _add_message_to_chat_history(chat: Chat, content: str):
-    ChatMessage.objects.create(chat=chat, message_type="ai", content=content)
 
 
 def _update_future_message_due_at(future_message: FutureMessage):

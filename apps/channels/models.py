@@ -55,3 +55,9 @@ class ChannelSession(BaseModel):
     experiment_session = models.OneToOneField(
         ExperimentSession, on_delete=models.CASCADE, related_name="channel_session"
     )
+
+    def is_stale(self) -> bool:
+        """A Channel Session is considered stale if the experiment that the channel points to differs from the
+        one that the experiment session points to. This will happen when the user repurposes the channel to point
+        to another experiment."""
+        return self.experiment_channel.experiment != self.experiment_session.experiment
