@@ -98,7 +98,7 @@ def _no_activity_pings():
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-        ping_message = _bot_prompt_for_user(experiment_session, bot_ping_message=bot_ping_message)
+        ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
             _try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
