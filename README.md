@@ -26,7 +26,7 @@ Python 3.11 is recommended.
 ### 2. Run the automated setup
 
 ```shell
-inv setup-dev-environment
+inv setup-dev-env
 ```
 
 This will:
