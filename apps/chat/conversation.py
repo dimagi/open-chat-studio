@@ -57,7 +57,7 @@ class Conversation:
     def memory(self) -> BaseMemory:
         return self.executer.memory
 
-    def predict(self, input: str) -> Tuple[str, str, str]:
+    def predict(self, input: str) -> Tuple[str, int, int]:
         with get_openai_callback() as cb:
             response = self.executer.predict(input=input)
         return response, cb.prompt_tokens, cb.completion_tokens
