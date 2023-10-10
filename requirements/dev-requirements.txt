@@ -23,6 +23,8 @@ freezegun==1.2.2
     # via -r requirements/dev-requirements.in
 identify==2.5.22
     # via pre-commit
+invoke==2.2.0
+    # via -r requirements/dev-requirements.in
 isort==5.12.0
     # via -r requirements/dev-requirements.in
 mock==5.1.0
@@ -62,6 +64,8 @@ six==1.16.0
     # via
     #   -c requirements/requirements.txt
     #   python-dateutil
+termcolor==2.3.0
+    # via -r requirements/dev-requirements.in
 virtualenv==20.21.0
     # via pre-commit
 wheel==0.40.0
