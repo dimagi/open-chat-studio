@@ -1,0 +1,77 @@
+from pathlib import Path
+
+from invoke import Context, Exit, call, task
+from termcolor import cprint
+
+
+@task
+def docker(c: Context, command):
+    if command == "up":
+        c.run("docker compose -f docker-compose-dev.yml up -d")
+    elif command == "down":
+        c.run("docker compose -f docker-compose-dev.yml down")
+    else:
+        raise Exit(f"Unknown docker command: {command}", -1)
+
+
+@task(pre=[call(docker, command="up")])
+def up(c: Context):
+    pass
+
+
+@task(pre=[call(docker, command="down")])
+def down(c: Context):
+    pass
+
+
+@task
+def requirements(c: Context, upgrade_all=False, upgrade_package=None):
+    if upgrade_all and upgrade_package:
+        raise Exit("Cannot specify both upgrade and upgrade-package", -1)
+    args = " -U" if upgrade_all else ""
+    cmd_base = "pip-compile --resolver=backtracking"
+    env = {"CUSTOM_COMPILE_COMMAND": "inv requirements"}
+    if upgrade_package:
+        cmd_base += f" --upgrade-package {upgrade_package}"
+    c.run(f"{cmd_base} requirements/requirements.in{args}", env=env)
+    c.run(f"{cmd_base} requirements/dev-requirements.in{args}", env=env)
+    c.run(f"{cmd_base} requirements/prod-requirements.in{args}", env=env)
+
+
+@task
+def translations(c: Context):
+    c.run("python manage.py makemessages --all --ignore node_modules --ignore venv")
+    c.run("python manage.py makemessages -d djangojs --all --ignore node_modules --ignore venv")
+    c.run("python manage.py compilemessages")
+
+
+@task
+def schema(c: Context):
+    c.run("python manage.py spectacular --file api_schema.yaml")
+
+
+@task
+def setup_dev_env(c: Context):
+    cprint("Setting up dev environment", "green")
+    up(c)
+
+    cprint("\nInstalling pre-commit hooks", "green")
+    c.run("pre-commit install --install-hooks", echo=True)
+
+    if not Path(".env").exists():
+        cprint("\nCreating .env file", "green")
+        c.run("cp .env.example .env", echo=True)
+    else:
+        print("\nSkipping .env file creation, file already exists")
+
+    cprint("\nRunning DB migrations", "green")
+    c.run("python manage.py migrate", echo=True)
+
+    cprint("\nInstalling npm packages", "green")
+    c.run("npm install", echo=True)
+
+    cprint("\nBuilding JS & CSS resources", "green")
+    c.run("npm run dev", echo=True)
+
+    cprint("\nCreating superuser", "green")
+    c.run("python manage.py createsuperuser", echo=True, pty=True)
