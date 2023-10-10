@@ -14,6 +14,8 @@ from apps.chat.models import Chat, ChatMessage, FutureMessage
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
 
+logger = logging.getLogger(__name__)
+
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
 
 
@@ -41,18 +43,21 @@ def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruct
         .all()
     )
     for channel_session in channel_sessions:
-        if channel_session.is_stale():
-            continue
+        try:
+            if channel_session.is_stale():
+                continue
 
-        experiment_session = channel_session.experiment_session
-        bot_message_to_user = message
-        if is_bot_instruction:
-            bot_message_to_user = _bot_prompt_for_user(
-                experiment_session=experiment_session, prompt_instruction=message
-            )
-        else:
-            ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message)
-        _try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
+            experiment_session = channel_session.experiment_session
+            bot_message_to_user = message
+            if is_bot_instruction:
+                bot_message_to_user = _bot_prompt_for_user(
+                    experiment_session=experiment_session, prompt_instruction=message
+                )
+            else:
+                ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message)
+            _try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
+        except Exception as exception:
+            logger.exception(exception)
 
 
 @isolate_task
@@ -93,7 +98,7 @@ def _no_activity_pings():
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-        ping_message = _bot_prompt_for_user(experiment_session, bot_ping_message=bot_ping_message)
+        ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
             _try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
