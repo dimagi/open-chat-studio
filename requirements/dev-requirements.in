@@ -5,3 +5,5 @@ black
 isort
 mock
 freezegun
+invoke
+termcolor
