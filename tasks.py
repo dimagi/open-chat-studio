@@ -53,7 +53,7 @@ def schema(c: Context):
 @task
 def setup_dev_env(c: Context):
     cprint("Setting up dev environment", "green")
-    up(c)
+    docker(c, command="up")
 
     cprint("\nInstalling pre-commit hooks", "green")
     c.run("pre-commit install --install-hooks", echo=True)
