@@ -24,12 +24,12 @@ def get_next_unique_team_slug(team_name: str) -> str:
 
 
 def get_team_for_request(request, view_kwargs):
-    if not request.user.is_authenticated:
-        return
-
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
-        return get_object_or_404(Team, slug=team_slug, membership__user=request.user)
+        return get_object_or_404(Team, slug=team_slug)
+
+    if not request.user.is_authenticated:
+        return
 
     return get_default_team_from_request(request)
 

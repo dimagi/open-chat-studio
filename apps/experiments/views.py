@@ -105,7 +105,6 @@ def experiments_prompt_builder(request, team_slug: str):
 def experiments_prompt_builder_get_message(request, team_slug: str):
     data_json = request.body.decode("utf-8")
     user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     result = get_prompt_builder_response_task.delay(user.id, data_json)
     return JsonResponse({"task_id": result.task_id})
 
@@ -258,7 +257,6 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     experiment = get_object_or_404(Experiment, id=experiment_id)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
     result = get_response_for_webchat_task.delay(session.id, message_text)
     return TemplateResponse(
@@ -278,7 +276,6 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     experiment = get_object_or_404(Experiment, id=experiment_id)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id))
@@ -299,7 +296,6 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     experiment_session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
 
     since = datetime.now().astimezone(pytz.timezone("UTC"))
@@ -327,7 +323,6 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 
 def start_experiment(request, team_slug: str, experiment_id: str):
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True)
     except ValidationError:
@@ -530,7 +525,6 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
