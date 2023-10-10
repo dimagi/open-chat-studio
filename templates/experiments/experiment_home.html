@@ -18,7 +18,7 @@
       <span>As an admin, you can manage experiments in the admin site.</span>
     </div>
     <div class="flex-none">
-      <a href="{% url 'admin:index'  %}experiments/" class="btn btn-sm btn-primary">Manage Experiments</a>
+      <a href="{% url 'admin:app_list' 'experiments' %}" class="btn btn-sm btn-primary">Manage Experiments</a>
     </div>
   </div>
 {% endif %}

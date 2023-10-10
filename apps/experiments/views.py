@@ -435,7 +435,11 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
     experiment = get_object_or_404(Experiment, id=experiment_id)
     session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)
     send_experiment_invitation(session)
-    return TemplateResponse(request, "experiments/manage/invite_sent_htmx.html")
+    return TemplateResponse(
+        request,
+        "experiments/manage/invite_row.html",
+        context={"request": request, "experiment": experiment, "session": session},
+    )
 
 
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
