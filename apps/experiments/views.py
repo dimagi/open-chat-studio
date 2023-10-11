@@ -21,6 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView
 
 from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.models import ChatMessage
@@ -40,7 +41,6 @@ from apps.experiments.models import (
 )
 from apps.experiments.tasks import get_prompt_builder_response_task, get_response_for_webchat_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
-from apps.teams.models import Team
 from apps.users.models import CustomUser
 
 
@@ -55,6 +55,31 @@ def experiments_home(request, team_slug: str):
             "active_tab": "experiments",
         },
     )
+
+
+class CreateExperiment(CreateView):
+    model = Experiment
+    fields = [
+        "name",
+        "description",
+        "llm",
+        "temperature",
+        "chatbot_prompt",
+        "safety_layers",
+        "tools_enabled",
+        "source_material",
+        "seed_message",
+        "pre_survey",
+        "post_survey",
+        "consent_form",
+        "synthetic_voice",
+        "no_activity_config",
+    ]
+    template_name = "experiments/experiment_create.html"
+
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
 
 
 @login_and_team_required

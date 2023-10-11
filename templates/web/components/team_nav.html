@@ -6,6 +6,17 @@
       <i class="fa fa-flask h-4 w-4"></i>
       {% translate "Experiments" %}
     </a>
+    <ul>
+      <li><a>level 2 item 1</a></li>
+      <li><a>level 2 item 2</a></li>
+      <li>
+        <a>Parent</a>
+        <ul>
+          <li><a>level 3 item 1</a></li>
+          <li><a>level 3 item 2</a></li>
+        </ul>
+      </li>
+    </ul>
   </li>
   <li>
     <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>

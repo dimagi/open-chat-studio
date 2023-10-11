@@ -1,0 +1,14 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+<div class="app-card max-w-5xl mx-auto">
+  <h1 class="pg-title">New Experiment</h1>
+  <div>
+    <form method="post" class="my-2">
+    {% csrf_token %}
+    {% render_form_fields form %}
+    <input type="submit" class="pg-button-primary mt-2" value="Create">
+  </form>
+  </div>
+</div>
+{% endblock %}

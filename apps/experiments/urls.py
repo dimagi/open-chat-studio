@@ -6,6 +6,7 @@ app_name = "experiments"
 
 urlpatterns = [
     path("", views.experiments_home, name="experiments_home"),
+    path("new/", views.CreateExperiment.as_view(), name="experiments_new"),
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
         "prompt_builder/get_message/",
