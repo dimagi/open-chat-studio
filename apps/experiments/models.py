@@ -1,5 +1,6 @@
 import uuid
 
+import markdown
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -126,6 +127,9 @@ class ConsentForm(BaseModel):
 
     def __str__(self):
         return self.name
+
+    def get_rendered_content(self):
+        return markdown.markdown(self.consent_text)
 
 
 class SyntheticVoice(BaseModel):
