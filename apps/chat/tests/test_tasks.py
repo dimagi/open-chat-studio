@@ -9,7 +9,7 @@ from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
 from apps.experiments.models import Experiment, ExperimentSession, NoActivityMessageConfig, Prompt, SessionStatus
-from apps.experiments.views import _start_experiment_session
+from apps.experiments.views.experiment import _start_experiment_session
 from apps.users.models import CustomUser
 
 
