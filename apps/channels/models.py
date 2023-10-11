@@ -47,6 +47,7 @@ def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
 
 
+# TODO: Remove this model
 class ChannelSession(BaseModel):
     external_chat_id = models.CharField(null=False, blank=False)
     experiment_channel = models.ForeignKey(

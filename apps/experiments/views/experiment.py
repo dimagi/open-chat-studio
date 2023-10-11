@@ -136,10 +136,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 def _start_experiment_session(
     experiment: Experiment,
-    external_chat_id: str,
     experiment_channel: ExperimentChannel,
     user: Optional[CustomUser] = None,
     participant: Optional[Participant] = None,
+    external_chat_id: Optional[str] = None,
 ) -> ExperimentSession:
     session = ExperimentSession.objects.create(
         user=user,
@@ -166,9 +166,7 @@ def _check_and_process_seed_message(session: ExperimentSession):
 def start_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
-    session = _start_experiment_session(
-        experiment, external_chat_id=session.chat.id, experiment_channel=channel, user=request.user
-    )
+    session = _start_experiment_session(experiment, experiment_channel=channel, user=request.user)
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
@@ -285,7 +283,6 @@ def start_experiment(request, team_slug: str, experiment_id: str):
                 experiment,
                 user=get_real_user_or_none(request.user),
                 participant=participant,
-                external_chat_id=session.chat.id,
                 experiment_channel=channel,
             )
             return _record_consent_and_redirect(request, team_slug, session)

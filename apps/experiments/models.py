@@ -315,6 +315,8 @@ class ExperimentSession(BaseModel):
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(user=self.user, name=self.experiment.name)
+        if self.experiment_channel.platform == "web" and self.external_chat_id is None:
+            self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:
