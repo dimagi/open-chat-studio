@@ -1,13 +1,18 @@
+import json
 import logging
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime
 from typing import List, Optional, Type
 
 import pytz
+from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
 
-from apps.chat.agent.schemas import ReminderSchema
-from apps.chat.models import FutureMessage
+from apps.channels.models import ChannelSession
+from apps.chat.agent import schemas
 from apps.experiments.models import ExperimentSession
+
+BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
 
 
 class CustomBaseTool(BaseTool):
@@ -32,44 +37,64 @@ class CustomBaseTool(BaseTool):
         raise Exception("Not implemented")
 
 
-class CurrentDatetimeTool(CustomBaseTool):
-    name = "current_datetime"
-    description = "useful for getting the current datetime and timezone in ISO 8601. this should be called before setting any reminders"
-
-    def action(self, *args, **kwargs):
-        timezone = pytz.timezone("Africa/Johannesburg")
-        current_datetime = datetime.now().astimezone(timezone)
-        iso_format = current_datetime.strftime("%Y-%m-%dT%H:%M:%S%z")
-        return str(iso_format)
-
-
-class ReminderTool(CustomBaseTool):
-    name = "reminder"
-    description = "useful tool for reminding users and getting back to them later"
+class RecurringReminderTool(CustomBaseTool):
+    name = "recurring-reminder"
+    description = "useful to schedule recurring reminders"
     requires_session = True
-    args_schema: Type[ReminderSchema] = ReminderSchema
+    args_schema: Type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
 
     def action(
         self,
         datetime_due: datetime,
-        repeating: bool,
-        interval_minutes: Optional[int],
-        reminder_message: str,
-        periods: Optional[int],
+        datetime_end: datetime,
+        every: int,
+        period: str,
+        message: str,
         **kwargs,
     ):
-        end_date = datetime_due
-        if repeating and interval_minutes and periods:
-            end_date = datetime_due + timedelta(minutes=interval_minutes) * periods
-        future_message = FutureMessage.objects.create(
-            message=reminder_message,
-            due_at=datetime_due,
-            experiment_session=self.experiment_session,
-            interval_minutes=interval_minutes if repeating else 0,
-            end_date=end_date,
+        interval_schedule, _created = IntervalSchedule.objects.get_or_create(every=every, period=period)
+        create_periodic_task(
+            self.experiment_session,
+            message=message,
+            start_time=datetime_due,
+            expires=datetime_end,
+            interval=interval_schedule,
         )
-        future_message.save()
         return "Success"
 
 
-tools: List[CustomBaseTool] = (CurrentDatetimeTool(), ReminderTool())
+class OneOffReminderTool(CustomBaseTool):
+    name = "one-off-reminder"
+    description = "useful to schedule one-off reminders"
+    requires_session = True
+    args_schema: Type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
+
+    def action(
+        self,
+        datetime_due: datetime,
+        message: str,
+        **kwargs,
+    ):
+        create_periodic_task(
+            self.experiment_session,
+            message=message,
+            clocked=ClockedSchedule.objects.create(clocked_time=datetime_due),
+            one_off=True,
+        )
+        return "Success"
+
+
+def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
+    channel_session = ChannelSession.objects.filter(experiment_session=experiment_session).first()
+    task_kwargs = json.dumps(
+        {"chat_ids": [channel_session.external_chat_id], "message": message, "is_bot_instruction": False}
+    )
+    PeriodicTask.objects.create(
+        name=f"reminder-{experiment_session.id}-{uuid.uuid4()}",
+        task=BOT_MESSAGE_FOR_USER_TASK,
+        kwargs=task_kwargs,
+        **kwargs,
+    )
+
+
+tools: List[CustomBaseTool] = (RecurringReminderTool(), OneOffReminderTool())
