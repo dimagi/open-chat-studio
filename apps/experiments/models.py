@@ -315,7 +315,9 @@ class ExperimentSession(BaseModel):
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(user=self.user, name=self.experiment.name)
-        if self.experiment_channel.platform == "web" and self.external_chat_id is None:
+
+        is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
+        if is_web_channel and self.external_chat_id is None:
             self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
