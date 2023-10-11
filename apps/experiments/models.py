@@ -347,6 +347,8 @@ class ExperimentSession(BaseModel):
     def get_post_survey_link(self):
         return self.experiment.post_survey.get_link(self.participant, self)
 
-    def get_channel_session(self):
-        if hasattr(self, "channel_session"):
-            return self.channel_session
+    def is_stale(self) -> bool:
+        """A Channel Session is considered stale if the experiment that the channel points to differs from the
+        one that the experiment session points to. This will happen when the user repurposes the channel to point
+        to another experiment."""
+        return self.experiment_channel.experiment != self.experiment
