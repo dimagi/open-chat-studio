@@ -8,7 +8,7 @@
     </a>
     <ul>
       <li>
-        <a href="{% url 'experiments:safety_home' request.team.slug %}" {% if active_tab == 'safety:home' %}class="active"{% endif %}>
+        <a href="{% url 'experiments:safety_home' request.team.slug %}" {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
         <i class="fa fa-shield h-4 w-4"></i>
         {% translate "Safety Layers" %}
       </a>

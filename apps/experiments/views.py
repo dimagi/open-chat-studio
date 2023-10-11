@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView
+from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.channels.models import ChannelSession, ExperimentChannel
@@ -60,38 +60,13 @@ def experiments_home(request, team_slug: str):
     )
 
 
-# class CreateExperiment(CreateView):
-#     model = Experiment
-#     fields = [
-#         "name",
-#         "description",
-#         "llm",
-#         "temperature",
-#         "chatbot_prompt",
-#         "safety_layers",
-#         "tools_enabled",
-#         "source_material",
-#         "seed_message",
-#         "pre_survey",
-#         "post_survey",
-#         "consent_form",
-#         "synthetic_voice",
-#         "no_activity_config",
-#     ]
-#     template_name = "experiments/new_object.html"
-#
-#     def form_valid(self, form):
-#         form.instance.owner = self.request.user
-#         return super().form_valid(form)
-
-
 @login_and_team_required
 def safety_layer_home(request, team_slug: str):
     return TemplateResponse(
         request,
         "generic/object_home.html",
         {
-            "active_tab": "safety:home",
+            "active_tab": "safety_layers",
             "title": "Safety Layers",
             "new_object_url": reverse("experiments:safety_new", args=[team_slug]),
             "table_url": reverse("experiments:safety_table", args=[team_slug]),
@@ -114,9 +89,11 @@ class CreateSafetyLayer(CreateView):
         "default_response_to_user",
         "prompt_to_bot",
     ]
-    template_name = "experiments/../../templates/generic/new_object.html"
+    template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Safety Layer",
+        "button_text": "Create",
+        "active_tab": "safety_layers",
     }
 
     def get_success_url(self):
@@ -125,6 +102,37 @@ class CreateSafetyLayer(CreateView):
     def form_valid(self, form):
         form.instance.owner = self.request.user
         return super().form_valid(form)
+
+
+class EditSafetyLayer(UpdateView):
+    model = SafetyLayer
+    fields = [
+        "prompt",
+        "messages_to_review",
+        "default_response_to_user",
+        "prompt_to_bot",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Update Safety Layer",
+        "button_text": "Update",
+        "active_tab": "safety_layers",
+    }
+
+    def get_form(self):
+        form = super().get_form()
+        form.fields["prompt"].disabled = True
+        return form
+
+    def get_success_url(self):
+        return reverse("experiments:safety_home", args=[self.request.team.slug])
+
+
+@login_and_team_required
+def delete_safety_layer(request, team_slug: str, pk: int):
+    safety_layer = get_object_or_404(SafetyLayer, id=pk)
+    safety_layer.delete()
+    return HttpResponse()
 
 
 @login_and_team_required
