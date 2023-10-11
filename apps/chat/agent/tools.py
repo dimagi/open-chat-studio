@@ -53,12 +53,13 @@ class RecurringReminderTool(CustomBaseTool):
         **kwargs,
     ):
         interval_schedule, _created = IntervalSchedule.objects.get_or_create(every=every, period=period)
-        periodic_task_kwargs = {
-            "start_time": datetime_due,
-            "expires": datetime_end,
-            "interval": interval_schedule,
-        }
-        create_periodic_task(self.experiment_session, message=message, kwargs=periodic_task_kwargs)
+        create_periodic_task(
+            self.experiment_session,
+            message=message,
+            start_time=datetime_due,
+            expires=datetime_end,
+            interval=interval_schedule,
+        )
         return "Success"
 
 
@@ -74,15 +75,16 @@ class OneOffReminderTool(CustomBaseTool):
         message: str,
         **kwargs,
     ):
-        periodic_task_kwargs = {
-            "clocked": ClockedSchedule.objects.create(clocked_time=datetime_due),
-            "one_off": True,
-        }
-        create_periodic_task(self.experiment_session, message=message, kwargs=periodic_task_kwargs)
+        create_periodic_task(
+            self.experiment_session,
+            message=message,
+            clocked=ClockedSchedule.objects.create(clocked_time=datetime_due),
+            one_off=True,
+        )
         return "Success"
 
 
-def create_periodic_task(experiment_session: ExperimentSession, message: str, kwargs: dict):
+def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
     channel_session = ChannelSession.objects.filter(experiment_session=experiment_session).first()
     task_kwargs = json.dumps(
         {"chat_ids": [channel_session.external_chat_id], "message": message, "is_bot_instruction": False}
