@@ -125,6 +125,10 @@ class ConsentForm(BaseModel):
     consent_text = models.TextField(help_text="Custom markdown text")
     is_default = models.BooleanField(default=False)
 
+    @classmethod
+    def get_default(cls):
+        return cls.objects.get(is_default=True)
+
     def __str__(self):
         return self.name
 
