@@ -26,20 +26,7 @@ def update_experiment_sessions(apps, schema_editor):
 
 def revert_update(apps, schema_editor):
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
-    records_updated = 0
-    while True:
-        sessions = ExperimentSession.objects.all()[records_updated:records_updated+BATCH_SIZE]
-        if not sessions:
-            break
-
-        dirty_experiment_sessions = []
-        for session in sessions:
-            session.external_chat_id = None
-            session.experiment_channel = None
-            dirty_experiment_sessions.append(session)
-
-        ExperimentSession.objects.bulk_update(dirty_experiment_sessions, ["external_chat_id", "experiment_channel"])
-        records_updated += len(sessions)
+    ExperimentSession.objects.all().update(external_chat_id=None, experiment_channel=None)
 
 class Migration(migrations.Migration):
     dependencies = [
