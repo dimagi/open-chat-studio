@@ -353,15 +353,8 @@ def start_experiment(request, team_slug: str, experiment_id: str):
             }
         )
 
-    if experiment.consent_form:
-        rendered_markdown = experiment.consent_form.consent_text
-    else:
-        consent_template = "experiments/consent/consent_default.md"
-        rendered_markdown = render_to_string(consent_template, request=request)
-
-    markdown_text = markdown.markdown(rendered_markdown)
-    consent_notice = mark_safe(markdown_text)
-
+    consent_md = experiment.consent_form.consent_text
+    consent_notice = mark_safe(markdown.markdown(consent_md))
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
@@ -485,9 +478,8 @@ def start_experiment_session(request, team_slug: str, experiment_id: str, sessio
             initial=initial,
         )
 
-    consent_template = "experiments/consent/consent_default.md"
-    rendered_markdown = render_to_string(consent_template, request=request)
-    consent_notice = mark_safe(markdown.markdown(rendered_markdown))
+    consent_md = experiment.consent_form.consent_text
+    consent_notice = mark_safe(markdown.markdown(consent_md))
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
