@@ -123,7 +123,7 @@ class ConsentForm(BaseModel):
 
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
-    is_default = models.BooleanField(default=False)
+    is_default = models.BooleanField(default=False, editable=False)
 
     @classmethod
     def get_default(cls):

@@ -109,6 +109,7 @@ class ConsentFormAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "consent_text",
+        "is_default",
     )
     readonly_fields = ("is_default",)
 
