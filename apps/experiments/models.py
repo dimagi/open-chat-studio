@@ -300,6 +300,14 @@ class ExperimentSession(BaseModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
+    external_chat_id = models.CharField(null=True, blank=True)  # Change to null=False in followup PR
+    experiment_channel = models.ForeignKey(
+        "channels.ExperimentChannel",
+        on_delete=models.CASCADE,
+        related_name="experiment_sessions",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["created_at"]
