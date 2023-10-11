@@ -122,6 +122,7 @@ class ConsentForm(BaseModel):
 
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
+    is_default = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -224,11 +225,9 @@ class Experiment(BaseModel):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         related_name="experiments",
-        help_text="If set, this consent form will be used instead of the default one.",
+        help_text="Consent form content to show to users before participation in experiments.",
     )
     synthetic_voice = models.ForeignKey(
         SyntheticVoice, null=True, blank=True, related_name="experiments", on_delete=models.SET_NULL

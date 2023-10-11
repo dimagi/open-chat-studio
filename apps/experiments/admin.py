@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin
 
 from apps.experiments import models
+from apps.experiments.models import ConsentForm
 
 
 @admin.register(models.Prompt)
@@ -83,6 +84,11 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
     form = ExperimentAdminForm
 
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        initial["consent_form"] = ConsentForm.objects.get(is_default=True)
+        return initial
+
 
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
@@ -104,6 +110,7 @@ class ConsentFormAdmin(admin.ModelAdmin):
         "name",
         "consent_text",
     )
+    readonly_fields = ("is_default",)
 
 
 @admin.register(models.SyntheticVoice)
