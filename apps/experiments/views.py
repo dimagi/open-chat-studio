@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView
+from django_tables2 import SingleTableView
 
 from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.models import ChatMessage
@@ -36,12 +37,14 @@ from apps.experiments.models import (
     Participant,
     Prompt,
     PromptBuilderHistory,
+    SafetyLayer,
     SessionStatus,
     SourceMaterial,
 )
 from apps.experiments.tasks import get_prompt_builder_response_task, get_response_for_webchat_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
 from apps.users.models import CustomUser
+from templates.experiments.tables import SafetyLayerTable
 
 
 @login_and_team_required
@@ -57,25 +60,67 @@ def experiments_home(request, team_slug: str):
     )
 
 
-class CreateExperiment(CreateView):
-    model = Experiment
+# class CreateExperiment(CreateView):
+#     model = Experiment
+#     fields = [
+#         "name",
+#         "description",
+#         "llm",
+#         "temperature",
+#         "chatbot_prompt",
+#         "safety_layers",
+#         "tools_enabled",
+#         "source_material",
+#         "seed_message",
+#         "pre_survey",
+#         "post_survey",
+#         "consent_form",
+#         "synthetic_voice",
+#         "no_activity_config",
+#     ]
+#     template_name = "experiments/new_object.html"
+#
+#     def form_valid(self, form):
+#         form.instance.owner = self.request.user
+#         return super().form_valid(form)
+
+
+@login_and_team_required
+def safety_layer_home(request, team_slug: str):
+    return TemplateResponse(
+        request,
+        "generic/object_home.html",
+        {
+            "active_tab": "safety:home",
+            "title": "Safety Layers",
+            "new_object_url": reverse("experiments:safety_new", args=[team_slug]),
+            "table_url": reverse("experiments:safety_table", args=[team_slug]),
+        },
+    )
+
+
+class SafetyLayerTableView(SingleTableView):
+    model = SafetyLayer
+    paginate_by = 25
+    table_class = SafetyLayerTable
+    template_name = "table/single_table.html"
+
+
+class CreateSafetyLayer(CreateView):
+    model = SafetyLayer
     fields = [
-        "name",
-        "description",
-        "llm",
-        "temperature",
-        "chatbot_prompt",
-        "safety_layers",
-        "tools_enabled",
-        "source_material",
-        "seed_message",
-        "pre_survey",
-        "post_survey",
-        "consent_form",
-        "synthetic_voice",
-        "no_activity_config",
+        "prompt",
+        "messages_to_review",
+        "default_response_to_user",
+        "prompt_to_bot",
     ]
-    template_name = "experiments/experiment_create.html"
+    template_name = "experiments/../../templates/generic/new_object.html"
+    extra_context = {
+        "title": "Create Safety Layer",
+    }
+
+    def get_success_url(self):
+        return reverse("experiments:safety_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
         form.instance.owner = self.request.user

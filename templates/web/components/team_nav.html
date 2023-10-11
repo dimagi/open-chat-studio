@@ -7,14 +7,11 @@
       {% translate "Experiments" %}
     </a>
     <ul>
-      <li><a>level 2 item 1</a></li>
-      <li><a>level 2 item 2</a></li>
       <li>
-        <a>Parent</a>
-        <ul>
-          <li><a>level 3 item 1</a></li>
-          <li><a>level 3 item 2</a></li>
-        </ul>
+        <a href="{% url 'experiments:safety_home' request.team.slug %}" {% if active_tab == 'safety:home' %}class="active"{% endif %}>
+        <i class="fa fa-shield h-4 w-4"></i>
+        {% translate "Safety Layers" %}
+      </a>
       </li>
     </ul>
   </li>

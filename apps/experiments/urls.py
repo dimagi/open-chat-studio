@@ -6,7 +6,9 @@ app_name = "experiments"
 
 urlpatterns = [
     path("", views.experiments_home, name="experiments_home"),
-    path("new/", views.CreateExperiment.as_view(), name="experiments_new"),
+    path("safety/", views.safety_layer_home, name="safety_home"),
+    path("safety/new/", views.CreateSafetyLayer.as_view(), name="safety_new"),
+    path("safety/table/", views.SafetyLayerTableView.as_view(), name="safety_table"),
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
         "prompt_builder/get_message/",
