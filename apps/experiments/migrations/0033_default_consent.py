@@ -2,13 +2,32 @@
 from django.db import migrations, models
 import django.db.models.deletion
 
+DEFAULT_CONSENT_TEXT = """
+Welcome to this chatbot built on Open Chat Studio! 
+
+The Chatbot is provided "as-is" and "as available." Open Chat Studio makes no warranties,
+express or implied, regarding the Chatbot's accuracy, completeness, or availability.
+
+You use the chatbot at your own risk. Open Chat Studio shall not be liable for any harm
+or damages that may result from your use of the chatbot.
+
+You understand and agree that any reliance on the Chatbot's responses is solely at your own
+discretion and risk.
+
+By selecting “I Agree” below, you indicate that: 
+
+* You have read and understood the above information.
+* You voluntarily agree to try out this chatbot.
+* You are 18 years or older.
+"""
+
 
 def create_default_consent(apps, schema_editor):
     ConsentForm = apps.get_model("experiments", "ConsentForm")
     if not ConsentForm.objects.filter(is_default=True).exists():
         ConsentForm.objects.create(
             name="Default Consent",
-            consent_text="Do you consent to participating in this experimental chatbot?",
+            consent_text=DEFAULT_CONSENT_TEXT,
             is_default=True
         )
 
