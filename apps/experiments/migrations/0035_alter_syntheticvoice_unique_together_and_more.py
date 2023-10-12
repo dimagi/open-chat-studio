@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0033_default_consent"),
+        ("experiments", "0034_alter_experiment_safety_layers"),
     ]
 
     operations = [
