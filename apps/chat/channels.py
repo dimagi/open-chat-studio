@@ -1,3 +1,4 @@
+import logging
 import uuid
 from abc import abstractmethod
 from datetime import datetime, timedelta
@@ -186,7 +187,8 @@ class ChannelBase:
         try:
             voice_audio, duration = audio.synthesize_voice(text, synthetic_voice=self.experiment.synthetic_voice)
             self.send_voice_to_user(voice_audio, duration)
-        except AudioSynthesizeException:
+        except AudioSynthesizeException as e:
+            logging.warning(e)
             self.send_text_to_user(text)
 
     def _get_voice_transcript(self) -> str:
