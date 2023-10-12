@@ -18,6 +18,12 @@ urlpatterns = [
     path("source_material/<int:pk>/", views.EditSourceMaterial.as_view(), name="source_material_edit"),
     path("source_material/<int:pk>/delete/", views.delete_source_material, name="source_material_delete"),
     path("source_material/table/", views.SourceMaterialTableView.as_view(), name="source_material_table"),
+    # surveys
+    path("survey/", views.survey_home, name="survey_home"),
+    path("survey/new/", views.CreateSurvey.as_view(), name="survey_new"),
+    path("survey/<int:pk>/", views.EditSurvey.as_view(), name="survey_edit"),
+    path("survey/<int:pk>/delete/", views.delete_survey, name="survey_delete"),
+    path("survey/table/", views.SurveyTableView.as_view(), name="survey_table"),
     # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(

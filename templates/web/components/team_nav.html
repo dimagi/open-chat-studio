@@ -3,41 +3,48 @@
 {% if request.team %}
   <li>
     <a href="{% url 'experiments:experiments_home' request.team.slug %}" {% if active_tab == 'experiments' %}class="active"{% endif %}>
-      <i class="fa fa-flask h-4 w-4"></i>
+      <i class="fa fa-flask fa-fw"></i>
       {% translate "Experiments" %}
     </a>
     <ul>
       <li>
         <a href="{% url 'experiments:safety_home' request.team.slug %}"
            {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
-          <i class="fa fa-shield h-4 w-4"></i>
+          <i class="fa fa-shield fa-fw"></i>
           {% translate "Safety Layers" %}
         </a>
       </li>
       <li>
         <a href="{% url 'experiments:source_material_home' request.team.slug %}"
            {% if active_tab == 'source_material' %}class="active"{% endif %}>
-          <i class="fa fa-book h-4 w-4"></i>
+          <i class="fa fa-book fa-fw"></i>
           {% translate "Source Material" %}
+        </a>
+      </li>
+      <li>
+        <a href="{% url 'experiments:survey_home' request.team.slug %}"
+           {% if active_tab == 'survey' %}class="active"{% endif %}>
+          <i class="fa-solid fa-file-circle-question fa-fw"></i>
+          {% translate "Surveys" %}
         </a>
       </li>
     </ul>
   </li>
   <li>
     <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>
-      <i class="fa fa-ruler h-4 w-4"></i>
+      <i class="fa fa-ruler fa-fw"></i>
       {% translate "Prompt Builder" %}
     </a>
   </li>
 {#  <li>#}
 {#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
-{#      <i class="fa fa-comments h-4 w-4"></i>#}
+{#      <i class="fa fa-comments fa-fw"></i>#}
 {#      {% translate "Chats" %}#}
 {#    </a>#}
 {#  </li>#}
   <li>
     <a href="{% url 'single_team:manage_team' request.team.slug %}" {% if active_tab == 'manage-team' %}class="active"{% endif %}>
-      <i class="fa fa-gear h-4 w-4"></i>
+      <i class="fa fa-gear fa-fw"></i>
       {% translate "My Team" %}
     </a>
   </li>

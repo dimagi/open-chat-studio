@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import SafetyLayer, SourceMaterial
+from apps.experiments.models import SafetyLayer, SourceMaterial, Survey
 
 
 class SafetyLayerTable(tables.Table):
@@ -43,3 +43,23 @@ class SourceMaterialTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No source material found."
+
+
+class SurveyTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "edit_url_name": "experiments:survey_edit",
+            "delete_url_name": "experiments:survey_delete",
+        },
+    )
+
+    class Meta:
+        model = Survey
+        fields = (
+            "name",
+            "url",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No surveys found."
