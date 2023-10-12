@@ -8,7 +8,14 @@ from mock import Mock, patch
 from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
-from apps.experiments.models import Experiment, ExperimentSession, NoActivityMessageConfig, Prompt, SessionStatus
+from apps.experiments.models import (
+    ConsentForm,
+    Experiment,
+    ExperimentSession,
+    NoActivityMessageConfig,
+    Prompt,
+    SessionStatus,
+)
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.users.models import CustomUser
 
@@ -33,6 +40,7 @@ class TasksTest(TestCase):
             description="test",
             chatbot_prompt=self.prompt,
             no_activity_config=self.no_activity_config,
+            consent_form=ConsentForm.get_default(),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"
@@ -62,6 +70,7 @@ class TasksTest(TestCase):
             description="test2",
             chatbot_prompt=self.prompt,
             no_activity_config=None,
+            consent_form=ConsentForm.get_default(),
         )
         ExperimentChannel.objects.create(
             name="TestChannel2", experiment=second_experiment, extra_data={"bot_token": "222222"}, platform="telegram"
