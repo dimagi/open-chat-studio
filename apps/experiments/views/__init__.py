@@ -34,3 +34,10 @@ from .safety import (  # noqa: F401
     delete_safety_layer,
     safety_layer_home,
 )
+from .source_material import (  # noqa: F401
+    CreateSourceMaterial,
+    EditSourceMaterial,
+    SourceMaterialTableView,
+    delete_source_material,
+    source_material_home,
+)

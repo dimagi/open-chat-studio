@@ -8,10 +8,18 @@
     </a>
     <ul>
       <li>
-        <a href="{% url 'experiments:safety_home' request.team.slug %}" {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
-        <i class="fa fa-shield h-4 w-4"></i>
-        {% translate "Safety Layers" %}
-      </a>
+        <a href="{% url 'experiments:safety_home' request.team.slug %}"
+           {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
+          <i class="fa fa-shield h-4 w-4"></i>
+          {% translate "Safety Layers" %}
+        </a>
+      </li>
+      <li>
+        <a href="{% url 'experiments:source_material_home' request.team.slug %}"
+           {% if active_tab == 'source_material' %}class="active"{% endif %}>
+          <i class="fa fa-book h-4 w-4"></i>
+          {% translate "Source Material" %}
+        </a>
       </li>
     </ul>
   </li>

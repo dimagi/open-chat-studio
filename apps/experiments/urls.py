@@ -12,6 +12,12 @@ urlpatterns = [
     path("safety/<int:pk>/", views.EditSafetyLayer.as_view(), name="safety_edit"),
     path("safety/<int:pk>/delete/", views.delete_safety_layer, name="safety_delete"),
     path("safety/table/", views.SafetyLayerTableView.as_view(), name="safety_table"),
+    # source material
+    path("source_material/", views.source_material_home, name="source_material_home"),
+    path("source_material/new/", views.CreateSourceMaterial.as_view(), name="source_material_new"),
+    path("source_material/<int:pk>/", views.EditSourceMaterial.as_view(), name="source_material_edit"),
+    path("source_material/<int:pk>/delete/", views.delete_source_material, name="source_material_delete"),
+    path("source_material/table/", views.SourceMaterialTableView.as_view(), name="source_material_table"),
     # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
