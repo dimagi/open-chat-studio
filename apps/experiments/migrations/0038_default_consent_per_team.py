@@ -21,7 +21,7 @@ def create_default_consent_form(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0034_consentform_team_experiment_team_and_more"),
+        ("experiments", "0037_make_team_not_null"),
     ]
 
     operations = [

@@ -8,86 +8,24 @@ from apps.utils.teams_migration import assign_model_to_team_migration
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("teams", "0003_flag"),
-        ("experiments", "0033_default_consent"),
+        ("experiments", "0036_populate_team"),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="consentform",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
-        migrations.RunPython(assign_model_to_team_migration("experiments.ConsentForm"), migrations.RunPython.noop),
-        migrations.AddField(
-            model_name="experiment",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
+        migrations.RunPython(
+            assign_model_to_team_migration("experiments.ConsentForm", delete_if_no_team=True),
+            migrations.RunPython.noop
         ),
         migrations.RunPython(assign_model_to_team_migration("experiments.Experiment"), migrations.RunPython.noop),
-        migrations.AddField(
-            model_name="noactivitymessageconfig",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(
             assign_model_to_team_migration("experiments.NoActivityMessageConfig"), migrations.RunPython.noop
         ),
-        migrations.AddField(
-            model_name="prompt",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(assign_model_to_team_migration("experiments.Prompt"), migrations.RunPython.noop),
-        migrations.AddField(
-            model_name="promptbuilderhistory",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(
             assign_model_to_team_migration("experiments.PromptBuilderHistory"), migrations.RunPython.noop
         ),
-        migrations.AddField(
-            model_name="safetylayer",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(assign_model_to_team_migration("experiments.SafetyLayer"), migrations.RunPython.noop),
-        migrations.AddField(
-            model_name="sourcematerial",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(assign_model_to_team_migration("experiments.SourceMaterial"), migrations.RunPython.noop),
-        migrations.AddField(
-            model_name="survey",
-            name="team",
-            field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.CASCADE, to="teams.team", verbose_name="Team"
-            ),
-            preserve_default=False,
-        ),
         migrations.RunPython(
             assign_model_to_team_migration("experiments.Survey"), migrations.RunPython.noop
         ),
