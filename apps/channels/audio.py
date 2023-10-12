@@ -64,9 +64,21 @@ def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[
 
             return BytesIO(file_content), duration_seconds
         else:
+            # Delete the temporary file
+            try:
+                os.unlink(temp_file.name)
+            except FileNotFoundError:
+                pass
+
             raise AudioSynthesizeException(f"Azure audio synthesis failed with reason: {result.reason}. Req")
 
     except Exception as e:
+        # Delete the temporary file
+        try:
+            os.unlink(temp_file.name)
+        except FileNotFoundError:
+            pass
+
         raise AudioSynthesizeException(f"Unable to synthesize audio with Azure: {e}")
 
 
