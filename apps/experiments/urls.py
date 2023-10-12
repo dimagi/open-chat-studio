@@ -41,7 +41,10 @@ urlpatterns = [
         name="prompt_builder_load_source_material",
     ),
     # experiments
+    path("new/", views.CreateExperiment.as_view(), name="new"),
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
+    path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
+    path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
     path("e/<int:experiment_id>/start_session/", views.start_session, name="start_session"),
     path(
         "e/<int:experiment_id>/session/<int:session_id>/", views.experiment_chat_session, name="experiment_chat_session"

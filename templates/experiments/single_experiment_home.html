@@ -11,7 +11,8 @@
     {% endif %}
     {% if request.user.is_superuser %}
       <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}" class="btn btn-outline btn-secondary">Invitations</a>
-      <a href="{% url 'admin:experiments_experiment_change' experiment.id %}" class="btn btn-outline btn-dark">Edit Experiment</a>
+      <a href="{% url 'experiments:edit' team.slug experiment.id %}" class="btn btn-outline btn-dark">Edit Experiment</a>
+      <a href="{% url 'experiments:delete' team.slug experiment.id %}" class="btn btn-outline btn-error">Delete Experiment</a>
     {% endif %}
   </form>
   <h2 class="pg-subtitle">Previous Chat Sessions</h2>

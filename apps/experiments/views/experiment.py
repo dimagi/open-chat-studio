@@ -12,13 +12,14 @@ from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, UpdateView
 
 from apps.channels.models import ChannelSession, ExperimentChannel
 from apps.chat.models import ChatMessage
@@ -44,6 +45,75 @@ def experiments_home(request, team_slug: str):
             "active_tab": "experiments",
         },
     )
+
+
+class CreateExperiment(CreateView):
+    model = Experiment
+    fields = [
+        "name",
+        "description",
+        "llm",
+        "temperature",
+        "chatbot_prompt",
+        "safety_layers",
+        "tools_enabled",
+        "source_material",
+        "seed_message",
+        "pre_survey",
+        "post_survey",
+        "consent_form",
+        "synthetic_voice",
+        "no_activity_config",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Create Experiment",
+        "button_text": "Create",
+        "active_tab": "experiments",
+    }
+
+    def get_success_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
+
+class EditExperiment(UpdateView):
+    model = Experiment
+    fields = [
+        "name",
+        "description",
+        "llm",
+        "temperature",
+        "chatbot_prompt",
+        "safety_layers",
+        "tools_enabled",
+        "source_material",
+        "seed_message",
+        "pre_survey",
+        "post_survey",
+        "consent_form",
+        "synthetic_voice",
+        "no_activity_config",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Update Experiment",
+        "button_text": "Update",
+        "active_tab": "experiments",
+    }
+
+    def get_success_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+
+@login_and_team_required
+def delete_experiment(request, team_slug: str, pk: int):
+    safety_layer = get_object_or_404(Experiment, id=pk)
+    safety_layer.delete()
+    return redirect("experiments:experiments_home", team_slug)
 
 
 @login_and_team_required

@@ -1,8 +1,18 @@
 {% extends 'web/app/app_base.html' %}
 {% block app %}
 <div class="app-card">
-  <h1 class="pg-title">Experiments</h1>
-  <h2 class="pg-subtitle">The following experiments are available.</h2>
+  <div class="grid grid-cols-6">
+    <div class="col-span-5">
+      <h1 class="pg-title">Experiments</h1>
+    </div>
+    {% if request.user.is_superuser %}
+    <div class="justify-self-end">
+      <a class="btn btn-primary btn-sm" href="{% url "experiments:new" request.team.slug %}">Add new</a>
+    </div>
+    {% endif %}
+  </div>
+  <hr class="m-2">
+
 {% if request.user.is_superuser %}
 <style>
   @media (prefers-color-scheme: dark) {
