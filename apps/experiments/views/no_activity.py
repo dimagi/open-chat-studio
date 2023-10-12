@@ -30,6 +30,9 @@ class NoActivityMessageConfigTableView(SingleTableView):
     table_class = NoActivityMessageConfigTable
     template_name = "table/single_table.html"
 
+    def get_queryset(self):
+        return NoActivityMessageConfig.objects.filter(team=self.request.team)
+
 
 class CreateNoActivityMessageConfig(CreateView):
     model = NoActivityMessageConfig
@@ -50,6 +53,7 @@ class CreateNoActivityMessageConfig(CreateView):
         return reverse("experiments:no_activity_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -69,12 +73,15 @@ class EditNoActivityMessageConfig(UpdateView):
         "active_tab": "no_activity_config",
     }
 
+    def get_queryset(self):
+        return NoActivityMessageConfig.objects.filter(team=self.request.team)
+
     def get_success_url(self):
         return reverse("experiments:no_activity_home", args=[self.request.team.slug])
 
 
 @login_and_team_required
 def delete_no_activity_config(request, team_slug: str, pk: int):
-    no_activity_config = get_object_or_404(NoActivityMessageConfig, id=pk)
+    no_activity_config = get_object_or_404(NoActivityMessageConfig, id=pk, team=request.team)
     no_activity_config.delete()
     return HttpResponse()
