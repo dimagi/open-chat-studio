@@ -33,7 +33,7 @@ def drop_synthetic_voices(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0035_alter_syntheticvoice_language_code_and_more"),
+        ("experiments", "0035_update_AWS_synthetic_voices"),
     ]
 
     operations = [migrations.RunPython(load_azure_synthetic_voices, drop_synthetic_voices)]

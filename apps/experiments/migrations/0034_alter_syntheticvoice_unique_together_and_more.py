@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0032_load_synthetic_voices"),
+        ("experiments", "0033_default_consent"),
     ]
 
     operations = [
@@ -17,14 +17,15 @@ class Migration(migrations.Migration):
             model_name="syntheticvoice",
             name="language_code",
             field=models.CharField(
-                blank=True, help_text="The language code this voice is for", max_length=32, null=True
+                default="<undef>", help_text="The language code this voice is for", max_length=32
             ),
+            preserve_default=False,
         ),
         migrations.AddField(
             model_name="syntheticvoice",
             name="service",
             field=models.CharField(
-                choices=[("AWS", "AWS"), ("azure", "Azure")],
+                choices=[("AWS", "AWS"), ("Azure", "Azure")],
                 default="AWS",
                 help_text="The service this voice is from",
                 max_length=6,

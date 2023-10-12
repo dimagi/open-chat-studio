@@ -39,7 +39,7 @@ def drop_language_code(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0033_alter_syntheticvoice_unique_together_and_more"),
+        ("experiments", "0034_alter_syntheticvoice_unique_together_and_more"),
     ]
 
     operations = [migrations.RunPython(load_language_code, drop_language_code)]
