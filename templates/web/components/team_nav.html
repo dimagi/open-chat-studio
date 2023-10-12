@@ -35,6 +35,13 @@
           {% translate "Consent Forms" %}
         </a>
       </li>
+      <li>
+        <a href="{% url 'experiments:no_activity_home' request.team.slug %}"
+           {% if active_tab == 'no_activity_config' %}class="active"{% endif %}>
+          <i class="fa-solid fa-hourglass-end fa-fw"></i>
+          {% translate "No Activity Config" %}
+        </a>
+      </li>
     </ul>
   </li>
   <li>
