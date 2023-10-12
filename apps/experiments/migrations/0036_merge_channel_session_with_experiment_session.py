@@ -30,7 +30,7 @@ def revert_update(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0033_experimentsession_experiment_channel_and_more"),
+        ("experiments", "0035_experimentsession_experiment_channel_and_more"),
     ]
 
     operations = [migrations.RunPython(update_experiment_sessions, revert_update)]

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0034_merge_channel_session_with_experiment_session"),
+        ("experiments", "0036_merge_channel_session_with_experiment_session"),
     ]
 
     operations = [

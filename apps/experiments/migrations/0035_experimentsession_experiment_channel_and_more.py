@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("channels", "0007_alter_experimentchannel_platform"),
-        ("experiments", "0032_load_synthetic_voices"),
+        ("experiments", "0034_alter_experiment_safety_layers"),
     ]
 
     operations = [
