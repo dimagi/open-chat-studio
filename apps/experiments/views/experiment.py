@@ -21,7 +21,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
@@ -135,13 +135,19 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 def _start_experiment_session(
-    experiment: Experiment, user: Optional[CustomUser] = None, participant: Optional[Participant] = None
+    experiment: Experiment,
+    experiment_channel: ExperimentChannel,
+    user: Optional[CustomUser] = None,
+    participant: Optional[Participant] = None,
+    external_chat_id: Optional[str] = None,
 ) -> ExperimentSession:
     session = ExperimentSession.objects.create(
         user=user,
         participant=participant,
         experiment=experiment,
         llm=experiment.llm,
+        external_chat_id=external_chat_id,
+        experiment_channel=experiment_channel,
     )
     return _check_and_process_seed_message(session)
 
@@ -160,11 +166,7 @@ def _check_and_process_seed_message(session: ExperimentSession):
 def start_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id)
     channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
-    session = _start_experiment_session(experiment, request.user)
-    # TODO: Move this into `_start_experiment_session` (or some model?) and refactor
-    ChannelSession.objects.get_or_create(
-        experiment_channel=channel, experiment_session=session, external_chat_id=session.chat.id
-    )
+    session = _start_experiment_session(experiment, experiment_channel=channel, user=request.user)
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
@@ -278,10 +280,10 @@ def start_experiment(request, team_slug: str, experiment_id: str):
                 )[0]
             channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
             session = _start_experiment_session(
-                experiment, get_real_user_or_none(request.user), participant=participant
-            )
-            ChannelSession.objects.get_or_create(
-                experiment_channel=channel, experiment_session=session, external_chat_id=session.chat.id
+                experiment,
+                user=get_real_user_or_none(request.user),
+                participant=participant,
+                experiment_channel=channel,
             )
             return _record_consent_and_redirect(request, team_slug, session)
 

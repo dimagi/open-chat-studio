@@ -5,7 +5,7 @@ from django.test import TestCase
 from freezegun import freeze_time
 from mock import Mock, patch
 
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
 from apps.experiments.models import (
@@ -105,14 +105,11 @@ class TasksTest(TestCase):
         self.assertEqual(_try_send_message.call_count, 2)
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
-        experiment_session = _start_experiment_session(experiment)
+        experiment_session = _start_experiment_session(
+            experiment, external_chat_id=self.telegram_chat_id, experiment_channel=self.experiment_channel
+        )
         experiment_session.status = session_status
         experiment_session.save()
-        ChannelSession.objects.create(
-            external_chat_id=self.telegram_chat_id,
-            experiment_session=experiment_session,
-            experiment_channel=self.experiment_channel,
-        )
         return experiment_session
 
     def _add_chats(self, experiment_session: ExperimentSession, last_message_type: str):

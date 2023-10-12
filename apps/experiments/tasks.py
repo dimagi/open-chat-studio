@@ -14,9 +14,7 @@ from apps.users.models import CustomUser
 @shared_task
 def get_response_for_webchat_task(experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
-    # Channel session should exist. We shoul run a data migration before this code
-    channel_session = experiment_session.get_channel_session()
-    message_handler = WebMessageHandler(channel_session.experiment_channel)
+    message_handler = WebMessageHandler(experiment_session.experiment_channel)
     message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
     return message_handler.new_user_message(message)
 

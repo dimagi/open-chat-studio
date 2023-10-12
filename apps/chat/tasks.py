@@ -6,7 +6,6 @@ import pytz
 from celery.app import shared_task
 from django.db.models import OuterRef, Subquery
 
-from apps.channels.models import ChannelSession
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.exceptions import ExperimentChannelRepurposedException
 from apps.chat.message_handlers import MessageHandler
@@ -36,17 +35,18 @@ def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruct
     chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
     response will be saved to the chat history.
     """
-    channel_sessions = (
-        ChannelSession.objects.filter(external_chat_id__in=chat_ids)
-        .prefetch_related("experiment_session__experiment", "experiment_session__experiment")
+    experiment_sessions = (
+        ExperimentSession.objects.filter(external_chat_id__in=chat_ids)
+        .prefetch_related(
+            "experiment",
+        )
         .all()
     )
-    for channel_session in channel_sessions:
+    for experiment_session in experiment_sessions:
         try:
-            if channel_session.is_stale():
+            if experiment_session.is_stale():
                 continue
 
-            experiment_session = channel_session.experiment_session
             bot_message_to_user = message
             if is_bot_instruction:
                 bot_message_to_user = _bot_prompt_for_user(
@@ -118,9 +118,8 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
 def _try_send_message(experiment_session: ExperimentSession, message: str):
     """Tries to send a message to the experiment session"""
     try:
-        channel_session = experiment_session.get_channel_session()
-        experiment_channel = channel_session.experiment_channel
-        if experiment_channel.experiment != experiment_session.experiment:
+        experiment_channel = experiment_session.experiment_channel
+        if experiment_session.is_stale():
             # The experiment channel's experiment might have changed
             raise ExperimentChannelRepurposedException(
                 message=f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}' whereas the current experiment session points to experiment '{experiment_session.experiment.name}'"
