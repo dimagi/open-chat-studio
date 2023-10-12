@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import ConsentForm, SafetyLayer, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, NoActivityMessageConfig, SafetyLayer, SourceMaterial, Survey
 
 
 class SafetyLayerTable(tables.Table):
@@ -83,3 +83,25 @@ class ConsentFormTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No consent forms found."
+
+
+class NoActivityMessageConfigTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "edit_url_name": "experiments:no_activity_edit",
+            "delete_url_name": "experiments:no_activity_delete",
+        },
+    )
+
+    class Meta:
+        model = NoActivityMessageConfig
+        fields = (
+            "name",
+            "message_for_bot",
+            "max_pings",
+            "ping_after",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No configs found."
