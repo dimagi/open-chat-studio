@@ -17,7 +17,7 @@ WHATSAPP = "whatsapp"
 
 
 class ExperimentChannel(BaseModel):
-    PLATFORM = ((TELEGRAM, TELEGRAM), (WEB, WEB), (WHATSAPP, WHATSAPP))
+    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"))
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -32,7 +32,7 @@ class ExperimentChannel(BaseModel):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         try:
-            if self.platform == "telegram":
+            if self.platform == TELEGRAM:
                 _set_telegram_webhook(self)
         except apihelper.ApiTelegramException:
             token = self.extra_data.get("bot_token", "")
