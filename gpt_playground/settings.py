@@ -416,10 +416,10 @@ TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 
 DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "min-w-max w-full table-auto",
+    "class": "w-full table-fixed",
     "thead": {"class": "bg-gray-200 text-gray-600 uppercase text-sm leading-normal"},
     "th": {"class": "py-3 px-6 text-left"},
-    "td": {"class": "py-3 px-6 text-left"},
+    "td": {"class": "py-3 px-6 text-left overflow-hidden"},
 }
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": "border-b border-gray-200 hover:bg-gray-100",
