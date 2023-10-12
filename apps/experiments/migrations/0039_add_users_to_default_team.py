@@ -7,7 +7,7 @@ def add_users_to_default_team(apps, schema_editor):
     Team = apps.get_model("teams", "Team")
     User = apps.get_model(settings.AUTH_USER_MODEL)
     Membership = apps.get_model("teams", "Membership")
-    default_team = Team.objects.order("id").first()
+    default_team = Team.objects.order_by("id").first()
     for user in User.objects.all():
         Membership.objects.get_or_create(team=default_team, user=user, defaults={
             "role": "member"
