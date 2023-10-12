@@ -82,6 +82,7 @@ django==4.2
     #   django-hijack
     #   django-otp
     #   django-storages
+    #   django-tables2
     #   django-timezone-field
     #   djangorestframework
     #   drf-spectacular
@@ -102,6 +103,8 @@ django-hijack==3.3.0
 django-otp==1.1.6
     # via django-allauth-2fa
 django-storages==1.13.2
+    # via -r requirements/requirements.in
+django-tables2==2.6.0
     # via -r requirements/requirements.in
 django-timezone-field==6.0.1
     # via django-celery-beat

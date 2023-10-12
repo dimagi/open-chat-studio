@@ -2,6 +2,7 @@ boto3
 Django
 django-allauth
 django-allauth-2fa
+django-tables2
 django-waffle
 psycopg2-binary
 django-environ

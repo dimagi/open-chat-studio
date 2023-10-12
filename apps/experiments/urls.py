@@ -6,6 +6,13 @@ app_name = "experiments"
 
 urlpatterns = [
     path("", views.experiments_home, name="experiments_home"),
+    # safety layers
+    path("safety/", views.safety_layer_home, name="safety_home"),
+    path("safety/new/", views.CreateSafetyLayer.as_view(), name="safety_new"),
+    path("safety/<int:pk>/", views.EditSafetyLayer.as_view(), name="safety_edit"),
+    path("safety/<int:pk>/delete/", views.delete_safety_layer, name="safety_delete"),
+    path("safety/table/", views.SafetyLayerTableView.as_view(), name="safety_table"),
+    # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
         "prompt_builder/get_message/",
@@ -33,6 +40,7 @@ urlpatterns = [
         views.prompt_builder_load_source_material,
         name="prompt_builder_load_source_material",
     ),
+    # experiments
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:experiment_id>/start_session/", views.start_session, name="start_session"),
     path(
