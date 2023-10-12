@@ -243,6 +243,7 @@ class MessageHandler:
 
     def _create_experiment_and_channel_sessions(self):
         self.experiment_session = ExperimentSession.objects.create(
+            team=self.experiment.team,
             user=None,
             participant=None,
             experiment=self.experiment,

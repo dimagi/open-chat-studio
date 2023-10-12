@@ -125,8 +125,8 @@ class ConsentForm(BaseTeamModel):
     is_default = models.BooleanField(default=False, editable=False)
 
     @classmethod
-    def get_default(cls):
-        return cls.objects.get(is_default=True)
+    def get_default(cls, team):
+        return cls.objects.get(team=team, is_default=True)
 
     def __str__(self):
         return self.name
