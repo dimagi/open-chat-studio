@@ -303,7 +303,7 @@ class ExperimentSession(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
-            self.chat = Chat.objects.create(user=self.user, name=self.experiment.name)
+            self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:

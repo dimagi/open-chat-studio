@@ -36,7 +36,7 @@ from apps.users.models import CustomUser
 
 @login_and_team_required
 def experiments_home(request, team_slug: str):
-    experiments = Experiment.objects.filter(Q(is_active=True) | Q(owner=request.user)).order_by("-created_at")
+    experiments = Experiment.objects.filter(team=request.team).order_by("-created_at")
     return TemplateResponse(
         request,
         "experiments/experiment_home.html",
@@ -76,6 +76,7 @@ class CreateExperiment(CreateView):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -105,20 +106,23 @@ class EditExperiment(UpdateView):
         "active_tab": "experiments",
     }
 
+    def get_queryset(self):
+        return Experiment.objects.filter(team=self.request.team)
+
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
 
 @login_and_team_required
 def delete_experiment(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(Experiment, id=pk)
+    safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
     safety_layer.delete()
     return redirect("experiments:experiments_home", team_slug)
 
 
 @login_and_team_required
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     sessions = ExperimentSession.objects.filter(
         user=request.user,
         experiment=experiment,
@@ -138,6 +142,7 @@ def _start_experiment_session(
     experiment: Experiment, user: Optional[CustomUser] = None, participant: Optional[Participant] = None
 ) -> ExperimentSession:
     session = ExperimentSession.objects.create(
+        team=experiment.team,
         user=user,
         participant=participant,
         experiment=experiment,
@@ -158,7 +163,7 @@ def _check_and_process_seed_message(session: ExperimentSession):
 @require_POST
 @login_and_team_required
 def start_session(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
     session = _start_experiment_session(experiment, request.user)
     # TODO: Move this into `_start_experiment_session` (or some model?) and refactor
@@ -177,7 +182,7 @@ def _ensure_channel_exists(experiment: Experiment, platform: str, name: str) -> 
 
 @login_and_team_required
 def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(ExperimentSession, user=request.user, experiment_id=experiment_id, id=session_id)
     return TemplateResponse(
         request,
@@ -193,7 +198,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
     message_text = request.POST["message"]
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
@@ -212,7 +217,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
 # @login_and_team_required
 def get_message_response(request, team_slug: str, experiment_id: int, session_id: int, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
@@ -235,7 +240,9 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
-    experiment_session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    experiment_session = get_object_or_404(
+        ExperimentSession, user=user, experiment_id=experiment_id, id=session_id, team=request.team
+    )
 
     since = datetime.now().astimezone(pytz.timezone("UTC"))
     if since_param and since_param != "null":
@@ -263,7 +270,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 def start_experiment(request, team_slug: str, experiment_id: str):
     try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True)
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
     except ValidationError:
         # old links dont have uuids
         raise Http404
@@ -308,7 +315,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
 @team_admin_required
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def experiment_invitations(request, team_slug: str, experiment_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     sessions = experiment.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
@@ -354,7 +361,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
     # Create a HttpResponse with the CSV data and file attachment headers
     response = HttpResponse(experiment_to_csv(experiment).getvalue(), content_type="text/csv")
@@ -363,7 +370,7 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
 
 
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)
     send_experiment_invitation(session)
     return TemplateResponse(
@@ -394,7 +401,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_experiment_session(request, team_slug: str, experiment_id: str, session_id: str):
-    experiment = get_object_or_404(Experiment, public_id=experiment_id)
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
 
     if request.method == "POST":
