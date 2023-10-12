@@ -22,7 +22,7 @@ def get_response_for_webchat_task(experiment_session_id: int, message_text: str)
 
 
 @shared_task
-def get_prompt_builder_response_task(user_id, data: str) -> str:
+def get_prompt_builder_response_task(team_id: int, user_id, data: str) -> str:
     # Deserialize the incoming JSON
     data_dict = json.loads(data)
     messages_history = data_dict["messages"]
@@ -84,5 +84,5 @@ def get_prompt_builder_response_task(user_id, data: str) -> str:
         }
     )
     history_event |= {"preview": answer, "time": datetime.now().time().strftime("%H:%M")}
-    PromptBuilderHistory.objects.create(owner=user, history=history_event)
+    PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}

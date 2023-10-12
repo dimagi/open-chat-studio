@@ -18,7 +18,7 @@ from apps.teams.decorators import login_and_team_required, team_admin_required
 
 @login_and_team_required
 def prompt_builder_load_prompts(request, team_slug: str):
-    prompts = Prompt.objects.all()
+    prompts = Prompt.objects.filter(team=request.team)
     prompts_list = list(prompts.values())
 
     return TemplateResponse(
@@ -32,7 +32,7 @@ def prompt_builder_load_prompts(request, team_slug: str):
 
 @login_and_team_required
 def prompt_builder_load_source_material(request, team_slug: str):
-    source_material = SourceMaterial.objects.all()
+    source_material = SourceMaterial.objects.filter(team=request.team)
     source_material_list = list(source_material.values())
 
     return TemplateResponse(
@@ -46,7 +46,7 @@ def prompt_builder_load_source_material(request, team_slug: str):
 
 @login_and_team_required
 def experiments_prompt_builder(request, team_slug: str):
-    prompts = Prompt.objects.order_by("-created_at").all()
+    prompts = Prompt.objects.filter(team=request.team).order_by("-created_at").all()
     prompts_list = list(prompts.values())
 
     return TemplateResponse(
@@ -64,7 +64,7 @@ def experiments_prompt_builder(request, team_slug: str):
 def experiments_prompt_builder_get_message(request, team_slug: str):
     data_json = request.body.decode("utf-8")
     user = get_real_user_or_none(request.user)
-    result = get_prompt_builder_response_task.delay(user.id, data_json)
+    result = get_prompt_builder_response_task.delay(request.team.id, user.id, data_json)
     return JsonResponse({"task_id": result.task_id})
 
 
@@ -83,9 +83,9 @@ def get_prompt_builder_message_response(request, team_slug: str):
 def get_prompt_builder_history(request, team_slug: str):
     # Fetch history for the request user limited to last 30 days
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    histories = PromptBuilderHistory.objects.filter(owner=request.user, created_at__gte=thirty_days_ago).order_by(
-        "-created_at"
-    )
+    histories = PromptBuilderHistory.objects.filter(
+        team=request.team, owner=request.user, created_at__gte=thirty_days_ago
+    ).order_by("-created_at")
 
     # Initialize temporary output format
     output_temp = defaultdict(list)
