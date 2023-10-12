@@ -126,8 +126,10 @@ class TelegramMessageHandlerTest(TestCase):
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
-    @patch("apps.chat.bots.ChatOpenAI")
-    def test_reset_command_creates_new_experiment_session(self, openai_mock, _call_predict, _send_text_to_user_mock):
+    @patch("apps.chat.bots.create_conversation")
+    def test_reset_command_creates_new_experiment_session(
+        self, create_conversation, _call_predict, _send_text_to_user_mock
+    ):
         """The reset command should create a new session when the user conversed with the bot"""
         telegram_chat_id = 00000
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
@@ -144,8 +146,10 @@ class TelegramMessageHandlerTest(TestCase):
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
-    @patch("apps.chat.bots.ChatOpenAI")
-    def test_reset_conversation_does_not_create_new_session(self, openai_mock, _call_predict, _send_text_to_user_mock):
+    @patch("apps.chat.bots.create_conversation")
+    def test_reset_conversation_does_not_create_new_session(
+        self, create_conversation, _call_predict, _send_text_to_user_mock
+    ):
         """The reset command should not create a new session when the user haven't conversed with the bot yet"""
         telegram_chat_id = 00000
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
