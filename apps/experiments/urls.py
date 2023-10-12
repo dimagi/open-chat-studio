@@ -4,14 +4,20 @@ from . import views
 
 app_name = "experiments"
 
+
+def _make_crud_urls(model_name: str, slug: str, prefix: str = None):
+    prefix = prefix or slug
+    return [
+        path(f"{prefix}/", getattr(views, f"{slug}_home"), name=f"{prefix}_home"),
+        path(f"{prefix}/new/", getattr(views, f"Create{model_name}").as_view(), name=f"{prefix}_new"),
+        path(f"{prefix}/<int:pk>/", getattr(views, f"Edit{model_name}").as_view(), name=f"{prefix}_edit"),
+        path(f"{prefix}/<int:pk>/delete/", getattr(views, f"delete_{slug}"), name=f"{prefix}_delete"),
+        path(f"{prefix}/table/", getattr(views, f"{model_name}TableView").as_view(), name=f"{prefix}_table"),
+    ]
+
+
 urlpatterns = [
     path("", views.experiments_home, name="experiments_home"),
-    # safety layers
-    path("safety/", views.safety_layer_home, name="safety_home"),
-    path("safety/new/", views.CreateSafetyLayer.as_view(), name="safety_new"),
-    path("safety/<int:pk>/", views.EditSafetyLayer.as_view(), name="safety_edit"),
-    path("safety/<int:pk>/delete/", views.delete_safety_layer, name="safety_delete"),
-    path("safety/table/", views.SafetyLayerTableView.as_view(), name="safety_table"),
     # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
@@ -107,3 +113,8 @@ urlpatterns = [
     # public link
     path("e/<slug:experiment_id>/start/", views.start_experiment, name="start_experiment"),
 ]
+
+urlpatterns.extend(_make_crud_urls("SafetyLayer", "safety_layer", "safety"))
+urlpatterns.extend(_make_crud_urls("SourceMaterial", "source_material"))
+urlpatterns.extend(_make_crud_urls("Survey", "survey"))
+urlpatterns.extend(_make_crud_urls("ConsentForm", "consent_form", "consent"))

@@ -1,3 +1,10 @@
+from .consent import (  # noqa: F401
+    ConsentFormTableView,
+    CreateConsentForm,
+    EditConsentForm,
+    consent_form_home,
+    delete_consent_form,
+)
 from .experiment import (  # noqa: F401
     CreateExperiment,
     EditExperiment,
@@ -37,3 +44,11 @@ from .safety import (  # noqa: F401
     delete_safety_layer,
     safety_layer_home,
 )
+from .source_material import (  # noqa: F401
+    CreateSourceMaterial,
+    EditSourceMaterial,
+    SourceMaterialTableView,
+    delete_source_material,
+    source_material_home,
+)
+from .survey import CreateSurvey, EditSurvey, SurveyTableView, delete_survey, survey_home  # noqa: F401

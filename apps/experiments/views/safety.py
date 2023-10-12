@@ -6,8 +6,8 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import SafetyLayer
+from apps.experiments.tables import SafetyLayerTable
 from apps.teams.decorators import login_and_team_required
-from templates.experiments.tables import SafetyLayerTable
 
 
 @login_and_team_required
