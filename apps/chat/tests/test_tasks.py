@@ -16,7 +16,7 @@ from apps.experiments.models import (
     Prompt,
     SessionStatus,
 )
-from apps.experiments.views import _start_experiment_session
+from apps.experiments.views.experiment import _start_experiment_session
 from apps.users.models import CustomUser
 
 
