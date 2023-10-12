@@ -1,10 +1,7 @@
 from typing import List, Optional
 
-from langchain import ConversationChain
-from langchain.callbacks import get_openai_callback
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema import AIMessage, HumanMessage
 
 from apps.chat.conversation import Conversation
