@@ -37,48 +37,34 @@ def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[
             subscription=settings.AZURE_SUBSCRIPTION_KEY, region=settings.AZURE_REGION
         )
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+            # Create an audio configuration that points to the output audio file
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
 
-        # Create an audio configuration that points to the output audio file
-        audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+            # Setup voice font (Azure refers to synthetic voices as voice fonts)
+            speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
 
-        # Setup voice font (Azure refers to synthetic voices as voice fonts)
-        speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
+            # Create a speech synthesizer
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
-        # Create a speech synthesizer
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+            # Synthesize the text
+            result = synthesizer.speak_text(text)
 
-        # Synthesize the text
-        result = synthesizer.speak_text(text)
+            # Check if synthesis was successful
+            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                audio_segment = AudioSegment.from_file(
+                    temp_file.name, format="wav"
+                )  # Azure returns audio in WAV format
+                duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
 
-        # Check if synthesis was successful
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            audio_segment = AudioSegment.from_file(temp_file.name, format="wav")  # Azure returns audio in WAV format
-            duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
+                with open(temp_file.name, "rb") as f:
+                    file_content = f.read()
 
-            with open(temp_file.name, "rb") as f:
-                file_content = f.read()
-
-            # Delete the temporary file
-            os.unlink(temp_file.name)
-
-            return BytesIO(file_content), duration_seconds
-        else:
-            # Delete the temporary file
-            try:
-                os.unlink(temp_file.name)
-            except FileNotFoundError:
-                pass
-
-            raise AudioSynthesizeException(f"Azure audio synthesis failed with reason: {result.reason}. Req")
+                return BytesIO(file_content), duration_seconds
+            else:
+                raise AudioSynthesizeException(f"Azure audio synthesis failed with reason: {result.reason}. Req")
 
     except Exception as e:
-        # Delete the temporary file
-        try:
-            os.unlink(temp_file.name)
-        except FileNotFoundError:
-            pass
-
         raise AudioSynthesizeException(f"Unable to synthesize audio with Azure: {e}")
 
 
