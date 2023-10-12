@@ -21,7 +21,7 @@ def get_transcript(audio: BytesIO) -> str:
 
 def synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
     if synthetic_voice.service == "AWS":
-        return AWS_synthesize_voice(text, synthetic_voice)
+        return aws_synthesize_voice(text, synthetic_voice)
     elif synthetic_voice.service == "azure":
         return azure_synthesize_voice(text, synthetic_voice)
 
