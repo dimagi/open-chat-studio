@@ -30,6 +30,9 @@ class SourceMaterialTableView(SingleTableView):
     table_class = SourceMaterialTable
     template_name = "table/single_table.html"
 
+    def get_queryset(self):
+        return SourceMaterial.objects.filter(team=self.request.team)
+
 
 class CreateSourceMaterial(CreateView):
     model = SourceMaterial
@@ -49,6 +52,7 @@ class CreateSourceMaterial(CreateView):
         return reverse("experiments:source_material_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -67,12 +71,15 @@ class EditSourceMaterial(UpdateView):
         "active_tab": "source_material",
     }
 
+    def get_queryset(self):
+        return SourceMaterial.objects.filter(team=self.request.team)
+
     def get_success_url(self):
         return reverse("experiments:source_material_home", args=[self.request.team.slug])
 
 
 @login_and_team_required
 def delete_source_material(request, team_slug: str, pk: int):
-    source_material = get_object_or_404(SourceMaterial, id=pk)
+    source_material = get_object_or_404(SourceMaterial, id=pk, team=request.team)
     source_material.delete()
     return HttpResponse()

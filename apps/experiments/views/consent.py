@@ -30,6 +30,9 @@ class ConsentFormTableView(SingleTableView):
     table_class = ConsentFormTable
     template_name = "table/single_table.html"
 
+    def get_queryset(self):
+        return ConsentForm.objects.filter(team=self.request.team)
+
 
 class CreateConsentForm(CreateView):
     model = ConsentForm
@@ -48,6 +51,7 @@ class CreateConsentForm(CreateView):
         return reverse("experiments:consent_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -65,13 +69,16 @@ class EditConsentForm(UpdateView):
         "active_tab": "consent_forms",
     }
 
+    def get_queryset(self):
+        return ConsentForm.objects.filter(team=self.request.team)
+
     def get_success_url(self):
         return reverse("experiments:consent_home", args=[self.request.team.slug])
 
 
 @login_and_team_required
 def delete_consent_form(request, team_slug: str, pk: int):
-    consent_form = get_object_or_404(ConsentForm, id=pk)
+    consent_form = get_object_or_404(ConsentForm, id=pk, team=request.team)
     if consent_form.is_default:
         return HttpResponse("Cannot delete default consent form.", status=400)
     consent_form.delete()
