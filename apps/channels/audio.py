@@ -49,7 +49,7 @@ def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[
         synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
         # Synthesize the text
-        result = synthesizer.speak_text_async(text).get()
+        result = synthesizer.speak_text(text)
 
         # Check if synthesis was successful
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
