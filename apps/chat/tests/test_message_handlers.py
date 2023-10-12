@@ -4,7 +4,7 @@ from django.test import TestCase
 from mock import Mock, patch
 from telebot import types
 
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.message_handlers import TelegramMessageHandler
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt
 from apps.teams.models import Team
@@ -39,47 +39,45 @@ class TelegramMessageHandlerTest(TestCase):
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.message_handlers.TelegramMessageHandler._get_llm_response")
-    def test_incoming_message_creates_channel_session(self, _get_llm_response, _send_text_to_user_mock):
+    def test_incoming_message_adds_adds_channel_info(self, _get_llm_response, _send_text_to_user_mock):
+        """When an `experiment_session` is created, channel specific info like `external_chat_id` and
+        `experiment_channel` should also be added to the `experiment_session`
+        """
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
 
         message = _telegram_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
         experiment_session = ExperimentSession.objects.filter(
-            experiment=self.experiment, channel_session__external_chat_id=self.telegram_chat_id
+            experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).first()
         self.assertIsNotNone(experiment_session)
-        channel_session = ChannelSession.objects.filter(
-            experiment_channel=self.experiment_channel,
-            external_chat_id=self.telegram_chat_id,
-            experiment_session=experiment_session,
-        ).first()
-        self.assertIsNotNone(channel_session)
+        self.assertIsNotNone(experiment_session.experiment_channel)
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.message_handlers.TelegramMessageHandler._get_llm_response")
-    def test_channel_added_for_channel_session(self, _get_llm_response, _send_text_to_user_mock):
+    def test_channel_added_for_experiment_session(self, _get_llm_response, _send_text_to_user_mock):
         # Let's send two messages. The first one to create the sessions for us and the second one for testing
         # Message 1
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
         message = _telegram_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
-        # Let's remove the `experiment_channel` from channel_session
-        channel_session = ChannelSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
-        channel_session.experiment_channel = None
-        channel_session.save()
+        # Let's remove the `experiment_channel` from experiment_session
+        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
+        experiment_session.experiment_channel = None
+        experiment_session.save()
 
         # Message 2
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
         message = _telegram_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
-        channel_session = ChannelSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
-        self.assertIsNotNone(channel_session.experiment_channel)
+        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
+        self.assertIsNotNone(experiment_session.experiment_channel)
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.message_handlers.TelegramMessageHandler._get_llm_response")
-    def test_incoming_message_uses_existing_channel_session(self, _get_llm_response, _send_text_to_user_mock):
+    def test_incoming_message_uses_existing_experiment_session(self, _get_llm_response, _send_text_to_user_mock):
         """Approach: Simulate messages coming in after each other in order to test this behaviour"""
         # First message
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
@@ -89,13 +87,13 @@ class TelegramMessageHandlerTest(TestCase):
 
         # Let's find the session it created
         experiment_sessions_count = ExperimentSession.objects.filter(
-            experiment=self.experiment, channel_session__external_chat_id=self.telegram_chat_id
+            experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).count()
         self.assertEqual(experiment_sessions_count, 1)
 
         # Second message
-        # First we mock the _create_experiment_and_channel_sessions so we can verify that it was not called
-        message_handler._create_experiment_and_channel_sessions = Mock()
+        # First we mock the _create_experiment_session so we can verify that it was not called
+        message_handler._create_experiment_session = Mock()
 
         # Now let's simulate the incoming message
         message = _telegram_message(chat_id=self.telegram_chat_id)
@@ -103,11 +101,11 @@ class TelegramMessageHandlerTest(TestCase):
 
         # Assertions
         experiment_sessions_count = ExperimentSession.objects.filter(
-            experiment=self.experiment, channel_session__external_chat_id=self.telegram_chat_id
+            experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).count()
         self.assertEqual(experiment_sessions_count, 1)
 
-        message_handler._create_experiment_and_channel_sessions.assert_not_called()
+        message_handler._create_experiment_session.assert_not_called()
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.message_handlers.TelegramMessageHandler._get_llm_response")
@@ -127,8 +125,8 @@ class TelegramMessageHandlerTest(TestCase):
         experiment_sessions_count = ExperimentSession.objects.count()
         self.assertEqual(experiment_sessions_count, 2)
 
-        self.assertTrue(ExperimentSession.objects.filter(channel_session__external_chat_id=00000).exists())
-        self.assertTrue(ExperimentSession.objects.filter(channel_session__external_chat_id=11111).exists())
+        self.assertTrue(ExperimentSession.objects.filter(external_chat_id=00000).exists())
+        self.assertTrue(ExperimentSession.objects.filter(external_chat_id=11111).exists())
 
     def _get_telegram_message_handler(self, experiment_channel: ExperimentChannel) -> TelegramMessageHandler:
         message_handler = TelegramMessageHandler(channel=experiment_channel)

@@ -297,6 +297,14 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
+    external_chat_id = models.CharField(null=False)
+    experiment_channel = models.ForeignKey(
+        "channels.ExperimentChannel",
+        on_delete=models.CASCADE,
+        related_name="experiment_sessions",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["created_at"]
@@ -304,6 +312,10 @@ class ExperimentSession(BaseTeamModel):
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
+
+        is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
+        if is_web_channel and self.external_chat_id is None:
+            self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:
@@ -336,6 +348,8 @@ class ExperimentSession(BaseTeamModel):
     def get_post_survey_link(self):
         return self.experiment.post_survey.get_link(self.participant, self)
 
-    def get_channel_session(self):
-        if hasattr(self, "channel_session"):
-            return self.channel_session
+    def is_stale(self) -> bool:
+        """A Channel Session is considered stale if the experiment that the channel points to differs from the
+        one that the experiment session points to. This will happen when the user repurposes the channel to point
+        to another experiment."""
+        return self.experiment_channel.experiment != self.experiment
