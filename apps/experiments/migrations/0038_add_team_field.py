@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("teams", "0003_flag"),
-        ("experiments", "0034_alter_experiment_safety_layers"),
+        ("experiments", "0037_alter_experimentsession_external_chat_id"),
     ]
 
     operations = [

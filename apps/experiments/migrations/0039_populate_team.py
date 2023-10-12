@@ -8,7 +8,7 @@ from apps.utils.teams_migration import assign_model_to_team_migration
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0035_add_team_field"),
+        ("experiments", "0038_add_team_field"),
     ]
 
     operations = [
