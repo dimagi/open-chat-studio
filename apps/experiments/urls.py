@@ -24,6 +24,12 @@ urlpatterns = [
     path("survey/<int:pk>/", views.EditSurvey.as_view(), name="survey_edit"),
     path("survey/<int:pk>/delete/", views.delete_survey, name="survey_delete"),
     path("survey/table/", views.SurveyTableView.as_view(), name="survey_table"),
+    # consent
+    path("consent/", views.consent_form_home, name="consent_home"),
+    path("consent/new/", views.CreateConsentForm.as_view(), name="consent_new"),
+    path("consent/<int:pk>/", views.EditConsentForm.as_view(), name="consent_edit"),
+    path("consent/<int:pk>/delete/", views.delete_consent_form, name="consent_delete"),
+    path("consent/table/", views.ConsentFormTableView.as_view(), name="consent_table"),
     # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(

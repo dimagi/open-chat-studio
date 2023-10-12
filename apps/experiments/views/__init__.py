@@ -1,3 +1,10 @@
+from .consent import (  # noqa: F401
+    ConsentFormTableView,
+    CreateConsentForm,
+    EditConsentForm,
+    consent_form_home,
+    delete_consent_form,
+)
 from .experiment import (  # noqa: F401
     download_experiment_chats,
     end_experiment,

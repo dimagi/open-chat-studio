@@ -28,6 +28,13 @@
           {% translate "Surveys" %}
         </a>
       </li>
+      <li>
+        <a href="{% url 'experiments:consent_home' request.team.slug %}"
+           {% if active_tab == 'consent_forms' %}class="active"{% endif %}>
+          <i class="fa-solid fa-file-contract fa-fw"></i>
+          {% translate "Consent Forms" %}
+        </a>
+      </li>
     </ul>
   </li>
   <li>

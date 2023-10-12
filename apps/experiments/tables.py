@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import SafetyLayer, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, SafetyLayer, SourceMaterial, Survey
 
 
 class SafetyLayerTable(tables.Table):
@@ -63,3 +63,23 @@ class SurveyTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No surveys found."
+
+
+class ConsentFormTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "edit_url_name": "experiments:consent_edit",
+            "delete_url_name": "experiments:consent_delete",
+        },
+    )
+
+    class Meta:
+        model = ConsentForm
+        fields = (
+            "name",
+            "is_default",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No consent forms found."
