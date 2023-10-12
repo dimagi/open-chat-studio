@@ -20,7 +20,7 @@ def load_azure_synthetic_voices(apps, schema_editor):
             language_code=voice["language_code"],
             gender=voice["gender"],
             neural=voice["neural"],
-            service=voice["service"],
+            service="Azure",
         )
 
         if created:
@@ -29,7 +29,7 @@ def load_azure_synthetic_voices(apps, schema_editor):
 
 def drop_synthetic_voices(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")
-    SyntheticVoice.objects.filter(service="azure").delete()
+    SyntheticVoice.objects.filter(service="Azure").delete()
 
 class Migration(migrations.Migration):
     dependencies = [

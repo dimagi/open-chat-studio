@@ -20,6 +20,7 @@ def load_language_code(apps, schema_editor):
             language=voice["language"],
             gender=voice["gender"],
             neural=voice["neural"],
+            service=voice["service"],
         )
 
         synth_voice.language_code=voice["language_code"]
@@ -34,7 +35,7 @@ def load_language_code(apps, schema_editor):
 
 def drop_language_code(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")
-    SyntheticVoice.objects.all().update(language_code=None)
+    SyntheticVoice.objects.all().update(language_code="<undef>")
 
 
 class Migration(migrations.Migration):

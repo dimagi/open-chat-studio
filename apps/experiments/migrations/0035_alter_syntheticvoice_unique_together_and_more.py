@@ -9,10 +9,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterUniqueTogether(
-            name="syntheticvoice",
-            unique_together=set(),
-        ),
         migrations.AddField(
             model_name="syntheticvoice",
             name="language_code",
