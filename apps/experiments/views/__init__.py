@@ -1,4 +1,7 @@
 from .experiment import (  # noqa: F401
+    CreateExperiment,
+    EditExperiment,
+    delete_experiment,
     download_experiment_chats,
     end_experiment,
     experiment_chat,

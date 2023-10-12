@@ -199,7 +199,7 @@ class Experiment(BaseModel):
     llm = models.CharField(max_length=20, choices=LLM_CHOICES, default="gpt-3.5-turbo")
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
     chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
-    safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments")
+    safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
     )
