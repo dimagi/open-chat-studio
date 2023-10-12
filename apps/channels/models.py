@@ -40,7 +40,7 @@ def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     """
     Set the webhook at Telegram to allow message forwarding to this platform
     """
-    tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), parse_mode=None)
+    tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
     if experiment_channel.active:
         webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
     else:
