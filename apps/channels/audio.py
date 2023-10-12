@@ -82,7 +82,7 @@ def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[
         raise AudioSynthesizeException(f"Unable to synthesize audio with Azure: {e}")
 
 
-def AWS_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+def aws_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
     """
     Calls AWS Polly to convert the text to speech using the synthetic_voice
     """
