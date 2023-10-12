@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import JSONField
 from django.urls import reverse
-from telebot import TeleBot, apihelper
+from telebot import TeleBot, apihelper, types
 
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
@@ -13,6 +13,8 @@ from apps.web.meta import absolute_url
 
 
 class ExperimentChannel(BaseModel):
+    RESET_COMMAND = "/reset"
+
     PLATFORM = (("telegram", "telegram"), ("web", "web"), ("whatsapp", "whatsapp"))
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -45,6 +47,7 @@ def _set_telegram_webhook(experiment_channel: ExperimentChannel):
         webhook_url = None
 
     tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
+    tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
 
 
 # TODO: Remove this model

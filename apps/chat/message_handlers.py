@@ -20,8 +20,6 @@ from apps.chat.bots import get_bot_from_session
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.experiments.models import ExperimentSession, SessionStatus
 
-RESET_COMMAND = "/ocs-reset"
-
 
 class MESSAGE_TYPES(Enum):
     TEXT = "text"
@@ -268,7 +266,7 @@ class MessageHandler:
         )
 
     def _is_reset_conversation_request(self):
-        return self.message_text == RESET_COMMAND
+        return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
 class WebMessageHandler(MessageHandler):

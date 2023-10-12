@@ -137,7 +137,7 @@ class TelegramMessageHandlerTest(TestCase):
         message_handler.new_user_message(normal_message)
 
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
-        reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=RESET_COMMAND)
+        reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
         message_handler.new_user_message(reset_message)
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
         self.assertEqual(len(sessions), 2)
@@ -154,10 +154,10 @@ class TelegramMessageHandlerTest(TestCase):
         telegram_chat_id = 00000
         message_handler = self._get_telegram_message_handler(self.experiment_channel)
 
-        message1 = _telegram_message(chat_id=telegram_chat_id, message_text=RESET_COMMAND)
+        message1 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
         message_handler.new_user_message(message1)
 
-        message2 = _telegram_message(chat_id=telegram_chat_id, message_text=RESET_COMMAND)
+        message2 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
         message_handler.new_user_message(message2)
 
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
