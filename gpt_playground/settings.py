@@ -428,3 +428,7 @@ DJANGO_TABLES2_ROW_ATTRS = {
 
 # This is only used for development purposes
 SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
+
+# For Azure TTS
+AZURE_SUBSCRIPTION_KEY = os.environ.get("AZURE_SUBSCRIPTION_KEY")
+AZURE_REGION = os.environ.get("AZURE_REGION")
