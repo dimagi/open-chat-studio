@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.chat.models import Chat
@@ -14,7 +13,7 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
-class Prompt(BaseModel):
+class Prompt(BaseTeamModel):
     """
     A prompt - typically the starting point for ChatGPT.
     """
@@ -40,7 +39,7 @@ class Prompt(BaseModel):
             return input_str
 
 
-class PromptBuilderHistory(BaseModel):
+class PromptBuilderHistory(BaseTeamModel):
     """
     History entries for the prompt builder
     """
@@ -52,7 +51,7 @@ class PromptBuilderHistory(BaseModel):
         return str(self.history)
 
 
-class SourceMaterial(BaseModel):
+class SourceMaterial(BaseTeamModel):
     """
     Some Source Material on a particular topic.
     """
@@ -66,7 +65,7 @@ class SourceMaterial(BaseModel):
         return self.topic
 
 
-class SafetyLayer(BaseModel):
+class SafetyLayer(BaseTeamModel):
     REVIEW_CHOICES = (("human", "Human messages"), ("ai", "AI messages"))
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
@@ -90,7 +89,7 @@ class SafetyLayer(BaseModel):
         return str(self.prompt)
 
 
-class Survey(BaseModel):
+class Survey(BaseTeamModel):
     """
     A survey.
     """
@@ -116,7 +115,7 @@ class Survey(BaseModel):
         )
 
 
-class ConsentForm(BaseModel):
+class ConsentForm(BaseTeamModel):
     """
     Custom markdown consent form to be used by experiments.
     """
@@ -175,7 +174,7 @@ class SyntheticVoice(BaseModel):
         return f"{self.language}, {self.gender}, {prefix}{self.name}"
 
 
-class NoActivityMessageConfig(BaseModel):
+class NoActivityMessageConfig(BaseTeamModel):
     """Configuration for when the user doesn't respond to the bot's message"""
 
     message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
@@ -187,7 +186,7 @@ class NoActivityMessageConfig(BaseModel):
         return self.name
 
 
-class Experiment(BaseModel):
+class Experiment(BaseTeamModel):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -278,12 +277,10 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
-class ExperimentSession(BaseModel):
+class ExperimentSession(BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
-
-    team = models.ForeignKey(Team, verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True, blank=True)
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
