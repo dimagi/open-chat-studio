@@ -97,10 +97,9 @@ def ngrok_url(c: Context):
 
 
 @task
-def runserver(c: Context, telegram=False):
+def runserver(c: Context, public=False):
     runserver_command = "python manage.py runserver"
-    public_url = None
-    if telegram:
+    if public:
         public_url = ngrok_url(c)
         runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
     c.run(runserver_command, echo=True, pty=True)
