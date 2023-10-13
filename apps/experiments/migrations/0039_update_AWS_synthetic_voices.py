@@ -20,8 +20,8 @@ def load_language_code(apps, schema_editor):
             language=voice["language"],
             gender=voice["gender"],
             neural=voice["neural"],
-            service=voice["service"],
             defaults={
+                "service": voice["service"],
                 "language_code": voice["language_code"],
             }
         )
