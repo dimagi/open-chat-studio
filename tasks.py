@@ -1,5 +1,7 @@
+import time
 from pathlib import Path
 
+import requests
 from invoke import Context, Exit, call, task
 from termcolor import cprint
 
@@ -75,3 +77,30 @@ def setup_dev_env(c: Context):
 
     cprint("\nCreating superuser", "green")
     c.run("python manage.py createsuperuser", echo=True, pty=True)
+
+
+@task
+def ngrok_url(c: Context):
+    #  You need to have ngrok installed on your system
+    c.run("ngrok http 8000", echo=True, asynchronous=True)
+    while True:
+        try:
+            response = requests.get("http://localhost:4040/api/tunnels")
+            if response.status_code == 200:
+                break
+        except Exception:
+            time.sleep(1)
+            print("Trying to a public address from ngrok")
+
+    public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
+    print(f"Public address found: {public_url}")
+    return public_url
+
+
+@task
+def runserver(c: Context, public=False):
+    runserver_command = "python manage.py runserver"
+    if public:
+        public_url = ngrok_url(c)
+        runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
+    c.run(runserver_command, echo=True, pty=True)
