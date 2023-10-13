@@ -26,9 +26,9 @@ class MESSAGE_TYPES(Enum):
     VOICE = "voice"
 
 
-class MessageHandler:
+class ChannelsBase:
     """
-    Base class for message handlers in different channels. This class defines a set of common functions that all channels
+    This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
 
     Attributes:
@@ -64,7 +64,7 @@ class MessageHandler:
         self, channel: Optional[ExperimentChannel] = None, experiment_session: Optional[ExperimentSession] = None
     ):
         if not channel and not experiment_session:
-            raise MessageHandlerException("MessageHandler expects either")
+            raise MessageHandlerException("ChannelsBase expects either")
 
         self.channel = channel
         self.experiment_session = experiment_session
@@ -130,16 +130,16 @@ class MessageHandler:
         pass
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "MessageHandler":
-        """Given an `experiment_session` instance, returns the correct MessageHandler subclass to use"""
+    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelsBase":
+        """Given an `experiment_session` instance, returns the correct ChannelsBase subclass to use"""
         platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
-            PlatformMessageHandlerClass = TelegramMessageHandler
+            PlatformMessageHandlerClass = TelegramChannel
         elif platform == "web":
-            PlatformMessageHandlerClass = WebMessageHandler
+            PlatformMessageHandlerClass = WebChannel
         elif platform == "whatsapp":
-            PlatformMessageHandlerClass = WhatsappMessageHandler
+            PlatformMessageHandlerClass = WhatsappChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
@@ -270,7 +270,7 @@ class MessageHandler:
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
-class WebMessageHandler(MessageHandler):
+class WebChannel(ChannelsBase):
     """Message Handler for the UI"""
 
     voice_replies_supported = False
@@ -292,7 +292,7 @@ class WebMessageHandler(MessageHandler):
         pass
 
 
-class TelegramMessageHandler(MessageHandler):
+class TelegramChannel(ChannelsBase):
     voice_replies_supported = True
 
     def initialize(self):
@@ -344,7 +344,7 @@ class TelegramMessageHandler(MessageHandler):
         )
 
 
-class WhatsappMessageHandler(MessageHandler):
+class WhatsappChannel(ChannelsBase):
     voice_replies_supported = True
 
     def initialize(self):
