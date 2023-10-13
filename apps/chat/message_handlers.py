@@ -9,6 +9,7 @@ import boto3
 import requests
 from botocore.client import Config
 from django.conf import settings
+from django.utils import timezone
 from telebot import TeleBot
 from telebot.util import smart_split
 from twilio.rest import Client
@@ -160,6 +161,10 @@ class MessageHandler:
             self.experiment_session.status = SessionStatus.ACTIVE
             self.experiment_session.save()
 
+            if self._is_reset_conversation_request():
+                # Why not include webchats? They can be reset by creating a new chat.
+                return
+
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
             response = self._get_llm_response(self.message_text)
@@ -225,22 +230,32 @@ class MessageHandler:
         self.experiment_session = ExperimentSession.objects.filter(
             experiment=self.experiment,
             external_chat_id=str(self.chat_id),
-        ).first()
-        if not self.experiment_session:
-            self._create_experiment_session()
-        elif not self.experiment_session.experiment_channel:
-            # This branch will only be entered for channel sessions that were created by the data migration.
-            # These sessions doesn't have experiment channels associated with them, so we need to make sure that
-            # they have experiment channels here. For new chats/sessions, the channel is added when they're
-            # created in _create_experiment_session.
-            # See this PR: https://github.com/czue/gpt-playground/pull/67
-            # If you see this comment in or after November 2023, you can remove this code. Do update the data
-            # migration (apps/channels/migrations/0005_create_channel_sessions.py) to link experiment channels
-            # to the channel sessions when removing this code
-            self.experiment_session.experiment_channel = self.channel
-            self.experiment_session.save()
+        ).last()
 
-    def _create_experiment_session(self):
+        if not self.experiment_session:
+            self._create_new_experiment_session()
+        else:
+            if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
+                self._reset_session()
+            if not self.experiment_session.experiment_channel:
+                # This branch will only be entered for channel sessions that were created by the data migration.
+                # These sessions doesn't have experiment channels associated with them, so we need to make sure that
+                # they have experiment channels here. For new chats/sessions, the channel is added when they're
+                # created in _create_new_experiment_session.
+                # See this PR: https://github.com/czue/gpt-playground/pull/67
+                # If you see this comment in or after November 2023, you can remove this code. Do update the data
+                # migration (apps/channels/migrations/0005_create_channel_sessions.py) to link experiment channels
+                # to the channel sessions when removing this code
+                self.experiment_session.experiment_channel = self.channel
+                self.experiment_session.save()
+
+    def _reset_session(self):
+        """Resets the session by ending the current `experiment_session` and creating a new one"""
+        self.experiment_session.ended_at = timezone.now()
+        self.experiment_session.save()
+        self._create_new_experiment_session()
+
+    def _create_new_experiment_session(self):
         self.experiment_session = ExperimentSession.objects.create(
             user=None,
             participant=None,
@@ -249,6 +264,9 @@ class MessageHandler:
             external_chat_id=self.chat_id,
             experiment_channel=self.channel,
         )
+
+    def _is_reset_conversation_request(self):
+        return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
 class WebMessageHandler(MessageHandler):

@@ -5,10 +5,9 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.translation import gettext
 
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
@@ -344,6 +343,9 @@ class ExperimentSession(BaseModel):
                 "experiments:start_experiment_session", args=[self.team.slug, self.experiment.public_id, self.public_id]
             )
         )
+
+    def user_already_engaged(self) -> bool:
+        return ChatMessage.objects.filter(chat=self.chat, message_type="human").exists()
 
     def get_pre_survey_link(self):
         return self.experiment.pre_survey.get_link(self.participant, self)
