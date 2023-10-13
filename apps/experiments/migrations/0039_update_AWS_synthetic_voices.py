@@ -15,16 +15,16 @@ def load_language_code(apps, schema_editor):
     voices_created = 0
     voices_edited = 0
     for voice in voice_data:
-        synth_voice, created = SyntheticVoice.objects.get_or_create(
+        _, created = SyntheticVoice.objects.update_or_create(
             name=voice["name"],
             language=voice["language"],
             gender=voice["gender"],
             neural=voice["neural"],
             service=voice["service"],
+            defaults={
+                "language_code": voice["language_code"],
+            }
         )
-
-        synth_voice.language_code=voice["language_code"]
-        synth_voice.save()
 
         if created:
             voices_created += 1
