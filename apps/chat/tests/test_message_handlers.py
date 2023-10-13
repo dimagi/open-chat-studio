@@ -170,7 +170,7 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertEqual(sessions[0].chat.get_langchain_messages(), [])
 
     def _get_telegram_message_handler(self, experiment_channel: ExperimentChannel) -> TelegramChannel:
-        message_handler = TelegramChannel(channel=experiment_channel)
+        message_handler = TelegramChannel(experiment_channel=experiment_channel)
         message_handler.telegram_bot = Mock()
         return message_handler
 

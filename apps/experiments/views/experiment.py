@@ -188,14 +188,16 @@ def _check_and_process_seed_message(session: ExperimentSession):
 @login_and_team_required
 def start_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
-    session = _start_experiment_session(experiment, experiment_channel=channel, user=request.user)
+    experiment_channel = _ensure_experiment_channel_exists(
+        experiment=experiment, platform="web", name=f"{experiment.id}-web"
+    )
+    session = _start_experiment_session(experiment, experiment_channel=experiment_channel, user=request.user)
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
 
 
-def _ensure_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
+def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
     channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
     return channel
 
@@ -303,12 +305,14 @@ def start_experiment(request, team_slug: str, experiment_id: str):
                 participant = Participant.objects.get_or_create(
                     team=request.team, email=form.cleaned_data["email_address"]
                 )[0]
-            channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
+            experiment_channel = _ensure_experiment_channel_exists(
+                experiment=experiment, platform="web", name=f"{experiment.id}-web"
+            )
             session = _start_experiment_session(
                 experiment,
                 user=get_real_user_or_none(request.user),
                 participant=participant,
-                experiment_channel=channel,
+                experiment_channel=experiment_channel,
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
