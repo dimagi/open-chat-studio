@@ -414,7 +414,6 @@ class WhatsappMessageHandler(MessageHandler):
             },
             ExpiresIn=360,
         )
-        print(f"\n\npublic_url: {public_url}\n\n")
         from_number = self.channel.extra_data["number"]
         to_number = self.chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[public_url])
