@@ -5,7 +5,7 @@ from mock import Mock, patch
 from telebot import types
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.message_handlers import RESET_COMMAND, TelegramMessageHandler
+from apps.chat.message_handlers import TelegramMessageHandler
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt
 from apps.users.models import CustomUser
 
