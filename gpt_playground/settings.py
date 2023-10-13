@@ -427,4 +427,4 @@ DJANGO_TABLES2_ROW_ATTRS = {
 }
 
 # This is only used for development purposes
-SITE_URL_ROOT = os.environ.get("SITE_URL_ROOT", None)
+SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
