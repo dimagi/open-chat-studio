@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, validator
 from pydantic.dataclasses import dataclass
 
-from apps.chat.message_handlers import MESSAGE_TYPES
+from apps.chat.channels import MESSAGE_TYPES
 
 
 class WebMessage(BaseModel):

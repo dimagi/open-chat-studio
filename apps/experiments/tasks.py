@@ -6,7 +6,7 @@ from celery.app import shared_task
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import TopicBot
-from apps.chat.message_handlers import WebChannel
+from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
 from apps.users.models import CustomUser
 

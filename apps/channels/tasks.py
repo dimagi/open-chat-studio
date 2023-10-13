@@ -6,7 +6,7 @@ from telebot import types
 
 from apps.channels.datamodels import WhatsappMessage
 from apps.channels.models import ExperimentChannel
-from apps.chat.message_handlers import TelegramChannel, WhatsappChannel
+from apps.chat.channels import TelegramChannel, WhatsappChannel
 
 
 @shared_task

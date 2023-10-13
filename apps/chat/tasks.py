@@ -7,8 +7,8 @@ from celery.app import shared_task
 from django.db.models import OuterRef, Subquery
 
 from apps.chat.bots import get_bot_from_experiment
+from apps.chat.channels import ChannelsBase
 from apps.chat.exceptions import ExperimentChannelRepurposedException
-from apps.chat.message_handlers import ChannelsBase
 from apps.chat.models import Chat, ChatMessage
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus

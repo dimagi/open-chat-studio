@@ -5,7 +5,7 @@ from mock import Mock, patch
 from telebot import types
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.message_handlers import TelegramChannel
+from apps.chat.channels import TelegramChannel
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -37,8 +37,8 @@ class TelegramMessageHandlerTest(TestCase):
             name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"
         )
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
-    @patch("apps.chat.message_handlers.TelegramChannel._get_llm_response")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel._get_llm_response")
     def test_incoming_message_adds_adds_channel_info(self, _get_llm_response, _send_text_to_user_mock):
         """When an `experiment_session` is created, channel specific info like `external_chat_id` and
         `experiment_channel` should also be added to the `experiment_session`
@@ -54,8 +54,8 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertIsNotNone(experiment_session)
         self.assertIsNotNone(experiment_session.experiment_channel)
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
-    @patch("apps.chat.message_handlers.TelegramChannel._get_llm_response")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel._get_llm_response")
     def test_channel_added_for_experiment_session(self, _get_llm_response, _send_text_to_user_mock):
         # Let's send two messages. The first one to create the sessions for us and the second one for testing
         # Message 1
@@ -75,8 +75,8 @@ class TelegramMessageHandlerTest(TestCase):
         experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
         self.assertIsNotNone(experiment_session.experiment_channel)
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
-    @patch("apps.chat.message_handlers.TelegramChannel._get_llm_response")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel._get_llm_response")
     def test_incoming_message_uses_existing_experiment_session(self, _get_llm_response, _send_text_to_user_mock):
         """Approach: Simulate messages coming in after each other in order to test this behaviour"""
         # First message
@@ -107,8 +107,8 @@ class TelegramMessageHandlerTest(TestCase):
 
         message_handler._create_new_experiment_session.assert_not_called()
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
-    @patch("apps.chat.message_handlers.TelegramChannel._get_llm_response")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel._get_llm_response")
     def test_different_sessions_created_for_different_users(self, _get_llm_response, _send_text_to_user_mock):
         # First user's message
         message_handler_1 = self._get_telegram_message_handler(self.experiment_channel)
@@ -128,7 +128,7 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertTrue(ExperimentSession.objects.filter(external_chat_id=00000).exists())
         self.assertTrue(ExperimentSession.objects.filter(external_chat_id=11111).exists())
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
     @patch("apps.chat.bots.create_conversation")
     def test_reset_command_creates_new_experiment_session(
@@ -148,7 +148,7 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertIsNotNone(sessions[0].ended_at)
         self.assertIsNone(sessions[1].ended_at)
 
-    @patch("apps.chat.message_handlers.TelegramChannel.send_text_to_user")
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
     @patch("apps.chat.bots.create_conversation")
     def test_reset_conversation_does_not_create_new_session(
