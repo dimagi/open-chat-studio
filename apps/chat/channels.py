@@ -26,7 +26,7 @@ class MESSAGE_TYPES(Enum):
     VOICE = "voice"
 
 
-class ChannelsBase:
+class ChannelBase:
     """
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
@@ -66,7 +66,7 @@ class ChannelsBase:
         experiment_session: Optional[ExperimentSession] = None,
     ):
         if not experiment_channel and not experiment_session:
-            raise MessageHandlerException("ChannelsBase expects either")
+            raise MessageHandlerException("ChannelBase expects either")
 
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
@@ -132,8 +132,8 @@ class ChannelsBase:
         pass
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelsBase":
-        """Given an `experiment_session` instance, returns the correct ChannelsBase subclass to use"""
+    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
         platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
@@ -272,7 +272,7 @@ class ChannelsBase:
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
-class WebChannel(ChannelsBase):
+class WebChannel(ChannelBase):
     """Message Handler for the UI"""
 
     voice_replies_supported = False
@@ -294,7 +294,7 @@ class WebChannel(ChannelsBase):
         pass
 
 
-class TelegramChannel(ChannelsBase):
+class TelegramChannel(ChannelBase):
     voice_replies_supported = True
 
     def initialize(self):
@@ -346,7 +346,7 @@ class TelegramChannel(ChannelsBase):
         )
 
 
-class WhatsappChannel(ChannelsBase):
+class WhatsappChannel(ChannelBase):
     voice_replies_supported = True
 
     def initialize(self):
