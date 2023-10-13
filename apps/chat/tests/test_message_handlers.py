@@ -92,8 +92,8 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertEqual(experiment_sessions_count, 1)
 
         # Second message
-        # First we mock the _create_experiment_session so we can verify that it was not called
-        message_handler._create_experiment_session = Mock()
+        # First we mock the _create_new_experiment_session so we can verify that it was not called
+        message_handler._create_new_experiment_session = Mock()
 
         # Now let's simulate the incoming message
         message = _telegram_message(chat_id=self.telegram_chat_id)
@@ -105,7 +105,7 @@ class TelegramMessageHandlerTest(TestCase):
         ).count()
         self.assertEqual(experiment_sessions_count, 1)
 
-        message_handler._create_experiment_session.assert_not_called()
+        message_handler._create_new_experiment_session.assert_not_called()
 
     @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
     @patch("apps.chat.message_handlers.TelegramMessageHandler._get_llm_response")
@@ -128,13 +128,54 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertTrue(ExperimentSession.objects.filter(external_chat_id=00000).exists())
         self.assertTrue(ExperimentSession.objects.filter(external_chat_id=11111).exists())
 
+    @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
+    @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
+    @patch("apps.chat.bots.create_conversation")
+    def test_reset_command_creates_new_experiment_session(
+        self, create_conversation, _call_predict, _send_text_to_user_mock
+    ):
+        """The reset command should create a new session when the user conversed with the bot"""
+        telegram_chat_id = 00000
+        message_handler = self._get_telegram_message_handler(self.experiment_channel)
+        normal_message = _telegram_message(chat_id=telegram_chat_id)
+        message_handler.new_user_message(normal_message)
+
+        message_handler = self._get_telegram_message_handler(self.experiment_channel)
+        reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        message_handler.new_user_message(reset_message)
+        sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
+        self.assertEqual(len(sessions), 2)
+        self.assertIsNotNone(sessions[0].ended_at)
+        self.assertIsNone(sessions[1].ended_at)
+
+    @patch("apps.chat.message_handlers.TelegramMessageHandler.send_text_to_user")
+    @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
+    @patch("apps.chat.bots.create_conversation")
+    def test_reset_conversation_does_not_create_new_session(
+        self, create_conversation, _call_predict, _send_text_to_user_mock
+    ):
+        """The reset command should not create a new session when the user haven't conversed with the bot yet"""
+        telegram_chat_id = 00000
+        message_handler = self._get_telegram_message_handler(self.experiment_channel)
+
+        message1 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        message_handler.new_user_message(message1)
+
+        message2 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        message_handler.new_user_message(message2)
+
+        sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
+        self.assertEqual(len(sessions), 1)
+        # The reset command should not be saved in the history
+        self.assertEqual(sessions[0].chat.get_langchain_messages(), [])
+
     def _get_telegram_message_handler(self, experiment_channel: ExperimentChannel) -> TelegramMessageHandler:
         message_handler = TelegramMessageHandler(channel=experiment_channel)
         message_handler.telegram_bot = Mock()
         return message_handler
 
 
-def _telegram_message(chat_id: int) -> types.Message:
+def _telegram_message(chat_id: int, message_text: str = "Hi there") -> types.Message:
     message_data = {
         "update_id": 432101234,
         "message": {
@@ -155,7 +196,7 @@ def _telegram_message(chat_id: int) -> types.Message:
                 "type": "private",
             },
             "date": 1690376696,
-            "text": "Hi there",
+            "text": message_text,
         },
     }
     json_data = json.dumps(message_data)
