@@ -102,4 +102,4 @@ def runserver(c: Context, telegram=False):
     if telegram:
         public_url = ngrok_url(c)
         runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
-    c.run(runserver_command, echo=True)
+    c.run(runserver_command, echo=True, pty=True)

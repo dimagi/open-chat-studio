@@ -426,4 +426,5 @@ DJANGO_TABLES2_ROW_ATTRS = {
     "id": lambda record: f"record-{record.id}",
 }
 
+# This is only used for development purposes
 SITE_URL_ROOT = os.environ.get("SITE_URL_ROOT")
