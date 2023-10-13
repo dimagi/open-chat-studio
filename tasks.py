@@ -81,6 +81,7 @@ def setup_dev_env(c: Context):
 
 @task
 def ngrok_url(c: Context):
+    #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
     time.sleep(2)
     while True:
