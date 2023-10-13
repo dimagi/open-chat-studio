@@ -52,6 +52,11 @@ class CreateSafetyLayer(CreateView):
     def get_success_url(self):
         return reverse("experiments:safety_home", args=[self.request.team.slug])
 
+    def get_form(self):
+        form = super().get_form()
+        form.fields["prompt"].queryset = self.request.team.prompt_set
+        return form
+
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.owner = self.request.user
@@ -75,6 +80,11 @@ class EditSafetyLayer(UpdateView):
 
     def get_queryset(self):
         return SafetyLayer.objects.filter(team=self.request.team)
+
+    def get_form(self):
+        form = super().get_form()
+        form.fields["prompt"].queryset = self.request.team.prompt_set
+        return form
 
     def get_form(self):
         form = super().get_form()

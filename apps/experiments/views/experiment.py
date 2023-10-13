@@ -3,17 +3,15 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
-import markdown
 import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
-from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
-from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -75,6 +73,11 @@ class CreateExperiment(CreateView):
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        return form
+
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.owner = self.request.user
@@ -109,8 +112,23 @@ class EditExperiment(UpdateView):
     def get_queryset(self):
         return Experiment.objects.filter(team=self.request.team)
 
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        return form
+
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+
+def _apply_related_model_querysets(team, form):
+    form.fields["chatbot_prompt"].queryset = team.prompt_set
+    form.fields["safety_layers"].queryset = team.safetylayer_set
+    form.fields["source_material"].queryset = team.sourcematerial_set
+    form.fields["pre_survey"].queryset = team.survey_set
+    form.fields["post_survey"].queryset = team.survey_set
+    form.fields["consent_form"].queryset = team.consentform_set
+    form.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
 
 
 @login_and_team_required
