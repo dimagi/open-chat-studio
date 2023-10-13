@@ -104,3 +104,8 @@ def runserver(c: Context, public=False):
         public_url = ngrok_url(c)
         runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
     c.run(runserver_command, echo=True, pty=True)
+
+
+@task
+def celery(c: Context):
+    c.run('watchfiles --filter python "celery -A gpt_playground worker -l INFO -B"', echo=True, pty=True)
