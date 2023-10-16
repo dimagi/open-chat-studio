@@ -10,6 +10,7 @@ from apps.channels.models import ExperimentChannel
 class ExperimentChannelAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "team",
         "platform",
         "active",
     )
@@ -22,6 +23,10 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.experiment.team.name
 
     def get_changeform_initial_data(self, request: HttpRequest) -> Dict[str, str]:
         return {"extra_data": {"bot_token": "your token here"}}

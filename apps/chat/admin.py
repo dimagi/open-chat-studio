@@ -5,9 +5,10 @@ from .models import Chat, ChatMessage
 
 @admin.register(Chat)
 class ChatAdmin(admin.ModelAdmin):
-    list_display = ("user", "created_at", "updated_at")
+    list_display = ("user", "team", "created_at", "updated_at")
     search_fields = ("user",)
     list_filter = (
+        "team",
         "user",
         "created_at",
         "updated_at",
@@ -20,7 +21,7 @@ class ChatAdmin(admin.ModelAdmin):
 
 @admin.register(ChatMessage)
 class ChatMessageAdmin(admin.ModelAdmin):
-    list_display = ("chat", "message_type", "content", "created_at", "updated_at")
+    list_display = ("chat", "team", "message_type", "content", "created_at", "updated_at")
     search_fields = (
         "chat",
         "content",
@@ -34,3 +35,7 @@ class ChatMessageAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.chat.team.name
