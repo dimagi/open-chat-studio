@@ -16,6 +16,7 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
     )
     search_fields = ("name",)
     list_filter = (
+        "platform",
         "created_at",
         "updated_at",
     )
@@ -30,7 +31,3 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
 
     def get_changeform_initial_data(self, request: HttpRequest) -> Dict[str, str]:
         return {"extra_data": {"bot_token": "your token here"}}
-
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        return queryset.exclude(platform="web")
