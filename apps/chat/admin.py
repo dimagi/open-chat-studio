@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Chat, ChatMessage, FutureMessage
+from .models import Chat, ChatMessage
 
 
 @admin.register(Chat)
@@ -34,9 +34,3 @@ class ChatMessageAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-
-
-@admin.register(FutureMessage)
-class FutureMessageAdmin(admin.ModelAdmin):
-    list_display = ("message", "due_at", "end_date", "resolved")
-    search_fields = ("resolved",)

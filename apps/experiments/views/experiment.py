@@ -1,52 +1,40 @@
-import json
 import logging
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
-import markdown
 import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
-from django.db.models import Q
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404
-from django.template.loader import render_to_string
+from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, UpdateView
 
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import (
-    Experiment,
-    ExperimentSession,
-    Participant,
-    Prompt,
-    PromptBuilderHistory,
-    SessionStatus,
-    SourceMaterial,
-)
-from apps.experiments.tasks import get_prompt_builder_response_task, get_response_for_webchat_task
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.tasks import get_response_for_webchat_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
-from apps.teams.models import Team
 from apps.users.models import CustomUser
 
 
 @login_and_team_required
 def experiments_home(request, team_slug: str):
-    experiments = Experiment.objects.filter(Q(is_active=True) | Q(owner=request.user)).order_by("-created_at")
+    experiments = Experiment.objects.filter(team=request.team).order_by("-created_at")
     return TemplateResponse(
         request,
         "experiments/experiment_home.html",
@@ -57,130 +45,102 @@ def experiments_home(request, team_slug: str):
     )
 
 
-@login_and_team_required
-def prompt_builder_load_prompts(request, team_slug: str):
-    prompts = Prompt.objects.all()
-    prompts_list = list(prompts.values())
-
-    return TemplateResponse(
-        request,
-        "experiments/prompts_list.html",
-        {
-            "prompts": prompts_list,
-        },
-    )
-
-
-@login_and_team_required
-def prompt_builder_load_source_material(request, team_slug: str):
-    source_material = SourceMaterial.objects.all()
-    source_material_list = list(source_material.values())
-
-    return TemplateResponse(
-        request,
-        "experiments/source_material_list.html",
-        {
-            "source_materials": source_material_list,
-        },
-    )
-
-
-@login_and_team_required
-def experiments_prompt_builder(request, team_slug: str):
-    prompts = Prompt.objects.order_by("-created_at").all()
-    prompts_list = list(prompts.values())
-
-    return TemplateResponse(
-        request,
-        "experiments/prompt_builder.html",
-        {
-            "prompts": prompts_list,
-            "active_tab": "prompt_builder",
-        },
-    )
-
-
-@require_POST
-@login_and_team_required
-def experiments_prompt_builder_get_message(request, team_slug: str):
-    data_json = request.body.decode("utf-8")
-    user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
-    result = get_prompt_builder_response_task.delay(user.id, data_json)
-    return JsonResponse({"task_id": result.task_id})
-
-
-def get_prompt_builder_message_response(request, team_slug: str):
-    task_id = request.GET.get("task_id")
-    progress = Progress(AsyncResult(task_id))
-    return JsonResponse(
-        {
-            "task_id": task_id,
-            "progress": progress.get_info(),
-        },
-    )
-
-
-@login_and_team_required
-def get_prompt_builder_history(request, team_slug: str):
-    # Fetch history for the request user limited to last 30 days
-    thirty_days_ago = timezone.now() - timedelta(days=30)
-    histories = PromptBuilderHistory.objects.filter(owner=request.user, created_at__gte=thirty_days_ago).order_by(
-        "-created_at"
-    )
-
-    # Initialize temporary output format
-    output_temp = defaultdict(list)
-
-    history_id = 0  # Initial history_id for the oldest item
-    for history in histories:
-        # Adding history_id to JSON history object
-        history_data = history.history
-        history_data["history_id"] = history_id
-
-        # Customizing the output for each history
-        event = {
-            "history_id": history_id,
-            "time": history.created_at.strftime("%H:%M"),
-            "preview": history_data.get("preview", ""),
-            "sourceMaterialName": history_data.get("sourceMaterialName", "None"),
-            "sourceMaterialID": history_data.get("sourceMaterialID", -1),
-            "temperature": history_data.get("temperature", 0.7),
-            "prompt": history_data.get("prompt", ""),
-            "inputFormatter": history_data.get("inputFormatter", ""),
-            "model": history_data.get("model", "gpt-4"),
-            "messages": history_data.get("messages", []),
-        }
-
-        # Populating the temporary output dictionary
-        output_temp[history.created_at.date()].append(event)
-
-        history_id += 1  # Incrementing history_id for each newer history
-
-    # Convert to the final desired output format
-    output_list = [
-        {"date": date_obj.strftime("%A %d %b %Y"), "events": events} for date_obj, events in output_temp.items()
+class CreateExperiment(CreateView):
+    model = Experiment
+    fields = [
+        "name",
+        "description",
+        "llm",
+        "temperature",
+        "chatbot_prompt",
+        "safety_layers",
+        "tools_enabled",
+        "source_material",
+        "seed_message",
+        "pre_survey",
+        "post_survey",
+        "consent_form",
+        "synthetic_voice",
+        "no_activity_config",
     ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Create Experiment",
+        "button_text": "Create",
+        "active_tab": "experiments",
+    }
 
-    return JsonResponse(output_list, safe=False)
+    def get_success_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        return form
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
+
+class EditExperiment(UpdateView):
+    model = Experiment
+    fields = [
+        "name",
+        "description",
+        "llm",
+        "temperature",
+        "chatbot_prompt",
+        "safety_layers",
+        "tools_enabled",
+        "source_material",
+        "seed_message",
+        "pre_survey",
+        "post_survey",
+        "consent_form",
+        "synthetic_voice",
+        "no_activity_config",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Update Experiment",
+        "button_text": "Update",
+        "active_tab": "experiments",
+    }
+
+    def get_queryset(self):
+        return Experiment.objects.filter(team=self.request.team)
+
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        return form
+
+    def get_success_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+
+def _apply_related_model_querysets(team, form):
+    form.fields["chatbot_prompt"].queryset = team.prompt_set
+    form.fields["safety_layers"].queryset = team.safetylayer_set
+    form.fields["source_material"].queryset = team.sourcematerial_set
+    form.fields["pre_survey"].queryset = team.survey_set
+    form.fields["post_survey"].queryset = team.survey_set
+    form.fields["consent_form"].queryset = team.consentform_set
+    form.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
 
 
 @login_and_team_required
-@team_admin_required
-def prompt_builder_start_save_process(request, team_slug: str):
-    # Get your long data
-    long_data = json.loads(request.body)
-
-    # Save it in session
-    request.session["long_data"] = long_data
-
-    # Redirect to admin add page
-    return JsonResponse({"redirect_url": reverse("admin:experiments_prompt_add")})
+def delete_experiment(request, team_slug: str, pk: int):
+    safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
+    safety_layer.delete()
+    return redirect("experiments:experiments_home", team_slug)
 
 
 @login_and_team_required
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     sessions = ExperimentSession.objects.filter(
         user=request.user,
         experiment=experiment,
@@ -197,13 +157,20 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 def _start_experiment_session(
-    experiment: Experiment, user: Optional[CustomUser] = None, participant: Optional[Participant] = None
+    experiment: Experiment,
+    experiment_channel: ExperimentChannel,
+    user: Optional[CustomUser] = None,
+    participant: Optional[Participant] = None,
+    external_chat_id: Optional[str] = None,
 ) -> ExperimentSession:
     session = ExperimentSession.objects.create(
+        team=experiment.team,
         user=user,
         participant=participant,
         experiment=experiment,
         llm=experiment.llm,
+        external_chat_id=external_chat_id,
+        experiment_channel=experiment_channel,
     )
     return _check_and_process_seed_message(session)
 
@@ -220,13 +187,9 @@ def _check_and_process_seed_message(session: ExperimentSession):
 @require_POST
 @login_and_team_required
 def start_session(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
-    session = _start_experiment_session(experiment, request.user)
-    # TODO: Move this into `_start_experiment_session` (or some model?) and refactor
-    ChannelSession.objects.get_or_create(
-        experiment_channel=channel, experiment_session=session, external_chat_id=session.chat.id
-    )
+    session = _start_experiment_session(experiment, experiment_channel=channel, user=request.user)
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
@@ -239,7 +202,7 @@ def _ensure_channel_exists(experiment: Experiment, platform: str, name: str) -> 
 
 @login_and_team_required
 def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(ExperimentSession, user=request.user, experiment_id=experiment_id, id=session_id)
     return TemplateResponse(
         request,
@@ -255,10 +218,9 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
     message_text = request.POST["message"]
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
     result = get_response_for_webchat_task.delay(session.id, message_text)
     return TemplateResponse(
@@ -275,10 +237,9 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
 # @login_and_team_required
 def get_message_response(request, team_slug: str, experiment_id: int, session_id: int, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id))
@@ -299,8 +260,9 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
-    experiment_session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    experiment_session = get_object_or_404(
+        ExperimentSession, user=user, experiment_id=experiment_id, id=session_id, team=request.team
+    )
 
     since = datetime.now().astimezone(pytz.timezone("UTC"))
     if since_param and since_param != "null":
@@ -327,9 +289,8 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 
 def start_experiment(request, team_slug: str, experiment_id: str):
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True)
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
     except ValidationError:
         # old links dont have uuids
         raise Http404
@@ -344,10 +305,10 @@ def start_experiment(request, team_slug: str, experiment_id: str):
                 )[0]
             channel = _ensure_channel_exists(experiment=experiment, platform="web", name=f"{experiment.id}-web")
             session = _start_experiment_session(
-                experiment, get_real_user_or_none(request.user), participant=participant
-            )
-            ChannelSession.objects.get_or_create(
-                experiment_channel=channel, experiment_session=session, external_chat_id=session.chat.id
+                experiment,
+                user=get_real_user_or_none(request.user),
+                participant=participant,
+                experiment_channel=channel,
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
@@ -358,22 +319,14 @@ def start_experiment(request, team_slug: str, experiment_id: str):
             }
         )
 
-    if experiment.consent_form:
-        rendered_markdown = experiment.consent_form.consent_text
-    else:
-        consent_template = "experiments/consent/consent_default.md"
-        rendered_markdown = render_to_string(consent_template, request=request)
-
-    markdown_text = markdown.markdown(rendered_markdown)
-    consent_notice = mark_safe(markdown_text)
-
+    consent_notice = experiment.consent_form.get_rendered_content()
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
             "experiment": experiment,
-            "consent_notice": consent_notice,
+            "consent_notice": mark_safe(consent_notice),
             "form": form,
         },
     )
@@ -382,7 +335,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
 @team_admin_required
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def experiment_invitations(request, team_slug: str, experiment_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     sessions = experiment.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
@@ -428,7 +381,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
     # Create a HttpResponse with the CSV data and file attachment headers
     response = HttpResponse(experiment_to_csv(experiment).getvalue(), content_type="text/csv")
@@ -437,10 +390,14 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
 
 
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)
     send_experiment_invitation(session)
-    return TemplateResponse(request, "experiments/manage/invite_sent_htmx.html")
+    return TemplateResponse(
+        request,
+        "experiments/manage/invite_row.html",
+        context={"request": request, "experiment": experiment, "session": session},
+    )
 
 
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
@@ -464,7 +421,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_experiment_session(request, team_slug: str, experiment_id: str, session_id: str):
-    experiment = get_object_or_404(Experiment, public_id=experiment_id)
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
 
     if request.method == "POST":
@@ -486,16 +443,14 @@ def start_experiment_session(request, team_slug: str, experiment_id: str, sessio
             initial=initial,
         )
 
-    consent_template = "experiments/consent/consent_default.md"
-    rendered_markdown = render_to_string(consent_template, request=request)
-    consent_notice = mark_safe(markdown.markdown(rendered_markdown))
+    consent_notice = experiment.consent_form.get_rendered_content()
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
             "experiment": experiment,
-            "consent_notice": consent_notice,
+            "consent_notice": mark_safe(consent_notice),
             "form": form,
         },
     )
@@ -530,7 +485,6 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
-    request.team = request.team or get_object_or_404(Team, slug=team_slug)
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",

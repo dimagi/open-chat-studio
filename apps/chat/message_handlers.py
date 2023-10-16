@@ -9,11 +9,13 @@ import boto3
 import requests
 from botocore.client import Config
 from django.conf import settings
+from django.utils import timezone
 from telebot import TeleBot
+from telebot.util import smart_split
 from twilio.rest import Client
 
 from apps.channels import audio
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.bots import get_bot_from_session
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.experiments.models import ExperimentSession, SessionStatus
@@ -129,9 +131,8 @@ class MessageHandler:
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "MessageHandler":
-        """Given a `channel_session` instance, returns the correct MessageHandler subclass to use"""
-        channel_session = experiment_session.get_channel_session()
-        platform = channel_session.experiment_channel.platform
+        """Given an `experiment_session` instance, returns the correct MessageHandler subclass to use"""
+        platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
             PlatformMessageHandlerClass = TelegramMessageHandler
@@ -142,7 +143,7 @@ class MessageHandler:
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
-            channel=channel_session.experiment_channel, experiment_session=experiment_session
+            channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
     def _add_message(self, message):
@@ -159,6 +160,10 @@ class MessageHandler:
             # Webchats' statuses are updated through an "external" flow
             self.experiment_session.status = SessionStatus.ACTIVE
             self.experiment_session.save()
+
+            if self._is_reset_conversation_request():
+                # Why not include webchats? They can be reset by creating a new chat.
+                return
 
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
@@ -217,43 +222,52 @@ class MessageHandler:
         If not, a new experiment session is created and associated with the chat.
         """
         if self.experiment_session and not self.channel:
+            # TODO: Remove
             # Since web channels doesn't have channel records (atm), they will only have experiment sessions
             # so we don't create channel_sessions for them.
             return
 
         self.experiment_session = ExperimentSession.objects.filter(
             experiment=self.experiment,
-            channel_session__external_chat_id=str(self.chat_id),
-        ).first()
-        if not self.experiment_session:
-            self._create_experiment_and_channel_sessions()
-        elif not self.experiment_session.channel_session.experiment_channel:
-            # This branch will only be entered for channel sessions that were created by the data migration.
-            # These sessions doesn't have experiment channels associated with them, so we need to make sure that
-            # they have experiment channels here. For new chats/sessions, the channel is added when they're
-            # created in _create_experiment_and_channel_sessions.
-            # See this PR: https://github.com/czue/gpt-playground/pull/67
-            # If you see this comment in or after November 2023, you can remove this code. Do update the data
-            # migration (apps/channels/migrations/0005_create_channel_sessions.py) to link experiment channels
-            # to the channel sessions when removing this code
-            channel_session = self.experiment_session.channel_session
-            channel_session.experiment_channel = self.channel
-            channel_session.save()
+            external_chat_id=str(self.chat_id),
+        ).last()
 
-    def _create_experiment_and_channel_sessions(self):
+        if not self.experiment_session:
+            self._create_new_experiment_session()
+        else:
+            if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
+                self._reset_session()
+            if not self.experiment_session.experiment_channel:
+                # This branch will only be entered for channel sessions that were created by the data migration.
+                # These sessions doesn't have experiment channels associated with them, so we need to make sure that
+                # they have experiment channels here. For new chats/sessions, the channel is added when they're
+                # created in _create_new_experiment_session.
+                # See this PR: https://github.com/czue/gpt-playground/pull/67
+                # If you see this comment in or after November 2023, you can remove this code. Do update the data
+                # migration (apps/channels/migrations/0005_create_channel_sessions.py) to link experiment channels
+                # to the channel sessions when removing this code
+                self.experiment_session.experiment_channel = self.channel
+                self.experiment_session.save()
+
+    def _reset_session(self):
+        """Resets the session by ending the current `experiment_session` and creating a new one"""
+        self.experiment_session.ended_at = timezone.now()
+        self.experiment_session.save()
+        self._create_new_experiment_session()
+
+    def _create_new_experiment_session(self):
         self.experiment_session = ExperimentSession.objects.create(
+            team=self.experiment.team,
             user=None,
             participant=None,
             experiment=self.experiment,
             llm=self.experiment.llm,
-        )
-
-        channel_session = ChannelSession(
             external_chat_id=self.chat_id,
-            experiment_session=self.experiment_session,
             experiment_channel=self.channel,
         )
-        channel_session.save()
+
+    def _is_reset_conversation_request(self):
+        return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
 class WebMessageHandler(MessageHandler):
@@ -303,7 +317,8 @@ class TelegramMessageHandler(MessageHandler):
         self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
 
     def send_text_to_user(self, text: str):
-        self.telegram_bot.send_message(chat_id=self.chat_id, text=text)
+        for message_text in smart_split(text):
+            self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
@@ -312,8 +327,7 @@ class TelegramMessageHandler(MessageHandler):
 
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        channel_session = self.experiment_session.channel_session
-        self.telegram_bot.send_message(chat_id=channel_session.external_chat_id, text=bot_message)
+        self.telegram_bot.send_message(chat_id=self.experiment_session.external_chat_id, text=bot_message)
 
     # Callbacks
 
@@ -356,8 +370,7 @@ class WhatsappMessageHandler(MessageHandler):
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
         from_number = self.channel.extra_data["number"]
-        channel_session = self.experiment_session.get_channel_session()
-        to_number = channel_session.external_chat_id
+        to_number = self.experiment_session.external_chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=bot_message, to=f"whatsapp:{to_number}")
 
     def get_message_audio(self) -> BytesIO:

@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import Optional, Tuple
 
+import pytz
 from langchain import ConversationChain
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.callbacks import get_openai_callback
@@ -29,6 +31,8 @@ class Conversation:
         llm,
         experiment_session: Optional[ExperimentSession] = None,
     ):
+        UTC = pytz.timezone("UTC")
+        current_datetime = datetime.now().astimezone(UTC)
         prompt_to_use = SystemMessagePromptTemplate.from_template(prompt_str)
         if source_material:
             try:
@@ -39,9 +43,13 @@ class Conversation:
         if experiment_session and experiment_session.experiment.tools_enabled:
             self.executer = AgentExecuter(llm=llm, memory=memory, experiment_session=experiment_session)
             # Insert the messages here
+            current_date_message = SystemMessagePromptTemplate.from_template("{current_date}")
             self.executer.agent.prompt = OpenAIFunctionsAgent.create_prompt(
                 system_message=prompt_to_use,
-                extra_prompt_messages=[MessagesPlaceholder(variable_name="history")],
+                extra_prompt_messages=[
+                    MessagesPlaceholder(variable_name="history"),
+                    current_date_message.format(current_date=str(current_datetime)),
+                ],
             )
         else:
             prompt = ChatPromptTemplate.from_messages(
@@ -57,7 +65,7 @@ class Conversation:
     def memory(self) -> BaseMemory:
         return self.executer.memory
 
-    def predict(self, input: str) -> Tuple[str, str, str]:
+    def predict(self, input: str) -> Tuple[str, int, int]:
         with get_openai_callback() as cb:
             response = self.executer.predict(input=input)
         return response, cb.prompt_tokens, cb.completion_tokens

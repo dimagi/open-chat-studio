@@ -1,35 +1,53 @@
-FROM python:3.11-buster
-ENV PYTHONUNBUFFERED=1
+FROM python:3.11-slim-bookworm as build-python
+RUN apt-get update \
+  # dependencies for building Python packages
+  && apt-get install -y build-essential libpq-dev
+COPY ./requirements /requirements
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
+    -r /requirements/requirements.txt \
+    -r /requirements/prod-requirements.txt
 
-# install node/npm
-RUN \
-  echo "deb https://deb.nodesource.com/node_16.x buster main" > /etc/apt/sources.list.d/nodesource.list && \
-  wget -qO- https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
-  apt-get update && \
-  apt-get install -yqq nodejs
-
-# Install FFmpeg dependencies for audio transcriptions
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
- && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir /code
+FROM node:18-bullseye AS build-node
+RUN nodejs -v && npm -v
 WORKDIR /code
-
-COPY requirements requirements/
-COPY requirements.txt requirements.txt
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
-COPY . /code/
-
-# build front end files
+COPY . /code
 RUN npm install
 RUN npm run build
 
-# why this has to be here:
-# https://stackoverflow.com/questions/59719175/where-to-run-collectstatic-when-deploying-django-app-to-heroku-using-docker
+FROM python:3.11-slim-bookworm
+ENV PYTHONUNBUFFERED 1
+ENV DEBUG 0
+
+RUN apt-get update \
+  # psycopg2 dependencies
+  && apt-get install -y libpq-dev \
+  # Translations dependencies
+  && apt-get install -y gettext \
+  # audio/video dependencies
+  && apt-get install -y ffmpeg \
+  # cleaning up unused files
+  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system django \
+    && adduser --system --ingroup django django
+
+COPY --from=build-node /code/static /code/static
+COPY --from=build-python /wheels /wheels
+COPY ./requirements /requirements
+RUN pip install --no-index --find-links=/wheels \
+    -r /requirements/requirements.txt \
+    -r /requirements/prod-requirements.txt \
+    && rm -rf /wheels \
+    && rm -rf /root/.cache/pip/*
+
+WORKDIR /code
+
+COPY --chown=django:django . /code
+
 RUN python manage.py collectstatic --noinput --settings=gpt_playground.settings_production
+RUN chown django:django -R static_root
 
+USER django
 
-# Run gunicorn by default
 CMD exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application

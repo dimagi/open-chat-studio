@@ -1,8 +1,18 @@
 {% extends 'web/app/app_base.html' %}
 {% block app %}
 <div class="app-card">
-  <h1 class="pg-title">Experiments</h1>
-  <h2 class="pg-subtitle">The following experiments are available.</h2>
+  <div class="grid grid-cols-6">
+    <div class="col-span-5">
+      <h1 class="pg-title">Experiments</h1>
+    </div>
+    {% if request.user.is_superuser %}
+    <div class="justify-self-end">
+      <a class="btn btn-primary btn-sm" href="{% url "experiments:new" request.team.slug %}">Add new</a>
+    </div>
+    {% endif %}
+  </div>
+  <hr class="m-2">
+
 {% if request.user.is_superuser %}
 <style>
   @media (prefers-color-scheme: dark) {
@@ -12,13 +22,13 @@
 }
 </style>
 <!-- TODO: it would be better to calculate the dark-bg-alert colour instead of hardcoding the rgb value -->
-  <div class="alert dark-bg-alert !bg-blue-50  my-2">
-    <div>
+  <div class="alert dark-bg-alert !bg-blue-50 my-2">
+    <div class="flex">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-      <span>As an admin, you can manage experiments in the admin site.</span>
+      <span class="pl-2">As an admin, you can manage experiments in the admin site.</span>
     </div>
-    <div class="flex-none">
-      <a href="{% url 'admin:index'  %}experiments/" class="btn btn-sm btn-primary">Manage Experiments</a>
+    <div class="justify-self-end">
+      <a href="{% url 'admin:app_list' 'experiments' %}" class="btn btn-sm btn-primary">Manage Experiments</a>
     </div>
   </div>
 {% endif %}

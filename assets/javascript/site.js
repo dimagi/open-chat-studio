@@ -2,4 +2,5 @@
 // HTMX setup: https://htmx.org/docs/#installing
 import 'htmx.org';
 import './htmx';
-import './alpine'
+import './alpine';
+import './tiktoken';

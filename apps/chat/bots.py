@@ -1,10 +1,7 @@
 from typing import List, Optional
 
-from langchain import ConversationChain
-from langchain.callbacks import get_openai_callback
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema import AIMessage, HumanMessage
 
 from apps.chat.conversation import Conversation
@@ -115,8 +112,8 @@ class TopicBot:
             bot.output_tokens = 0
         return input_tokens, output_tokens
 
-    def get_response(self, user_input: str, is_ping_message=False):
-        if not is_ping_message:
+    def get_response(self, user_input: str, is_prompt_instruction=False):
+        if not is_prompt_instruction:
             human_message = HumanMessage(content=user_input)
             self.history.append(human_message)
             self.history_to_save.append(human_message)

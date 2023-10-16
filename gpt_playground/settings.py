@@ -65,6 +65,8 @@ THIRD_PARTY_APPS = [
     "hijack.contrib.admin",  # hijack buttons in the admin
     "whitenoise.runserver_nostatic",  # whitenoise runserver
     "waffle",
+    "django_celery_beat",
+    "django_tables2",
 ]
 
 # Put your project-specific apps here
@@ -324,6 +326,7 @@ if REDIS_URL.startswith("rediss"):
     REDIS_URL = f"{REDIS_URL}?ssl_cert_reqs=none"
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 WAGTAILADMIN_BASE_URL = "http://localhost:8000"
 
 # Waffle config
@@ -407,3 +410,21 @@ WHATSAPP_AWS_AUDIO_BUCKET = os.environ.get("WHATSAPP_AWS_AUDIO_BUCKET", default=
 
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+
+
+# Django tables
+
+DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
+DJANGO_TABLES2_TABLE_ATTRS = {
+    "class": "w-full table-fixed",
+    "thead": {"class": "bg-gray-200 text-gray-600 uppercase text-sm leading-normal"},
+    "th": {"class": "py-3 px-6 text-left"},
+    "td": {"class": "py-3 px-6 text-left overflow-hidden"},
+}
+DJANGO_TABLES2_ROW_ATTRS = {
+    "class": "border-b border-gray-200 hover:bg-gray-100",
+    "id": lambda record: f"record-{record.id}",
+}
+
+# This is only used for development purposes
+SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)

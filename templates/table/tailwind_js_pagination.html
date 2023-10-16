@@ -1,0 +1,17 @@
+{% extends 'table/tailwind.html' %}
+{% load django_tables2 %}
+{% comment %}
+Override pagination in base template to use htmx
+{% endcomment %}
+{% block prev-page-link-attr %}
+hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
+hx-trigger="click"
+hx-target="div.table-container"
+hx-swap="outerHTML"
+{% endblock %}
+{% block next-page-link-attr %}
+hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
+hx-trigger="click"
+hx-target="div.table-container"
+hx-swap="outerHTML"
+{% endblock %}

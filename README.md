@@ -1,78 +1,71 @@
 # Open Chat Studio
 
-Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more informaton.
+Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more information.
 
-## Installation
+## Dev Environment Setup
 
-Setup a virtualenv and install requirements
-(this example uses [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/)):
+This project uses [Invoke](https://www.pyinvoke.org/) for dev automation. You can view the list of
+available commands with:
+
+```shell
+inv -l
+```
+
+New commands / updates can be made to the `tasks.py` file.
+
+### 1. Install dependencies
+Setup a virtualenv and install requirements:
 
 ```bash
 python -m venv venv
 pip install -r dev-requirements.txt
 ```
 
-Python 3.11 is recommended, though anything between 3.9 and 3.11 should work.
+Python 3.11 is recommended.
 
-## Set up database
+### 2. Run the automated setup
 
-Create a database named `gpt_playground`.
-
-```
-createdb gpt_playground
+```shell
+inv setup-dev-env
 ```
 
-or if you're using docker, start the container with
+This will:
 
-```
-docker run -d --name gpt-postgres -p 5432:5432 -e POSTGRES_PASSWORD=*** -e POSTGRES_USER=postgres -e POSTGRES_DATABASE=gpt_playground postgres:14
-```
-then create the DB
-```
-docker exec -it gpt-postgres createdb -U postgres gpt_playground
+#### Install the pre-commit hooks
+
+```shell
+pre-commit install --install-hooks
 ```
 
-Create database migrations:
+#### Set up database
+
+Start the database and redis services and run the DB migrations:
 
 ```
-./manage.py makemigrations
-```
-
-Create database tables:
-
-```
+inv up
+cp .env.example .env
 ./manage.py migrate
 ```
 
-## Building front-end
+#### Build the front-end resources
 
 To build JavaScript and CSS files, first install npm packages:
 
 ```bash
 npm install
+npm run dev
 ```
 
-Then build (and watch for changes locally):
+#### Create a superuser
 
 ```bash
-npm run dev-watch
+./manage.py createsuperuser
 ```
 
-
-## Running server
+### Running server
 
 ```bash
 ./manage.py runserver
-```
-
-## Running Redis
-
-Redis is needed by Celery to run background tasks.
-
-You can set up Redis in docker using:
-
-```bash
-docker run -d -p 6379:6379 --name gpt-redis redis
 ```
 
 ## Running Celery
@@ -95,18 +88,18 @@ celery -A gpt_playground worker -l INFO -B
 
 ## Updating translations
 
-**Docker:**
-
 ```bash
-make translations
+inv translations
 ```
 
-**Native:**
+## Updating requirements
 
-```bash
-./manage.py makemessages --all --ignore node_modules --ignore venv
-./manage.py makemessages -d djangojs --all --ignore node_modules --ignore venv
-./manage.py compilemessages
+```shell
+inv requirements
+
+Options:
+  -p STRING, --upgrade-package=STRING
+  -u, --upgrade-all
 ```
 
 ## Installing Git commit hooks
@@ -137,16 +130,6 @@ On Linux-based systems you can watch for changes using the following:
 
 ```bash
 find . -name '*.py' | entr python ./manage.py test apps.utils.tests.test_slugs
-```
-
-
-## Customizations
-
-Copy the `.env.example` file to `.env` and set any values that you need.
-You should also add your OpenAI key to this file:
-
-```
-OPENAI_API_KEY="sk-***"
 ```
 
 ### Testing bots

@@ -3,7 +3,7 @@ from typing import Dict
 from django.contrib import admin
 from django.http.request import HttpRequest
 
-from apps.channels.models import ChannelSession, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 
 
 @admin.register(ExperimentChannel)
@@ -29,11 +29,3 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.exclude(platform="web")
-
-
-@admin.register(ChannelSession)
-class ChannelSessionAdmin(admin.ModelAdmin):
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )

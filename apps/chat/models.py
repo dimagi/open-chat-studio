@@ -5,10 +5,11 @@ from django.conf import settings
 from django.db import models
 from langchain.schema import BaseMessage, messages_from_dict
 
+from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class Chat(BaseModel):
+class Chat(BaseTeamModel):
     """
     A chat instance.
     """
@@ -59,18 +60,3 @@ class ChatMessage(BaseModel):
                 "content": self.content,
             },
         }
-
-
-class FutureMessage(BaseModel):
-    """
-    A message that will be sent in the future.
-    """
-
-    message = models.CharField(null=False, blank=False)
-    due_at = models.DateTimeField()
-    interval_minutes = models.IntegerField(null=True, blank=True)
-    experiment_session = models.ForeignKey(
-        "experiments.ExperimentSession", on_delete=models.CASCADE, related_name="future_messages"
-    )
-    end_date = models.DateTimeField()
-    resolved = models.BooleanField(default=False)

@@ -14,15 +14,13 @@ from apps.users.models import CustomUser
 @shared_task
 def get_response_for_webchat_task(experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
-    # Channel session should exist. We shoul run a data migration before this code
-    channel_session = experiment_session.get_channel_session()
-    message_handler = WebMessageHandler(channel_session.experiment_channel)
+    message_handler = WebMessageHandler(experiment_session.experiment_channel)
     message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
     return message_handler.new_user_message(message)
 
 
 @shared_task
-def get_prompt_builder_response_task(user_id, data: str) -> str:
+def get_prompt_builder_response_task(team_id: int, user_id, data: str) -> str:
     # Deserialize the incoming JSON
     data_dict = json.loads(data)
     messages_history = data_dict["messages"]
@@ -84,5 +82,5 @@ def get_prompt_builder_response_task(user_id, data: str) -> str:
         }
     )
     history_event |= {"preview": answer, "time": datetime.now().time().strftime("%H:%M")}
-    PromptBuilderHistory.objects.create(owner=user, history=history_event)
+    PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}
