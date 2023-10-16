@@ -145,6 +145,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         user=request.user,
         experiment=experiment,
     )
+    channel = experiment.experimentchannel_set.exclude(platform="web").first()
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -153,6 +154,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "experiment": experiment,
             "sessions": sessions,
             "platforms": ChannelPlatforms.for_dropdown(),
+            "channel": channel,
         },
     )
 

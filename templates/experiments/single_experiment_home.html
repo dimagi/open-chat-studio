@@ -41,6 +41,7 @@
   <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
   <h3 class="inline mr-4">Channels:</h3>
   <i class="fa-regular fa-window-maximize"></i> Web
+  {% if not channel %}
   <div class="dropdown">
     <button class="btn btn-ghost btn-sm">
       <i class="fa-regular fa-plus"></i>
@@ -65,6 +66,7 @@
       </div>
     </dialog>
   {% endfor %}
+  {% endif %}
   <hr class="m-2">
 
   <h2 class="pg-subtitle">Previous Chat Sessions</h2>
