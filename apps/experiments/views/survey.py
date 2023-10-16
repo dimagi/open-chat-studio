@@ -30,6 +30,9 @@ class SurveyTableView(SingleTableView):
     table_class = SurveyTable
     template_name = "table/single_table.html"
 
+    def get_queryset(self):
+        return Survey.objects.filter(team=self.request.team)
+
 
 class CreateSurvey(CreateView):
     model = Survey
@@ -48,6 +51,7 @@ class CreateSurvey(CreateView):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -65,12 +69,15 @@ class EditSurvey(UpdateView):
         "active_tab": "survey",
     }
 
+    def get_queryset(self):
+        return Survey.objects.filter(team=self.request.team)
+
     def get_success_url(self):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
 
 
 @login_and_team_required
 def delete_survey(request, team_slug: str, pk: int):
-    survey = get_object_or_404(Survey, id=pk)
+    survey = get_object_or_404(Survey, id=pk, team=request.team)
     survey.delete()
     return HttpResponse()

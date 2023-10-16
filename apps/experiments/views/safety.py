@@ -30,6 +30,9 @@ class SafetyLayerTableView(SingleTableView):
     table_class = SafetyLayerTable
     template_name = "table/single_table.html"
 
+    def get_queryset(self):
+        return SafetyLayer.objects.filter(team=self.request.team)
+
 
 class CreateSafetyLayer(CreateView):
     model = SafetyLayer
@@ -49,7 +52,13 @@ class CreateSafetyLayer(CreateView):
     def get_success_url(self):
         return reverse("experiments:safety_home", args=[self.request.team.slug])
 
+    def get_form(self):
+        form = super().get_form()
+        form.fields["prompt"].queryset = self.request.team.prompt_set
+        return form
+
     def form_valid(self, form):
+        form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
@@ -69,6 +78,14 @@ class EditSafetyLayer(UpdateView):
         "active_tab": "safety_layers",
     }
 
+    def get_queryset(self):
+        return SafetyLayer.objects.filter(team=self.request.team)
+
+    def get_form(self):
+        form = super().get_form()
+        form.fields["prompt"].queryset = self.request.team.prompt_set
+        return form
+
     def get_form(self):
         form = super().get_form()
         form.fields["prompt"].disabled = True
@@ -80,6 +97,6 @@ class EditSafetyLayer(UpdateView):
 
 @login_and_team_required
 def delete_safety_layer(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(SafetyLayer, id=pk)
+    safety_layer = get_object_or_404(SafetyLayer, id=pk, team=request.team)
     safety_layer.delete()
     return HttpResponse()

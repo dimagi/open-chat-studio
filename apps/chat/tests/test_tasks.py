@@ -17,6 +17,7 @@ from apps.experiments.models import (
     SessionStatus,
 )
 from apps.experiments.views.experiment import _start_experiment_session
+from apps.teams.models import Team
 from apps.users.models import CustomUser
 
 
@@ -24,23 +25,26 @@ class TasksTest(TestCase):
     def setUp(self):
         super().setUp()
         self.telegram_chat_id = 1234567891
+        self.team = Team.objects.create(name="test-team")
         self.user = CustomUser.objects.create_user(username="testuser")
         self.prompt = Prompt.objects.create(
+            team=self.team,
             owner=self.user,
             name="test-prompt",
             description="test",
             prompt="You are a helpful assistant",
         )
         self.no_activity_config = NoActivityMessageConfig.objects.create(
-            message_for_bot="Some message", name="Some name", max_pings=3, ping_after=1
+            team=self.team, message_for_bot="Some message", name="Some name", max_pings=3, ping_after=1
         )
         self.experiment = Experiment.objects.create(
+            team=self.team,
             owner=self.user,
             name="TestExperiment",
             description="test",
             chatbot_prompt=self.prompt,
             no_activity_config=self.no_activity_config,
-            consent_form=ConsentForm.get_default(),
+            consent_form=ConsentForm.get_default(self.team),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"
@@ -65,12 +69,13 @@ class TasksTest(TestCase):
     @patch("apps.chat.tasks._try_send_message")
     def test_no_activity_ping_triggered_for_active_sessions(self, _bot_prompt_for_user, _try_send_message):
         second_experiment = Experiment.objects.create(
+            team=self.team,
             owner=self.user,
             name="TestExperiment2",
             description="test2",
             chatbot_prompt=self.prompt,
             no_activity_config=None,
-            consent_form=ConsentForm.get_default(),
+            consent_form=ConsentForm.get_default(self.team),
         )
         ExperimentChannel.objects.create(
             name="TestChannel2", experiment=second_experiment, extra_data={"bot_token": "222222"}, platform="telegram"

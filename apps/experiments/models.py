@@ -13,7 +13,7 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
-class Prompt(BaseModel):
+class Prompt(BaseTeamModel):
     """
     A prompt - typically the starting point for ChatGPT.
     """
@@ -39,7 +39,7 @@ class Prompt(BaseModel):
             return input_str
 
 
-class PromptBuilderHistory(BaseModel):
+class PromptBuilderHistory(BaseTeamModel):
     """
     History entries for the prompt builder
     """
@@ -51,7 +51,7 @@ class PromptBuilderHistory(BaseModel):
         return str(self.history)
 
 
-class SourceMaterial(BaseModel):
+class SourceMaterial(BaseTeamModel):
     """
     Some Source Material on a particular topic.
     """
@@ -65,7 +65,7 @@ class SourceMaterial(BaseModel):
         return self.topic
 
 
-class SafetyLayer(BaseModel):
+class SafetyLayer(BaseTeamModel):
     REVIEW_CHOICES = (("human", "Human messages"), ("ai", "AI messages"))
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
@@ -89,7 +89,7 @@ class SafetyLayer(BaseModel):
         return str(self.prompt)
 
 
-class Survey(BaseModel):
+class Survey(BaseTeamModel):
     """
     A survey.
     """
@@ -115,7 +115,7 @@ class Survey(BaseModel):
         )
 
 
-class ConsentForm(BaseModel):
+class ConsentForm(BaseTeamModel):
     """
     Custom markdown consent form to be used by experiments.
     """
@@ -125,8 +125,8 @@ class ConsentForm(BaseModel):
     is_default = models.BooleanField(default=False, editable=False)
 
     @classmethod
-    def get_default(cls):
-        return cls.objects.get(is_default=True)
+    def get_default(cls, team):
+        return cls.objects.get(team=team, is_default=True)
 
     def __str__(self):
         return self.name
@@ -174,7 +174,7 @@ class SyntheticVoice(BaseModel):
         return f"{self.language}, {self.gender}, {prefix}{self.name}"
 
 
-class NoActivityMessageConfig(BaseModel):
+class NoActivityMessageConfig(BaseTeamModel):
     """Configuration for when the user doesn't respond to the bot's message"""
 
     message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
@@ -186,7 +186,7 @@ class NoActivityMessageConfig(BaseModel):
         return self.name
 
 
-class Experiment(BaseModel):
+class Experiment(BaseTeamModel):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -277,12 +277,10 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
-class ExperimentSession(BaseModel):
+class ExperimentSession(BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
-
-    team = models.ForeignKey(Team, verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True, blank=True)
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
@@ -313,7 +311,7 @@ class ExperimentSession(BaseModel):
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
-            self.chat = Chat.objects.create(user=self.user, name=self.experiment.name)
+            self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
 
         is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
         if is_web_channel and self.external_chat_id is None:

@@ -18,7 +18,7 @@ class Command(BaseCommand):
         if options["resume"]:
             chat = Chat.objects.get(id=options["resume"])
         else:
-            chat = Chat.objects.create()
+            chat = Chat.objects.create(team=experiment.team)
         print(chat)
         explainer_bot = get_bot_from_experiment(experiment, chat)
         run_explainer_bot(explainer_bot, experiment)

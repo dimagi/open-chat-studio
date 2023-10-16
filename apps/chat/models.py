@@ -5,10 +5,11 @@ from django.conf import settings
 from django.db import models
 from langchain.schema import BaseMessage, messages_from_dict
 
+from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class Chat(BaseModel):
+class Chat(BaseTeamModel):
     """
     A chat instance.
     """
