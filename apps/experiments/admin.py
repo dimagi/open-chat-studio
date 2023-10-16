@@ -7,8 +7,11 @@ from apps.experiments.models import ConsentForm
 
 @admin.register(models.Prompt)
 class PromptAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "prompt")
-    list_filter = ("owner",)
+    list_display = ("name", "team", "owner", "prompt")
+    list_filter = (
+        "team",
+        "owner",
+    )
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -29,8 +32,11 @@ class PromptBuilderHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(models.SourceMaterial)
 class SourceMaterialAdmin(admin.ModelAdmin):
-    list_display = ("topic", "owner")
-    list_filter = ("owner",)
+    list_display = ("topic", "team", "owner")
+    list_filter = (
+        "team",
+        "owner",
+    )
 
 
 class SafetyLayerInline(admin.TabularInline):
@@ -44,23 +50,28 @@ class SafetyLayerInline(admin.TabularInline):
 @admin.register(models.SafetyLayer)
 class SafetyLayerAdmin(admin.ModelAdmin):
     list_display = (
+        "team",
         "prompt",
         "messages_to_review",
     )
+    list_filter = ("team",)
 
 
 @admin.register(models.Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("email", "public_id")
+    list_display = ("email", "team", "public_id")
     readonly_fields = ("public_id",)
+    list_filter = ("team",)
 
 
 @admin.register(models.Survey)
 class SurveyAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "team",
         "url",
     )
+    list_filter = ("team",)
 
 
 class ExperimentAdminForm(forms.ModelForm):
@@ -77,8 +88,8 @@ class ExperimentAdminForm(forms.ModelForm):
 
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "chatbot_prompt", "source_material", "llm")
-    list_filter = ("owner", "source_material")
+    list_display = ("name", "team", "owner", "chatbot_prompt", "source_material", "llm")
+    list_filter = ("team", "owner", "source_material")
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
@@ -94,6 +105,7 @@ class ExperimentAdmin(admin.ModelAdmin):
 class ExperimentSessionAdmin(admin.ModelAdmin):
     list_display = (
         "experiment",
+        "team",
         "participant",
         "user",
         "status",
@@ -103,15 +115,21 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
     list_filter = ("experiment", "user")
     readonly_fields = ("public_id",)
 
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.experiment.team.name
+
 
 @admin.register(models.ConsentForm)
 class ConsentFormAdmin(admin.ModelAdmin):
     list_display = (
+        "team",
         "name",
         "consent_text",
         "is_default",
     )
     readonly_fields = ("is_default",)
+    list_filter = ("team",)
 
 
 @admin.register(models.SyntheticVoice)
@@ -128,7 +146,9 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
 @admin.register(models.NoActivityMessageConfig)
 class NoActivityMessageConfigAdmin(admin.ModelAdmin):
     list_display = (
+        "team",
         "message_for_bot",
         "name",
         "max_pings",
     )
+    list_filter = ("team",)
