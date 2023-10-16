@@ -38,7 +38,33 @@
       </div>
     </div>
   </div>
-  <h2 class="pg-subtitle my-2">{{ experiment.description }}</h2>
+  <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
+  <h3 class="inline mr-4">Channels:</h3>
+  <i class="fa-regular fa-window-maximize"></i> Web
+  <div class="dropdown">
+    <button class="btn btn-ghost btn-sm">
+      <i class="fa-regular fa-plus"></i>
+    </button>
+    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border">
+      {% for platform in platforms %}
+        <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% for platform in platforms %}
+    <dialog id="{{ platform.value }}_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+        <form method="post">
+          <p class="py-4">Press ESC key or click the button below to close</p>
+          <div class="modal-action">
+            <button class="btn btn-primary" type="submit">Create Link</button>
+            <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()">Close</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
   <hr class="m-2">
 
   <h2 class="pg-subtitle">Previous Chat Sessions</h2>

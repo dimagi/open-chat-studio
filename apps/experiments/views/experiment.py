@@ -19,7 +19,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatforms, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
@@ -152,6 +152,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "active_tab": "experiments",
             "experiment": experiment,
             "sessions": sessions,
+            "platforms": ChannelPlatforms.for_dropdown(),
         },
     )
 

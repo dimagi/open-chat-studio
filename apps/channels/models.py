@@ -12,16 +12,28 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
+class ChannelPlatforms(models.TextChoices):
+    TELEGRAM = "telegram", "Telegram"
+    WEB = "web", "Web"
+    WHATSAPP = "whatsapp", "WhatsApp"
+
+    @classmethod
+    def for_dropdown(cls):
+        return [
+            cls.TELEGRAM,
+            cls.WHATSAPP,
+        ]
+
+
 class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
 
-    PLATFORM = (("telegram", "telegram"), ("web", "web"), ("whatsapp", "whatsapp"))
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
     active = models.BooleanField(default=True)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    platform = models.CharField(max_length=32, choices=PLATFORM, default="telegram")
+    platform = models.CharField(max_length=32, choices=ChannelPlatforms.choices, default="telegram")
 
     def __str__(self):
         return f"name: {self.name}"
