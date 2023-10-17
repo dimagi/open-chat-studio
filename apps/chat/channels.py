@@ -26,21 +26,21 @@ class MESSAGE_TYPES(Enum):
     VOICE = "voice"
 
 
-class MessageHandler:
+class ChannelBase:
     """
-    Base class for message handlers in different channels. This class defines a set of common functions that all channels
+    This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
 
     Attributes:
         voice_replies_supported: Indicates whether the channel supports voice messages
 
     Args:
-        channel: An optional ExperimentChannel object representing the channel associated with the handler.
+        experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
         experiment_session: An optional ExperimentSession object representing the experiment session associated with the handler.
 
         Either one of these arguments must to be provided
     Raises:
-        MessageHandlerException: If both 'channel' and 'experiment_session' arguments are not provided.
+        MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Properties:
         chat_id: An abstract property that must be implemented in subclasses to return the unique identifier of the chat.
@@ -61,14 +61,16 @@ class MessageHandler:
     voice_replies_supported = False
 
     def __init__(
-        self, channel: Optional[ExperimentChannel] = None, experiment_session: Optional[ExperimentSession] = None
+        self,
+        experiment_channel: Optional[ExperimentChannel] = None,
+        experiment_session: Optional[ExperimentSession] = None,
     ):
-        if not channel and not experiment_session:
-            raise MessageHandlerException("MessageHandler expects either")
+        if not experiment_channel and not experiment_session:
+            raise MessageHandlerException("ChannelBase expects either")
 
-        self.channel = channel
+        self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
-        self.experiment = channel.experiment if channel else experiment_session.experiment
+        self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
 
         self.initialize()
@@ -130,20 +132,20 @@ class MessageHandler:
         pass
 
     @staticmethod
-    def from_experiment_session(experiment_session: ExperimentSession) -> "MessageHandler":
-        """Given an `experiment_session` instance, returns the correct MessageHandler subclass to use"""
+    def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
+        """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
         platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
-            PlatformMessageHandlerClass = TelegramMessageHandler
+            PlatformMessageHandlerClass = TelegramChannel
         elif platform == "web":
-            PlatformMessageHandlerClass = WebMessageHandler
+            PlatformMessageHandlerClass = WebChannel
         elif platform == "whatsapp":
-            PlatformMessageHandlerClass = WhatsappMessageHandler
+            PlatformMessageHandlerClass = WhatsappChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
-            channel=experiment_session.experiment_channel, experiment_session=experiment_session
+            experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
     def _add_message(self, message):
@@ -156,7 +158,7 @@ class MessageHandler:
         The `message` here will probably be some object, depending on the channel being used.
         """
         self._add_message(message)
-        if self.channel.platform != "web":
+        if self.experiment_channel.platform != "web":
             # Webchats' statuses are updated through an "external" flow
             self.experiment_session.status = SessionStatus.ACTIVE
             self.experiment_session.save()
@@ -221,7 +223,7 @@ class MessageHandler:
         Checks if an experiment session already exists for the specified experiment and chat ID.
         If not, a new experiment session is created and associated with the chat.
         """
-        if self.experiment_session and not self.channel:
+        if self.experiment_session and not self.experiment_channel:
             # TODO: Remove
             # Since web channels doesn't have channel records (atm), they will only have experiment sessions
             # so we don't create channel_sessions for them.
@@ -246,7 +248,7 @@ class MessageHandler:
                 # If you see this comment in or after November 2023, you can remove this code. Do update the data
                 # migration (apps/channels/migrations/0005_create_channel_sessions.py) to link experiment channels
                 # to the channel sessions when removing this code
-                self.experiment_session.experiment_channel = self.channel
+                self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
 
     def _reset_session(self):
@@ -263,14 +265,14 @@ class MessageHandler:
             experiment=self.experiment,
             llm=self.experiment.llm,
             external_chat_id=self.chat_id,
-            experiment_channel=self.channel,
+            experiment_channel=self.experiment_channel,
         )
 
     def _is_reset_conversation_request(self):
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
 
-class WebMessageHandler(MessageHandler):
+class WebChannel(ChannelBase):
     """Message Handler for the UI"""
 
     voice_replies_supported = False
@@ -292,11 +294,11 @@ class WebMessageHandler(MessageHandler):
         pass
 
 
-class TelegramMessageHandler(MessageHandler):
+class TelegramChannel(ChannelBase):
     voice_replies_supported = True
 
     def initialize(self):
-        self.telegram_bot = TeleBot(self.channel.extra_data["bot_token"], threaded=False)
+        self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     @property
     def chat_id(self) -> int:
@@ -344,14 +346,14 @@ class TelegramMessageHandler(MessageHandler):
         )
 
 
-class WhatsappMessageHandler(MessageHandler):
+class WhatsappChannel(ChannelBase):
     voice_replies_supported = True
 
     def initialize(self):
         self.client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
     def send_text_to_user(self, text: str):
-        from_number = self.channel.extra_data["number"]
+        from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=text, to=f"whatsapp:{to_number}")
 
@@ -369,7 +371,7 @@ class WhatsappMessageHandler(MessageHandler):
 
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_number = self.channel.extra_data["number"]
+        from_number = self.experiment_channel.extra_data["number"]
         to_number = self.experiment_session.external_chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=bot_message, to=f"whatsapp:{to_number}")
 
@@ -414,7 +416,6 @@ class WhatsappMessageHandler(MessageHandler):
             },
             ExpiresIn=360,
         )
-        print(f"\n\npublic_url: {public_url}\n\n")
-        from_number = self.channel.extra_data["number"]
+        from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[public_url])

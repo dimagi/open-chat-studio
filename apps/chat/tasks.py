@@ -7,8 +7,8 @@ from celery.app import shared_task
 from django.db.models import OuterRef, Subquery
 
 from apps.chat.bots import get_bot_from_experiment
+from apps.chat.channels import ChannelBase
 from apps.chat.exceptions import ExperimentChannelRepurposedException
-from apps.chat.message_handlers import MessageHandler
 from apps.chat.models import Chat, ChatMessage
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
@@ -125,7 +125,7 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
                 message=f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}' whereas the current experiment session points to experiment '{experiment_session.experiment.name}'"
             )
 
-        handler = MessageHandler.from_experiment_session(experiment_session)
+        handler = ChannelBase.from_experiment_session(experiment_session)
         handler.new_bot_message(message)
     except ExperimentChannelRepurposedException as e:
         raise e

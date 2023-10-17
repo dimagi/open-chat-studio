@@ -3,7 +3,7 @@ import json
 from django.test import TestCase
 
 from apps.channels.datamodels import WhatsappMessage
-from apps.chat.message_handlers import MESSAGE_TYPES
+from apps.chat.channels import MESSAGE_TYPES
 
 
 class TestWhatsappMessage(TestCase):

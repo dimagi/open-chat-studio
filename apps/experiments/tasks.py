@@ -6,7 +6,7 @@ from celery.app import shared_task
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import TopicBot
-from apps.chat.message_handlers import WebMessageHandler
+from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
 from apps.users.models import CustomUser
 
@@ -14,7 +14,7 @@ from apps.users.models import CustomUser
 @shared_task
 def get_response_for_webchat_task(experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
-    message_handler = WebMessageHandler(experiment_session.experiment_channel)
+    message_handler = WebChannel(experiment_session.experiment_channel)
     message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
     return message_handler.new_user_message(message)
 

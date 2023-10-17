@@ -3,12 +3,12 @@ from typing import Optional
 from pydantic import BaseModel, Field, validator
 from pydantic.dataclasses import dataclass
 
-from apps.chat.message_handlers import MESSAGE_TYPES
+from apps.chat.channels import MESSAGE_TYPES
 
 
 class WebMessage(BaseModel):
     """
-    A wrapper class for user messages coming from the UI. It's easier to pass this object to the WebMessageHandler
+    A wrapper class for user messages coming from the UI. It's easier to pass this object to the WebChannel
     and expose some attributes/methods to access chat specific data from the message. This follows a similar
     pattern then that of other channels
     """
