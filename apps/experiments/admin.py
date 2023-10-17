@@ -95,11 +95,6 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
     form = ExperimentAdminForm
 
-    def get_changeform_initial_data(self, request):
-        initial = super().get_changeform_initial_data(request)
-        initial["consent_form"] = ConsentForm.objects.get(is_default=True)
-        return initial
-
 
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
