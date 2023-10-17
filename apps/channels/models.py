@@ -12,7 +12,7 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
-class ChannelPlatforms(models.TextChoices):
+class ChannelPlatform(models.TextChoices):
     TELEGRAM = "telegram", "Telegram"
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
@@ -24,6 +24,20 @@ class ChannelPlatforms(models.TextChoices):
             cls.WHATSAPP,
         ]
 
+    def form(self):
+        from apps.channels.forms import ChannelForm
+
+        return ChannelForm(initial={"platform": self})
+
+    def extra_form(self, *args, **kwargs):
+        from apps.channels.forms import TelegramChannelForm, WhatsappChannelForm
+
+        match self:
+            case self.TELEGRAM:
+                return TelegramChannelForm(*args, **kwargs)
+            case self.WHATSAPP:
+                return WhatsappChannelForm(*args, **kwargs)
+
 
 class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
@@ -33,7 +47,7 @@ class ExperimentChannel(BaseModel):
     active = models.BooleanField(default=True)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    platform = models.CharField(max_length=32, choices=ChannelPlatforms.choices, default="telegram")
+    platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
 
     def __str__(self):
         return f"name: {self.name}"
@@ -46,6 +60,10 @@ class ExperimentChannel(BaseModel):
         except apihelper.ApiTelegramException:
             token = self.extra_data.get("bot_token", "")
             logging.error(f"Unable set Telegram webhook with token '{token}'")
+
+    @property
+    def platform_enum(self):
+        return ChannelPlatform(self.platform)
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):

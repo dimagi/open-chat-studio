@@ -8,6 +8,7 @@ from .consent import (  # noqa: F401
 from .experiment import (  # noqa: F401
     CreateExperiment,
     EditExperiment,
+    create_channel,
     delete_experiment,
     download_experiment_chats,
     end_experiment,

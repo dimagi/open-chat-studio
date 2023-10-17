@@ -6,7 +6,6 @@ from urllib.parse import quote
 import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
-from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
@@ -19,7 +18,8 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 
-from apps.channels.models import ChannelPlatforms, ExperimentChannel
+from apps.channels.forms import ChannelForm
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
@@ -145,7 +145,9 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         user=request.user,
         experiment=experiment,
     )
-    channel = experiment.experimentchannel_set.exclude(platform="web").first()
+    channels = experiment.experimentchannel_set.exclude(platform="web").all()
+    used_platforms = {channel.platform_enum for channel in channels}
+    available_platforms = set(ChannelPlatform.for_dropdown()) - used_platforms
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -153,10 +155,24 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "active_tab": "experiments",
             "experiment": experiment,
             "sessions": sessions,
-            "platforms": ChannelPlatforms.for_dropdown(),
-            "channel": channel,
+            "platforms": available_platforms,
+            "channels": channels,
         },
     )
+
+
+@login_and_team_required
+def create_channel(request, team_slug: str, experiment_id: int):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    form = ChannelForm(request.POST)
+    if form.is_valid():
+        platform = ChannelPlatform(form.cleaned_data["platform"])
+        extra_form = platform.extra_form(request.POST)
+        config_data = {}
+        if extra_form and extra_form.is_valid():
+            config_data = extra_form.cleaned_data
+        form.save(experiment, config_data)
+    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
 def _start_experiment_session(
