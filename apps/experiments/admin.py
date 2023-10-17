@@ -81,10 +81,6 @@ class ExperimentAdminForm(forms.ModelForm):
         model = models.Experiment
         fields = "__all__"
 
-    def __init__(self, *args, **kwargs):
-        super(ExperimentAdminForm, self).__init__(*args, **kwargs)
-        self.fields["chatbot_prompt"].queryset = models.Prompt.objects.order_by("name")
-
 
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
