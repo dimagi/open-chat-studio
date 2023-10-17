@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import ConsentForm, NoActivityMessageConfig, SafetyLayer, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, NoActivityMessageConfig, Prompt, SafetyLayer, SourceMaterial, Survey
 
 
 class SafetyLayerTable(tables.Table):
@@ -105,3 +105,35 @@ class NoActivityMessageConfigTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No configs found."
+
+
+class PromptTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "edit_url_name": "experiments:prompt_edit",
+            "delete_url_name": "experiments:prompt_delete",
+        },
+    )
+
+    def render_description(self, value):
+        if len(value) > 100:
+            return f"{value[:100]}..."
+        return value
+
+    def render_prompt(self, value):
+        if len(value) > 100:
+            return f"{value[:100]}..."
+        return value
+
+    class Meta:
+        model = Prompt
+        fields = (
+            "name",
+            "description",
+            "prompt",
+            "input_formatter",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No prompts found."

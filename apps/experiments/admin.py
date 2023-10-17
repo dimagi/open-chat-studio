@@ -13,16 +13,6 @@ class PromptAdmin(admin.ModelAdmin):
         "owner",
     )
 
-    def get_changeform_initial_data(self, request):
-        initial = super().get_changeform_initial_data(request)
-        long_data = request.session.pop("long_data", None)  # Replace None with a default value if needed
-
-        if long_data:
-            # Assuming long_data is a dict mapping field names to their initial values
-            initial.update(long_data)
-
-        return initial
-
 
 @admin.register(models.PromptBuilderHistory)
 class PromptBuilderHistoryAdmin(admin.ModelAdmin):
