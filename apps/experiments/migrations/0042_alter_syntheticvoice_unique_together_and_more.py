@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0037_alter_experimentsession_external_chat_id"),
+        ("experiments", "0041_default_consent_and_add_users_to_team"),
     ]
 
     operations = [
