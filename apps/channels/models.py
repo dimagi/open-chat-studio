@@ -23,6 +23,9 @@ class ExperimentChannel(BaseModel):
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=PLATFORM, default="telegram")
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return f"name: {self.name}"
 
