@@ -29,6 +29,9 @@ class Prompt(BaseTeamModel):
         "E.g. 'Safe or unsafe? {input}'",
     )
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -60,6 +63,9 @@ class SourceMaterial(BaseTeamModel):
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")
     material = models.TextField()
+
+    class Meta:
+        ordering = ["topic"]
 
     def __str__(self):
         return self.topic
@@ -103,6 +109,9 @@ class Survey(BaseTeamModel):
         max_length=500,
     )
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -123,6 +132,9 @@ class ConsentForm(BaseTeamModel):
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
     is_default = models.BooleanField(default=False, editable=False)
+
+    class Meta:
+        ordering = ["name"]
 
     @classmethod
     def get_default(cls, team):
@@ -175,12 +187,13 @@ class SyntheticVoice(BaseModel):
         null=False, blank=False, choices=SERVICES, max_length=6, help_text="The service this voice is from"
     )
 
+    class Meta:
+        ordering = ["name"]
+        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
+
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work
         return self.gender
-
-    class Meta:
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
 
     def __str__(self):
         prefix = "*" if self.neural else ""
@@ -194,6 +207,9 @@ class NoActivityMessageConfig(BaseTeamModel):
     name = models.CharField(max_length=64)
     max_pings = models.IntegerField()
     ping_after = models.IntegerField(help_text="The amount of minutes after which to ping the user. Minimum 1.")
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -264,6 +280,9 @@ class Experiment(BaseTeamModel):
         help_text="This is an experimental feature and might exhibit undesirable behaviour for external channels",
     )
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -276,6 +295,7 @@ class Participant(BaseTeamModel):
         return self.email
 
     class Meta:
+        ordering = ["email"]
         unique_together = ("team", "email")
 
 
