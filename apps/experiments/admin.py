@@ -135,12 +135,13 @@ class ConsentFormAdmin(admin.ModelAdmin):
 @admin.register(models.SyntheticVoice)
 class SyntheticVoiceAdmin(admin.ModelAdmin):
     list_display = (
+        "service",
         "name",
         "language",
         "get_gender",
         "neural",
     )
-    list_filter = ("language", "gender")
+    list_filter = ("service", "language", "gender")
 
 
 @admin.register(models.NoActivityMessageConfig)

@@ -1,7 +1,10 @@
+import os
+import tempfile
 from contextlib import closing
 from io import BytesIO
 from typing import Tuple
 
+import azure.cognitiveservices.speech as speechsdk
 import boto3
 import openai
 from django.conf import settings
@@ -17,6 +20,58 @@ def get_transcript(audio: BytesIO) -> str:
 
 
 def synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    if synthetic_voice.service == "AWS":
+        return aws_synthesize_voice(text, synthetic_voice)
+    elif synthetic_voice.service == "Azure":
+        return azure_synthesize_voice(text, synthetic_voice)
+
+    raise AudioSynthesizeException(f"Unrecognized audio service: {synthetic_voice.service}")
+
+
+def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    """
+    Calls Azure's cognitive speech services to convert the text to speech using the synthetic_voice
+    """
+    try:
+        speech_config = speechsdk.SpeechConfig(
+            subscription=settings.AZURE_SUBSCRIPTION_KEY, region=settings.AZURE_REGION
+        )
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+            # Create an audio configuration that points to the output audio file
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+
+            # Setup voice font (Azure refers to synthetic voices as voice fonts)
+            speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
+
+            # Create a speech synthesizer
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+
+            # Synthesize the text
+            result = synthesizer.speak_text(text)
+
+            # Check if synthesis was successful
+            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                audio_segment = AudioSegment.from_file(
+                    temp_file.name, format="wav"
+                )  # Azure returns audio in WAV format
+                duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
+
+                with open(temp_file.name, "rb") as f:
+                    file_content = f.read()
+
+                return BytesIO(file_content), duration_seconds
+            else:
+                raise AudioSynthesizeException(f"Azure audio synthesis failed with reason: {result.reason}. Req")
+
+    except Exception as e:
+        raise AudioSynthesizeException(f"Unable to synthesize audio with Azure: {e}")
+
+
+def aws_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    """
+    Calls AWS Polly to convert the text to speech using the synthetic_voice
+    """
     try:
         polly_client = boto3.Session(
             aws_access_key_id=settings.AWS_POLLY_ACCESS_KEY_ID,
@@ -38,7 +93,7 @@ def synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesI
         with closing(audio_stream) as stream:
             return BytesIO(audio_data), duration_seconds
     except Exception as e:
-        raise AudioSynthesizeException(f"Unable to synthesize audio: {e}")
+        raise AudioSynthesizeException(f"Unable to synthesize audio with AWS Polly: {e}")
 
 
 def convert_ogg_to_wav(ogg_audio: BytesIO) -> BytesIO:

@@ -153,13 +153,26 @@ class SyntheticVoice(BaseModel):
         ("male (child)", "Male (Child)"),
         ("female (child)", "Female (Child)"),
     )
+
+    SERVICES = (
+        ("AWS", "AWS"),
+        ("Azure", "Azure"),
+    )
+
     name = models.CharField(
         max_length=64, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
     neural = models.BooleanField(default=False, help_text="Indicates whether this voice is a neural voice")
     language = models.CharField(null=False, blank=False, max_length=64, help_text="The language this voice is for")
+    language_code = models.CharField(
+        null=False, blank=False, max_length=32, help_text="The language code this voice is for"
+    )
+
     gender = models.CharField(
         null=False, blank=False, choices=GENDERS, max_length=14, help_text="The gender of this voice"
+    )
+    service = models.CharField(
+        null=False, blank=False, choices=SERVICES, max_length=6, help_text="The service this voice is from"
     )
 
     def get_gender(self):
@@ -167,11 +180,11 @@ class SyntheticVoice(BaseModel):
         return self.gender
 
     class Meta:
-        unique_together = ("name", "language", "gender", "neural")
+        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
 
     def __str__(self):
         prefix = "*" if self.neural else ""
-        return f"{self.language}, {self.gender}, {prefix}{self.name}"
+        return f"{self.service}, {self.language}, {self.gender}, {prefix}{self.name}"
 
 
 class NoActivityMessageConfig(BaseTeamModel):
