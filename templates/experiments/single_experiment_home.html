@@ -41,14 +41,31 @@
   </div>
   <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
   <h3 class="inline mr-4">Channels:</h3>
-  <span class="mx-2"><i class="fa-regular fa-window-maximize"></i> Web</span>
+  <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
   {#  Commented elements included for Tailwind processing #}
   {#  <i class="fa-brands fa-telegram"></i> #}
   {#  <i class="fa-brands fa-whatsapp"></i> #}
   {% for channel in channels %}
-    <span class="mx-2">
-      <i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}
-    </span>
+    <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+      <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
+    </div>
+    <dialog id="channel_{{ channel.id }}_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
+        <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}">
+          {% csrf_token %}
+          {% render_form_fields channel.form %}
+          {% if channel.extra_form %}
+            {% render_form_fields channel.extra_form %}
+          {% endif %}
+          <div class="modal-action">
+            <button class="btn btn-primary" type="submit" name="action" value="update">Update</button>
+            <button class="btn btn-error" type="submit" name="action" value="delete">Delete</button>
+            <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()">Close</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
   {% endfor %}
   {% if platforms %}
   <div class="dropdown">

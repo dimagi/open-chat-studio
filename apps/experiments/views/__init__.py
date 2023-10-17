@@ -28,6 +28,7 @@ from .experiment import (  # noqa: F401
     start_experiment,
     start_experiment_session,
     start_session,
+    update_delete_channel,
 )
 from .no_activity import (  # noqa: F401
     CreateNoActivityMessageConfig,

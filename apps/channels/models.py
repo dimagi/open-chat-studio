@@ -65,6 +65,14 @@ class ExperimentChannel(BaseModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
+    def form(self, *args, **kwargs):
+        from apps.channels.forms import ChannelForm
+
+        return ChannelForm(instance=self, *args, **kwargs)
+
+    def extra_form(self, *args, **kwargs):
+        return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
+
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     """

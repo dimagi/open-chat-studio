@@ -165,7 +165,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(request.POST)
+    form = ChannelForm(data=request.POST)
     if form.is_valid():
         platform = ChannelPlatform(form.cleaned_data["platform"])
 
@@ -173,11 +173,29 @@ def create_channel(request, team_slug: str, experiment_id: int):
             messages.error(request, f"Channel for {platform.label} already exists")
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
-        extra_form = platform.extra_form(request.POST)
+        extra_form = platform.extra_form(data=request.POST)
         config_data = {}
         if extra_form and extra_form.is_valid():
             config_data = extra_form.cleaned_data
         form.save(experiment, config_data)
+    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+
+@login_and_team_required
+def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
+    channel = get_object_or_404(
+        ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
+    )
+    if request.POST.get("action") == "delete":
+        channel.delete()
+    else:
+        form = channel.form(data=request.POST)
+        if form.is_valid():
+            extra_form = channel.extra_form(data=request.POST)
+            config_data = {}
+            if extra_form and extra_form.is_valid():
+                config_data = extra_form.cleaned_data
+            form.save(channel.experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
