@@ -164,9 +164,15 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
     form = ChannelForm(request.POST)
     if form.is_valid():
         platform = ChannelPlatform(form.cleaned_data["platform"])
+
+        if platform in existing_platforms:
+            messages.error(request, f"Channel for {platform.label} already exists")
+            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
         extra_form = platform.extra_form(request.POST)
         config_data = {}
         if extra_form and extra_form.is_valid():
