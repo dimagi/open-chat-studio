@@ -25,12 +25,14 @@
             </button>
           </form>
         </div>
+        {% if not request.user|is_admin_of:team %}
         <div class="tooltip" data-tip="Invitations">
           <a class="btn btn-primary join-item"
              href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
             <i class="fa-regular fa-envelope"></i>
           </a>
         </div>
+        {% endif %}
         <div class="tooltip" data-tip="Edit">
           <a class="btn btn-primary join-item"
              href="{% url 'experiments:edit' team.slug experiment.id %}">
