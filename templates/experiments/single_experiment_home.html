@@ -1,4 +1,5 @@
 {% extends 'web/app/app_base.html' %}
+{% load team_tags %}
 {% load form_tags %}
 {% block app %}
 <div class="app-card">
@@ -7,35 +8,41 @@
       <h1 class="pg-title">{{ experiment.name }}</h1>
     </div>
     <div class="justify-self-end">
-      <div class="dropdown">
-        <button class="btn btn-primary btn-circle">
-          <i class="fa-solid fa-ellipsis"></i>
-        </button>
-        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-          <li>
-            <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
-              {% csrf_token %}
-              <input type="submit" value="New Session"/>
-            </form>
-          </li>
-          {% if experiment.is_active %}
-            <li>
-              <a href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}">Public
-                Experiment Link</a>
-            </li>
-          {% endif %}
-          {% if request.user.is_superuser %}
-            <li><a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">Invitations</a></li>
-          {% endif %}
-          {% if request.user.is_superuser %}
-            <li>
-              <a href="{% url 'experiments:edit' team.slug experiment.id %}">Edit
-                Experiment</a>
-            </li>
-            <li><a href="{% url 'experiments:delete' team.slug experiment.id %}">Delete
-              Experiment</a></li>
-          {% endif %}
-        </ul>
+      <div class="join">
+        {% if experiment.is_active %}
+          <div class="tooltip" data-tip="Public Link">
+            <a class="btn btn-primary join-item rounded-l-full"
+               href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" target="_blank">
+              <i class="fa-solid fa-link"></i>
+            </a>
+          </div>
+        {% endif %}
+        <div class="tooltip" data-tip="Start Web Session">
+          <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary join-item">
+              <i class="fa-solid fa-file-circle-plus"></i>
+            </button>
+          </form>
+        </div>
+        <div class="tooltip" data-tip="Invitations">
+          <a class="btn btn-primary join-item"
+             href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+            <i class="fa-regular fa-envelope"></i>
+          </a>
+        </div>
+        <div class="tooltip" data-tip="Edit">
+          <a class="btn btn-primary join-item"
+             href="{% url 'experiments:edit' team.slug experiment.id %}">
+            <i class="fa-solid fa-pencil"></i>
+          </a>
+        </div>
+        <div class="tooltip" data-tip="Delete">
+          <a class="btn btn-primary join-item rounded-r-full"
+             href="{% url 'experiments:delete' team.slug experiment.id %}">
+            <i class="fa-solid fa-trash"></i>
+          </a>
+        </div>
       </div>
     </div>
   </div>
