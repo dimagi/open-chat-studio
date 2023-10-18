@@ -188,7 +188,7 @@ class ChannelBase:
             voice_audio, duration = audio.synthesize_voice(text, synthetic_voice=self.experiment.synthetic_voice)
             self.send_voice_to_user(voice_audio, duration)
         except AudioSynthesizeException as e:
-            logging.warning(e)
+            logging.exception(e)
             self.send_text_to_user(text)
 
     def _get_voice_transcript(self) -> str:
