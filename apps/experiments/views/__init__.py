@@ -8,6 +8,7 @@ from .consent import (  # noqa: F401
 from .experiment import (  # noqa: F401
     CreateExperiment,
     EditExperiment,
+    create_channel,
     delete_experiment,
     download_experiment_chats,
     end_experiment,
@@ -27,6 +28,7 @@ from .experiment import (  # noqa: F401
     start_experiment,
     start_experiment_session,
     start_session,
+    update_delete_channel,
 )
 from .no_activity import (  # noqa: F401
     CreateNoActivityMessageConfig,

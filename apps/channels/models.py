@@ -16,6 +16,33 @@ TELEGRAM = "telegram"
 WHATSAPP = "whatsapp"
 
 
+class ChannelPlatform(models.TextChoices):
+    TELEGRAM = "telegram", "Telegram"
+    WEB = "web", "Web"
+    WHATSAPP = "whatsapp", "WhatsApp"
+
+    @classmethod
+    def for_dropdown(cls):
+        return [
+            cls.TELEGRAM,
+            cls.WHATSAPP,
+        ]
+
+    def form(self):
+        from apps.channels.forms import ChannelForm
+
+        return ChannelForm(initial={"platform": self})
+
+    def extra_form(self, *args, **kwargs):
+        from apps.channels.forms import TelegramChannelForm, WhatsappChannelForm
+
+        match self:
+            case self.TELEGRAM:
+                return TelegramChannelForm(*args, **kwargs)
+            case self.WHATSAPP:
+                return WhatsappChannelForm(*args, **kwargs)
+
+
 class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
     PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"))
@@ -25,7 +52,7 @@ class ExperimentChannel(BaseModel):
     active = models.BooleanField(default=True)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    platform = models.CharField(max_length=32, choices=PLATFORM, default="telegram")
+    platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
 
     class Meta:
         ordering = ["name"]
@@ -41,6 +68,18 @@ class ExperimentChannel(BaseModel):
         except apihelper.ApiTelegramException:
             token = self.extra_data.get("bot_token", "")
             logging.error(f"Unable set Telegram webhook with token '{token}'")
+
+    @property
+    def platform_enum(self):
+        return ChannelPlatform(self.platform)
+
+    def form(self, *args, **kwargs):
+        from apps.channels.forms import ChannelForm
+
+        return ChannelForm(instance=self, *args, **kwargs)
+
+    def extra_form(self, *args, **kwargs):
+        return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):

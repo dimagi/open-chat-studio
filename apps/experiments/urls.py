@@ -52,6 +52,8 @@ urlpatterns = [
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
     path("e/<int:experiment_id>/start_session/", views.start_session, name="start_session"),
+    path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
+    path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
         "e/<int:experiment_id>/session/<int:session_id>/", views.experiment_chat_session, name="experiment_chat_session"
     ),

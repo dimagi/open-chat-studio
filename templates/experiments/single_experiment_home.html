@@ -1,4 +1,5 @@
 {% extends 'web/app/app_base.html' %}
+{% load form_tags %}
 {% block app %}
 <div class="app-card">
   <div class="flex">
@@ -6,27 +7,96 @@
       <h1 class="pg-title">{{ experiment.name }}</h1>
     </div>
     <div class="justify-self-end">
-        <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
-          {% csrf_token %}
-          <input class="btn btn-primary btn-sm" type="submit" value="New Session"/>
-        </form>
-        {% if experiment.is_active %}
-          <a href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" class="btn btn-secondary btn-sm">Public
-            Experiment Link</a>
-        {% endif %}
-        {% if request.user.is_superuser %}
-          <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}"
-             class="btn btn-outline btn-secondary btn-sm">Invitations</a>
-        {% endif %}
-        {% if request.user.is_superuser %}
-          <a href="{% url 'experiments:edit' team.slug experiment.id %}" class="btn btn-outline btn-dark btn-sm">Edit
-            Experiment</a>
-          <a href="{% url 'experiments:delete' team.slug experiment.id %}" class="btn btn-outline btn-error btn-sm">Delete
-            Experiment</a>
-        {% endif %}
+      <div class="dropdown">
+        <button class="btn btn-primary btn-circle">
+          <i class="fa-solid fa-ellipsis"></i>
+        </button>
+        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+          <li>
+            <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
+              {% csrf_token %}
+              <input type="submit" value="New Session"/>
+            </form>
+          </li>
+          {% if experiment.is_active %}
+            <li>
+              <a href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}">Public
+                Experiment Link</a>
+            </li>
+          {% endif %}
+          {% if request.user.is_superuser %}
+            <li><a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">Invitations</a></li>
+          {% endif %}
+          {% if request.user.is_superuser %}
+            <li>
+              <a href="{% url 'experiments:edit' team.slug experiment.id %}">Edit
+                Experiment</a>
+            </li>
+            <li><a href="{% url 'experiments:delete' team.slug experiment.id %}">Delete
+              Experiment</a></li>
+          {% endif %}
+        </ul>
+      </div>
     </div>
   </div>
-  <h2 class="pg-subtitle my-2">{{ experiment.description }}</h2>
+  <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
+  <h3 class="inline mr-4">Channels:</h3>
+  <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
+  {#  Commented elements included for Tailwind processing #}
+  {#  <i class="fa-brands fa-telegram"></i> #}
+  {#  <i class="fa-brands fa-whatsapp"></i> #}
+  {% for channel in channels %}
+    <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+      <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
+    </div>
+    <dialog id="channel_{{ channel.id }}_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
+        <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}">
+          {% csrf_token %}
+          {% render_form_fields channel.form %}
+          {% if channel.extra_form %}
+            {% render_form_fields channel.extra_form %}
+          {% endif %}
+          <div class="modal-action">
+            <button class="btn btn-primary" type="submit" name="action" value="update">Update</button>
+            <button class="btn btn-error" type="submit" name="action" value="delete">Delete</button>
+            <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()">Close</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
+  {% if platforms %}
+  <div class="dropdown">
+    <button class="btn btn-ghost btn-sm">
+      <i class="fa-regular fa-plus"></i>
+    </button>
+    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border">
+      {% for platform in platforms %}
+        <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% for platform in platforms %}
+    <dialog id="{{ platform.value }}_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+        <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}">
+          {% csrf_token %}
+          {% render_form_fields platform.form %}
+          {% if platform.extra_form %}
+            {% render_form_fields platform.extra_form %}
+          {% endif %}
+          <div class="modal-action">
+            <button class="btn btn-primary" type="submit">Create Link</button>
+            <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()">Close</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
+  {% endif %}
   <hr class="m-2">
 
   <h2 class="pg-subtitle">Previous Chat Sessions</h2>
