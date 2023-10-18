@@ -4,16 +4,106 @@ from datetime import timedelta
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, UpdateView
+from django_tables2 import SingleTableView
 
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Prompt, PromptBuilderHistory, SourceMaterial
+from apps.experiments.tables import PromptTable
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
+
+PROMPT_DATA_SESSION_KEY = "prompt_data"
+
+
+@login_and_team_required
+def prompt_home(request, team_slug: str):
+    return TemplateResponse(
+        request,
+        "generic/object_home.html",
+        {
+            "active_tab": "prompts",
+            "title": "Prompts",
+            "new_object_url": reverse("experiments:prompt_new", args=[team_slug]),
+            "table_url": reverse("experiments:prompt_table", args=[team_slug]),
+        },
+    )
+
+
+class PromptTableView(SingleTableView):
+    model = Prompt
+    paginate_by = 25
+    table_class = PromptTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return Prompt.objects.filter(team=self.request.team)
+
+
+class CreatePrompt(CreateView):
+    model = Prompt
+    fields = [
+        "name",
+        "description",
+        "prompt",
+        "input_formatter",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Create Prompt",
+        "button_text": "Create",
+        "active_tab": "prompts",
+    }
+
+    def get_success_url(self):
+        return reverse("experiments:prompt_home", args=[self.request.team.slug])
+
+    def get_initial(self):
+        initial = super().get_initial()
+        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
+        if long_data:
+            initial.update(long_data)
+        return initial
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
+
+class EditPrompt(UpdateView):
+    model = Prompt
+    fields = [
+        "name",
+        "description",
+        "prompt",
+        "input_formatter",
+    ]
+    template_name = "generic/object_form.html"
+    extra_context = {
+        "title": "Update Prompt",
+        "button_text": "Update",
+        "active_tab": "prompts",
+    }
+
+    def get_queryset(self):
+        return Prompt.objects.filter(team=self.request.team)
+
+    def get_success_url(self):
+        return reverse("experiments:prompt_home", args=[self.request.team.slug])
+
+
+@login_and_team_required
+def delete_prompt(request, team_slug: str, pk: int):
+    prompt = get_object_or_404(Prompt, id=pk, team=request.team)
+    prompt.delete()
+    return HttpResponse()
 
 
 @login_and_team_required
@@ -124,13 +214,7 @@ def get_prompt_builder_history(request, team_slug: str):
 
 
 @login_and_team_required
-@team_admin_required
 def prompt_builder_start_save_process(request, team_slug: str):
-    # Get your long data
-    long_data = json.loads(request.body)
-
-    # Save it in session
-    request.session["long_data"] = long_data
-
-    # Redirect to admin add page
-    return JsonResponse({"redirect_url": reverse("admin:experiments_prompt_add")})
+    prompt_data = json.loads(request.body)
+    request.session[PROMPT_DATA_SESSION_KEY] = prompt_data
+    return JsonResponse({"redirect_url": reverse("experiments:prompt_new", args=[team_slug])})
