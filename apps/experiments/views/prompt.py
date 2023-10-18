@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django.contrib.postgres.search import SearchVector
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
@@ -48,7 +49,9 @@ class PromptTableView(SingleTableView):
         query_set = Prompt.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query_set.filter(name__icontains=search)
+            query_set = query_set.annotate(document=SearchVector("name", "description", "prompt")).filter(
+                document=search
+            )
         return query_set
 
 
