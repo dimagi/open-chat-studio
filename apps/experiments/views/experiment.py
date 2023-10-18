@@ -166,7 +166,9 @@ def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
     form = ChannelForm(data=request.POST)
-    if form.is_valid():
+    if not form.is_valid():
+        messages.error(request, "Form has errors: " + form.errors.as_text())
+    else:
         platform = ChannelPlatform(form.cleaned_data["platform"])
 
         if platform in existing_platforms:
@@ -175,8 +177,12 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
         extra_form = platform.extra_form(data=request.POST)
         config_data = {}
-        if extra_form and extra_form.is_valid():
-            config_data = extra_form.cleaned_data
+        if extra_form:
+            if extra_form.is_valid():
+                config_data = extra_form.cleaned_data
+            else:
+                messages.error(request, "Channel data has errors: " + extra_form.errors.as_text())
+                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
         form.save(experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
@@ -188,14 +194,21 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
     )
     if request.POST.get("action") == "delete":
         channel.delete()
+        return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+    form = channel.form(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, "Form has errors: " + form.errors.as_text())
     else:
-        form = channel.form(data=request.POST)
-        if form.is_valid():
-            extra_form = channel.extra_form(data=request.POST)
-            config_data = {}
-            if extra_form and extra_form.is_valid():
+        extra_form = channel.extra_form(data=request.POST)
+        config_data = {}
+        if extra_form:
+            if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
-            form.save(channel.experiment, config_data)
+            else:
+                messages.error(request, "Channel data has errors: " + extra_form.errors.as_text())
+                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+        form.save(channel.experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 

@@ -16,7 +16,7 @@ class ChannelForm(forms.ModelForm):
 
 
 class TelegramChannelForm(forms.Form):
-    bot_token = forms.SlugField(label="Bot Token", max_length=100)
+    bot_token = forms.CharField(label="Bot Token", max_length=100)
 
 
 class WhatsappChannelForm(forms.Form):
