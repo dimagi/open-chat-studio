@@ -3,7 +3,7 @@
 *~
 db.sqlite3
 .sass-cache/
-celerybeat-schedule
+celerybeat*
 gpt_playground/localsettings.py
 gpt_playground/local.py
 static_root/

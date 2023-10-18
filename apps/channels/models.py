@@ -11,11 +11,15 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
+WEB = "web"
+TELEGRAM = "telegram"
+WHATSAPP = "whatsapp"
+
 
 class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
+    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"))
 
-    PLATFORM = (("telegram", "telegram"), ("web", "web"), ("whatsapp", "whatsapp"))
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
     active = models.BooleanField(default=True)
@@ -32,7 +36,7 @@ class ExperimentChannel(BaseModel):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         try:
-            if self.platform == "telegram":
+            if self.platform == TELEGRAM:
                 _set_telegram_webhook(self)
         except apihelper.ApiTelegramException:
             token = self.extra_data.get("bot_token", "")

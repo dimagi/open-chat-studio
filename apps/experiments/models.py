@@ -378,6 +378,9 @@ class ExperimentSession(BaseTeamModel):
     def user_already_engaged(self) -> bool:
         return ChatMessage.objects.filter(chat=self.chat, message_type="human").exists()
 
+    def get_platform_name(self) -> str:
+        return self.channel_session.experiment_channel.get_platform_display()
+
     def get_pre_survey_link(self):
         return self.experiment.pre_survey.get_link(self.participant, self)
 
