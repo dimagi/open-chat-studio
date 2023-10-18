@@ -61,8 +61,13 @@ def azure_synthesize_voice(text: str, synthetic_voice: SyntheticVoice) -> Tuple[
                     file_content = f.read()
 
                 return BytesIO(file_content), duration_seconds
-            else:
-                raise AudioSynthesizeException(f"Azure audio synthesis failed with reason: {result.reason}. Req")
+            elif result.reason == speechsdk.ResultReason.Canceled:
+                cancellation_details = result.cancellation_details
+                msg = "Azure speech synthesis failed: {}".format(cancellation_details.reason.name)
+                if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                    if cancellation_details.error_details:
+                        msg += ". Error details: {}".format(cancellation_details.error_details)
+                raise AudioSynthesizeException(msg)
 
     except Exception as e:
         raise AudioSynthesizeException(f"Unable to synthesize audio with Azure: {e}")
