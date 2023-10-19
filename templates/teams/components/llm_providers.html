@@ -1,5 +1,4 @@
 {% load i18n %}
-{% load form_tags %}
 <div>
   {% if request.team_membership.role == 'admin' %}
     {% url "llm_providers:table" request.team.slug as table_url %}
