@@ -1,23 +1,22 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.services.models import ServiceConfig
+from .models import LlmProvider
 
 
-class ServiceConfigTable(tables.Table):
-    subtype = columns.Column(verbose_name="Type")
+class LlmProviderTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "services:edit_llm",
-            "delete_url_name": "services:delete",
+            "edit_url_name": "llm_providers:edit",
+            "delete_url_name": "llm_providers:delete",
         },
     )
 
     class Meta:
-        model = ServiceConfig
+        model = LlmProvider
         fields = (
-            "subtype",
+            "type",
             "name",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
