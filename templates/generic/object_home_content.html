@@ -1,0 +1,32 @@
+{% load django_tables2 %}
+<div class="app-card">
+  <div class="grid grid-cols-6">
+    <div class="col-span-5">
+      <h1 class="pg-title">{{ title }}</h1>
+    </div>
+    {% if allow_new %}
+    <div class="justify-self-end">
+      <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
+         href="{{ new_object_url }}">Add new
+      </a>
+    </div>
+    {% endif %}
+  </div>
+  {% if enable_search %}
+    <div class="my-2">
+      <input class="input input-bordered join-item" type="search"
+             name="{{ search_param_name|default:"search" }}" placeholder="Search..."
+             hx-get="{{ table_url }}"
+             hx-trigger="keyup changed delay:500ms, search"
+             hx-target="div.table-container"
+             hx-indicator=".htmx-indicator">
+      <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
+    </div>
+  {% else %}
+    <hr class="my-2">
+  {% endif %}
+  <div hx-get="{{ table_url }}{% querystring %}"
+       hx-trigger="load" hx-swap="outerHTML">
+    {% include "table/table_placeholder.html" %}
+  </div>
+</div>

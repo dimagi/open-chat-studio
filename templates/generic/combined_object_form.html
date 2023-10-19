@@ -1,0 +1,26 @@
+{# Generic template for rendering an object form (e.g. create / update) #}
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+<div class="app-card max-w-5xl mx-auto">
+  <h1 class="pg-title">{{ title }}</h1>
+  <div>
+    <form method="post" class="my-2" x-data="{ type: '{{ form.type.value }}' }">
+    {% csrf_token %}
+    {% for field in combined_form.primary %}
+      {% if field.name == combined_form.secondary_key_field %}
+        {% render_field field xmodel="type" %}
+      {% else %}
+        {% render_field field %}
+      {% endif %}
+    {% endfor %}
+    {% for key, form in combined_form.secondary.items %}
+      <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
+        {% render_form_fields form %}
+      </div>
+    {% endfor %}
+    <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
+  </form>
+  </div>
+</div>
+{% endblock %}

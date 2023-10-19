@@ -1,4 +1,5 @@
 import itertools
+from abc import ABC
 from typing import Type
 
 from django import forms
@@ -9,6 +10,12 @@ from apps.services import forms
 from apps.teams.models import BaseTeamModel
 
 
+class Subtype(models.TextChoices):
+    @property
+    def form_cls(self) -> Type[forms.ServiceConfigForm]:
+        raise NotImplementedError
+
+
 class ServiceType(models.TextChoices):
     LLM_PROVIDER = "llm_provider", _("LLM Provider")
 
@@ -17,7 +24,7 @@ class ServiceType(models.TextChoices):
         return list(itertools.chain.from_iterable([member.subtype.choices for member in cls]))
 
     @property
-    def subtype(self) -> Type[models.TextChoices]:
+    def subtype(self) -> Type[Subtype]:
         match self:
             case ServiceType.LLM_PROVIDER:
                 return LlmProvider
@@ -25,12 +32,12 @@ class ServiceType(models.TextChoices):
         raise Exception(f"No subtype configured for {self}")
 
 
-class LlmProvider(models.TextChoices):
+class LlmProvider(Subtype):
     openai = "openai", _("OpenAI")
     azure = "azure", _("Azure OpenAI")
 
     @property
-    def config_form(self):
+    def form_cls(self) -> Type[forms.ServiceConfigForm]:
         match self:
             case LlmProvider.openai:
                 return forms.OpenAIConfigForm
@@ -55,21 +62,3 @@ class ServiceConfig(BaseTeamModel):
     @property
     def subtype_enum(self):
         return self.service_type_enum.subtype(self.subtype)
-
-    def get_forms(self, data: dict = None):
-        return get_service_form(self.subtype_enum, instance=self, data=data)
-
-
-def get_service_form(subtype, instance=None, data=None):
-    main_form = forms.modelform_factory(
-        ServiceConfig,
-        fields=["service_type", "subtype", "name"],
-        widgets={
-            "service_type": forms.HiddenInput(),
-            "subtype": forms.HiddenInput(),
-        },
-    )(data=data, instance=instance)
-
-    initial_config = instance.config if instance else None
-    config_form = subtype.config_form(data=data, initial=initial_config)
-    return [main_form, config_form]
