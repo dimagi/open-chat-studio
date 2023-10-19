@@ -28,11 +28,20 @@ class CombinedForms:
         self.active_secondary().save(instance)
         return instance
 
+    def get_secondary_key(self, instance):
+        if instance:
+            return getattr(instance, self.secondary_key_field)
 
-def get_service_forms(service_type: ServiceType, data=None) -> CombinedForms:
+
+def get_service_forms(service_type: ServiceType, data=None, instance=None) -> CombinedForms:
+    initial_config = instance.config if instance else None
+    subtypes = [instance.subtype_enum] if instance else list(service_type.subtype)
     return CombinedForms(
-        primary=_get_main_form(service_type, data=data.copy() if data else None),
-        secondary={subtype: subtype.form_cls(data=data.copy() if data else None) for subtype in service_type.subtype},
+        primary=_get_main_form(service_type, data=data.copy() if data else None, instance=instance),
+        secondary={
+            subtype: subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
+            for subtype in subtypes
+        },
         secondary_key_field="subtype",
     )
 
@@ -48,13 +57,16 @@ def _get_main_form(service_type, instance=None, data=None):
     widgets = {
         "service_type": forms.HiddenInput(),
     }
-    if instance:
-        widgets["subtype"] = forms.HiddenInput()
-    return forms.modelform_factory(
+    form_cls = forms.modelform_factory(
         ServiceConfig,
         fields=["service_type", "name", "subtype"],
         labels={
             "subtype": "Type",
         },
         widgets=widgets,
-    )(data=data, instance=instance, initial={"service_type": service_type})
+    )
+    form = form_cls(data=data, instance=instance, initial={"service_type": service_type})
+    if instance:
+        form.fields["subtype"].disabled = True
+
+    return form

@@ -8,10 +8,10 @@ class ServiceConfigTable(tables.Table):
     subtype = columns.Column(verbose_name="Type")
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
-        # extra_context={
-        #     "edit_url_name": "services:edit",
-        #     "delete_url_name": "services:delete",
-        # },
+        extra_context={
+            "edit_url_name": "services:edit_llm",
+            "delete_url_name": "services:delete",
+        },
     )
 
     class Meta:
