@@ -1,9 +1,11 @@
 import json
 from collections import defaultdict
 from datetime import timedelta
+from typing import Any, Dict
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django.contrib.postgres.search import SearchVector
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
@@ -32,6 +34,7 @@ def prompt_home(request, team_slug: str):
             "title": "Prompts",
             "new_object_url": reverse("experiments:prompt_new", args=[team_slug]),
             "table_url": reverse("experiments:prompt_table", args=[team_slug]),
+            "enable_search": True,
         },
     )
 
@@ -43,7 +46,13 @@ class PromptTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Prompt.objects.filter(team=self.request.team)
+        query_set = Prompt.objects.filter(team=self.request.team)
+        search = self.request.GET.get("search")
+        if search:
+            query_set = query_set.annotate(document=SearchVector("name", "description", "prompt")).filter(
+                document=search
+            )
+        return query_set
 
 
 class CreatePrompt(CreateView):
