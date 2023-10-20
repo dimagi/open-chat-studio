@@ -1,17 +1,14 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from apps.generics.forms import OptionalForm
 
-
-class ProviderTypeConfigForm(OptionalForm):
+class ProviderTypeConfigForm(forms.Form):
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
 
 
 class OpenAIConfigForm(ProviderTypeConfigForm):
-    type_key = "openai"
     openai_api_key = forms.CharField(label=_("API Key"))
     openai_api_base = forms.URLField(
         label="API Base URL",
@@ -30,7 +27,6 @@ class OpenAIConfigForm(ProviderTypeConfigForm):
 
 
 class AzureOpenAIConfigForm(ProviderTypeConfigForm):
-    type_key = "azure"
     openai_api_key = forms.CharField(label=_("Azure API Key"))
     openai_api_base = forms.URLField(
         label="API URL",

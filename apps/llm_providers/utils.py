@@ -1,12 +1,12 @@
 from django import forms
 
-from ..generics.utils import CombinedForms
+from ..generics.type_select_form import TypeSelectForm
 from .models import LlmProvider, LlmProviderType
 
 
-def get_llm_config_form(data=None, instance=None) -> CombinedForms:
+def get_llm_config_form(data=None, instance=None) -> TypeSelectForm:
     initial_config = instance.config if instance else None
-    return CombinedForms(
+    return TypeSelectForm(
         primary=_get_main_form(data=data.copy() if data else None, instance=instance),
         secondary={
             type_: type_.form_cls(data=data.copy() if data else None, initial=initial_config)

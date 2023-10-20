@@ -4,11 +4,15 @@ from django import forms
 
 from apps.generics.exceptions import CombinedFormError
 
+BIND_DISABLED_ATTRS = {"x-bind:disabled": "type !== '{key}'"}
+BIND_REQUIRED_ATTRS = {"x-bind:required": "type === '{key}'"}
+BIND_REQUIRED_DISABLED_ATTRS = {**BIND_REQUIRED_ATTRS, **BIND_DISABLED_ATTRS}
+
 
 @dataclasses.dataclass
-class CombinedForms:
+class TypeSelectForm:
     """Helper class for instances where you have a main form and a list of secondary forms.
-    Only one of the secondary forms will be 'active' based on a field in the primary form.
+    Only one of the secondary forms will be 'active' based on a 'type' field in the primary form.
 
     This usually happens when you have a generic model that stores some 'configuration'. The
     specifics of the configuration is dependent on a 'type' field in the model.
@@ -52,3 +56,24 @@ class CombinedForms:
         missing_secondary = choices - set(self.secondary)
         if missing_secondary:
             raise CombinedFormError(f"Missing secondary forms for choices: {missing_secondary}")
+
+        for key, form in self.secondary.items():
+            apply_alpine_attrs(form, key)
+
+
+def apply_alpine_attrs(form, key):
+    """This adds the 'x-bind:required' attribute to required form fields so that they are only marked required when
+    they are visible.
+
+    It also adss 'x-bind:disabled' to all fields to prevent them from being included in the form submission if they
+    are not visible.
+    """
+    for field in form.fields.values():
+        if field.required:
+            field.widget.attrs = _format_attrs(BIND_REQUIRED_DISABLED_ATTRS, key)
+        else:
+            field.widget.attrs = _format_attrs(BIND_DISABLED_ATTRS, key)
+
+
+def _format_attrs(attrs, key):
+    return {name: value.format(key=key) for name, value in attrs.items()}
