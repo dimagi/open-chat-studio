@@ -1,0 +1,2 @@
+class CombinedFormError(Exception):
+    pass

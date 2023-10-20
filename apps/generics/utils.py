@@ -2,6 +2,8 @@ import dataclasses
 
 from django import forms
 
+from apps.generics.exceptions import CombinedFormError
+
 
 @dataclasses.dataclass
 class CombinedForms:
@@ -36,3 +38,17 @@ class CombinedForms:
     def get_secondary_key(self, instance):
         if instance:
             return getattr(instance, self.secondary_key_field)
+
+    def __post_init__(self):
+        if self.secondary_key_field not in self.primary.fields:
+            raise CombinedFormError(f"secondary_key_field ('{self.secondary}') must be a field in the primary form")
+
+        field = self.primary.fields[self.secondary_key_field]
+        choices = {choice[0] for choice in getattr(field, "choices", []) if choice[0]}
+        missing_choices = set(self.secondary) - choices
+        if missing_choices:
+            raise CombinedFormError(f"No secondary form configured for choices: {missing_choices}")
+
+        missing_secondary = choices - set(self.secondary)
+        if missing_secondary:
+            raise CombinedFormError(f"Missing secondary forms for choices: {missing_secondary}")
