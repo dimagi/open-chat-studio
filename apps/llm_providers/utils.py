@@ -1,6 +1,7 @@
 from django import forms
 
-from ..generics.type_select_form import TypeSelectForm
+from apps.generics.type_select_form import TypeSelectForm
+
 from .models import LlmProvider, LlmProviderType
 
 

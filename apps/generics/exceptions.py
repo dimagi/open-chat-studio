@@ -1,2 +1,2 @@
-class CombinedFormError(Exception):
+class TypeSelectFormError(Exception):
     pass

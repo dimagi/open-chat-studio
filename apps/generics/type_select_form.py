@@ -2,7 +2,7 @@ import dataclasses
 
 from django import forms
 
-from apps.generics.exceptions import CombinedFormError
+from apps.generics.exceptions import TypeSelectFormError
 
 BIND_DISABLED_ATTRS = {"x-bind:disabled": "type !== '{key}'"}
 BIND_REQUIRED_ATTRS = {"x-bind:required": "type === '{key}'"}
@@ -16,6 +16,17 @@ class TypeSelectForm:
 
     This usually happens when you have a generic model that stores some 'configuration'. The
     specifics of the configuration is dependent on a 'type' field in the model.
+
+    Example:
+
+        TypeSelectForm(
+            primary=modelform_factory(MyModel, fields=["name", "the_type"]),
+            secondary={
+                "typeA": TypeAForm,
+                "typeB": TypeBForm,
+            },
+            secondary_key_field="the_type",
+        )
     """
 
     primary: forms.BaseModelForm
@@ -34,7 +45,7 @@ class TypeSelectForm:
         return self.active_secondary().is_valid()
 
     def save(self):
-        assert self.is_valid(), "combined form must be valid to save"
+        assert self.is_valid(), "form must be valid to save"
         instance = self.primary.save(commit=False)
         self.active_secondary().save(instance)
         return instance
@@ -45,17 +56,17 @@ class TypeSelectForm:
 
     def __post_init__(self):
         if self.secondary_key_field not in self.primary.fields:
-            raise CombinedFormError(f"secondary_key_field ('{self.secondary}') must be a field in the primary form")
+            raise TypeSelectFormError(f"secondary_key_field ('{self.secondary}') must be a field in the primary form")
 
         field = self.primary.fields[self.secondary_key_field]
         choices = {choice[0] for choice in getattr(field, "choices", []) if choice[0]}
         missing_choices = set(self.secondary) - choices
         if missing_choices:
-            raise CombinedFormError(f"No secondary form configured for choices: {missing_choices}")
+            raise TypeSelectFormError(f"No secondary form configured for choices: {missing_choices}")
 
         missing_secondary = choices - set(self.secondary)
         if missing_secondary:
-            raise CombinedFormError(f"Missing secondary forms for choices: {missing_secondary}")
+            raise TypeSelectFormError(f"Missing secondary forms for choices: {missing_secondary}")
 
         for key, form in self.secondary.items():
             apply_alpine_attrs(form, key)
