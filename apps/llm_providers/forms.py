@@ -8,7 +8,37 @@ class ProviderTypeConfigForm(forms.Form):
         return instance
 
 
-class OpenAIConfigForm(ProviderTypeConfigForm):
+class ObfuscatingMixin:
+    """Mixin that obfuscate configured field values for display."""
+
+    obfuscate_fields = []
+
+    def __init__(self, initial=None, *args, **kwargs):
+        self.initial_raw = initial
+        if initial:
+            initial = initial.copy()
+            for field in self.obfuscate_fields:
+                initial[field] = obfuscate_value(initial.get(field, ""))
+        super().__init__(initial=initial, *args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if not self.initial:
+            return cleaned_data
+
+        for field in self.obfuscate_fields:
+            initial = self.initial.get(field)
+            new = obfuscate_value(self.cleaned_data.get(field))
+            if new == initial:
+                cleaned_data[field] = self.initial_raw.get(field)
+
+        return cleaned_data
+
+
+class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["openai_api_key"]
+
     openai_api_key = forms.CharField(label=_("API Key"))
     openai_api_base = forms.URLField(
         label="API Base URL",
@@ -26,9 +56,17 @@ class OpenAIConfigForm(ProviderTypeConfigForm):
     )
 
 
-class AzureOpenAIConfigForm(ProviderTypeConfigForm):
+class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["openai_api_key"]
+
     openai_api_key = forms.CharField(label=_("Azure API Key"))
     openai_api_base = forms.URLField(
         label="API URL",
         help_text="Base URL path for API requests e.g. 'https://<your-endpoint>.openai.azure.com/'",
     )
+
+
+def obfuscate_value(value):
+    if value and isinstance(value, str):
+        return value[:4] + "*" * (len(value) - 4)
+    return value
