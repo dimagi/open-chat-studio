@@ -25,22 +25,22 @@ class BaseTypeSelectFormView(views.View):
     _object = None
 
     def get(self, request, team_slug: str, pk: int = None):
-        return render(request, "generic/type_select_form.html", self.get_context_data())
+        form = self.get_form()
+        return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
     def post(self, request, team_slug: str, pk: int = None):
         form = self.get_form(request.POST)
         if form.is_valid():
             self.form_valid(form)
             return HttpResponseRedirect(self.get_success_url())
-        return render(request, "generic/type_select_form.html", self.get_context_data())
+        return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
     def form_valid(self, form):
         instance = form.save()
         instance.save()
 
-    def get_context_data(self):
+    def get_context_data(self, form):
         extra_context = self.extra_context or {}
-        form = self.get_form()
         obj = self.get_object()
         return {
             "title": self.title,
