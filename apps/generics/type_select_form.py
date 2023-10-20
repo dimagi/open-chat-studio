@@ -58,8 +58,8 @@ class TypeSelectForm:
         if self.secondary_key_field not in self.primary.fields:
             raise TypeSelectFormError(f"secondary_key_field ('{self.secondary}') must be a field in the primary form")
 
-        field = self.primary.fields[self.secondary_key_field]
-        choices = {choice[0] for choice in getattr(field, "choices", []) if choice[0]}
+        type_field = self.primary.fields[self.secondary_key_field]
+        choices = {choice[0] for choice in getattr(type_field, "choices", []) if choice[0]}
         missing_choices = set(self.secondary) - choices
         if missing_choices:
             raise TypeSelectFormError(f"No secondary form configured for choices: {missing_choices}")
@@ -67,6 +67,8 @@ class TypeSelectForm:
         missing_secondary = choices - set(self.secondary)
         if missing_secondary:
             raise TypeSelectFormError(f"Missing secondary forms for choices: {missing_secondary}")
+
+        type_field.widget.attrs = {"x-model": "type"}
 
         for key, form in self.secondary.items():
             apply_alpine_attrs(form, key)

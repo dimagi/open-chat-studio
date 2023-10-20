@@ -8,11 +8,7 @@
     <form method="post" class="my-2" x-data="{ type: '{{ secondary_key }}' }">
     {% csrf_token %}
     {% for field in form.primary %}
-      {% if field.name == form.secondary_key_field %}
-        {% render_field field xmodel="type" %}
-      {% else %}
-        {% render_field field %}
-      {% endif %}
+      {% render_field field %}
     {% endfor %}
     {% for key, form in form.secondary.items %}
       <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
