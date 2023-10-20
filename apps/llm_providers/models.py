@@ -3,6 +3,7 @@ from typing import Type
 from django import forms
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django_cryptography.fields import encrypt
 
 from apps.teams.models import BaseTeamModel
 
@@ -26,7 +27,7 @@ class LlmProviderType(models.TextChoices):
 class LlmProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
     name = models.CharField(max_length=255)
-    config = models.JSONField(default=dict)
+    config = encrypt(models.JSONField(default=dict))
 
     def __str__(self):
         return f"LLM Provider {self.name} ({self.type})"
