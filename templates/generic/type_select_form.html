@@ -7,9 +7,7 @@
   <div>
     <form method="post" class="my-2" x-data="{ type: '{{ secondary_key }}' }">
     {% csrf_token %}
-    {% for field in form.primary %}
-      {% render_field field %}
-    {% endfor %}
+    {% render_form_fields form.primary %}
     {% for key, form in form.secondary.items %}
       <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
         {% render_form_fields form %}
