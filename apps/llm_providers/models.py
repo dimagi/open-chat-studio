@@ -4,6 +4,8 @@ from django import forms
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
+from langchain.chat_models import ChatOpenAI
+from langchain.llms import AzureOpenAI
 
 from apps.teams.models import BaseTeamModel
 
@@ -23,6 +25,15 @@ class LlmProviderType(models.TextChoices):
                 return forms.AzureOpenAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
+    @property
+    def chat_model_cls(self):
+        match self:
+            case LlmProviderType.openai:
+                return ChatOpenAI
+            case LlmProviderType.azure:
+                return AzureOpenAI
+        raise Exception(f"No chat model configured for {self}")
+
 
 class LlmProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
@@ -35,3 +46,7 @@ class LlmProvider(BaseTeamModel):
     @property
     def type_enum(self):
         return LlmProviderType(self.type)
+
+    def get_chat_model(self, llm_model: str, temperature: float):
+        config = {k: v for k, v in self.config.items() if v}
+        self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)

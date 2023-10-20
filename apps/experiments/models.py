@@ -228,6 +228,7 @@ class Experiment(BaseTeamModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
+    llm_provider = models.ForeignKey("llm_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True)
     llm = models.CharField(max_length=20, choices=LLM_CHOICES, default="gpt-3.5-turbo")
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
     chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
