@@ -5,9 +5,7 @@ from apps.experiments.models import Experiment
 
 
 def experiment_to_message_export_rows(experiment: Experiment):
-    for session in experiment.sessions.prefetch_related(
-        "chat", "chat__messages", "participant", "channel_session__experiment_channel"
-    ):
+    for session in experiment.sessions.prefetch_related("chat", "chat__messages", "participant", "experiment_channel"):
         for message in session.chat.messages.all():
             yield [
                 message.id,

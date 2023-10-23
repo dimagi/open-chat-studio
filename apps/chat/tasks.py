@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List
+from uuid import UUID
 
 import pytz
 from celery.app import shared_task
@@ -28,7 +29,7 @@ def periodic_tasks(self):
 
 
 @shared_task
-def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: bool):
+def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: bool, experiment_public_id: UUID):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
     If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
@@ -36,7 +37,9 @@ def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruct
     response will be saved to the chat history.
     """
     experiment_sessions = (
-        ExperimentSession.objects.filter(external_chat_id__in=chat_ids)
+        ExperimentSession.objects.filter(
+            external_chat_id__in=chat_ids, experiment__public_id=UUID(experiment_public_id)
+        )
         .prefetch_related(
             "experiment",
         )
