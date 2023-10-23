@@ -69,7 +69,9 @@ click-repl==0.2.0
 cron-descriptor==1.4.0
     # via django-celery-beat
 cryptography==40.0.2
-    # via pyjwt
+    # via
+    #   django-cryptography
+    #   pyjwt
 dataclasses-json==0.5.7
     # via langchain
 defusedxml==0.7.1
@@ -80,7 +82,9 @@ django==4.2
     #   django-allauth
     #   django-allauth-2fa
     #   django-anymail
+    #   django-appconf
     #   django-celery-beat
+    #   django-cryptography
     #   django-hijack
     #   django-otp
     #   django-storages
@@ -96,7 +100,11 @@ django-allauth-2fa==0.10.0
     # via -r requirements/requirements.in
 django-anymail[mailgun]==9.1
     # via -r requirements/requirements.in
+django-appconf==1.0.5
+    # via django-cryptography
 django-celery-beat==2.5.0
+    # via -r requirements/requirements.in
+django-cryptography==1.1
     # via -r requirements/requirements.in
 django-environ==0.10.0
     # via -r requirements/requirements.in

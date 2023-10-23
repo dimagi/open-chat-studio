@@ -5,6 +5,7 @@ django-allauth-2fa
 django-tables2
 django-waffle
 psycopg2-binary
+django-cryptography
 django-environ
 djangorestframework
 djangorestframework-api-key

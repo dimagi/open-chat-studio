@@ -1,0 +1,2 @@
+class TypeSelectFormError(Exception):
+    pass
