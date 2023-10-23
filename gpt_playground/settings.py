@@ -433,3 +433,6 @@ SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 # For Azure TTS
 AZURE_SUBSCRIPTION_KEY = env("AZURE_SUBSCRIPTION_KEY", default="")
 AZURE_REGION = env("AZURE_REGION", default="")
+
+# Encryption
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
