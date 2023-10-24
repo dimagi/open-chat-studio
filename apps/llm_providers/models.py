@@ -41,7 +41,7 @@ class LlmProvider(BaseTeamModel):
     config = encrypt(models.JSONField(default=dict))
 
     def __str__(self):
-        return f"LLM Provider {self.name} ({self.type})"
+        return f"{self.type_enum.label}: {self.name}"
 
     @property
     def type_enum(self):

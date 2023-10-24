@@ -1,0 +1,7 @@
+{% if notices %}
+  {% for notice in notices %}
+    <div class="notification flex w-full shadow-md !rounded-none alert m-1" >
+      <div class="prose !max-w-none">{{ notice|safe }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
