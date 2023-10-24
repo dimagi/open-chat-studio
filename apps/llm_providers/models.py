@@ -49,4 +49,4 @@ class LlmProvider(BaseTeamModel):
 
     def get_chat_model(self, llm_model: str, temperature: float):
         config = {k: v for k, v in self.config.items() if v}
-        self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)
+        return self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)

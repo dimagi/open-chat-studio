@@ -8,6 +8,7 @@ from apps.channels.datamodels import WebMessage
 from apps.chat.bots import TopicBot
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
+from apps.llm_providers.models import LlmProvider
 from apps.users.models import CustomUser
 
 
@@ -20,9 +21,8 @@ def get_response_for_webchat_task(experiment_session_id: int, message_text: str)
 
 
 @shared_task
-def get_prompt_builder_response_task(team_id: int, user_id, data: str) -> str:
-    # Deserialize the incoming JSON
-    data_dict = json.loads(data)
+def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> str:
+    llm_provider = LlmProvider.objects.get(id=data_dict["provider"])
     messages_history = data_dict["messages"]
 
     user = CustomUser.objects.get(id=user_id)
@@ -48,8 +48,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data: str) -> str:
     bot = TopicBot(
         prompt=dummy_prompt,
         source_material=sourece_material_material,
-        model_name=data_dict["model"],
-        temperature=float(data_dict["temperature"]),
+        llm=llm_provider.get_chat_model(data_dict["model"], float(data_dict["temperature"])),
         safety_layers=None,
         chat=None,
         messages_history=messages_history,

@@ -164,9 +164,9 @@ def experiments_prompt_builder(request, team_slug: str):
 @require_POST
 @login_and_team_required
 def experiments_prompt_builder_get_message(request, team_slug: str):
-    data_json = request.body.decode("utf-8")
+    data = json.loads(request.body.decode("utf-8"))
     user = get_real_user_or_none(request.user)
-    result = get_prompt_builder_response_task.delay(request.team.id, user.id, data_json)
+    result = get_prompt_builder_response_task.delay(request.team.id, user.id, data)
     return JsonResponse({"task_id": result.task_id})
 
 

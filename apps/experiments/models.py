@@ -295,6 +295,9 @@ class Experiment(BaseTeamModel):
     def __str__(self):
         return self.name
 
+    def get_chat_model(self):
+        return self.llm_provider.get_chat_model(self.llm, self.temperature)
+
 
 class Participant(BaseTeamModel):
     email = models.EmailField()
