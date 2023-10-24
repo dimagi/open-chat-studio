@@ -4,7 +4,7 @@
     <div class="col-span-5">
       <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
     </div>
-    {% if allow_new %}
+    {% if allow_new|default:True %}
     <div class="justify-self-end">
       <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
          href="{{ new_object_url }}">Add new
