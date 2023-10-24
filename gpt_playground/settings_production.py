@@ -51,6 +51,3 @@ ADMINS = [
 # set these values if you want to subscribe people to a mailchimp list after they sign up.
 MAILCHIMP_API_KEY = env("MAILCHIMP_API_KEY", default=None)
 MAILCHIMP_LIST_ID = env("MAILCHIMP_LIST_ID", default=None)
-
-# Encryption
-CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT")
