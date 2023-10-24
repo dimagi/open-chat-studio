@@ -40,6 +40,9 @@ class LlmProvider(BaseTeamModel):
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
 
+    class Meta:
+        ordering = ("type", "name")
+
     def __str__(self):
         return f"{self.type_enum.label}: {self.name}"
 
