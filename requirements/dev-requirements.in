@@ -8,3 +8,5 @@ freezegun
 invoke
 termcolor
 watchfiles
+pytest
+pytest-django
