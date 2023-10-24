@@ -286,6 +286,9 @@ class Experiment(BaseTeamModel):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
 
 class Participant(BaseTeamModel):
     email = models.EmailField()

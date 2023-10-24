@@ -1,0 +1,10 @@
+<form method="post" action="{% url 'experiments:start_session' record.team.slug record.id %}" class="inline">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-sm" title="New Session">
+    <i class="fa-solid fa-file-circle-plus"></i>
+  </button>
+</form>
+<a class="btn btn-sm"
+   href="{% url 'experiments:edit' record.team.slug record.id %}" title="Edit">
+  <i class="fa-solid fa-pencil"></i>
+</a>

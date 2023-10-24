@@ -1,7 +1,37 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import ConsentForm, NoActivityMessageConfig, Prompt, SafetyLayer, SourceMaterial, Survey
+from apps.experiments.models import (
+    ConsentForm,
+    Experiment,
+    NoActivityMessageConfig,
+    Prompt,
+    SafetyLayer,
+    SourceMaterial,
+    Survey,
+)
+
+
+class ExperimentTable(tables.Table):
+    name = columns.Column(
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+    )
+    description = columns.Column(verbose_name="Description")
+    bot = columns.Column(accessor="chatbot_prompt__name")
+    topic = columns.Column(accessor="source_material__topic")
+    actions = columns.TemplateColumn(
+        template_name="experiments/components/experiment_actions_column.html",
+    )
+
+    class Meta:
+        model = Experiment
+        fields = ("name",)
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No experiments found."
 
 
 class SafetyLayerTable(tables.Table):
