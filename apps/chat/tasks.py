@@ -9,7 +9,6 @@ from django.db.models import OuterRef, Subquery
 
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.channels import ChannelBase
-from apps.chat.exceptions import ExperimentChannelRepurposedException
 from apps.chat.models import Chat, ChatMessage
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
@@ -100,6 +99,18 @@ def _no_activity_pings():
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
+
+        experiment_channel = experiment_session.experiment_channel
+        if experiment_session.is_stale():
+            # The experiment channel's experiment might have changed
+            logger.warning(
+                (
+                    f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
+                    "whereas the current experiment session points to experiment"
+                    f"'{experiment_session.experiment.name}'"
+                )
+            )
+            return
         ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
             _try_send_message(experiment_session=experiment_session, message=ping_message)
@@ -121,16 +132,7 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
 def _try_send_message(experiment_session: ExperimentSession, message: str):
     """Tries to send a message to the experiment session"""
     try:
-        experiment_channel = experiment_session.experiment_channel
-        if experiment_session.is_stale():
-            # The experiment channel's experiment might have changed
-            raise ExperimentChannelRepurposedException(
-                message=f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}' whereas the current experiment session points to experiment '{experiment_session.experiment.name}'"
-            )
-
         handler = ChannelBase.from_experiment_session(experiment_session)
         handler.new_bot_message(message)
-    except ExperimentChannelRepurposedException as e:
-        raise e
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
