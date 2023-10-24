@@ -59,4 +59,5 @@ jobs:
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
-        run: pytest
+        run: |
+          python manage.py test
