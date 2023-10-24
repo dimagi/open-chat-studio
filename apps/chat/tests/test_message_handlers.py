@@ -7,6 +7,7 @@ from telebot import types
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt
+from apps.llm_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
@@ -32,6 +33,7 @@ class TelegramMessageHandlerTest(TestCase):
             description="test",
             chatbot_prompt=self.prompt,
             consent_form=ConsentForm.get_default(self.team),
+            llm_provider=LlmProvider.objects.create(name="test", type="openai", team=self.team),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"
