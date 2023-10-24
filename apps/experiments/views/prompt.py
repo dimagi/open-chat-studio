@@ -155,7 +155,7 @@ def experiments_prompt_builder(request, team_slug: str):
         {
             "prompts": prompts_list,
             "llm_providers": llm_providers,
-            "default_llm_provider": llm_providers[0],
+            "default_llm_provider": llm_providers[0] if llm_providers else None,
             "active_tab": "prompt_builder",
         },
     )

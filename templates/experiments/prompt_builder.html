@@ -102,7 +102,7 @@
                             temperature: 0.7,
                             prompt: '',
                             inputFormatter: '',
-                            provider: {{ default_llm_provider.id }},
+                            provider: {{ default_llm_provider.id|default:'null' }},
                             model: 'gpt-4',
                             messages: []
                         }

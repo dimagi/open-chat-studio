@@ -70,10 +70,15 @@
 
         <div class="divider divider-horizontal"></div>
         <div class="flex-none flex flex-col items-center">
+            <label class="label" x-show="!$store.promptBuilder.currentState.provider" x-cloak>
+              <span class="text-error">First create an&nbsp;</span>
+              <a class="text-error link" href="{% url "llm_providers:new" request.team.slug %}">LLM Provider</a>
+            </label>
             <div class="flex flex-row">
                 <button id="submit-button" x-ref="submitButton" @click.stop="submitMessageHistoryToGetResponse()"
-                class="w-full px-6 py-2 text-white transition duration-500 ease-in-out transform bg-blue-600 rounded-lg focus:outline-none focus:ring-2 ring-offset-current ring-offset-2 hover:bg-blue-800">Submit</button>
-                <button class="button px-4 py-2 rounded-lg bg-base-100 hover:bg-base-300"
+                        x-bind:disabled="!$store.promptBuilder.currentState.provider"
+                class="btn btn-primary">Submit</button>
+                <button class="btn"
                 x-on:click="$store.promptBuilder.toggleSidebar('history')"><i class="fa fa-history"></i></button>
             </div>
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
