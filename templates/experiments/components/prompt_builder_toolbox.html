@@ -43,6 +43,12 @@
             <div class="w-1/2 pr-10">
                 <!-- Model Dropdown -->
                 <label for="model-selector" class="block font-semibold mb-2">Model</label>
+                <select id="provider-selector" class="w-full select select-bordered"
+                    x-model="$store.promptBuilder.currentState.provider">
+                    {% for provider in llm_providers %}
+                    <option value="{{ provider.id }}">{{ provider }}</option>
+                    {% endfor %}
+                </select>
                 <select id="model-selector" class="w-full select select-bordered"
                     x-model="$store.promptBuilder.currentState.model">
                     <option value="gpt-3.5-turbo">GPT-3.5</option>
@@ -171,6 +177,7 @@
             inputFormatter: Alpine.store('promptBuilder').currentState.inputFormatter,
             sourceMaterialID: Alpine.store('promptBuilder').currentState.sourceMaterialID,
             sourceMaterialName: Alpine.store('promptBuilder').currentState.sourceMaterialName,
+            provider: Alpine.store('promptBuilder').currentState.provider,
             model: Alpine.store('promptBuilder').currentState.model,
             temperature: Alpine.store('promptBuilder').currentState.temperature,
             messages: messagesArray

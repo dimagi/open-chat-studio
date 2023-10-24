@@ -148,11 +148,14 @@ def experiments_prompt_builder(request, team_slug: str):
     prompts = Prompt.objects.filter(team=request.team).order_by("-created_at").all()
     prompts_list = list(prompts.values())
 
+    llm_providers = list(request.team.llmprovider_set.all())
     return TemplateResponse(
         request,
         "experiments/prompt_builder.html",
         {
             "prompts": prompts_list,
+            "llm_providers": llm_providers,
+            "default_llm_provider": llm_providers[0],
             "active_tab": "prompt_builder",
         },
     )
