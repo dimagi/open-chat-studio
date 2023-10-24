@@ -350,14 +350,6 @@ ADMINS = [("Dimagi Admins", "devops+openchatstudio@dimagi.com")]
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
-
-# OpenAI setup
-
-OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
-
-# where chroma DBs get persisted
-CHROMA_DB_DIRECTORY = BASE_DIR / "data" / "dbs"
-
 # Sentry setup
 
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'
