@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from langchain.chat_models import ChatOpenAI
+from langchain.chat_models.base import BaseLanguageModel
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import AIMessage, HumanMessage
 
@@ -12,15 +12,14 @@ from apps.experiments.models import Experiment, ExperimentSession, Prompt, Safet
 def create_conversation(
     prompt_str: str,
     source_material: str,
-    model_name: str,
-    temperature: float,
+    llm: BaseLanguageModel,
     experiment_session: Optional[ExperimentSession] = None,
 ) -> Conversation:
     return Conversation(
         prompt_str=prompt_str,
         source_material=source_material,
         memory=ConversationBufferMemory(return_messages=True),
-        llm=ChatOpenAI(model_name=model_name, temperature=temperature),
+        llm=llm,
         experiment_session=experiment_session,
     )
 
@@ -30,8 +29,7 @@ class TopicBot:
         self,
         prompt: Prompt,
         source_material: str,
-        model_name: str,
-        temperature: float,
+        llm: BaseLanguageModel,
         safety_layers: List[SafetyLayer] = None,
         chat=None,
         messages_history=None,
@@ -39,8 +37,7 @@ class TopicBot:
     ):
         self.prompt = prompt
         self.safety_layers = safety_layers or []
-        self.model_name = model_name
-        self.temperature = temperature
+        self.llm = llm
         self.source_material = source_material
         self.safe_mode = bool(self.safety_layers)
         self.chat = chat
@@ -57,8 +54,7 @@ class TopicBot:
         experiment = session.experiment
         return TopicBot(
             prompt=experiment.chatbot_prompt,
-            model_name=experiment.llm,
-            temperature=experiment.temperature,
+            llm=experiment.get_chat_model(),
             source_material=experiment.source_material.material if experiment.source_material else None,
             safety_layers=experiment.safety_layers.all(),
             chat=session.chat,
@@ -69,8 +65,7 @@ class TopicBot:
         self.conversation = create_conversation(
             self.prompt.prompt,
             self.source_material,
-            model_name=self.model_name,
-            temperature=self.temperature,
+            self.llm,
             experiment_session=ExperimentSession.objects.filter(id=self.session_id).first(),
         )
         # load the history up
@@ -79,7 +74,7 @@ class TopicBot:
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
-            SafetyBot(safety_layer, self.model_name, self.source_material) for safety_layer in self.safety_layers
+            SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
         # Add the history messages. This origintated for the promptbuilder
@@ -165,24 +160,17 @@ class TopicBot:
 
 
 class SafetyBot:
-    def __init__(self, safety_layer: SafetyLayer, model_name: str, source_material: Optional[str]):
+    def __init__(self, safety_layer: SafetyLayer, llm: BaseLanguageModel, source_material: Optional[str]):
         self.safety_layer = safety_layer
         self.prompt = safety_layer.prompt
-        self.model_name = model_name
+        self.llm = llm
         self.source_material = source_material
         self.input_tokens = 0
         self.output_tokens = 0
         self._initialize()
 
     def _initialize(self):
-        # todo: make configurable
-        temperature = 0.7
-        self.conversation = create_conversation(
-            self.prompt.prompt,
-            self.source_material,
-            model_name=self.model_name,
-            temperature=temperature,
-        )
+        self.conversation = create_conversation(self.prompt.prompt, self.source_material, self.llm)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -218,9 +206,8 @@ def get_bot_from_experiment(experiment: Experiment, chat: Chat):
     session = ExperimentSession.objects.filter(experiment=experiment, chat=chat).first()
     return TopicBot(
         prompt=experiment.chatbot_prompt,
-        model_name=experiment.llm,
-        temperature=experiment.temperature,
         source_material=experiment.source_material.material if experiment.source_material else None,
+        llm=experiment.get_chat_model(),
         safety_layers=experiment.safety_layers.all(),
         chat=chat,
         session=session,

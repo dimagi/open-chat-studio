@@ -17,6 +17,7 @@ from apps.experiments.models import (
     SessionStatus,
 )
 from apps.experiments.views.experiment import _start_experiment_session
+from apps.llm_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
@@ -45,6 +46,14 @@ class TasksTest(TestCase):
             chatbot_prompt=self.prompt,
             no_activity_config=self.no_activity_config,
             consent_form=ConsentForm.get_default(self.team),
+            llm_provider=LlmProvider.objects.create(
+                name="test",
+                type="openai",
+                team=self.team,
+                config={
+                    "openai_api_key": "123123123",
+                },
+            ),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"

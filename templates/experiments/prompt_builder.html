@@ -13,19 +13,19 @@
     {% endif %}
     <div class="w-full h-screen flex flex-row py-4">
         <!-- History sidebar -->
-        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='history', 'hidden': $store.promptBuilder.visibleSidebar !== 'history' }" class="flex">
+        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='history', 'hidden': $store.promptBuilder.visibleSidebar !== 'history' }" class="flex" x-cloak>
             {% include "experiments/components/prompt_builder_history_sidebar.html" %}
         </div>
 
         <!-- Source material sidebar -->
         <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='source-material', 'hidden': $store.promptBuilder.visibleSidebar !== 'source-material' }"
-            class="flex">
+            class="flex" x-cloak>
             {% include "experiments/components/prompt_builder_source_material_sidebar.html" %}
         </div>
         
         <!-- Load prompt sidebar -->
         <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='prompts', 'hidden': $store.promptBuilder.visibleSidebar !== 'prompts' }"
-            class="flex">
+            class="flex" x-cloak>
             {% include "experiments/components/prompt_builder_prompts_list_sidebar.html" %}
         </div>
 
@@ -102,6 +102,7 @@
                             temperature: 0.7,
                             prompt: '',
                             inputFormatter: '',
+                            provider: {{ default_llm_provider.id|default:'null' }},
                             model: 'gpt-4',
                             messages: []
                         }

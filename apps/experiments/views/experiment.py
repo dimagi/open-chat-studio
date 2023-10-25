@@ -69,6 +69,7 @@ class CreateExperiment(CreateView):
     fields = [
         "name",
         "description",
+        "llm_provider",
         "llm",
         "temperature",
         "chatbot_prompt",
@@ -108,6 +109,7 @@ class EditExperiment(UpdateView):
     fields = [
         "name",
         "description",
+        "llm_provider",
         "llm",
         "temperature",
         "chatbot_prompt",
@@ -141,6 +143,7 @@ class EditExperiment(UpdateView):
 
 
 def _apply_related_model_querysets(team, form):
+    form.fields["llm_provider"].queryset = team.llmprovider_set
     form.fields["chatbot_prompt"].queryset = team.prompt_set
     form.fields["safety_layers"].queryset = team.safetylayer_set
     form.fields["source_material"].queryset = team.sourcematerial_set

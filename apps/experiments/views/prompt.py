@@ -148,11 +148,14 @@ def experiments_prompt_builder(request, team_slug: str):
     prompts = Prompt.objects.filter(team=request.team).order_by("-created_at").all()
     prompts_list = list(prompts.values())
 
+    llm_providers = list(request.team.llmprovider_set.all())
     return TemplateResponse(
         request,
         "experiments/prompt_builder.html",
         {
             "prompts": prompts_list,
+            "llm_providers": llm_providers,
+            "default_llm_provider": llm_providers[0] if llm_providers else None,
             "active_tab": "prompt_builder",
         },
     )
@@ -161,9 +164,9 @@ def experiments_prompt_builder(request, team_slug: str):
 @require_POST
 @login_and_team_required
 def experiments_prompt_builder_get_message(request, team_slug: str):
-    data_json = request.body.decode("utf-8")
+    data = json.loads(request.body.decode("utf-8"))
     user = get_real_user_or_none(request.user)
-    result = get_prompt_builder_response_task.delay(request.team.id, user.id, data_json)
+    result = get_prompt_builder_response_task.delay(request.team.id, user.id, data)
     return JsonResponse({"task_id": result.task_id})
 
 

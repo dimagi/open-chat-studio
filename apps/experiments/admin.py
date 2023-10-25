@@ -74,7 +74,7 @@ class ExperimentAdminForm(forms.ModelForm):
 
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
-    list_display = ("name", "team", "owner", "chatbot_prompt", "source_material", "llm")
+    list_display = ("name", "team", "owner", "chatbot_prompt", "source_material", "llm", "llm_provider")
     list_filter = ("team", "owner", "source_material")
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]

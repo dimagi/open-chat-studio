@@ -228,7 +228,16 @@ class Experiment(BaseTeamModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
-    llm = models.CharField(max_length=20, choices=LLM_CHOICES, default="gpt-3.5-turbo")
+    llm_provider = models.ForeignKey(
+        "llm_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
+    )
+    llm = models.CharField(
+        max_length=20,
+        choices=LLM_CHOICES,
+        default="gpt-3.5-turbo",
+        help_text="The LLM model to use.",
+        verbose_name="LLM Model",
+    )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
     chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
@@ -285,6 +294,9 @@ class Experiment(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def get_chat_model(self):
+        return self.llm_provider.get_chat_model(self.llm, self.temperature)
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
