@@ -3,8 +3,10 @@ from typing import List, Optional
 from langchain.chat_models.base import BaseLanguageModel
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import AIMessage, HumanMessage
+from pydantic import ValidationError
 
 from apps.chat.conversation import Conversation
+from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
 
@@ -15,13 +17,16 @@ def create_conversation(
     llm: BaseLanguageModel,
     experiment_session: Optional[ExperimentSession] = None,
 ) -> Conversation:
-    return Conversation(
-        prompt_str=prompt_str,
-        source_material=source_material,
-        memory=ConversationBufferMemory(return_messages=True),
-        llm=llm,
-        experiment_session=experiment_session,
-    )
+    try:
+        return Conversation(
+            prompt_str=prompt_str,
+            source_material=source_material,
+            memory=ConversationBufferMemory(return_messages=True),
+            llm=llm,
+            experiment_session=experiment_session,
+        )
+    except ValidationError as e:
+        raise ChatException(str(e)) from e
 
 
 class TopicBot:
