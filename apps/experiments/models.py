@@ -297,6 +297,9 @@ class Experiment(BaseTeamModel):
 
     def get_chat_model(self):
         return self.llm_provider.get_chat_model(self.llm, self.temperature)
+    
+    def get_absolute_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
 
 class Participant(BaseTeamModel):

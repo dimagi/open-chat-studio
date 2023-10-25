@@ -8,6 +8,7 @@ from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
@@ -17,6 +18,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
+from django_tables2 import SingleTableView
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -27,6 +29,7 @@ from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
 from apps.users.models import CustomUser
@@ -34,15 +37,31 @@ from apps.users.models import CustomUser
 
 @login_and_team_required
 def experiments_home(request, team_slug: str):
-    experiments = Experiment.objects.filter(team=request.team).order_by("-created_at")
     return TemplateResponse(
         request,
-        "experiments/experiment_home.html",
+        "generic/object_home.html",
         {
-            "experiments": experiments,
             "active_tab": "experiments",
+            "title": "Experiments",
+            "new_object_url": reverse("experiments:new", args=[team_slug]),
+            "table_url": reverse("experiments:table", args=[team_slug]),
+            "enable_search": True,
         },
     )
+
+
+class ExperimentTableView(SingleTableView):
+    model = Experiment
+    paginate_by = 25
+    table_class = ExperimentTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        query_set = Experiment.objects.filter(team=self.request.team)
+        search = self.request.GET.get("search")
+        if search:
+            query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+        return query_set
 
 
 class CreateExperiment(CreateView):

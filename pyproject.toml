@@ -12,3 +12,8 @@ exclude = '''
   | migrations
 )
 '''
+
+[tool.pytest.ini_options]
+addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
+python_files = "tests.py test_*.py *_tests.py"
+norecursedirs = ".* build dist venv node_modules compose assets static"

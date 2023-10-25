@@ -12,8 +12,3 @@ class AudioSynthesizeException(ChatException):
 class MessageHandlerException(ChatException):
     def __init__(self, message):
         super().__init__(message)
-
-
-class ExperimentChannelRepurposedException(ChatException):
-    def __init__(self, message):
-        super().__init__(message)
