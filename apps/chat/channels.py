@@ -184,8 +184,10 @@ class ChannelBase:
         return response
 
     def _reply_voice_message(self, text: str):
+        voice_provider = self.experiment.voice_provider
+        voice_service = voice_provider.get_voice_service()
         try:
-            voice_audio, duration = audio.synthesize_voice(text, synthetic_voice=self.experiment.synthetic_voice)
+            voice_audio, duration = voice_service.synthesize_voice(text, self.experiment.synthetic_voice)
             self.send_voice_to_user(voice_audio, duration)
         except AudioSynthesizeException as e:
             logging.exception(e)

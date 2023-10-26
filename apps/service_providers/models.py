@@ -8,7 +8,7 @@ from langchain.llms import AzureOpenAI
 
 from apps.teams.models import BaseTeamModel
 
-from . import forms
+from . import forms, voice_service
 
 
 class LlmProviderType(models.TextChoices):
@@ -68,6 +68,14 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AzureVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
+    def get_voice_service(self, config: dict):
+        match self:
+            case VoiceProviderType.aws:
+                return voice_service.AWSVoiceSynthesizer(**config)
+            case VoiceProviderType.azure:
+                return voice_service.AzureVoiceSynthesizer(**config)
+        raise Exception(f"No voice service configured for {self}")
+
 
 class VoiceProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
@@ -83,3 +91,6 @@ class VoiceProvider(BaseTeamModel):
     @property
     def type_enum(self):
         return VoiceProviderType(self.type)
+
+    def get_voice_service(self):
+        return self.type_enum.get_voice_service(self.config)

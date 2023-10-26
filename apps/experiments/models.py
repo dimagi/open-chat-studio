@@ -166,9 +166,12 @@ class SyntheticVoice(BaseModel):
         ("female (child)", "Female (Child)"),
     )
 
+    AWS = "AWS"
+    Azure = "Azure"
+
     SERVICES = (
-        ("AWS", "AWS"),
-        ("Azure", "Azure"),
+        ("AWS", AWS),
+        ("Azure", Azure),
     )
 
     name = models.CharField(
