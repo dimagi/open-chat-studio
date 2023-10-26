@@ -6,14 +6,16 @@ from ..generics.views import BaseTypeSelectFormView
 from .utils import ServiceProvider, get_service_provider_config_form
 
 
-class ServiceProviderTableView(SingleTableView):
-    paginate_by = 25
-    template_name = "table/single_table.html"
-
+class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
         type_ = self.kwargs["provider_type"]
         return ServiceProvider(type_)
+
+
+class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
+    paginate_by = 25
+    template_name = "table/single_table.html"
 
     def get_queryset(self):
         return self.provider_type.model.objects.filter(team=self.request.team)
@@ -29,15 +31,10 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
     return HttpResponse()
 
 
-class CreateServiceProvider(BaseTypeSelectFormView):
+class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
     extra_context = {
         "active_tab": "manage-team",
     }
-
-    @property
-    def provider_type(self) -> ServiceProvider:
-        type_ = self.kwargs["provider_type"]
-        return ServiceProvider(type_)
 
     @property
     def model(self):
