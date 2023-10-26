@@ -10,3 +10,4 @@ termcolor
 watchfiles
 pytest
 pytest-django
+factory-boy
