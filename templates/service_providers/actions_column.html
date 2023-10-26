@@ -1,0 +1,15 @@
+{# This template is used by Tables classes to render edit and delete actions #}
+<div class="btn-group">
+{% if edit_url_name %}
+<a href="{% url edit_url_name request.team.slug provider_type record.id %}" class="btn btn-sm btn-ghost">
+    <i class="fa fa-pencil"></i>
+</a>
+{% endif %}
+{% if delete_url_name and record.can_delete|default_if_none:True %}
+<button class="btn btn-sm btn-ghost"
+        hx-delete="{% url delete_url_name request.team.slug provider_type record.id %}"
+        hx-target="#record-{{ record.id }}">
+    <i class="fa fa-trash"></i>
+</button>
+{% endif %}
+</div>

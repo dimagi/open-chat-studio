@@ -8,30 +8,62 @@ from .tables import LlmProviderTable
 from .utils import get_llm_config_form
 
 
-class LlmProviderTableView(SingleTableView):
+class ServiceProviderTableView(SingleTableView):
     paginate_by = 25
-    table_class = LlmProviderTable
     template_name = "table/single_table.html"
 
+    @property
+    def provider_type(self):
+        type_ = self.kwargs["provider_type"]
+        if type_ not in ["llm"]:
+            raise ValueError(f"Invalid provider type: {type_}")
+        return type_
+
     def get_queryset(self):
-        return LlmProvider.objects.filter(team=self.request.team)
+        match self.provider_type:
+            case "llm":
+                return LlmProvider.objects.filter(team=self.request.team)
+
+    def get_table_class(self):
+        match self.provider_type:
+            case "llm":
+                return LlmProviderTable
 
 
-def delete_service_provider(request, team_slug: str, pk: int):
-    service_config = get_object_or_404(LlmProvider, team=request.team, pk=pk)
+def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
+    match provider_type:
+        case "llm":
+            object_type = LlmProvider
+        case _:
+            raise ValueError(f"Invalid provider type: {provider_type}")
+
+    service_config = get_object_or_404(object_type, team=request.team, pk=pk)
     service_config.delete()
     return HttpResponse()
 
 
-class CreateEditLlmProvider(BaseTypeSelectFormView):
-    model = LlmProvider
+class CreateServiceProvider(BaseTypeSelectFormView):
     extra_context = {
         "active_tab": "manage-team",
     }
-    title = "Create LLM Provider"
+
+    @property
+    def provider_type(self):
+        type_ = self.kwargs["provider_type"]
+        if type_ not in ["llm"]:
+            raise ValueError(f"Invalid provider type: {type_}")
+        return type_
+
+    @property
+    def model(self):
+        match self.provider_type:
+            case "llm":
+                return LlmProvider
 
     def get_form(self, data=None):
-        return get_llm_config_form(data=data, instance=self.get_object())
+        match self.provider_type:
+            case "llm":
+                return get_llm_config_form(data=data, instance=self.get_object())
 
     def form_valid(self, form):
         instance = form.save()

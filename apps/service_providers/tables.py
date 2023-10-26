@@ -6,10 +6,11 @@ from .models import LlmProvider
 
 class LlmProviderTable(tables.Table):
     actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
+        template_name="service_providers/actions_column.html",
         extra_context={
             "edit_url_name": "service_providers:edit",
             "delete_url_name": "service_providers:delete",
+            "provider_type": "llm",
         },
     )
 
