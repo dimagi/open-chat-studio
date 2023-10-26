@@ -228,9 +228,6 @@ class Experiment(BaseTeamModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
-    llm_provider = models.ForeignKey(
-        "llm_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
-    )
     llm_provider_new = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
