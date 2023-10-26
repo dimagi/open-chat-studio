@@ -1,4 +1,3 @@
-import json
 import time
 from datetime import datetime
 
@@ -8,7 +7,7 @@ from apps.channels.datamodels import WebMessage
 from apps.chat.bots import TopicBot
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
-from apps.llm_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 
 
