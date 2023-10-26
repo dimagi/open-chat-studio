@@ -231,6 +231,9 @@ class Experiment(BaseTeamModel):
     llm_provider = models.ForeignKey(
         "llm_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
+    llm_provider_new = models.ForeignKey(
+        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
+    )
     llm = models.CharField(
         max_length=20,
         choices=LLM_CHOICES,

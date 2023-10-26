@@ -79,6 +79,7 @@ PROJECT_APPS = [
     "apps.teams.apps.TeamConfig",
     "apps.channels",
     "apps.llm_providers",
+    "apps.service_providers",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
