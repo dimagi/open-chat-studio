@@ -3,9 +3,7 @@ from django.shortcuts import get_object_or_404, resolve_url
 from django_tables2 import SingleTableView
 
 from ..generics.views import BaseTypeSelectFormView
-from .models import LlmProvider, VoiceProvider
-from .tables import LlmProviderTable, VoiceProviderTable
-from .utils import get_llm_config_form
+from .utils import ServiceProvider, get_service_provider_config_form
 
 
 class ServiceProviderTableView(SingleTableView):
@@ -13,37 +11,20 @@ class ServiceProviderTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     @property
-    def provider_type(self):
+    def provider_type(self) -> ServiceProvider:
         type_ = self.kwargs["provider_type"]
-        if type_ not in ["llm", "voice"]:
-            raise ValueError(f"Invalid provider type: {type_}")
-        return type_
+        return ServiceProvider(type_)
 
     def get_queryset(self):
-        match self.provider_type:
-            case "llm":
-                return LlmProvider.objects.filter(team=self.request.team)
-            case "voice":
-                return VoiceProvider.objects.filter(team=self.request.team)
+        return self.provider_type.model.objects.filter(team=self.request.team)
 
     def get_table_class(self):
-        match self.provider_type:
-            case "llm":
-                return LlmProviderTable
-            case "voice":
-                return VoiceProviderTable
+        return self.provider_type.table
 
 
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
-    match provider_type:
-        case "llm":
-            object_type = LlmProvider
-        case "voice":
-            object_type = VoiceProvider
-        case _:
-            raise ValueError(f"Invalid provider type: {provider_type}")
-
-    service_config = get_object_or_404(object_type, team=request.team, pk=pk)
+    provider = ServiceProvider(provider_type)
+    service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.delete()
     return HttpResponse()
 
@@ -54,27 +35,16 @@ class CreateServiceProvider(BaseTypeSelectFormView):
     }
 
     @property
-    def provider_type(self):
+    def provider_type(self) -> ServiceProvider:
         type_ = self.kwargs["provider_type"]
-        if type_ not in ["llm", "voice"]:
-            raise ValueError(f"Invalid provider type: {type_}")
-        return type_
+        return ServiceProvider(type_)
 
     @property
     def model(self):
-        match self.provider_type:
-            case "llm":
-                return LlmProvider
-            case "voice":
-                return VoiceProvider
+        return self.provider_type.model
 
     def get_form(self, data=None):
-        match self.provider_type:
-            case "llm":
-                return get_llm_config_form(data=data, instance=self.get_object())
-            case "voice":
-                # TODO
-                pass
+        return get_service_provider_config_form(self.provider_type, data=data, instance=self.get_object())
 
     def form_valid(self, form):
         instance = form.save()
