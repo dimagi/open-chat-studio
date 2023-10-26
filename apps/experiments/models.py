@@ -281,6 +281,13 @@ class Experiment(BaseTeamModel):
         related_name="experiments",
         help_text="Consent form content to show to users before participation in experiments.",
     )
+    voice_provider = models.ForeignKey(
+        "service_providers.VoiceProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Voice Provider",
+    )
     synthetic_voice = models.ForeignKey(
         SyntheticVoice, null=True, blank=True, related_name="experiments", on_delete=models.SET_NULL
     )

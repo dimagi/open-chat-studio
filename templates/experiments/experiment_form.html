@@ -1,0 +1,25 @@
+{% extends "generic/object_form.html" %}
+{% block page_js %}
+  {{ voice_providers_types|json_script:"voiceProviderTypes" }}
+  {{ synthetic_voice_options|json_script:"voiceOptions" }}
+  <script>
+      console.log({{experiment.synthetic_voice_id|default:'null'}});
+      const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
+      const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
+      document.addEventListener('alpine:init', () => {
+          Alpine.data('experiment', () => ({
+              voiceProvider: null,
+              synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+              synthetic_voice_options: [],
+              init() {
+                  this.$watch('voiceProvider', () => {
+                      const providerType = voiceProviderTypes[this.voiceProvider];
+                      this.synthetic_voice_options = voiceOptions.filter(option => {
+                        return option.type === providerType;
+                      });
+                  })
+              }
+          }));
+      });
+  </script>
+{% endblock page_js %}

@@ -1,0 +1,6 @@
+<select x-model="{{ widget.name }}" class="select select-bordered w-full {{ widget.attrs.class }}" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>
+  <option value selected>---------</option>
+  <template x-for="(option, index) in {{ widget.name }}_options" :key="index">
+    <option :value="option.value" x-text="option.text" :selected="option.value == {{ widget.name }}"></option>
+  </template>
+</select>
