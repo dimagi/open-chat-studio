@@ -1,8 +1,8 @@
 {% load i18n %}
 <div>
   {% if request.team_membership.role == 'admin' %}
-    {% url "llm_providers:table" request.team.slug as table_url %}
-    {% url "llm_providers:new" request.team.slug as new_object_url %}
+    {% url "service_providers:table" request.team.slug as table_url %}
+    {% url "service_providers:new" request.team.slug as new_object_url %}
     {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url allow_new=True title="LLM Providers" button_style="btn-outline" title_class="pg-subtitle" %}
   {% else %}
     {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url allow_new=False title="LLM Providers" button_style="btn-outline" title_class="pg-subtitle"%}

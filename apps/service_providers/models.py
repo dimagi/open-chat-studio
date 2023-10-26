@@ -40,7 +40,6 @@ class LlmProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
-    old_id = models.IntegerField()
 
     class Meta:
         ordering = ("type", "name")
