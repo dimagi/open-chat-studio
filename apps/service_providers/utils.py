@@ -2,6 +2,7 @@ import functools
 from enum import Enum
 
 from django import forms
+from django.db.models import Field
 
 from apps.generics.type_select_form import TypeSelectForm
 
@@ -85,7 +86,9 @@ def _get_main_form(provider: ServiceProvider, instance=None, data=None):
     return form
 
 
-def formfield_for_dbfield(db_field, provider, **kwargs):
+def formfield_for_dbfield(db_field: Field, provider: ServiceProvider, **kwargs):
+    """This is a callback function used by Django's `modelform_factory` to create the form fields for the model.
+    It's use here is to customize the `provider_type` field."""
     if db_field.name == provider.provider_type_field:
         # remove 'empty' value from choices
         return forms.TypedChoiceField(empty_value=None, choices=provider.subtype.choices)
