@@ -62,18 +62,22 @@ class ServiceProvider(Enum):
 
 
 def get_service_provider_config_form(provider: ServiceProvider, data=None, instance=None) -> TypeSelectForm:
+    """Return the form for the service provider. This is a 'type select form' which will include the main form
+    and the config form for the selected provider type.
+    """
     initial_config = provider.get_form_initial(instance) if instance else None
     return TypeSelectForm(
         primary=_get_main_form(provider, data=data.copy() if data else None, instance=instance),
         secondary={
-            type_: type_.form_cls(data=data.copy() if data else None, initial=initial_config)
-            for type_ in provider.subtype
+            subtype: subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
+            for subtype in provider.subtype
         },
         secondary_key_field=provider.provider_type_field,
     )
 
 
 def _get_main_form(provider: ServiceProvider, instance=None, data=None):
+    """Get the main 'model form' for the service provider which will be used to create the model instance."""
     form_cls = forms.modelform_factory(
         provider.model,
         fields=provider.primary_fields,
