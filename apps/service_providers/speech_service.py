@@ -24,7 +24,7 @@ class SpeechService(pydantic.BaseModel):
         except Exception as e:
             raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
 
-    def transcribe_audio(self, audio: bytes) -> str:
+    def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
     def _synthesize_voice(self, text, synthetic_voice) -> Tuple[BytesIO, float]:
@@ -106,12 +106,12 @@ class AzureSpeechService(SpeechService):
                         msg += ". Error details: {}".format(cancellation_details.error_details)
                 raise AudioSynthesizeException(msg)
 
-    def transcribe_audio(self, audio: bytes) -> str:
+    def transcribe_audio(self, audio: BytesIO) -> str:
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_file.write(audio)
+            temp_file.write(audio.getbuffer())
             temp_file.seek(0)
 
             audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)

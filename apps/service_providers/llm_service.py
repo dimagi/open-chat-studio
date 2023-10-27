@@ -1,3 +1,4 @@
+from io import BytesIO
 from typing import Type
 
 import openai
@@ -15,7 +16,7 @@ class LlmService(pydantic.BaseModel):
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return self._chat_model_cls(model=llm_model, temperature=temperature)
 
-    def transcribe_audio(self, audio: bytes) -> str:
+    def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
 
@@ -28,7 +29,7 @@ class OpenAILlmService(LlmService):
     openai_api_base: str = None
     openai_organization: str = None
 
-    def transcribe_audio(self, audio: bytes) -> str:
+    def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = openai.Audio.transcribe(
             model="whisper-1",
             file=audio,
