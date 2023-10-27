@@ -396,8 +396,8 @@ LOGGING = {
 # Telegram webhook config
 TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 
-TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN")
+TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", default=None)
+TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN", default=None)
 
 
 # Django tables
