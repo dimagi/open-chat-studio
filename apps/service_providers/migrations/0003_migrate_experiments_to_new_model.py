@@ -7,7 +7,7 @@ def migrate_llm_providers(apps, schema_editor):
     LlmProvider = apps.get_model("service_providers", "LlmProvider")
     Experiment = apps.get_model("experiments", "Experiment")
 
-    for experiment in Experiment.objects.all():
+    for experiment in Experiment.objects.filter(llm_provider__isnull=False):
         experiment.llm_provider_new_id = LlmProvider.objects.filter(old_id=experiment.llm_provider_id).first().id
         experiment.save()
 
