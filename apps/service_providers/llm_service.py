@@ -1,20 +1,17 @@
 from io import BytesIO
-from typing import Type
 
 import openai
 import pydantic
-from langchain.chat_models import ChatOpenAI
+from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
-from langchain.llms import AzureOpenAI
 
 
 class LlmService(pydantic.BaseModel):
     _type: str
-    _chat_model_cls: Type[BaseChatModel]
     supports_transcription: bool = False
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        return self._chat_model_cls(model=llm_model, temperature=temperature)
+        raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
@@ -22,12 +19,20 @@ class LlmService(pydantic.BaseModel):
 
 class OpenAILlmService(LlmService):
     _type = "openai"
-    _chat_model_cls = ChatOpenAI
     supports_transcription: bool = True
 
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
+
+    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+        return ChatOpenAI(
+            model=llm_model,
+            temperature=temperature,
+            openai_api_key=self.openai_api_key,
+            openai_api_base=self.openai_api_base,
+            openai_organization=self.openai_organization,
+        )
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = openai.Audio.transcribe(
@@ -42,7 +47,14 @@ class OpenAILlmService(LlmService):
 
 class AzureLlmService(LlmService):
     _type = "openai"
-    _chat_model_cls = AzureOpenAI
 
     openai_api_key: str
     openai_api_base: str
+
+    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+        return AzureChatOpenAI(
+            model=llm_model,
+            temperature=temperature,
+            openai_api_key=self.openai_api_key,
+            openai_api_base=self.openai_api_base,
+        )
