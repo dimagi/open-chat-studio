@@ -198,10 +198,18 @@ class ChannelBase:
         self.transcription_started()
 
         audio_file = self.get_message_audio()
-        transcript = audio.get_transcript(audio_file)
-
+        transcript = self._transcribe_audio(audio_file)
         self.transcription_finished(transcript)
         return transcript
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
+        llm_service = self.experiment.llm_provider_new.get_llm_service()
+        if llm_service.supports_transcription:
+            return llm_service.transcribe_audio(audio)
+        elif self.experiment.voice_provider:
+            voice_service = self.experiment.voice_provider.get_voice_service()
+            if voice_service.supports_transcription:
+                return voice_service.transcribe_audio(audio)
 
     def _get_llm_response(self, text: str) -> str:
         """

@@ -3,8 +3,6 @@ from typing import Type
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import AzureOpenAI
 
 from apps.teams.models import BaseTeamModel
 
@@ -91,5 +89,5 @@ class VoiceProvider(BaseTeamModel):
     def type_enum(self):
         return VoiceProviderType(self.type)
 
-    def get_voice_service(self):
+    def get_voice_service(self) -> voice_service.VoiceSynthesizer:
         return self.type_enum.get_voice_service(self.config)

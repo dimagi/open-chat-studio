@@ -1,12 +1,6 @@
 from io import BytesIO
 
-import openai
 from pydub import AudioSegment
-
-
-def get_transcript(audio: BytesIO) -> str:
-    transcript = openai.Audio.transcribe(model="whisper-1", file=audio)
-    return transcript["text"]
 
 
 def convert_ogg_to_wav(ogg_audio: BytesIO) -> BytesIO:
