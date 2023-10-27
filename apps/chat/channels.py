@@ -173,6 +173,7 @@ class ChannelBase:
             response = self._get_llm_response(self.message_text)
             self.send_text_to_user(response)
         elif self.message_content_type == MESSAGE_TYPES.VOICE:
+            # TODO: Error handling
             transcript = self._get_voice_transcript()
             response = self._get_llm_response(transcript)
             if self.voice_replies_supported and self.experiment.synthetic_voice:
