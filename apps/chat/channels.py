@@ -185,9 +185,9 @@ class ChannelBase:
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
-        voice_service = voice_provider.get_voice_service()
+        speech_service = voice_provider.get_speech_service()
         try:
-            voice_audio, duration = voice_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            voice_audio, duration = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
             self.send_voice_to_user(voice_audio, duration)
         except AudioSynthesizeException as e:
             logging.exception(e)
@@ -207,9 +207,9 @@ class ChannelBase:
         if llm_service.supports_transcription:
             return llm_service.transcribe_audio(audio)
         elif self.experiment.voice_provider:
-            voice_service = self.experiment.voice_provider.get_voice_service()
-            if voice_service.supports_transcription:
-                return voice_service.transcribe_audio(audio)
+            speech_service = self.experiment.voice_provider.get_speech_service()
+            if speech_service.supports_transcription:
+                return speech_service.transcribe_audio(audio)
 
     def _get_llm_response(self, text: str) -> str:
         """

@@ -13,7 +13,7 @@ from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 
 
-class VoiceSynthesizer(pydantic.BaseModel):
+class SpeechService(pydantic.BaseModel):
     _type: str
     supports_transcription = False
 
@@ -31,7 +31,7 @@ class VoiceSynthesizer(pydantic.BaseModel):
         raise NotImplementedError
 
 
-class AWSVoiceSynthesizer(VoiceSynthesizer):
+class AWSSpeechService(SpeechService):
     _type = SyntheticVoice.AWS
     aws_access_key_id: str
     aws_secret_access_key: str
@@ -62,7 +62,7 @@ class AWSVoiceSynthesizer(VoiceSynthesizer):
             return BytesIO(audio_data), duration_seconds
 
 
-class AzureVoiceSynthesizer(VoiceSynthesizer):
+class AzureSpeechService(SpeechService):
     _type = SyntheticVoice.Azure
     supports_transcription = True
     azure_subscription_key: str

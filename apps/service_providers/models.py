@@ -6,7 +6,7 @@ from django_cryptography.fields import encrypt
 
 from apps.teams.models import BaseTeamModel
 
-from . import forms, llm_service, voice_service
+from . import forms, llm_service, speech_service
 
 
 class LlmProviderType(models.TextChoices):
@@ -65,12 +65,12 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AzureVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_voice_service(self, config: dict):
+    def get_speech_service(self, config: dict):
         match self:
             case VoiceProviderType.aws:
-                return voice_service.AWSVoiceSynthesizer(**config)
+                return speech_service.AWSSpeechService(**config)
             case VoiceProviderType.azure:
-                return voice_service.AzureVoiceSynthesizer(**config)
+                return speech_service.AzureSpeechService(**config)
         raise Exception(f"No voice service configured for {self}")
 
 
@@ -89,5 +89,5 @@ class VoiceProvider(BaseTeamModel):
     def type_enum(self):
         return VoiceProviderType(self.type)
 
-    def get_voice_service(self) -> voice_service.VoiceSynthesizer:
-        return self.type_enum.get_voice_service(self.config)
+    def get_speech_service(self) -> speech_service.SpeechService:
+        return self.type_enum.get_speech_service(self.config)
