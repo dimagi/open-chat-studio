@@ -27,7 +27,8 @@
   </form>
 </section>
 {% if not create %}
-{% include 'teams/components/llm_providers.html' %}
+{% include 'teams/components/service_providers.html' with provider_type="llm" title="LLM Providers" %}
+{% include 'teams/components/service_providers.html' with provider_type="voice" title="Voice Providers" %}
 <section class="app-card">
   <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
   <div class='table-responsive'>

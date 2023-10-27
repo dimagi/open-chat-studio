@@ -70,3 +70,18 @@ def obfuscate_value(value):
     if value and isinstance(value, str):
         return value[:4] + "*" * (len(value) - 4)
     return value
+
+
+class AWSVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["aws_secret_access_key"]
+
+    aws_access_key_id = forms.CharField(label=_("Access Key ID"))
+    aws_secret_access_key = forms.CharField(label=_("Secret Access Key"))
+    aws_region = forms.CharField(label=_("Region"))
+
+
+class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["azure_subscription_key"]
+
+    azure_subscription_key = forms.CharField(label=_("Subscription Key"))
+    azure_region = forms.CharField(label=_("Region"))

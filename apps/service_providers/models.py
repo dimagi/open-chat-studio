@@ -1,6 +1,5 @@
 from typing import Type
 
-from django import forms
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
@@ -54,3 +53,33 @@ class LlmProvider(BaseTeamModel):
     def get_chat_model(self, llm_model: str, temperature: float):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)
+
+
+class VoiceProviderType(models.TextChoices):
+    aws = "aws", _("AWS Polly")
+    azure = "azure", _("Azure Text to Speech")
+
+    @property
+    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+        match self:
+            case VoiceProviderType.aws:
+                return forms.AWSVoiceConfigForm
+            case VoiceProviderType.azure:
+                return forms.AzureVoiceConfigForm
+        raise Exception(f"No config form configured for {self}")
+
+
+class VoiceProvider(BaseTeamModel):
+    type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return VoiceProviderType(self.type)

@@ -3,35 +3,45 @@ from django.shortcuts import get_object_or_404, resolve_url
 from django_tables2 import SingleTableView
 
 from ..generics.views import BaseTypeSelectFormView
-from .models import LlmProvider
-from .tables import LlmProviderTable
-from .utils import get_llm_config_form
+from .utils import ServiceProvider, get_service_provider_config_form
 
 
-class LlmProviderTableView(SingleTableView):
+class ServiceProviderMixin:
+    @property
+    def provider_type(self) -> ServiceProvider:
+        type_ = self.kwargs["provider_type"]
+        return ServiceProvider(type_)
+
+
+class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
     paginate_by = 25
-    table_class = LlmProviderTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return LlmProvider.objects.filter(team=self.request.team)
+        return self.provider_type.model.objects.filter(team=self.request.team)
+
+    def get_table_class(self):
+        return self.provider_type.table
 
 
-def delete_service_provider(request, team_slug: str, pk: int):
-    service_config = get_object_or_404(LlmProvider, team=request.team, pk=pk)
+def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
+    provider = ServiceProvider(provider_type)
+    service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.delete()
     return HttpResponse()
 
 
-class CreateEditLlmProvider(BaseTypeSelectFormView):
-    model = LlmProvider
+class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
     extra_context = {
         "active_tab": "manage-team",
     }
-    title = "Create LLM Provider"
+
+    @property
+    def model(self):
+        return self.provider_type.model
 
     def get_form(self, data=None):
-        return get_llm_config_form(data=data, instance=self.get_object())
+        return get_service_provider_config_form(self.provider_type, data=data, instance=self.get_object())
 
     def form_valid(self, form):
         instance = form.save()

@@ -1,4 +1,5 @@
 from django import views
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 
@@ -24,11 +25,11 @@ class BaseTypeSelectFormView(views.View):
 
     _object = None
 
-    def get(self, request, team_slug: str, pk: int = None):
+    def get(self, request, *args, **kwargs):
         form = self.get_form()
         return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
-    def post(self, request, team_slug: str, pk: int = None):
+    def post(self, request, *args, **kwargs):
         form = self.get_form(request.POST)
         if form.is_valid():
             self.form_valid(form)

@@ -24,7 +24,7 @@ def _create_llm_provider(request, team):
         return
 
     return """You need to create an <a href="{url}">LLM Provider</a> before you can continue.""".format(
-        url=reverse("service_providers:new", kwargs={"team_slug": team.slug})
+        url=reverse("service_providers:new", kwargs={"team_slug": team.slug, "provider_type": "llm"})
     )
 
 
