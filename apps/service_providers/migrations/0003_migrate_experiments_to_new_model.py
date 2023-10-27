@@ -17,6 +17,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("service_providers", "0002_copy_llm_providers"),
+        ("experiments", "0048_experiment_llm_provider_new"),
     ]
 
     operations = [
