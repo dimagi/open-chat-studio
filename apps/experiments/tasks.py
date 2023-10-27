@@ -21,7 +21,7 @@ def get_response_for_webchat_task(experiment_session_id: int, message_text: str)
 
 @shared_task
 def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> str:
-    llm_provider = LlmProvider.objects.get(id=data_dict["provider"])
+    llm_service = LlmProvider.objects.get(id=data_dict["provider"]).get_llm_service()
     messages_history = data_dict["messages"]
 
     user = CustomUser.objects.get(id=user_id)
@@ -47,7 +47,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     bot = TopicBot(
         prompt=dummy_prompt,
         source_material=sourece_material_material,
-        llm=llm_provider.get_chat_model(data_dict["model"], float(data_dict["temperature"])),
+        llm=llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"])),
         safety_layers=None,
         chat=None,
         messages_history=messages_history,

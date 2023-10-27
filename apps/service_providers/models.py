@@ -8,7 +8,7 @@ from langchain.llms import AzureOpenAI
 
 from apps.teams.models import BaseTeamModel
 
-from . import forms, voice_service
+from . import forms, llm_service, voice_service
 
 
 class LlmProviderType(models.TextChoices):
@@ -24,13 +24,12 @@ class LlmProviderType(models.TextChoices):
                 return forms.AzureOpenAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    @property
-    def chat_model_cls(self):
+    def get_llm_service(self, config: dict):
         match self:
             case LlmProviderType.openai:
-                return ChatOpenAI
+                return llm_service.OpenAILlmService(**config)
             case LlmProviderType.azure:
-                return AzureOpenAI
+                return llm_service.AzureLlmService(**config)
         raise Exception(f"No chat model configured for {self}")
 
 
@@ -50,9 +49,9 @@ class LlmProvider(BaseTeamModel):
     def type_enum(self):
         return LlmProviderType(self.type)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)
+        return self.type_enum.get_llm_service(config)
 
 
 class VoiceProviderType(models.TextChoices):
