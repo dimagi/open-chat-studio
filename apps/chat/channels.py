@@ -351,10 +351,9 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
-    voice_replies_supported = True
-
     def initialize(self):
         self.client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        self.voice_replies_supported = bool(settings.AWS_ACCESS_KEY_ID)
 
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data["number"]
@@ -393,16 +392,16 @@ class WhatsappChannel(ChannelBase):
         """
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id=settings.WHATSAPP_AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.WHATSAPP_AWS_SECRET_KEY,
-            region_name=settings.WHATSAPP_AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_S3_REGION,
             config=Config(signature_version="s3v4"),
         )
         file_path = f"{self.chat_id}/{uuid.uuid4()}.mp3"
         audio_bytes = voice_audio.getvalue()
         s3_client.upload_fileobj(
             BytesIO(audio_bytes),
-            settings.WHATSAPP_AWS_AUDIO_BUCKET,
+            settings.WHATSAPP_S3_AUDIO_BUCKET,
             file_path,
             ExtraArgs={
                 "Expires": datetime.utcnow() + timedelta(minutes=7),
@@ -415,7 +414,7 @@ class WhatsappChannel(ChannelBase):
         public_url = s3_client.generate_presigned_url(
             "get_object",
             Params={
-                "Bucket": settings.WHATSAPP_AWS_AUDIO_BUCKET,
+                "Bucket": settings.WHATSAPP_S3_AUDIO_BUCKET,
                 "Key": file_path,
             },
             ExpiresIn=360,
