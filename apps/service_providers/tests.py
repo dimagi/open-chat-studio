@@ -2,8 +2,8 @@ from django import forms
 from django.db import connection
 from django.test import SimpleTestCase, TestCase
 
-from apps.llm_providers.forms import ObfuscatingMixin
-from apps.llm_providers.models import LlmProvider, LlmProviderType
+from apps.service_providers.forms import ObfuscatingMixin
+from apps.service_providers.models import LlmProvider, LlmProviderType
 from apps.teams.models import Team
 
 
@@ -19,7 +19,7 @@ class TestLlmProviderModel(TestCase):
         assert LlmProvider.objects.get(name="Test").config == test_data
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT config FROM llm_providers_llmprovider")
+            cursor.execute("SELECT config FROM service_providers_llmprovider")
             assert cursor.fetchone()[0] != test_data
 
 

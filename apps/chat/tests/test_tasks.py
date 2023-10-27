@@ -17,7 +17,7 @@ from apps.experiments.models import (
     SessionStatus,
 )
 from apps.experiments.views.experiment import _start_experiment_session
-from apps.llm_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
@@ -46,7 +46,7 @@ class TasksTest(TestCase):
             chatbot_prompt=self.prompt,
             no_activity_config=self.no_activity_config,
             consent_form=ConsentForm.get_default(self.team),
-            llm_provider=LlmProvider.objects.create(
+            llm_provider_new=LlmProvider.objects.create(
                 name="test",
                 type="openai",
                 team=self.team,

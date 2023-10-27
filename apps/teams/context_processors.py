@@ -17,14 +17,14 @@ def get_team_notices(request):
 
 
 def _create_llm_provider(request, team):
-    if request.resolver_match.view_name == "llm_providers:new":
+    if request.resolver_match.view_name == "service_providers:new":
         return
 
     if team.llmprovider_set.exists():
         return
 
     return """You need to create an <a href="{url}">LLM Provider</a> before you can continue.""".format(
-        url=reverse("llm_providers:new", kwargs={"team_slug": team.slug})
+        url=reverse("service_providers:new", kwargs={"team_slug": team.slug})
     )
 
 

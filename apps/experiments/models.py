@@ -231,6 +231,9 @@ class Experiment(BaseTeamModel):
     llm_provider = models.ForeignKey(
         "llm_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
+    llm_provider_new = models.ForeignKey(
+        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
+    )
     llm = models.CharField(
         max_length=20,
         choices=LLM_CHOICES,
@@ -296,7 +299,7 @@ class Experiment(BaseTeamModel):
         return self.name
 
     def get_chat_model(self):
-        return self.llm_provider.get_chat_model(self.llm, self.temperature)
+        return self.llm_provider_new.get_chat_model(self.llm, self.temperature)
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])

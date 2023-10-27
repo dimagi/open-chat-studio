@@ -72,7 +72,7 @@
         <div class="flex-none flex flex-col items-center">
             <label class="label" x-show="!$store.promptBuilder.currentState.provider" x-cloak>
               <span class="text-error">First create an&nbsp;</span>
-              <a class="text-error link" href="{% url "llm_providers:new" request.team.slug %}">LLM Provider</a>
+              <a class="text-error link" href="{% url "service_providers:new" request.team.slug %}">LLM Provider</a>
             </label>
             <div class="flex flex-row">
                 <button id="submit-button" x-ref="submitButton" @click.stop="submitMessageHistoryToGetResponse()"

@@ -17,7 +17,7 @@ class LlmProviderTableView(SingleTableView):
         return LlmProvider.objects.filter(team=self.request.team)
 
 
-def delete_llm_provider(request, team_slug: str, pk: int):
+def delete_service_provider(request, team_slug: str, pk: int):
     service_config = get_object_or_404(LlmProvider, team=request.team, pk=pk)
     service_config.delete()
     return HttpResponse()

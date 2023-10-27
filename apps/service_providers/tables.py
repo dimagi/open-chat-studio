@@ -8,8 +8,8 @@ class LlmProviderTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "llm_providers:edit",
-            "delete_url_name": "llm_providers:delete",
+            "edit_url_name": "service_providers:edit",
+            "delete_url_name": "service_providers:delete",
         },
     )
 
