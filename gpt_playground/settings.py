@@ -253,13 +253,17 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
+if AWS_ACCESS_KEY_ID:
+    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+    AWS_S3_REGION = env("AWS_S3_REGION", default=None)
+    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="ocs-whatsapp-voice")
+
 USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
 if USE_S3_MEDIA:
     # Media file storage in S3
     # Using this will require configuration of the S3 bucket
-    AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
-    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
-    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="gpt_playground-media")
+    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
     AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
@@ -390,20 +394,10 @@ LOGGING = {
 }
 
 # Telegram webhook config
-TELEGRAM_SECRET_TOKEN = os.environ.get("TELEGRAM_SECRET_TOKEN", default="123")
+TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 
-# AWS Polly
-AWS_POLLY_ACCESS_KEY_ID = os.environ.get("AWS_POLLY_ACCESS_KEY_ID", default="")
-AWS_POLLY_SECRET_KEY = os.environ.get("AWS_POLLY_SECRET_KEY", default="")
-AWS_POLLY_REGION = os.environ.get("AWS_POLLY_REGION", default="ap-south-1")
-
-WHATSAPP_AWS_ACCESS_KEY_ID = AWS_POLLY_ACCESS_KEY_ID
-WHATSAPP_AWS_SECRET_KEY = AWS_POLLY_SECRET_KEY
-WHATSAPP_AWS_REGION = AWS_POLLY_REGION
-WHATSAPP_AWS_AUDIO_BUCKET = os.environ.get("WHATSAPP_AWS_AUDIO_BUCKET", default="dimagi-rad-ocs")
-
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", default=None)
+TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN", default=None)
 
 
 # Django tables
