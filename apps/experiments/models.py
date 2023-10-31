@@ -7,7 +7,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
 
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
@@ -75,7 +75,7 @@ class SafetyLayer(BaseTeamModel):
     REVIEW_CHOICES = (("human", "Human messages"), ("ai", "AI messages"))
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
-        choices=REVIEW_CHOICES,
+        choices=ChatMessageType.safety_layer_choices,
         default="human",
         help_text="Whether the prompt should be applied to human or AI messages",
         max_length=10,
@@ -405,7 +405,7 @@ class ExperimentSession(BaseTeamModel):
         )
 
     def user_already_engaged(self) -> bool:
-        return ChatMessage.objects.filter(chat=self.chat, message_type="human").exists()
+        return ChatMessage.objects.filter(chat=self.chat, message_type=ChatMessageType.HUMAN).exists()
 
     def get_platform_name(self) -> str:
         return self.experiment_channel.get_platform_display()

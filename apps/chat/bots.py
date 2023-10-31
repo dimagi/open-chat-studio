@@ -150,7 +150,7 @@ class TopicBot:
             # save messages individually to get correct timestamps
             ChatMessage.objects.create(
                 chat=self.chat,
-                message_type=type_.name,
+                message_type=type_.value,
                 content=message,
             )
 
@@ -188,10 +188,10 @@ class SafetyBot:
             return False
 
     def filter_human_messages(self) -> bool:
-        return self.safety_layer.messages_to_review == "human"
+        return self.safety_layer.messages_to_review == ChatMessageType.HUMAN
 
     def filter_ai_messages(self) -> bool:
-        return self.safety_layer.messages_to_review == "ai"
+        return self.safety_layer.messages_to_review == ChatMessageType.AI
 
 
 def get_bot_from_session(session: ExperimentSession) -> TopicBot:
