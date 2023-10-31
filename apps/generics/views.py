@@ -1,5 +1,4 @@
 from django import views
-from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 

@@ -1,13 +1,14 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
+from . import const
 from .models import LlmProvider, VoiceProvider
 
 
-def make_table(provider_type, model):
+def make_table(provider_type, model, fields=("type", "name")):
     meta_attrs = {
         "model": model,
-        "fields": ("type", "name"),
+        "fields": fields,
         "row_attrs": settings.DJANGO_TABLES2_ROW_ATTRS,
         "orderable": False,
     }
@@ -28,5 +29,5 @@ def make_table(provider_type, model):
     return type(tables.Table)(class_name, (tables.Table,), table_class_attrs)
 
 
-LlmProviderTable = make_table("llm", LlmProvider)
-VoiceProviderTable = make_table("voice", VoiceProvider)
+LlmProviderTable = make_table(const.LLM, LlmProvider)
+VoiceProviderTable = make_table(const.VOICE, VoiceProvider)

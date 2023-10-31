@@ -1,0 +1,2 @@
+LLM = "llm"
+VOICE = "voice"
