@@ -204,7 +204,7 @@ def delete_experiment(request, team_slug: str, pk: int):
 @login_and_team_required
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    sessions = ExperimentSession.objects.filter(
+    user_sessions = ExperimentSession.objects.filter(
         user=request.user,
         experiment=experiment,
     )
@@ -217,7 +217,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         {
             "active_tab": "experiments",
             "experiment": experiment,
-            "sessions": sessions,
+            "user_sessions": user_sessions,
             "platforms": available_platforms,
             "channels": channels,
         },

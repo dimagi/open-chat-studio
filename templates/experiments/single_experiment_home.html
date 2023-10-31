@@ -106,9 +106,10 @@
     </dialog>
   {% endfor %}
   {% endif %}
-  <hr class="m-2">
+</div>
+<div class="app-card">
 
-  <h2 class="pg-subtitle">Previous Chat Sessions</h2>
+  <h2 class="pg-subtitle">My Previous Chat Sessions</h2>
   <div class="overflow-x-auto">
     <table class="pg-table">
     <thead>
@@ -119,12 +120,21 @@
     </tr>
     </thead>
     <tbody>
-    {% for session in sessions %}
+    {% for session in user_sessions %}
       <tr>
         <td>{{ session.created_at }}</td>
         <td>{{ session.updated_at }}</td>
         <td>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">Continue Chat</a>
+          {% if session.is_complete %}
+            <a class="btn btn-sm btn-outline btn-primary"
+               href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
+               class="link">Review Chat</a>
+          {% else %}
+            <a class="btn btn-sm btn-outline btn-primary"
+               href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+              Continue Chat
+            </a>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

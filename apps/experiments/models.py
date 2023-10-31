@@ -421,3 +421,6 @@ class ExperimentSession(BaseTeamModel):
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
         return self.experiment_channel.experiment != self.experiment
+
+    def is_complete(self):
+        return self.status == SessionStatus.COMPLETE
