@@ -305,9 +305,6 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
-    "PREPROCESSING_HOOKS": [
-        "apps.api.schema.filter_schema_apis",
-    ],
     "APPEND_COMPONENTS": {
         "securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "Authorization"}}
     },
@@ -333,10 +330,8 @@ if REDIS_URL.startswith("rediss"):
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-WAGTAILADMIN_BASE_URL = "http://localhost:8000"
 
 # Waffle config
-
 WAFFLE_FLAG_MODEL = "teams.Flag"
 
 # replace any values below with specifics for your project
