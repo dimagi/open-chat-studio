@@ -109,13 +109,14 @@ class TopicBot:
             bot.output_tokens = 0
         return input_tokens, output_tokens
 
-    def get_response(self, user_input: str, is_prompt_instruction=False):
+    def process_input(self, user_input: str, is_prompt_instruction=False):
         if not is_prompt_instruction:
             human_message = HumanMessage(content=user_input)
             self.history_to_save.append(human_message)
         response = self._get_response(user_input)
         ai_message = AIMessage(content=response)
         self.history_to_save.append(ai_message)
+        self._save_history()
         return response
 
     def _get_response(self, input_str: str):
@@ -148,7 +149,7 @@ class TopicBot:
             safety_response = safety_layer.default_response_to_user or no_answer
         return safety_response
 
-    def save_history(self):
+    def _save_history(self):
         if self.chat:
             for message in self.history_to_save:
                 ChatMessage.objects.create(

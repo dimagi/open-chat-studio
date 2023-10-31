@@ -28,8 +28,7 @@ def run_explainer_bot(explainer_bot, experiment):
     user_input = input(f"Please enter your question about {experiment.name} here:\n\n")
     while True:
         if user_input.lower() == "exit":
-            explainer_bot.save_history()
             break
 
-        result = explainer_bot.get_response(user_input)
+        result = explainer_bot.process_input(user_input)
         user_input = input(f"\n{result}\n\n")
