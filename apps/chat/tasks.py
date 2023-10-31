@@ -124,8 +124,7 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
     message. The response from the bot will be saved to the chat history.
     """
     topic_bot = get_bot_from_experiment(experiment_session.experiment, experiment_session.chat)
-    bot_prompt = topic_bot.process_input(user_input=prompt_instruction, is_prompt_instruction=True)
-    return bot_prompt
+    return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
 
 
 def _try_send_message(experiment_session: ExperimentSession, message: str):
