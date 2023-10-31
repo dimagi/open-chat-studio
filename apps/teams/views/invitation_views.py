@@ -51,6 +51,10 @@ def accept_invitation(request, invitation_id):
 
 
 class SignupAfterInvite(SignupView):
+    def is_open(self):
+        """Allow signups from invitations even if public signups are closed."""
+        return True
+
     @property
     def invitation(self) -> Invitation:
         from ..models import Invitation
