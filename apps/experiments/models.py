@@ -72,11 +72,10 @@ class SourceMaterial(BaseTeamModel):
 
 
 class SafetyLayer(BaseTeamModel):
-    REVIEW_CHOICES = (("human", "Human messages"), ("ai", "AI messages"))
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
-        default="human",
+        default=ChatMessageType.HUMAN,
         help_text="Whether the prompt should be applied to human or AI messages",
         max_length=10,
     )

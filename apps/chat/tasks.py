@@ -9,7 +9,7 @@ from django.db.models import OuterRef, Subquery
 
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.channels import ChannelBase
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
 
@@ -55,7 +55,9 @@ def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruct
                     experiment_session=experiment_session, prompt_instruction=message
                 )
             else:
-                ChatMessage.objects.create(chat=experiment_session.chat, message_type="ai", content=message)
+                ChatMessage.objects.create(
+                    chat=experiment_session.chat, message_type=ChatMessageType.AI, content=message
+                )
             _try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
         except Exception as exception:
             logger.exception(exception)
@@ -76,7 +78,7 @@ def _no_activity_pings():
     now = datetime.now().astimezone(UTC)
     experiment_sessions_to_ping: List[ExperimentSession] = []
 
-    subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type="human").values("chat_id")
+    subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
     # Why not exclude the SETUP status? "Normal" UI chats have a SETUP status
     chats = (
         Chat.objects.filter(pk__in=Subquery(subquery))
@@ -88,7 +90,7 @@ def _no_activity_pings():
 
     for chat in chats:
         latest_message = ChatMessage.objects.filter(chat=chat).order_by("-created_at").first()
-        if latest_message and latest_message.message_type == "ai":
+        if latest_message and latest_message.message_type == ChatMessageType.AI:
             experiment_session: ExperimentSession = chat.experiment_session
             no_activity_config = experiment_session.experiment.no_activity_config
             max_pings_reached = experiment_session.no_activity_ping_count >= no_activity_config.max_pings
