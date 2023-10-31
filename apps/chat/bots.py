@@ -108,8 +108,8 @@ class TopicBot:
             bot.output_tokens = 0
         return input_tokens, output_tokens
 
-    def process_input(self, user_input: str, is_prompt_instruction=False):
-        if not is_prompt_instruction:
+    def process_input(self, user_input: str, save_input_to_history=True):
+        if save_input_to_history:
             self._save_message_to_history(user_input, ChatMessageType.HUMAN)
         response = self._get_response(user_input)
         self._save_message_to_history(response, ChatMessageType.AI)
