@@ -200,7 +200,7 @@ class SyntheticVoice(BaseModel):
 
     def __str__(self):
         prefix = "*" if self.neural else ""
-        return f"{self.service}, {self.language}, {self.gender}, {prefix}{self.name}"
+        return f"{self.language}, {self.gender}: {prefix}{self.name}"
 
 
 class NoActivityMessageConfig(BaseTeamModel):

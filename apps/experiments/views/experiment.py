@@ -184,10 +184,13 @@ def _get_voice_provider_alpine_context(request):
         "form_attrs": {"x-data": "experiment"},
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
-        "synthetic_voice_options": [
-            {"value": voice.id, "text": str(voice), "type": voice.service.lower()}
-            for voice in SyntheticVoice.objects.all()
-        ],
+        "synthetic_voice_options": sorted(
+            [
+                {"value": voice.id, "text": str(voice), "type": voice.service.lower()}
+                for voice in SyntheticVoice.objects.all()
+            ],
+            key=lambda v: v["text"],
+        ),
     }
 
 
