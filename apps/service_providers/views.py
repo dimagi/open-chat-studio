@@ -32,9 +32,9 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 
 
 class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
-    extra_context = {
-        "active_tab": "manage-team",
-    }
+    @property
+    def extra_context(self):
+        return {"active_tab": "manage-team", "title": self.provider_type.label}
 
     @property
     def model(self):
