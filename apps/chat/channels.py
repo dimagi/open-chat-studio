@@ -218,15 +218,13 @@ class ChannelBase:
         """
         self.submit_input_to_llm()
 
-        return self._get_experiment_response(session_id=self.experiment_session.id, message=text)
+        return self._get_experiment_response(message=text)
 
-    def _get_experiment_response(self, session_id: int, message: str) -> str:
-        session = ExperimentSession.objects.get(id=session_id)
-        experiment_bot = get_bot_from_session(session)
-        answer = experiment_bot.get_response(message)
-        experiment_bot.save_history()
-        session.no_activity_ping_count = 0
-        session.save()
+    def _get_experiment_response(self, message: str) -> str:
+        experiment_bot = get_bot_from_session(self.experiment_session)
+        answer = experiment_bot.process_input(message)
+        self.experiment_session.no_activity_ping_count = 0
+        self.experiment_session.save()
         return answer
 
     def _ensure_sessions_exists(self):

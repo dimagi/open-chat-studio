@@ -22,7 +22,7 @@ from django_tables2 import SingleTableView
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.export import experiment_to_csv
@@ -393,7 +393,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects.filter(message_type="ai", chat=experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(message_type=ChatMessageType.AI, chat=experiment_session.chat, created_at__gt=since)
         .order_by("created_at")
         .all()
     )

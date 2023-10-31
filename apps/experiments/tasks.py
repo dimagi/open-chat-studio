@@ -54,7 +54,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     )
 
     # Get the response from the bot using the last message from the user and return it
-    answer = bot.get_response(last_user_message)
+    answer = bot.process_input(last_user_message)
     input_tokens, output_tokens = bot.fetch_and_clear_token_count()
 
     # Push the user message back into the message list now that the bot response has arrived
