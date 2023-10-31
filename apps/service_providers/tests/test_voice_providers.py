@@ -76,7 +76,7 @@ def _test_voice_provider_error(provider_type: VoiceProviderType, data):
     assert not form.is_valid()
 
     with pytest.raises(ValidationError):
-        provider_type.get_voice_service(data)
+        provider_type.get_speech_service(data)
 
 
 def _test_voice_provider(team, provider_type: VoiceProviderType, data):
@@ -97,9 +97,9 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
     )
 
-    voice_service = provider.get_voice_service()
+    speech_service = provider.get_speech_service()
     # bypass pydantic validation
     mock_synthesize = mock.Mock(return_value=(None, 0.0))
-    object.__setattr__(voice_service, "_synthesize_voice", mock_synthesize)
-    voice_service.synthesize_voice("test", voice)
+    object.__setattr__(speech_service, "_synthesize_voice", mock_synthesize)
+    speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1

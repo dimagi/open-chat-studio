@@ -13,8 +13,9 @@ from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 
 
-class VoiceSynthesizer(pydantic.BaseModel):
+class SpeechService(pydantic.BaseModel):
     _type: str
+    supports_transcription = False
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
         assert synthetic_voice.service == self._type
@@ -23,11 +24,14 @@ class VoiceSynthesizer(pydantic.BaseModel):
         except Exception as e:
             raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
 
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        raise NotImplementedError
+
     def _synthesize_voice(self, text, synthetic_voice) -> Tuple[BytesIO, float]:
         raise NotImplementedError
 
 
-class AWSVoiceSynthesizer(VoiceSynthesizer):
+class AWSSpeechService(SpeechService):
     _type = SyntheticVoice.AWS
     aws_access_key_id: str
     aws_secret_access_key: str
@@ -58,8 +62,9 @@ class AWSVoiceSynthesizer(VoiceSynthesizer):
             return BytesIO(audio_data), duration_seconds
 
 
-class AzureVoiceSynthesizer(VoiceSynthesizer):
+class AzureSpeechService(SpeechService):
     _type = SyntheticVoice.Azure
+    supports_transcription = True
     azure_subscription_key: str
     azure_region: str
 
@@ -67,9 +72,7 @@ class AzureVoiceSynthesizer(VoiceSynthesizer):
         """
         Calls Azure's cognitive speech services to convert the text to speech using the synthetic_voice
         """
-        speech_config = speechsdk.SpeechConfig(
-            subscription=settings.AZURE_SUBSCRIPTION_KEY, region=settings.AZURE_REGION
-        )
+        speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
             # Create an audio configuration that points to the output audio file
@@ -102,3 +105,28 @@ class AzureVoiceSynthesizer(VoiceSynthesizer):
                     if cancellation_details.error_details:
                         msg += ". Error details: {}".format(cancellation_details.error_details)
                 raise AudioSynthesizeException(msg)
+
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
+        speech_config.speech_recognition_language = "en-US"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+            temp_file.write(audio.getbuffer())
+            temp_file.seek(0)
+
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+            speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+            result = speech_recognizer.recognize_once_async().get()
+
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            return result.text
+        elif result.reason == speechsdk.ResultReason.NoMatch:
+            reason = result.no_match_details.reason
+            raise AudioSynthesizeException(f"No speech could be recognized {reason}")
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = result.cancellation_details
+            msg = "Azure speech transcription failed: {}".format(cancellation_details.reason.name)
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                if cancellation_details.error_details:
+                    msg += ". Error details: {}".format(cancellation_details.error_details)
+            raise AudioSynthesizeException(msg)

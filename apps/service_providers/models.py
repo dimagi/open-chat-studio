@@ -3,12 +3,10 @@ from typing import Type
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import AzureOpenAI
 
 from apps.teams.models import BaseTeamModel
 
-from . import forms, voice_service
+from . import forms, llm_service, speech_service
 
 
 class LlmProviderType(models.TextChoices):
@@ -24,13 +22,12 @@ class LlmProviderType(models.TextChoices):
                 return forms.AzureOpenAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    @property
-    def chat_model_cls(self):
+    def get_llm_service(self, config: dict):
         match self:
             case LlmProviderType.openai:
-                return ChatOpenAI
+                return llm_service.OpenAILlmService(**config)
             case LlmProviderType.azure:
-                return AzureOpenAI
+                return llm_service.AzureLlmService(**config)
         raise Exception(f"No chat model configured for {self}")
 
 
@@ -50,9 +47,9 @@ class LlmProvider(BaseTeamModel):
     def type_enum(self):
         return LlmProviderType(self.type)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.chat_model_cls(model=llm_model, temperature=temperature, **config)
+        return self.type_enum.get_llm_service(config)
 
 
 class VoiceProviderType(models.TextChoices):
@@ -68,12 +65,12 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AzureVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_voice_service(self, config: dict):
+    def get_speech_service(self, config: dict):
         match self:
             case VoiceProviderType.aws:
-                return voice_service.AWSVoiceSynthesizer(**config)
+                return speech_service.AWSSpeechService(**config)
             case VoiceProviderType.azure:
-                return voice_service.AzureVoiceSynthesizer(**config)
+                return speech_service.AzureSpeechService(**config)
         raise Exception(f"No voice service configured for {self}")
 
 
@@ -92,5 +89,5 @@ class VoiceProvider(BaseTeamModel):
     def type_enum(self):
         return VoiceProviderType(self.type)
 
-    def get_voice_service(self):
-        return self.type_enum.get_voice_service(self.config)
+    def get_speech_service(self) -> speech_service.SpeechService:
+        return self.type_enum.get_speech_service(self.config)
