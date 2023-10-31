@@ -28,7 +28,7 @@ from apps.experiments.email import send_experiment_invitation
 from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.teams.decorators import login_and_team_required, team_admin_required
@@ -80,15 +80,22 @@ class CreateExperiment(CreateView):
         "pre_survey",
         "post_survey",
         "consent_form",
+        "voice_provider",
         "synthetic_voice",
         "no_activity_config",
     ]
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Create Experiment",
-        "button_text": "Create",
-        "active_tab": "experiments",
-    }
+    template_name = "experiments/experiment_form.html"
+
+    @property
+    def extra_context(self):
+        return {
+            **{
+                "title": "Create Experiment",
+                "button_text": "Create",
+                "active_tab": "experiments",
+            },
+            **_get_voice_provider_alpine_context(self.request),
+        }
 
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
@@ -96,6 +103,7 @@ class CreateExperiment(CreateView):
     def get_form(self):
         form = super().get_form()
         _apply_related_model_querysets(self.request.team, form)
+        _apply_voice_provider_alpine_attrs(form)
         return form
 
     def form_valid(self, form):
@@ -120,15 +128,22 @@ class EditExperiment(UpdateView):
         "pre_survey",
         "post_survey",
         "consent_form",
+        "voice_provider",
         "synthetic_voice",
         "no_activity_config",
     ]
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Update Experiment",
-        "button_text": "Update",
-        "active_tab": "experiments",
-    }
+    template_name = "experiments/experiment_form.html"
+
+    @property
+    def extra_context(self):
+        return {
+            **{
+                "title": "Update Experiment",
+                "button_text": "Update",
+                "active_tab": "experiments",
+            },
+            **_get_voice_provider_alpine_context(self.request),
+        }
 
     def get_queryset(self):
         return Experiment.objects.filter(team=self.request.team)
@@ -136,6 +151,7 @@ class EditExperiment(UpdateView):
     def get_form(self):
         form = super().get_form()
         _apply_related_model_querysets(self.request.team, form)
+        _apply_voice_provider_alpine_attrs(form)
         return form
 
     def get_success_url(self):
@@ -144,6 +160,7 @@ class EditExperiment(UpdateView):
 
 def _apply_related_model_querysets(team, form):
     form.fields["llm_provider_new"].queryset = team.llm_providers_new
+    form.fields["voice_provider"].queryset = team.voiceprovider_set
     form.fields["chatbot_prompt"].queryset = team.prompt_set
     form.fields["safety_layers"].queryset = team.safetylayer_set
     form.fields["source_material"].queryset = team.sourcematerial_set
@@ -151,6 +168,27 @@ def _apply_related_model_querysets(team, form):
     form.fields["post_survey"].queryset = team.survey_set
     form.fields["consent_form"].queryset = team.consentform_set
     form.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
+
+
+def _apply_voice_provider_alpine_attrs(form):
+    form.fields["voice_provider"].widget.attrs = {
+        "x-model.fill": "voiceProvider",
+    }
+    # special template for dynamic select options
+    form.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+
+def _get_voice_provider_alpine_context(request):
+    """Add context required by the experiments/experiment_form.html template."""
+    return {
+        "form_attrs": {"x-data": "experiment"},
+        # map provider ID to provider type
+        "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
+        "synthetic_voice_options": [
+            {"value": voice.id, "text": str(voice), "type": voice.service.lower()}
+            for voice in SyntheticVoice.objects.all()
+        ],
+    }
 
 
 @login_and_team_required
