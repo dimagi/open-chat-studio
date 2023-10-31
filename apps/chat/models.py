@@ -22,19 +22,20 @@ class Chat(BaseTeamModel):
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
 
+class ChatMessageType(models.TextChoices):
+    #  these must correspond to the langchain values
+    HUMAN = "human", "Human"
+    AI = "ai", "AI"
+    SYSTEM = "system", "System"
+
+
 class ChatMessage(BaseModel):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
 
-    # these must correspond to the langchain values
-    MESSAGE_TYPE_CHOICES = (
-        ("human", "Human"),
-        ("ai", "AI"),
-        ("system", "System"),
-    )
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
-    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPE_CHOICES)
+    message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
     content = models.TextField()
     # todo: additional_kwargs? dict
 
