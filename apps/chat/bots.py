@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from apps.chat.conversation import Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
 
 
@@ -46,7 +46,6 @@ class TopicBot:
         self.source_material = source_material
         self.safe_mode = bool(self.safety_layers)
         self.chat = chat
-        self.history_to_save = []
         self.session_id = session.id if session else None
         self.input_tokens = 0
         self.output_tokens = 0
@@ -111,12 +110,9 @@ class TopicBot:
 
     def process_input(self, user_input: str, is_prompt_instruction=False):
         if not is_prompt_instruction:
-            human_message = HumanMessage(content=user_input)
-            self.history_to_save.append(human_message)
+            self._save_message_to_history(user_input, ChatMessageType.HUMAN)
         response = self._get_response(user_input)
-        ai_message = AIMessage(content=response)
-        self.history_to_save.append(ai_message)
-        self._save_history()
+        self._save_message_to_history(response, ChatMessageType.AI)
         return response
 
     def _get_response(self, input_str: str):
@@ -149,15 +145,14 @@ class TopicBot:
             safety_response = safety_layer.default_response_to_user or no_answer
         return safety_response
 
-    def _save_history(self):
+    def _save_message_to_history(self, message: str, type_: ChatMessageType):
         if self.chat:
-            for message in self.history_to_save:
-                ChatMessage.objects.create(
-                    chat=self.chat,
-                    message_type=message.type,
-                    content=message.content,
-                )
-            self.history_to_save = []
+            # save messages individually to get correct timestamps
+            ChatMessage.objects.create(
+                chat=self.chat,
+                message_type=type_.value,
+                content=message,
+            )
 
 
 class SafetyBot:
