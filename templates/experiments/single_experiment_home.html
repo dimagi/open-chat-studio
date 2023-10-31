@@ -125,7 +125,16 @@
         <td>{{ session.created_at }}</td>
         <td>{{ session.updated_at }}</td>
         <td>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">Continue Chat</a>
+          {% if session.is_complete %}
+            <a class="btn btn-sm btn-outline btn-primary"
+               href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
+               class="link">Review Chat</a>
+          {% else %}
+            <a class="btn btn-sm btn-outline btn-primary"
+               href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+              Continue Chat
+            </a>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
