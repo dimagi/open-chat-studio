@@ -46,7 +46,6 @@ class TopicBot:
         self.source_material = source_material
         self.safe_mode = bool(self.safety_layers)
         self.chat = chat
-        self.history = []
         self.history_to_save = []
         self.session_id = session.id if session else None
         self.input_tokens = 0
@@ -73,26 +72,24 @@ class TopicBot:
             self.llm,
             experiment_session=ExperimentSession.objects.filter(id=self.session_id).first(),
         )
-        # load the history up
-        if self.chat:
-            self.conversation.memory.chat_memory.messages = self.chat.get_langchain_messages()
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-        # Add the history messages. This origintated for the promptbuilder
-        # where we maintain state client side
-        if messages_history is not None:
+        if self.chat:
+            self.conversation.memory.chat_memory.messages = self.chat.get_langchain_messages()
+        elif messages_history is not None:
+            # Add the history messages. This origintated for the promptbuilder
+            # where we maintain state client side
+            history = []
             for message in messages_history:
                 if message["author"] == "User":
-                    self.history.append(HumanMessage(content=message["message"]))
-                    self.history_to_save.append(HumanMessage(content=message["message"]))
+                    history.append(HumanMessage(content=message["message"]))
                 elif message["author"] == "Assistant":
-                    self.history.append(AIMessage(content=message["message"]))
-                    self.history_to_save.append(AIMessage(content=message["message"]))
-            self.conversation.memory.chat_memory.messages = self.history
+                    history.append(AIMessage(content=message["message"]))
+            self.conversation.memory.chat_memory.messages = history
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -115,11 +112,9 @@ class TopicBot:
     def get_response(self, user_input: str, is_prompt_instruction=False):
         if not is_prompt_instruction:
             human_message = HumanMessage(content=user_input)
-            self.history.append(human_message)
             self.history_to_save.append(human_message)
         response = self._get_response(user_input)
         ai_message = AIMessage(content=response)
-        self.history.append(ai_message)
         self.history_to_save.append(ai_message)
         return response
 
