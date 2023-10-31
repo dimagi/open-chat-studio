@@ -1,62 +1,52 @@
+import dataclasses
 import functools
 from enum import Enum
 
 from django import forms
+from django.db import models
 from django.db.models import Field
+from django_tables2 import tables
 
 from apps.generics.type_select_form import TypeSelectForm
 
 from . import const
 from .models import LlmProvider, LlmProviderType, VoiceProvider, VoiceProviderType
-from .tables import LlmProviderTable, VoiceProviderTable
+from .tables import make_table
 
 
-class ServiceProvider(Enum):
-    llm = const.LLM
-    voice = const.VOICE
+@dataclasses.dataclass
+class ServiceProviderType:
+    slug: str
+    label: str
+    model: models.Model
 
-    @property
-    def model(self):
-        match self:
-            case ServiceProvider.llm:
-                return LlmProvider
-            case ServiceProvider.voice:
-                return VoiceProvider
-        raise ValueError(f"Invalid provider type: {self}")
+    """
+    Enum for the subtypes of this provider type.
+    It is required that the enum has a `form_cls` property which returns
+    the config form class for that subtype.
+    """
+    subtype: Enum
 
-    @property
-    def table(self):
-        match self:
-            case ServiceProvider.llm:
-                return LlmProviderTable
-            case ServiceProvider.voice:
-                return VoiceProviderTable
-        raise ValueError(f"Invalid provider type: {self}")
+
+class ServiceProvider(ServiceProviderType, Enum):
+    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderType
+    voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType
 
     @property
-    def subtype(self):
-        """Return the enum for the subtypes of this provider type.
-
-        It is required that the enum has a `form_cls` property which returns
-        the config form class for that subtype."""
-        match self:
-            case ServiceProvider.llm:
-                return LlmProviderType
-            case ServiceProvider.voice:
-                return VoiceProviderType
-        raise ValueError(f"Invalid provider type: {self}")
+    def table(self) -> tables.Table:
+        return make_table(self.slug, self.model)
 
     @property
-    def primary_fields(self):
+    def primary_fields(self) -> list[str]:
         """The fields on the model which should be included in the main form."""
         return ["name", "type"]
 
     @property
-    def provider_type_field(self):
+    def provider_type_field(self) -> str:
         """The name of the model field which determines the provider type."""
         return "type"
 
-    def get_form_initial(self, instance):
+    def get_form_initial(self, instance) -> dict:
         """Return the initial data for the config form."""
         return instance.config
 

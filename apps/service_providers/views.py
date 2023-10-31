@@ -10,7 +10,7 @@ class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
         type_ = self.kwargs["provider_type"]
-        return ServiceProvider(type_)
+        return ServiceProvider[type_]
 
 
 class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
@@ -25,7 +25,7 @@ class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
 
 
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
-    provider = ServiceProvider(provider_type)
+    provider = ServiceProvider[provider_type]
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.delete()
     return HttpResponse()
