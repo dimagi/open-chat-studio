@@ -6,7 +6,7 @@ from freezegun import freeze_time
 from mock import Mock, patch
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
 from apps.experiments.models import (
     ConsentForm,
@@ -111,7 +111,7 @@ class TasksTest(TestCase):
         self._add_chats(experiment_session_no_config, last_message_type="ai")
         # Criteria number 4 not met
         experiment_session_not_eligible = self._add_session(self.experiment, session_status=SessionStatus.SETUP)
-        self._add_chats(experiment_session_not_eligible, last_message_type="human")
+        self._add_chats(experiment_session_not_eligible, last_message_type=ChatMessageType.HUMAN)
 
         # frozen_time = "2023-08-21 12:00:00"  # Set the desired frozen time
         with freeze_time(datetime.utcnow() + timedelta(minutes=5)):
@@ -126,9 +126,11 @@ class TasksTest(TestCase):
         experiment_session.save()
         return experiment_session
 
-    def _add_chats(self, experiment_session: ExperimentSession, last_message_type: str):
-        ChatMessage.objects.create(chat=experiment_session.chat, message_type="human", content="Hi")
-        if last_message_type == "ai":
+    def _add_chats(self, experiment_session: ExperimentSession, last_message_type: ChatMessageType):
+        ChatMessage.objects.create(chat=experiment_session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+        if last_message_type == ChatMessageType.AI:
             ChatMessage.objects.create(
-                chat=experiment_session.chat, message_type="ai", content="Hello. How can I assist you today?"
+                chat=experiment_session.chat,
+                message_type=ChatMessageType.AI,
+                content="Hello. How can I assist you today?",
             )

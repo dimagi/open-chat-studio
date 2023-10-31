@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 from django.conf import settings
 from django.db import models
+from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.teams.models import BaseTeamModel
@@ -28,6 +29,14 @@ class ChatMessageType(models.TextChoices):
     AI = "ai", "AI"
     SYSTEM = "system", "System"
 
+    @classproperty
+    def safety_layer_choices(cls):
+        return (
+            (choice[0], f"{choice[1]} messages")
+            for choice in ChatMessageType.choices
+            if choice[0] != ChatMessageType.SYSTEM
+        )
+
 
 class ChatMessage(BaseModel):
     """
@@ -44,11 +53,11 @@ class ChatMessage(BaseModel):
 
     @property
     def is_ai_message(self):
-        return self.message_type == "ai"
+        return self.message_type == ChatMessageType.AI
 
     @property
     def is_human_message(self):
-        return self.message_type == "human"
+        return self.message_type == ChatMessageType.HUMAN
 
     @property
     def created_at_datetime(self):
