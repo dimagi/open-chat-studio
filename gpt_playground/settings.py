@@ -94,6 +94,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "apps.teams.middleware.TeamsMiddleware",
+    "apps.web.scope_middleware.RequestContextMiddleware",
     "apps.web.locale_middleware.UserLocaleMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -362,6 +363,23 @@ if SENTRY_DSN:
             DjangoIntegration(),
             CeleryIntegration(),
         ],
+    )
+
+
+# Taskbadger setup
+TASKBADGER_ORG = env("TASKBADGER_ORG", default=None)
+TASKBADGER_PROJECT = env("TASKBADGER_PROJECT", default=None)
+TASKBADGER_API_KEY = env("TASKBADGER_API_KEY", default=None)
+
+if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
+    import taskbadger
+    from taskbadger.systems.celery import CelerySystemIntegration
+
+    taskbadger.init(
+        organization_slug=TASKBADGER_ORG,
+        project_slug=TASKBADGER_PROJECT,
+        token=TASKBADGER_API_KEY,
+        systems=[CelerySystemIntegration()],
     )
 
 
