@@ -1,8 +1,9 @@
+import sentry_sdk
 import taskbadger
 
 
 class RequestContextMiddleware:
-    """Middleware to set context for Taskbadger"""
+    """Middleware to set context for Sentry and Taskbadger"""
 
     def __init__(self, get_response):
         if get_response is None:
@@ -16,3 +17,6 @@ class RequestContextMiddleware:
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         request.taskbadger_scope["view_kwargs"] = view_kwargs
+        if view_kwargs.get("team_slug"):
+            with sentry_sdk.configure_scope() as sentry_scope:
+                sentry_scope.set_tag("team", view_kwargs["team_slug"])
