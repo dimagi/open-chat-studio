@@ -3,6 +3,7 @@
   <div class="grid grid-cols-6">
     <div class="col-span-5">
       <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
+      <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
     {% if allow_new|default:True %}
     <div class="justify-self-end">

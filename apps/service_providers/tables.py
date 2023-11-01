@@ -27,7 +27,3 @@ def make_table(provider_type, model, fields=("type", "name")):
         "Meta": Meta,
     }
     return type(tables.Table)(class_name, (tables.Table,), table_class_attrs)
-
-
-LlmProviderTable = make_table(const.LLM, LlmProvider)
-VoiceProviderTable = make_table(const.VOICE, VoiceProvider)

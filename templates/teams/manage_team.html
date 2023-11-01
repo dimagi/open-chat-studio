@@ -27,8 +27,10 @@
   </form>
 </section>
 {% if not create %}
-{% include 'teams/components/service_providers.html' with provider_type="llm" title="LLM Providers" %}
-{% include 'teams/components/service_providers.html' with provider_type="voice" title="Speech Providers" %}
+{% translate "Large Language Model services" as llm_subtitle %}
+{% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle %}
+{% translate "Speech to text and visa versa" as speech_subtitle %}
+{% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle %}
 <section class="app-card">
   <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
   <div class='table-responsive'>

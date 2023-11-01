@@ -1,0 +1,11 @@
+{% load team_tags %}
+{% load i18n %}
+<div>
+  {% with allow_new=request.user|is_admin_of:team %}
+    {% url "service_providers:table" request.team.slug provider_type as table_url %}
+    {% url "service_providers:new" request.team.slug provider_type as new_object_url %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
+    {% endwith %}
+  {% endwith %}
+</div>

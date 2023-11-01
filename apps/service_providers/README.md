@@ -82,3 +82,16 @@ there should be no need to make updates the views.
 
 There are four views configured which are used to create, update, delete any of the service provider types.
 See `urls.py` for the URL configuration.
+
+## Referencing in the UI
+
+The service providers are referenced in the UI using the `service_providers/service_provider_home.html` template
+which will render the list of providers for the given type with options to create new providers or edit existing ones.
+
+```
+{% include 'service_providers/service_provider_home.html'
+    with provider_type="voice"
+    title="Speech Service Providers"
+    subtitle="Text to speech" %}
+```
+(NOTE: Newlines added for readability, remove them when using the template)
