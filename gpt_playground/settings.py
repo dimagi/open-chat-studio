@@ -270,12 +270,7 @@ if USE_S3_MEDIA:
     DEFAULT_FILE_STORAGE = "apps.web.storage_backends.PublicMediaStorage"
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
-
-# future versions of Django will use BigAutoField as the default, but it can result in unwanted library
-# migration files being generated, so we stick with AutoField for now.
-# change this to BigAutoField if you're sure you want to use it and aren't worried about migrations.
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Email setup
 
