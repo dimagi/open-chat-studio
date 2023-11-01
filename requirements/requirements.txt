@@ -283,7 +283,7 @@ sqlalchemy==1.4.47
     # via langchain
 sqlparse==0.4.4
     # via django
-taskbadger==1.1.0
+taskbadger==1.2.0
     # via -r requirements/requirements.in
 tenacity==8.2.2
     # via langchain
