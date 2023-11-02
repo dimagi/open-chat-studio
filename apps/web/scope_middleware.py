@@ -16,7 +16,16 @@ class RequestContextMiddleware:
             return self.get_response(request)
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        request.taskbadger_scope["view_kwargs"] = view_kwargs
+        request.taskbadger_scope["view_kwargs"] = make_json_safe(view_kwargs)
         if view_kwargs.get("team_slug"):
             with sentry_sdk.configure_scope() as sentry_scope:
                 sentry_scope.set_tag("team", view_kwargs["team_slug"])
+
+
+def make_json_safe(view_kwargs):
+    def cast(value):
+        if isinstance(value, (int, str, bool)):
+            return value
+        return str(value)
+
+    return {k: cast(v) for k, v in view_kwargs.items()}
