@@ -28,6 +28,7 @@ class ChannelPlatform(models.TextChoices):
         return [
             cls.TELEGRAM,
             cls.WHATSAPP,
+            cls.FACEBOOK,
         ]
 
     def form(self):
@@ -36,13 +37,15 @@ class ChannelPlatform(models.TextChoices):
         return ChannelForm(initial={"platform": self})
 
     def extra_form(self, *args, **kwargs):
-        from apps.channels.forms import TelegramChannelForm, WhatsappChannelForm
+        from apps.channels import forms
 
         match self:
             case self.TELEGRAM:
-                return TelegramChannelForm(*args, **kwargs)
+                return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
-                return WhatsappChannelForm(*args, **kwargs)
+                return forms.WhatsappChannelForm(*args, **kwargs)
+            case self.FACEBOOK:
+                return forms.FacebookChannelForm(*args, **kwargs)
 
 
 class ExperimentChannel(BaseModel):

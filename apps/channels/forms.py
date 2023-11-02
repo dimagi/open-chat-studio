@@ -21,3 +21,9 @@ class TelegramChannelForm(forms.Form):
 
 class WhatsappChannelForm(forms.Form):
     number = forms.CharField(label="Number", max_length=100)
+
+
+class FacebookChannelForm(forms.Form):
+    page_id = forms.CharField(label="Page ID", max_length=100)
+    page_access_token = forms.CharField(label="Page Access Token", max_length=200)
+    verify_token = forms.CharField(label="Verify Token", max_length=100)

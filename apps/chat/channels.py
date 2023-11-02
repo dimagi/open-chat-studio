@@ -436,7 +436,8 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     voice_replies_supported = False
 
     def initialize(self):
-        self.client = MessengerClient(settings.PAGE_ACCESS_TOKEN, api_version=18.0)
+        page_access_token = self.experiment_channel.extra_data["page_access_token"]
+        self.client = MessengerClient(page_access_token, api_version=18.0)
 
     @property
     def chat_id(self) -> int:
