@@ -33,7 +33,7 @@ class TelegramMessageHandlerTest(TestCase):
             description="test",
             chatbot_prompt=self.prompt,
             consent_form=ConsentForm.get_default(self.team),
-            llm_provider_new=LlmProvider.objects.create(
+            llm_provider=LlmProvider.objects.create(
                 name="test",
                 type="openai",
                 team=self.team,
