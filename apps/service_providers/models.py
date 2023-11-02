@@ -32,7 +32,7 @@ class LlmProviderType(models.TextChoices):
 
 
 class LlmProvider(BaseTeamModel):
-    team = models.ForeignKey("teams.Team", on_delete=models.CASCADE, related_name="llm_providers_new")
+    team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))

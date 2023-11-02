@@ -204,7 +204,7 @@ class ChannelBase:
         return transcript
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
-        llm_service = self.experiment.llm_provider_new.get_llm_service()
+        llm_service = self.experiment.llm_provider.get_llm_service()
         if llm_service.supports_transcription:
             return llm_service.transcribe_audio(audio)
         elif self.experiment.voice_provider:
