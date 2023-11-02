@@ -3,19 +3,6 @@
 from django.db import migrations
 
 
-def bootstrap_llm_providers(apps, schema_editor):
-    Team = apps.get_model("teams", "Team")
-    LlmProvider = apps.get_model("llm_providers", "LlmProvider")
-    Experiment = apps.get_model("experiments", "Experiment")
-
-    for team in Team.objects.all():
-        provider = LlmProvider.objects.filter(team=team).first()
-        if not provider:
-            continue
-
-        Experiment.objects.filter(team=team).update(llm_provider=provider)
-
-
 class Migration(migrations.Migration):
     initial = True
 
@@ -24,5 +11,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(bootstrap_llm_providers)
+        # operations removed when removing the model
     ]
