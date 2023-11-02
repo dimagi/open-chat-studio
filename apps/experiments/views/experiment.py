@@ -159,7 +159,7 @@ class EditExperiment(UpdateView):
 
 
 def _apply_related_model_querysets(team, form):
-    form.fields["llm_provider"].queryset = team.llm_providers_new
+    form.fields["llm_provider"].queryset = team.llmprovider_set
     form.fields["voice_provider"].queryset = team.voiceprovider_set
     form.fields["chatbot_prompt"].queryset = team.prompt_set
     form.fields["safety_layers"].queryset = team.safetylayer_set

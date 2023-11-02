@@ -20,7 +20,7 @@ def _create_llm_provider(request, team):
     if request.resolver_match.view_name == "service_providers:new":
         return
 
-    if team.llm_providers_new.exists():
+    if team.llmprovider_set.exists():
         return
 
     return """You need to create an <a href="{url}">LLM Provider</a> before you can continue.""".format(

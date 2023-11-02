@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
                 (
                     "team",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE, related_name="llm_providers_new", to="teams.team"
+                        on_delete=django.db.models.deletion.CASCADE, related_name="llmprovider_set", to="teams.team"
                     ),
                 ),
                 ("old_id", models.IntegerField()),
