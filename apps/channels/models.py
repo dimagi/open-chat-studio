@@ -14,12 +14,14 @@ from apps.web.meta import absolute_url
 WEB = "web"
 TELEGRAM = "telegram"
 WHATSAPP = "whatsapp"
+FACEBOOK = "facebook"
 
 
 class ChannelPlatform(models.TextChoices):
     TELEGRAM = "telegram", "Telegram"
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
+    FACEBOOK = "facebook", "Facebook"
 
     @classmethod
     def for_dropdown(cls):
@@ -45,7 +47,7 @@ class ChannelPlatform(models.TextChoices):
 
 class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
-    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"))
+    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"), (FACEBOOK, "Facebook"))
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
