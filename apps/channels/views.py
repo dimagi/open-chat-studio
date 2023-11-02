@@ -2,7 +2,7 @@ import json
 import uuid
 
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.channels import tasks
@@ -24,3 +24,16 @@ def new_whatsapp_message(request):
     message_data = json.dumps(request.POST.dict())
     tasks.handle_whatsapp_message.delay(message_data)
     return HttpResponse()
+
+
+@csrf_exempt
+def new_facebook_message(request: HttpRequest):
+    if request.method == "GET":
+        # https://developers.facebook.com/docs/messenger-platform/webhooks#:~:text=Validating%20Verification%20Requests
+        challenge = request.GET["hub.challenge"]
+        if request.GET["hub.verify_token"] != settings.VERIFY_TOKEN:
+            return HttpResponseForbidden()
+        return HttpResponse(challenge, content_type="text/plain")
+    elif request.method == "POST":
+        return HttpResponse()
+    return HttpResponseForbidden()

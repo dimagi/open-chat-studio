@@ -434,3 +434,8 @@ SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 
 # Encryption
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
+
+# Meta
+# TODO: Change this to be experiment specific
+PAGE_ACCESS_TOKEN = env("PAGE_ACCESS_TOKEN", default="")
+VERIFY_TOKEN = env("VERIFY_TOKEN", default="")
