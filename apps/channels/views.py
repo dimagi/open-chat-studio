@@ -35,5 +35,7 @@ def new_facebook_message(request: HttpRequest):
             return HttpResponseForbidden()
         return HttpResponse(challenge, content_type="text/plain")
     elif request.method == "POST":
+        body_json = request.body.decode("utf-8")
+        tasks.handle_facebook_message.delay(body_json)
         return HttpResponse()
     return HttpResponseForbidden()

@@ -11,6 +11,7 @@ import requests
 from botocore.client import Config
 from django.conf import settings
 from django.utils import timezone
+from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
 from twilio.rest import Client
@@ -429,3 +430,31 @@ class WhatsappChannel(ChannelBase):
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[public_url])
+
+
+class FacebookMessengerChannel(ChannelBase, BaseMessenger):
+    voice_replies_supported = False
+
+    def initialize(self):
+        self.client = MessengerClient(settings.PAGE_ACCESS_TOKEN, api_version=18.0)
+
+    @property
+    def chat_id(self) -> int:
+        return self.message.user_id
+
+    @property
+    def message_content_type(self):
+        return self.message.content_type
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def send_text_to_user(self, text: str):
+        typing_off = sender_actions.SenderAction(sender_action="typing_off")
+        self.client.send_action(typing_off.to_dict(), recipient_id=self.chat_id)
+        self.client.send({"text": text}, recipient_id=self.chat_id, messaging_type="RESPONSE")
+
+    def submit_input_to_llm(self):
+        typing_on = sender_actions.SenderAction(sender_action="typing_on")
+        self.client.send_action(typing_on.to_dict(), recipient_id=self.chat_id)

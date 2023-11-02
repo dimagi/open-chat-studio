@@ -50,3 +50,19 @@ class WhatsappMessage(BaseModel):
     @property
     def message_text(self) -> str:
         return self.body
+
+
+class FacebookMessage(BaseModel):
+    """
+    A wrapper class for user messages coming from Facebook
+    """
+
+    page_id: str = Field()
+    user_id: str = Field()
+    message_text: Optional[str] = Field()
+    content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
+    media_url: Optional[str] = None
+
+    @property
+    def chat_id(self) -> str:
+        return self.user_id
