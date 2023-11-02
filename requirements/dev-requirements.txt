@@ -5,7 +5,9 @@
 #    inv requirements
 #
 anyio==4.0.0
-    # via watchfiles
+    # via
+    #   -c requirements/requirements.txt
+    #   watchfiles
 black==23.3.0
     # via -r requirements/dev-requirements.in
 build==0.10.0
@@ -87,7 +89,9 @@ six==1.16.0
     #   -c requirements/requirements.txt
     #   python-dateutil
 sniffio==1.3.0
-    # via anyio
+    # via
+    #   -c requirements/requirements.txt
+    #   anyio
 termcolor==2.3.0
     # via -r requirements/dev-requirements.in
 virtualenv==20.21.0

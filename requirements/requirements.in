@@ -31,3 +31,4 @@ twilio
 pydantic==1.10.7
 django_celery_beat==2.5.0
 azure-cognitiveservices-speech
+taskbadger
