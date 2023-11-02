@@ -94,14 +94,3 @@ def _set_telegram_webhook(experiment_channel: ExperimentChannel):
 
     tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
     tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
-
-
-# TODO: Remove this model
-class ChannelSession(BaseModel):
-    external_chat_id = models.CharField(null=False, blank=False)
-    experiment_channel = models.ForeignKey(
-        ExperimentChannel, on_delete=models.CASCADE, related_name="channel_sessions", null=True, blank=True
-    )
-    experiment_session = models.OneToOneField(
-        ExperimentSession, on_delete=models.CASCADE, related_name="channel_session"
-    )
