@@ -6,6 +6,7 @@ from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, HttpR
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.channels import tasks
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 
 
 @csrf_exempt
@@ -28,10 +29,13 @@ def new_whatsapp_message(request):
 
 @csrf_exempt
 def new_facebook_message(request: HttpRequest):
+    # https://developers.facebook.com/docs/messenger-platform/webhooks#:~:text=Validating%20Verification%20Requests
     if request.method == "GET":
-        # https://developers.facebook.com/docs/messenger-platform/webhooks#:~:text=Validating%20Verification%20Requests
         challenge = request.GET["hub.challenge"]
-        if request.GET["hub.verify_token"] != settings.VERIFY_TOKEN:
+        verify_token_exists = ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.FACEBOOK, extra_data__verify_token=request.GET["hub.verify_token"]
+        ).exists()
+        if not verify_token_exists:
             return HttpResponseForbidden()
         return HttpResponse(challenge, content_type="text/plain")
     elif request.method == "POST":
