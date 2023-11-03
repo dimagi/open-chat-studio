@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
             ),
             preserve_default=False,
         ),
-        migrations.RunPython(assign_model_to_team_migration("chat.Chat"), migrations.RunPython.noop),
+        migrations.RunPython(assign_model_to_team_migration("chat.Chat"), migrations.RunPython.noop, elidable=True),
         migrations.AlterField(
             model_name="chat",
             name="team",
