@@ -3,11 +3,11 @@ from io import BytesIO
 from pydub import AudioSegment
 
 
-def convert_ogg_to_wav(ogg_audio: BytesIO) -> BytesIO:
+def convert_audio_to_wav(audio: BytesIO, source_format="ogg") -> BytesIO:
     """
     OpenAI doesn't support .ogg filetypes, so we need to convert to wav (supported). We do this in-memory
     """
-    audio = AudioSegment.from_file(ogg_audio, format="ogg")
+    audio = AudioSegment.from_file(audio, format=source_format)
     # Convert to mono
     audio = audio.set_channels(1)
 
