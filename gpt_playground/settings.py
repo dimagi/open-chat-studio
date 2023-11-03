@@ -379,7 +379,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
         token=TASKBADGER_API_KEY,
-        systems=[CelerySystemIntegration()],
+        systems=[CelerySystemIntegration(excludes=["apps.chat.tasks.periodic_tasks"])],
     )
 
 

@@ -221,6 +221,7 @@ pygments==2.16.1
 pyjwt[crypto]==2.6.0
     # via
     #   django-allauth
+    #   pyjwt
     #   twilio
 pypng==0.20220715.0
     # via qrcode
@@ -283,7 +284,7 @@ sqlalchemy==1.4.47
     # via langchain
 sqlparse==0.4.4
     # via django
-taskbadger==1.2.0
+taskbadger==1.3.0
     # via -r requirements/requirements.in
 tenacity==8.2.2
     # via langchain
@@ -294,7 +295,9 @@ tqdm==4.65.0
 twilio==8.5.0
     # via -r requirements/requirements.in
 typer[all]==0.9.0
-    # via taskbadger
+    # via
+    #   taskbadger
+    #   typer
 typing-extensions==4.5.0
     # via
     #   pydantic
