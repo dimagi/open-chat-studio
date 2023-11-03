@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0010_alter_channelsession_id_alter_experimentchannel_id"),
+        ("channels", "0011_delete_channelsession"),
     ]
 
     operations = [
