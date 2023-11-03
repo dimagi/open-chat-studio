@@ -45,6 +45,12 @@ class TeamsAuthTest(TestCase):
         self.assertEqual(404, response.status_code)
         self._assertRequestHasTeam(response, self.yanks, None, None)
 
+    def test_team_view_missing_team(self):
+        self._login(self.sox_admin)
+        response = self.client.get(reverse("single_team:manage_team", args=["missing"]))
+        self.assertEqual(404, response.status_code)
+        self._assertRequestHasTeam(response, None, None)
+
     def test_team_admin_view(self):
         self._login(self.sox_admin)
         invite = self._create_invitation()
