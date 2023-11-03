@@ -34,10 +34,20 @@ def handle_facebook_message(message_data: str):
     data = json.loads(message_data)
     message = data["entry"][0]["messaging"][0]
     page_id = message["recipient"]["id"]
+    attachments = message["message"].get("attachments", [])
+    content_type = None
+    media_url = None
+    if len(attachments) > 0:
+        attachment = attachments[0]
+        media_url = attachment["payload"]["url"]
+        content_type = attachment["type"]
+
     message = FacebookMessage(
         user_id=message["sender"]["id"],
         page_id=page_id,
         message_text=message["message"].get("text", ""),
+        media_url=media_url,
+        content_type=content_type,
     )
     experiment_channel = ExperimentChannel.objects.filter(extra_data__contains={"page_id": message.page_id}).first()
     if not experiment_channel:
