@@ -3,11 +3,11 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.db.models import JSONField
+from django.db.models import JSONField, Q
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -51,7 +51,14 @@ class ChannelPlatform(models.TextChoices):
                 return forms.FacebookChannelForm(*args, **kwargs)
 
 
+class ExperimentChannelObjectManager(models.Manager):
+    def filter_extras(self, key: str, value: str, platform: ChannelPlatform, team: str):
+        extra_data_filter = Q(extra_data__contains={key: value})
+        return super().get_queryset().filter(extra_data_filter).filter(experiment__team__slug=team, platform=platform)
+
+
 class ExperimentChannel(BaseModel):
+    objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
     PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"), (FACEBOOK, "Facebook"))
 
