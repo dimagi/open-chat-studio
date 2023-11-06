@@ -55,6 +55,22 @@ class FacebookChannelTest(TestCase):
             platform=ChannelPlatform.FACEBOOK,
         )
 
+    def test_facebook_get_request_success(self):
+        """Tests Facebook's get request that verifies the server"""
+        url = reverse("channels:new_facebook_message", kwargs={"team": self.team.slug})
+        verify_token = self.facebook_details["verify_token"]
+        query_string = f"?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token={verify_token}"
+        response = self.client.get(f"{url}{query_string}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, verify_token.encode("utf-8"))
+
+    def test_facebook_get_request_failes(self):
+        """Tests Facebook's get request that verifies the server"""
+        url = reverse("channels:new_facebook_message", kwargs={"team": self.team.slug})
+        query_string = "?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=rubbish"
+        response = self.client.get(f"{url}{query_string}")
+        self.assertEqual(response.status_code, 403)
+
     @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
     def test_incoming_text_message(self, new_user_message):
         """Verify that a FacebookMessage object is being built correctly for text messages"""
