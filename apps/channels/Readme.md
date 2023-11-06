@@ -14,7 +14,7 @@ and page access token (this is the token that was generated). You'll notice anot
 
 
 ### 3. Set up a webhook from the Meta App to OpenChatStudio
-1. In your Meta App's settings, under the Webhooks section, click on "Add Callback URL" and provide `https://chatbots.dimagi.com/channels/facebook/incoming_message` as the callback URL. The Verify Token to use here is the one you saw when creating the Facebook channel in OpenChatStudio.
+1. In your Meta App's settings, under the Webhooks section, click on "Add Callback URL" and provide `https://chatbots.dimagi.com/channels/facebook/<your team name>/incoming_message` as the callback URL. The Verify Token to use here is the one you saw when creating the Facebook channel in OpenChatStudio.
 
 2. Once the webhook is set up, click on the `Add Subscriptions` button on the right hand side of the webhooks section and
 subscribe to the `messages` field. Currently only this field is supported.
