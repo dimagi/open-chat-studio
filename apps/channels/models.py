@@ -46,8 +46,7 @@ class ChannelPlatform(models.TextChoices):
                 return forms.WhatsappChannelForm(*args, **kwargs)
             case self.FACEBOOK:
                 initial = kwargs.get("initial", {})
-                if "verify_token" not in initial:
-                    initial["verify_token"] = str(uuid.uuid4())
+                initial.setdefault("verify_token", str(uuid.uuid4()))
                 kwargs["initial"] = initial
                 return forms.FacebookChannelForm(*args, **kwargs)
 
