@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from apps.teams.models import BaseTeamModel
 
-from . import forms, llm_service, speech_service
+from . import forms, llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
 
 
@@ -106,3 +106,39 @@ class VoiceProvider(BaseTeamModel):
 
     def get_speech_service(self) -> speech_service.SpeechService:
         return self.type_enum.get_speech_service(self.config)
+
+
+class MessagingProviderType(models.TextChoices):
+    twilio = "twilio", _("Twilio")
+
+    @property
+    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+        match self:
+            case MessagingProviderType.twilio:
+                return forms.TwilioMessagingConfigForm
+        raise Exception(f"No config form configured for {self}")
+
+    def get_messaging_service_client(self) -> messaging_service.MessagingService:
+        match self:
+            case MessagingProviderType.twilio:
+                return messaging_service.MessagingService
+        raise Exception(f"No config form configured for {self}")
+
+
+class MessagingProvider(BaseTeamModel):
+    type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return MessagingProviderType(self.type)
+
+    def get_messaging_service_client(self) -> speech_service.SpeechService:
+        return self.type_enum.get_messaging_service_client(self.config)
