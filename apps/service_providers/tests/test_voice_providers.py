@@ -1,8 +1,8 @@
 import mock
 import pytest
-from pydantic import ValidationError
 
 from apps.experiments.models import SyntheticVoice
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 
 
@@ -75,7 +75,7 @@ def _test_voice_provider_error(provider_type: VoiceProviderType, data):
     form = provider_type.form_cls(data=data)
     assert not form.is_valid()
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ServiceProviderConfigError):
         provider_type.get_speech_service(data)
 
 
