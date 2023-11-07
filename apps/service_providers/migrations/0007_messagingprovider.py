@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "type",
-                    models.CharField(choices=[("aws", "AWS Polly"), ("azure", "Azure Text to Speech")], max_length=255),
+                    models.CharField(choices=[("twilio", "Twilio")], max_length=255),
                 ),
                 ("name", models.CharField(max_length=255)),
                 ("config", django_cryptography.fields.encrypt(models.JSONField(default=dict))),
