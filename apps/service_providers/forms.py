@@ -64,6 +64,10 @@ class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         label="API URL",
         help_text="Base URL path for API requests e.g. 'https://<your-endpoint>.openai.azure.com/'",
     )
+    openai_api_version = forms.CharField(
+        label="API Version",
+        help_text="API Version e.g. '2023-05-15'",
+    )
 
 
 def obfuscate_value(value):
