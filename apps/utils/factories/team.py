@@ -19,6 +19,13 @@ class MembershipFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     role = "admin"
 
+    @factory.post_generation
+    def groups(self, create, extracted, **kwargs):
+        if not create or not extracted:
+            return
+
+        self.groups.add(*extracted)
+
 
 class TeamWithUsersFactory(TeamFactory):
     admin = factory.RelatedFactory(MembershipFactory, "team", role="admin")

@@ -1,6 +1,7 @@
+from contextlib import contextmanager
 from contextvars import ContextVar
 
-_context = ContextVar("current_team")
+_context = ContextVar("team")
 
 
 def get_current_team():
@@ -12,7 +13,10 @@ def get_current_team():
     ```
     Will return None if the team is not set
     """
-    return getattr(_context, "team", None)
+    try:
+        return _context.get()
+    except LookupError:
+        pass
 
 
 def set_current_team(team):
@@ -24,8 +28,17 @@ def set_current_team(team):
         get_current_team(team)
     ```
     """
-    setattr(_context, "team", team)
+    _context.set(team)
 
 
 def unset_current_team():
-    setattr(_context, "team", None)
+    _context.set(None)
+
+
+@contextmanager
+def current_team(team):
+    set_current_team(team)
+    try:
+        yield
+    finally:
+        unset_current_team()
