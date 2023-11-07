@@ -31,14 +31,23 @@ ALLOWED_HOSTS = [
 
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples
-# To use mailgun, comment out the lines below and make sure your key and domain
-# are available in the environment.
-EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
-
-ANYMAIL = {
-    "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
-    "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default="chatbotmg.dimagi.com"),
-}
+EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="anymail.backends.mailgun.EmailBackend")
+match EMAIL_BACKEND:
+    case "anymail.backends.mailgun.EmailBackend":
+        ANYMAIL = {
+            "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
+            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default="chatbotmg.dimagi.com"),
+        }
+    case "anymail.backends.amazon_ses.EmailBackend":
+        ANYMAIL = {
+            "AMAZON_SES_CLIENT_PARAMS": {
+                "aws_access_key_id": env("AWS_SES_ACCESS_KEY", default=None),
+                "aws_secret_access_key": env("AWS_SES_SECRET_KEY", default=None),
+                "region_name": env("AWS_SES_REGION", default="us-east-1"),
+            },
+        }
+    case _:
+        raise Exception(f"Unknown email backend: {EMAIL_BACKEND}")
 
 SERVER_EMAIL = "noreply@dimagi.com"
 DEFAULT_FROM_EMAIL = "noreply@dimagi.com"
