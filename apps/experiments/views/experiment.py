@@ -174,8 +174,12 @@ def _apply_voice_provider_alpine_attrs(form):
     form.fields["voice_provider"].widget.attrs = {
         "x-model.fill": "voiceProvider",
     }
+    form.fields["llm_provider"].widget.attrs = {
+        "x-model.number.fill": "llmProvider",
+    }
     # special template for dynamic select options
     form.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+    form.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
 
 def _get_voice_provider_alpine_context(request):
@@ -188,6 +192,14 @@ def _get_voice_provider_alpine_context(request):
             [
                 {"value": voice.id, "text": str(voice), "type": voice.service.lower()}
                 for voice in SyntheticVoice.objects.all()
+            ],
+            key=lambda v: v["text"],
+        ),
+        "llm_options": sorted(
+            [
+                {"value": model, "text": model, "provider": provider_id}
+                for provider_id, models in request.team.llmprovider_set.values_list("id", "llm_models")
+                for model in models
             ],
             key=lambda v: v["text"],
         ),
