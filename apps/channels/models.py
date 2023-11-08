@@ -8,6 +8,7 @@ from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
 from apps.experiments.models import Experiment
+from apps.teams.utils import get_current_team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -45,8 +46,13 @@ class ChannelPlatform(models.TextChoices):
             case self.WHATSAPP:
                 return forms.WhatsappChannelForm(*args, **kwargs)
             case self.FACEBOOK:
+                team_slug = get_current_team().slug
+                webhook_url = absolute_url(
+                    reverse("channels:new_facebook_message", kwargs={"team_slug": team_slug}), is_secure=True
+                )
                 initial = kwargs.get("initial", {})
                 initial.setdefault("verify_token", str(uuid.uuid4()))
+                initial.setdefault("webook_url", webhook_url)
                 kwargs["initial"] = initial
                 return forms.FacebookChannelForm(*args, **kwargs)
 

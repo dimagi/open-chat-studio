@@ -29,3 +29,9 @@ class FacebookChannelForm(forms.Form):
     verify_token = forms.CharField(
         label="Verify Token", max_length=100, widget=forms.TextInput(attrs={"readonly": "readonly"})
     )
+    webook_url = forms.CharField(
+        widget=forms.TextInput(attrs={"readonly": "readonly"}),
+        label="Webhook URL",
+        disabled=True,
+        help_text="Use this as the webhook URL when setting up your Facebook App",
+    )
