@@ -40,6 +40,8 @@ def use_team_backend(settings):
 
 @pytest.mark.django_db()
 def test_team_backend_no_current_team(group1, group2):
+    """Test that the backend returns no permissions (and doesn't error)
+    if there is no team set in the 'current_team' context."""
     membership = MembershipFactory(groups=[group1, group2])
     user = membership.user
     assert TeamBackend().get_group_permissions(user) == set()

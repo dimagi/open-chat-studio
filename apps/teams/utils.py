@@ -37,6 +37,7 @@ def unset_current_team():
 
 @contextmanager
 def current_team(team):
+    """Context manager useful for testing."""
     set_current_team(team)
     try:
         yield
