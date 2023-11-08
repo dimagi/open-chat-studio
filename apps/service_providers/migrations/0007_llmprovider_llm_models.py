@@ -14,7 +14,11 @@ class Migration(migrations.Migration):
             model_name="llmprovider",
             name="llm_models",
             field=django.contrib.postgres.fields.ArrayField(
-                base_field=models.CharField(max_length=128), default=list, size=None
+                base_field=models.CharField(max_length=128),
+                default=list,
+                size=None,
+                verbose_name="LLM Models",
+                help_text="The models that will be available for use. Separate multiple models with a comma.",
             ),
         ),
     ]

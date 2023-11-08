@@ -41,7 +41,12 @@ class LlmProvider(BaseTeamModel):
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
     name = models.CharField(max_length=255)
-    llm_models = ArrayField(models.CharField(max_length=128), default=list)
+    llm_models = ArrayField(
+        models.CharField(max_length=128),
+        default=list,
+        verbose_name="LLM Models",
+        help_text="The models that will be available for use. Separate multiple models with a comma.",
+    )
     config = encrypt(models.JSONField(default=dict))
 
     class Meta:
