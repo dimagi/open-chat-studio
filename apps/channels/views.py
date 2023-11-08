@@ -28,18 +28,21 @@ def new_whatsapp_message(request):
 
 
 @csrf_exempt
-def new_facebook_message(request: HttpRequest, team: str):
+def new_facebook_message(request: HttpRequest, team_slug: str):
     # https://developers.facebook.com/docs/messenger-platform/webhooks#:~:text=Validating%20Verification%20Requests
     if request.method == "GET":
         challenge = request.GET["hub.challenge"]
         verify_token_exists = ExperimentChannel.objects.filter_extras(
-            key="verify_token", value=request.GET["hub.verify_token"], platform=ChannelPlatform.FACEBOOK, team=team
+            key="verify_token",
+            value=request.GET["hub.verify_token"],
+            platform=ChannelPlatform.FACEBOOK,
+            team_slug=team_slug,
         ).exists()
         if not verify_token_exists:
             return HttpResponseForbidden()
         return HttpResponse(challenge, content_type="text/plain")
     elif request.method == "POST":
         body_json = request.body.decode("utf-8")
-        tasks.handle_facebook_message.delay(body_json)
+        tasks.handle_facebook_message.delay(team_slug=team_slug, message_data=body_json)
         return HttpResponse()
     return HttpResponseForbidden()

@@ -5,7 +5,7 @@ from celery.app import shared_task
 from telebot import types
 
 from apps.channels.datamodels import FacebookMessage, WhatsappMessage
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 
 
@@ -30,7 +30,7 @@ def handle_whatsapp_message(message_data: str):
 
 
 @shared_task
-def handle_facebook_message(message_data: str):
+def handle_facebook_message(team_slug: str, message_data: str):
     data = json.loads(message_data)
     message = data["entry"][0]["messaging"][0]
     page_id = message["recipient"]["id"]
@@ -49,7 +49,9 @@ def handle_facebook_message(message_data: str):
         media_url=media_url,
         content_type=content_type,
     )
-    experiment_channel = ExperimentChannel.objects.filter(extra_data__contains={"page_id": message.page_id}).first()
+    experiment_channel = ExperimentChannel.objects.filter_extras(
+        platform=ChannelPlatform.FACEBOOK, team=team_slug, key="page_id", value=message.page_id
+    ).first()
     if not experiment_channel:
         return
     message_handler = FacebookMessengerChannel(experiment_channel=experiment_channel)
