@@ -40,5 +40,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(bootstrap_voice_providers)
+        migrations.RunPython(bootstrap_voice_providers, elidable=True)
     ]

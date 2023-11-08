@@ -17,5 +17,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(gen_uuids)
+        migrations.RunPython(gen_uuids, elidable=True)
     ]

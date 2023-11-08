@@ -13,33 +13,34 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(
             assign_model_to_team_migration("experiments.ConsentForm", delete_if_no_team=True),
-            migrations.RunPython.noop
+            migrations.RunPython.noop,
+            elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.Experiment"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.Experiment"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.NoActivityMessageConfig"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.NoActivityMessageConfig"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.Prompt"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.Prompt"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.PromptBuilderHistory"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.PromptBuilderHistory"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.SafetyLayer"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.SafetyLayer"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.SourceMaterial"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.SourceMaterial"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.Survey"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.Survey"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            assign_model_to_team_migration("experiments.ExperimentSession"), migrations.RunPython.noop
+            assign_model_to_team_migration("experiments.ExperimentSession"), migrations.RunPython.noop, elidable=True
         ),
         migrations.RunPython(
-            migrate_participants, migrations.RunPython.noop
+            migrate_participants, migrations.RunPython.noop, elidable=True
         ),
     ]

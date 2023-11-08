@@ -18,5 +18,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(set_status)
+        migrations.RunPython(set_status, elidable=True)
     ]

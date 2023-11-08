@@ -21,5 +21,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(migrate_llm_providers)
+        migrations.RunPython(migrate_llm_providers, elidable=True)
     ]
