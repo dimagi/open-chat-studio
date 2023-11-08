@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.contrib.auth.models import Group
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -48,7 +49,17 @@ class Membership(BaseModel):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES)
-    # your additional membership fields go here.
+    groups = models.ManyToManyField(
+        Group,
+        verbose_name="Groups",
+        blank=True,
+        help_text=(
+            "The groups this membership belongs to. A membership  will get all permissions "
+            "granted to each of their groups."
+        ),
+        related_name="membership_set",
+        related_query_name="membership",
+    )
 
     def __str__(self):
         return f"{self.user}: {self.team}"

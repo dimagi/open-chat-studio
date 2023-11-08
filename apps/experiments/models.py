@@ -223,10 +223,6 @@ class Experiment(BaseTeamModel):
     Each experiment can be run as a chatbot.
     """
 
-    LLM_CHOICES = (
-        ("gpt-3.5-turbo", "GPT 3.5 (Chat GPT)"),
-        ("gpt-4", "GPT 4"),
-    )
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
@@ -235,8 +231,6 @@ class Experiment(BaseTeamModel):
     )
     llm = models.CharField(
         max_length=20,
-        choices=LLM_CHOICES,
-        default="gpt-3.5-turbo",
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
@@ -350,7 +344,7 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=20, choices=Experiment.LLM_CHOICES, default="gpt-3.5-turbo")
+    llm = models.CharField(max_length=20)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )

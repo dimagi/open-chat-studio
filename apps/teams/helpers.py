@@ -26,7 +26,7 @@ def get_next_unique_team_slug(team_name: str) -> str:
 def get_team_for_request(request, view_kwargs):
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
-        return get_object_or_404(Team, slug=team_slug)
+        return Team.objects.filter(slug=team_slug).first()
 
     if not request.user.is_authenticated:
         return

@@ -36,6 +36,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(create_default_consent_form),
-        migrations.RunPython(add_users_to_default_team),
+        migrations.RunPython(create_default_consent_form, elidable=True),
+        migrations.RunPython(add_users_to_default_team, elidable=True),
     ]

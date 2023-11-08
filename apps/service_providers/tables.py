@@ -1,9 +1,6 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from . import const
-from .models import LlmProvider, VoiceProvider
-
 
 def make_table(provider_type, model, fields=("type", "name")):
     meta_attrs = {

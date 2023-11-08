@@ -210,8 +210,8 @@ ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="none")
 ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 AUTHENTICATION_BACKENDS = (
-    # Needed to login by username in Django admin, regardless of `allauth`
-    "django.contrib.auth.backends.ModelBackend",
+    # login etc. + team membership based permissions
+    "apps.teams.backends.TeamBackend",
     # `allauth` specific authentication methods, such as login by e-mail
     "allauth.account.auth_backends.AuthenticationBackend",
 )
@@ -379,7 +379,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
         token=TASKBADGER_API_KEY,
-        systems=[CelerySystemIntegration()],
+        systems=[CelerySystemIntegration(excludes=["apps.chat.tasks.periodic_tasks"])],
     )
 
 

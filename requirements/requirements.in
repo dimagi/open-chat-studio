@@ -10,7 +10,7 @@ django-environ
 djangorestframework
 djangorestframework-api-key
 drf-spectacular
-django-anymail[mailgun]  # email services
+django-anymail
 django-hijack
 django-storages
 celery-progress

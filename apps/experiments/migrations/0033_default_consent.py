@@ -33,8 +33,8 @@ class Migration(migrations.Migration):
             name="is_default",
             field=models.BooleanField(default=False, editable=False),
         ),
-        migrations.RunPython(create_default_consent, migrations.RunPython.noop),
-        migrations.RunPython(populate_experiments_consent, migrations.RunPython.noop),
+        migrations.RunPython(create_default_consent, migrations.RunPython.noop, elidable=True),
+        migrations.RunPython(populate_experiments_consent, migrations.RunPython.noop, elidable=True),
         migrations.AlterField(
             model_name="experiment",
             name="consent_form",
