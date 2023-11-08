@@ -3,6 +3,7 @@ from django.utils.functional import SimpleLazyObject
 
 from apps.teams.helpers import get_team_for_request
 from apps.teams.models import Membership
+from apps.teams.utils import set_current_team
 
 
 def _get_team(request, view_kwargs):
@@ -30,3 +31,5 @@ class TeamsMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         request.team = SimpleLazyObject(lambda: _get_team(request, view_kwargs))
         request.team_membership = SimpleLazyObject(lambda: _get_team_membership(request))
+
+        set_current_team(request.team)
