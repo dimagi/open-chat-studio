@@ -2,20 +2,33 @@
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
+  {{ llm_options|json_script:"llmModelOptions" }}
   <script>
-      console.log({{experiment.synthetic_voice_id|default:'null'}});
       const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
       const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
+      const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
       document.addEventListener('alpine:init', () => {
           Alpine.data('experiment', () => ({
+
               voiceProvider: null,
               synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
               synthetic_voice_options: [],
+
+              llmProvider: null,
+              llm: '{{experiment.llm|default:'null'}}',
+              llm_options: [],
+
               init() {
                   this.$watch('voiceProvider', () => {
                       const providerType = voiceProviderTypes[this.voiceProvider];
                       this.synthetic_voice_options = voiceOptions.filter(option => {
                         return option.type === providerType;
+                      });
+                  });
+
+                  this.$watch('llmProvider', () => {
+                      this.llm_options = llmModelOptions.filter(option => {
+                        return option.provider === this.llmProvider;
                       });
                   })
               }

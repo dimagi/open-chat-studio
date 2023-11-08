@@ -27,19 +27,16 @@ class ServiceProviderType:
     """
     subtype: Enum
 
+    primary_fields: list[str]
+
 
 class ServiceProvider(ServiceProviderType, Enum):
-    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderType
-    voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType
+    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderType, ["name", "type", "llm_models"]
+    voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:
-        return make_table(self.slug, self.model)
-
-    @property
-    def primary_fields(self) -> list[str]:
-        """The fields on the model which should be included in the main form."""
-        return ["name", "type"]
+        return make_table(self.slug, self.model, fields=self.primary_fields)
 
     @property
     def provider_type_field(self) -> str:
