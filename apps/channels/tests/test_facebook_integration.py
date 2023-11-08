@@ -57,7 +57,7 @@ class FacebookChannelTest(TestCase):
 
     def test_facebook_get_request_success(self):
         """Tests Facebook's get request that verifies the server"""
-        url = reverse("channels:new_facebook_message", kwargs={"team": self.team.slug})
+        url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
         verify_token = self.facebook_details["verify_token"]
         query_string = f"?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token={verify_token}"
         response = self.client.get(f"{url}{query_string}")
@@ -66,7 +66,7 @@ class FacebookChannelTest(TestCase):
 
     def test_facebook_get_request_failes(self):
         """Tests Facebook's get request that verifies the server"""
-        url = reverse("channels:new_facebook_message", kwargs={"team": self.team.slug})
+        url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
         query_string = "?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=rubbish"
         response = self.client.get(f"{url}{query_string}")
         self.assertEqual(response.status_code, 403)
@@ -75,7 +75,7 @@ class FacebookChannelTest(TestCase):
     def test_incoming_text_message(self, new_user_message):
         """Verify that a FacebookMessage object is being built correctly for text messages"""
         message = _facebook_text_message(self.page_id, message="Hi there")
-        handle_facebook_message(message)
+        handle_facebook_message(team_slug=self.team.slug, message_data=message)
         called_args, called_kwargs = new_user_message.call_args
         facebook_message = called_args[0]
         self.assertEqual(facebook_message.page_id, self.page_id)
@@ -89,7 +89,7 @@ class FacebookChannelTest(TestCase):
         """Verify that a FacebookMessage object is being built correctly for voice messages"""
         media_url = "https://example.com/my-audio"
         message = _facebook_audio_message(self.page_id, attachment_url=media_url)
-        handle_facebook_message(message)
+        handle_facebook_message(team_slug=self.team.slug, message_data=message)
         called_args, called_kwargs = new_user_message.call_args
         facebook_message = called_args[0]
         self.assertEqual(facebook_message.page_id, self.page_id)

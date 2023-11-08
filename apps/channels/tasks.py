@@ -50,7 +50,7 @@ def handle_facebook_message(team_slug: str, message_data: str):
         content_type=content_type,
     )
     experiment_channel = ExperimentChannel.objects.filter_extras(
-        platform=ChannelPlatform.FACEBOOK, team=team_slug, key="page_id", value=message.page_id
+        platform=ChannelPlatform.FACEBOOK, team_slug=team_slug, key="page_id", value=message.page_id
     ).first()
     if not experiment_channel:
         return

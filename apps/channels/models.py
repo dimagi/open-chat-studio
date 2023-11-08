@@ -58,9 +58,9 @@ class ChannelPlatform(models.TextChoices):
 
 
 class ExperimentChannelObjectManager(models.Manager):
-    def filter_extras(self, team: str, platform: ChannelPlatform, key: str, value: str):
+    def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
         extra_data_filter = Q(extra_data__contains={key: value})
-        return self.filter(extra_data_filter).filter(experiment__team__slug=team, platform=platform)
+        return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
 
 class ExperimentChannel(BaseModel):

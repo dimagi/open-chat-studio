@@ -47,6 +47,8 @@ class TestExperimentChannelObjectManager(TestCase):
             (self.bot_token_key, self.bot_token, ChannelPlatform.TELEGRAM, "some-other-team", 0),
         ]
         for test_case in test_cases:
-            key, value, platform, team, expected_result_length = test_case
-            channels = ExperimentChannel.objects.filter_extras(key=key, value=value, platform=platform, team=team)
+            key, value, platform, team_slug, expected_result_length = test_case
+            channels = ExperimentChannel.objects.filter_extras(
+                key=key, value=value, platform=platform, team_slug=team_slug
+            )
             self.assertEqual(len(channels), expected_result_length)
