@@ -54,7 +54,6 @@ class Conversation:
                 ],
             )
         else:
-            print(f"using prompt_to_use: {prompt_to_use}\n\n\n---------------\n\n\n")
             prompt = ChatPromptTemplate.from_messages(
                 [
                     prompt_to_use,
