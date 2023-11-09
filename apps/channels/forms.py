@@ -6,8 +6,12 @@ from apps.channels.models import ExperimentChannel
 class ChannelForm(forms.ModelForm):
     class Meta:
         model = ExperimentChannel
-        fields = ["name", "platform"]
+        fields = ["name", "platform", "messaging_provider"]
         widgets = {"platform": forms.HiddenInput()}
+
+    def __init__(self, *args, **kwargs):
+        team = kwargs.pop("team", None)
+        super().__init__(*args, **kwargs)
 
     def save(self, experiment, config_data: dict):
         self.instance.experiment = experiment
