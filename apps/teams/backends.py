@@ -8,6 +8,11 @@ from django.db import models
 
 from apps.teams.utils import get_current_team
 
+SUPER_ADMIN_GROUP = "Super Admin"
+TEAM_ADMIN_GROUP = "Team Admin"
+EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
+CHAT_VIEWER_GROUP = "Chat Viewer"
+
 
 class TeamBackend(ModelBackend):
     def _get_group_permissions(self, user_obj):
@@ -88,23 +93,23 @@ class GroupDef:
 
 
 GROUPS = [
-    GroupDef("Super Admin", [AppPermSetDef(app_label, ALL) for app_label in CONTENT_TYPES]),
+    GroupDef(SUPER_ADMIN_GROUP, [AppPermSetDef(app_label, ALL) for app_label in CONTENT_TYPES]),
     GroupDef(
-        "Team Admin",
+        TEAM_ADMIN_GROUP,
         [
             AppPermSetDef("teams", ALL),
             AppPermSetDef("service_providers", ALL),
         ],
     ),
     GroupDef(
-        "Experiment Admin",
+        EXPERIMENT_ADMIN_GROUP,
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("channels", ALL),
         ],
     ),
     GroupDef(
-        "Chat Viewer",
+        CHAT_VIEWER_GROUP,
         [
             AppPermSetDef("chat", [VIEW]),
         ],

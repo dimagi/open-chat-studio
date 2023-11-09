@@ -3,6 +3,35 @@
 from django.db import migrations, models
 
 
+def _migrate_invitation_groups(apps, schema_editor):
+    Invitation = apps.get_model("teams", "Invitation")
+    Group = apps.get_model("auth", "Group")
+    for invitation in Invitation.objects.filter(groups=None):
+        groups = get_groups_for_role(Group, invitation.role)
+        invitation.groups.set(groups)
+
+
+def _migrate_membership_groups(apps, schema_editor):
+    Membership = apps.get_model("teams", "Membership")
+    Group = apps.get_model("auth", "Group")
+    for membership in Membership.objects.filter(groups=None):
+        groups = get_groups_for_role(Group, membership.role)
+        membership.groups.set(groups)
+
+
+def get_groups_for_role(group_model, role):
+    match role:
+        case "admin":
+            return group_model.objects.filter(name="Super Admin")
+        case "member":
+            return group_model.objects.filter(name__in=[
+                "Experiment Admin",
+                "Chat Viewer",
+            ])
+        case _:
+            return []
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
@@ -20,4 +49,6 @@ class Migration(migrations.Migration):
                 verbose_name="Groups",
             ),
         ),
+        migrations.RunPython(_migrate_invitation_groups, migrations.RunPython.noop, elidable=True),
+        migrations.RunPython(_migrate_membership_groups, migrations.RunPython.noop, elidable=True),
     ]
