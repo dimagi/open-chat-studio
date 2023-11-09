@@ -82,6 +82,12 @@ class Invitation(BaseModel):
     accepted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="accepted_invitations", null=True, blank=True
     )
+    groups = models.ManyToManyField(
+        Group,
+        verbose_name="Groups",
+        blank=True,
+        help_text="The groups to assign to the user when they accept the invitation.",
+    )
 
     def get_url(self) -> str:
         return absolute_url(reverse("teams:accept_invitation", args=[self.id]))
