@@ -34,7 +34,7 @@ CONTENT_TYPES = {
         "survey",
         "syntheticvoice",
     ],
-    "service_providers": ["llmprovider", "voiceprovider"],
+    "service_providers": ["llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
 }
 

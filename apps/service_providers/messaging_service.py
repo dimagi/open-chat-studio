@@ -19,6 +19,7 @@ class MessagingService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_message_audio(self, url: str):
+        """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 
 
