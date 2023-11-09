@@ -1,4 +1,4 @@
-from typing import Type
+from typing import List, Type
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -118,11 +118,11 @@ class MessagingProviderType(models.TextChoices):
                 return forms.TwilioMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_messaging_service_client(self) -> messaging_service.MessagingService:
+    def get_messaging_service(self, config: dict) -> messaging_service.MessagingService:
         match self:
             case MessagingProviderType.twilio:
-                return messaging_service.MessagingService
-        raise Exception(f"No config form configured for {self}")
+                return messaging_service.TwilioService(**config)
+        raise Exception(f"No messaging service configured for {self}")
 
 
 class MessagingProvider(BaseTeamModel):
@@ -140,5 +140,5 @@ class MessagingProvider(BaseTeamModel):
     def type_enum(self):
         return MessagingProviderType(self.type)
 
-    def get_messaging_service_client(self) -> speech_service.SpeechService:
-        return self.type_enum.get_messaging_service_client(self.config)
+    def get_messaging_service(self) -> messaging_service.MessagingService:
+        return self.type_enum.get_messaging_service(self.config)
