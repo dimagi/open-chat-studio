@@ -40,7 +40,7 @@ class ServiceProviderType:
 class ServiceProvider(ServiceProviderType, Enum):
     llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderType, ["name", "type", "llm_models"]
     voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
-    messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType
+    messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:

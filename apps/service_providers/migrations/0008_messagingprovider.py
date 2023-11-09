@@ -8,7 +8,7 @@ import django_cryptography.fields
 class Migration(migrations.Migration):
     dependencies = [
         ("teams", "0003_flag"),
-        ("service_providers", "0006_alter_llmprovider_team"),
+        ("service_providers", "0007_llmprovider_llm_models"),
     ]
 
     operations = [
