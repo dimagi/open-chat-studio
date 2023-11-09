@@ -131,3 +131,7 @@ def create_default_groups():
         group_def.update_or_create()
 
     _groups_created = True
+
+
+def get_team_owner_role():
+    return Group.objects.get(name=SUPER_ADMIN_GROUP)
