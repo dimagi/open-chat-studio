@@ -18,7 +18,7 @@ class MessagingService(pydantic.BaseModel):
     def send_whatsapp_voice_message(self, media_url: str, from_number: str, to_number):
         raise NotImplementedError
 
-    def get_message_audio(self):
+    def get_message_audio(self, url: str):
         raise NotImplementedError
 
 

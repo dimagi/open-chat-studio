@@ -11,7 +11,7 @@ def render_form_fields(form):
 
 
 @register.filter
-def dict_item(dictionary, key):
+def dict_lookup(dictionary, key):
     return dictionary.get(key, None)
 
 
