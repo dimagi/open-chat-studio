@@ -17,7 +17,7 @@ from apps.web.forms import set_form_fields_disabled
 def team_membership_details(request, team_slug, membership_id):
     membership = get_object_or_404(Membership, team=request.team, pk=membership_id)
     editing_self = membership.user == request.user
-    can_edit_team_members = request.team_membership.is_admin()
+    can_edit_team_members = request.user.has_perm("teams.change_membership")
     if not can_edit_team_members and not editing_self:
         messages.error(request, _("Sorry, you don't have permission to access that page."))
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
@@ -54,7 +54,7 @@ def team_membership_details(request, team_slug, membership_id):
 def remove_team_membership(request, team_slug, membership_id):
     membership = get_object_or_404(Membership, team=request.team, pk=membership_id)
     removing_self = membership.user == request.user
-    can_edit_team_members = request.team_membership.is_admin()
+    can_edit_team_members = request.user.has_perm("teams.change_membership")
     if not can_edit_team_members:
         if not removing_self:
             raise TeamPermissionError(_("You don't have permission to remove others from that team."))

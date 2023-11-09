@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
@@ -83,24 +83,24 @@ def create_team(request):
     )
 
 
-@team_admin_required
 @require_POST
+@permission_required("teams.delete_team")
 def delete_team(request, team_slug):
     request.team.delete()
     messages.success(request, _('The "{team}" team was successfully deleted').format(team=request.team.name))
     return HttpResponseRedirect(reverse("web:home"))
 
 
-@team_admin_required
 @require_POST
+@permission_required("teams.change_invitation")
 def resend_invitation(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     send_invitation(invitation)
     return HttpResponse('<span class="pg-button-light is-disbled btn-disabled">Sent!</span>')
 
 
-@team_admin_required
 @require_POST
+@permission_required("teams.add_invitation")
 def send_invitation_view(request, team_slug):
     form = InvitationForm(request.team, request.POST)
     if form.is_valid():
@@ -131,8 +131,8 @@ def send_invitation_view(request, team_slug):
     )
 
 
-@team_admin_required
 @require_POST
+@permission_required("teams.delete_invitation")
 def cancel_invitation_view(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     invitation.delete()
