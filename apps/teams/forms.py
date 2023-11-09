@@ -120,10 +120,10 @@ class InvitationForm(forms.ModelForm):
 
     class Meta:
         model = Invitation
-        fields = ("email", "role")
+        fields = ("email", "groups")
 
 
 class MembershipForm(forms.ModelForm):
     class Meta:
         model = Membership
-        fields = ("role",)
+        fields = ("groups",)

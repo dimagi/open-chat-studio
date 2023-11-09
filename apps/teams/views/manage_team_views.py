@@ -114,6 +114,7 @@ def send_invitation_view(request, team_slug):
             form.add_error(None, e.messages[0])
         else:
             invitation.save()
+            form.save_m2m()
             send_invitation(invitation)
             form = InvitationForm(request.team)  # clear saved data from the form
     else:
