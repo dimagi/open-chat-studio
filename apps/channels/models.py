@@ -54,6 +54,13 @@ class ExperimentChannel(BaseModel):
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
+    messaging_provider = models.ForeignKey(
+        "service_providers.MessagingProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Messaging Provider",
+    )
 
     class Meta:
         ordering = ["name"]
