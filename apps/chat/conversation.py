@@ -34,7 +34,9 @@ class Conversation:
         UTC = pytz.timezone("UTC")
         current_datetime = datetime.now().astimezone(UTC)
         prompt_to_use = SystemMessagePromptTemplate.from_template(prompt_str)
-        if source_material:
+        if "source_material" in prompt_to_use.input_variables:
+            if not source_material:
+                source_material = ""
             try:
                 prompt_to_use = prompt_to_use.format(source_material=source_material)
             except KeyError:
@@ -52,6 +54,7 @@ class Conversation:
                 ],
             )
         else:
+            print(f"using prompt_to_use: {prompt_to_use}\n\n\n---------------\n\n\n")
             prompt = ChatPromptTemplate.from_messages(
                 [
                     prompt_to_use,
