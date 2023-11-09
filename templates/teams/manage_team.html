@@ -38,7 +38,7 @@
       <thead>
       <tr>
         <th>{% translate "Member" %}</th>
-        <th>{% translate "Role" %}</th>
+        <th>{% translate "Roles" %}</th>
       </tr>
       </thead>
       <tbody>
@@ -51,7 +51,7 @@
               {{ membership.user }}
             {% endif %}
           </td>
-          <td>{{ membership.get_role_display }}</td>
+          <td>{{ membership.groups.all|join:", " }}</td>
         </tr>
       {% endfor %}
       </tbody>
