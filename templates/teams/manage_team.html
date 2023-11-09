@@ -1,4 +1,5 @@
 {% extends "web/app/app_base.html" %}
+{% load team_tags %}
 {% load static %}
 {% load i18n %}
 {% load form_tags %}
@@ -28,9 +29,9 @@
 </section>
 {% if not create %}
 {% translate "Large Language Model services" as llm_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle %}
+{% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
 {% translate "Speech to text and visa versa" as speech_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle %}
+{% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider"%}
 <section class="app-card">
   <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
   <div class='table-responsive'>
