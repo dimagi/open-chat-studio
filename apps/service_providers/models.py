@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from pydantic import ValidationError
 
+from apps.channels.models import ChannelPlatform
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service
@@ -123,6 +124,15 @@ class MessagingProviderType(models.TextChoices):
             case MessagingProviderType.twilio:
                 return messaging_service.TwilioService(**config)
         raise Exception(f"No messaging service configured for {self}")
+
+    @staticmethod
+    def platform_supported_provider_types(platform: ChannelPlatform) -> List["MessagingProviderType"]:
+        """Finds all provider types supporting the platform specified by `platform`"""
+        provider_types = []
+        for service in messaging_service.MessagingService.__subclasses__():
+            if platform in service.supported_platforms():
+                provider_types.append(MessagingProviderType(service._type))
+        return provider_types
 
 
 class MessagingProvider(BaseTeamModel):

@@ -1,6 +1,7 @@
 from django import forms
 
 from apps.channels.models import ExperimentChannel
+from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
 
 class ChannelForm(forms.ModelForm):
@@ -12,6 +13,16 @@ class ChannelForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
+        initial = kwargs.get("initial", {})
+        platform = initial.get("platform", None)
+        if platform:
+            provider_types = MessagingProviderType.platform_supported_provider_types(platform)
+            if provider_types:
+                self.fields["messaging_provider"].queryset = MessagingProvider.objects.filter(
+                    type__in=provider_types, team=team
+                )
+            else:
+                self.fields["messaging_provider"].widget = forms.HiddenInput()
 
     def save(self, experiment, config_data: dict):
         self.instance.experiment = experiment

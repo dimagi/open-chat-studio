@@ -24,6 +24,7 @@ class MessagingService(pydantic.BaseModel):
 
 class TwilioService(MessagingService):
     _type = "twilio"
+    _supported_platforms: list = [ChannelPlatform.WHATSAPP]
 
     account_sid: str
     auth_token: str
