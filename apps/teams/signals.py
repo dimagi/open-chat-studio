@@ -34,7 +34,8 @@ def clear_team_context(sender, **kwargs):
     unset_current_team()
 
 
-apps_to_migrate = set(CONTENT_TYPES)
+_apps_to_migrate = set(CONTENT_TYPES)
+_groups_created = []
 
 
 @post_migrate.connect
@@ -48,13 +49,14 @@ def sync_groups(sender, **kwargs):
     Since permissions are also created using a `post_migrate` signal we have to wait until all the
     permissions are created before we create the groups.
     """
-
     try:
-        apps_to_migrate.remove(sender.label)
+        _apps_to_migrate.remove(sender.label)
     except KeyError:
         pass
 
-    if not apps_to_migrate:
+    if not _groups_created and not _apps_to_migrate:
         # all the apps we care about have been migrated
         print("Creating groups")
         create_default_groups()
+
+    _groups_created.append(1)

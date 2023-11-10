@@ -118,22 +118,13 @@ GROUPS = [
     ),
 ]
 
-_groups_created = False
-
 
 def create_default_groups():
     """
     Creates the default groups for the team.
     """
-    global _groups_created
-    if _groups_created:
-        # avoid calling this multiple times
-        return
-
     for group_def in GROUPS:
         group_def.update_or_create()
-
-    _groups_created = True
 
 
 def make_user_team_owner(team, user) -> Membership:
