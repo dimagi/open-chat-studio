@@ -2,7 +2,8 @@ from django.http import Http404
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.teams.models import Invitation, Team
+from apps.teams.backends import get_team_owner_role
+from apps.teams.models import Invitation, Membership, Team
 from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
 from apps.users.models import CustomUser
 
@@ -17,7 +18,8 @@ class TeamsAuthTest(TestCase):
         cls.yanks = Team.objects.create(name="Yankees", slug="yanks")
 
         cls.sox_admin = _create_user("tito@redsox.com")
-        cls.sox.members.add(cls.sox_admin, through_defaults={"role": ROLE_ADMIN})
+        membership = Membership.objects.create(team=cls.sox, user=cls.sox_admin)
+        membership.groups.set([get_team_owner_role()])
 
         cls.yanks_member = _create_user("derek.jeter@yankees.com")
         cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MEMBER})
@@ -31,19 +33,19 @@ class TeamsAuthTest(TestCase):
         self._login(self.sox_admin)
         response = self.client.get(reverse("users:user_profile"))
         self.assertEqual(200, response.status_code, response)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
         self.assertEqual(200, response.status_code)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view_no_membership(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.yanks.slug]))
         self.assertEqual(404, response.status_code)
-        self._assertRequestHasTeam(response, self.yanks, None, None)
+        self._assertRequestHasTeam(response, self.yanks, None)
 
     def test_team_view_missing_team(self):
         self._login(self.sox_admin)
@@ -56,14 +58,14 @@ class TeamsAuthTest(TestCase):
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.sox.slug, invite.id]))
         self.assertEqual(200, response.status_code)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_admin_view_denied(self):
         self._login(self.yanks_member)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.yanks.slug, invite.id]))
-        self.assertEqual(404, response.status_code)
-        self._assertRequestHasTeam(response, self.yanks, self.yanks_member, ROLE_MEMBER)
+        self.assertEqual(403, response.status_code)
+        self._assertRequestHasTeam(response, self.yanks, self.yanks_member)
 
     def _login(self, user):
         success = self.client.login(username=user.username, password="123")
@@ -74,15 +76,14 @@ class TeamsAuthTest(TestCase):
             team=self.sox, email="dj@yankees.com", role=ROLE_MEMBER, invited_by=self.sox_admin
         )
 
-    def _assertRequestHasTeam(self, response, team, user=None, role=None):
+    def _assertRequestHasTeam(self, response, team, user=None):
         request = response.wsgi_request
         self.assertTrue(hasattr(request, "team"))
         self.assertEqual(request.team, team)
         self.assertTrue(hasattr(request, "team_membership"))
         membership = request.team_membership
-        if user or role:
+        if user:
             self.assertEqual(membership.user, user)
-            self.assertEqual(membership.role, role)
         else:
             # use assertEqual to force setup of the lazy object
             self.assertEqual(membership, None)
