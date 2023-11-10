@@ -84,7 +84,7 @@ def create_team(request):
 
 
 @require_POST
-@permission_required("teams.delete_team")
+@permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
     request.team.delete()
     messages.success(request, _('The "{team}" team was successfully deleted').format(team=request.team.name))
@@ -92,7 +92,7 @@ def delete_team(request, team_slug):
 
 
 @require_POST
-@permission_required("teams.change_invitation")
+@permission_required("teams.change_invitation", raise_exception=True)
 def resend_invitation(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     send_invitation(invitation)
@@ -100,7 +100,7 @@ def resend_invitation(request, team_slug, invitation_id):
 
 
 @require_POST
-@permission_required("teams.add_invitation")
+@permission_required("teams.add_invitation", raise_exception=True)
 def send_invitation_view(request, team_slug):
     form = InvitationForm(request.team, request.POST)
     if form.is_valid():
@@ -132,7 +132,7 @@ def send_invitation_view(request, team_slug):
 
 
 @require_POST
-@permission_required("teams.delete_invitation")
+@permission_required("teams.delete_invitation", raise_exception=True)
 def cancel_invitation_view(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     invitation.delete()
