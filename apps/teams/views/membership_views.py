@@ -1,4 +1,6 @@
 from django.contrib import messages
+from django.contrib.auth.models import Permission
+from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -58,9 +60,15 @@ def remove_team_membership(request, team_slug, membership_id):
     if not can_edit_team_members:
         if not removing_self:
             raise TeamPermissionError(_("You don't have permission to remove others from that team."))
-    if membership.role == ROLE_ADMIN:
-        admin_count = Membership.objects.filter(team=request.team, role=ROLE_ADMIN).count()
-        if admin_count == 1:
+    if membership.is_team_admin():
+        perms = Permission.objects.filter(Q(codename="change_team") | Q(codename="delete_team"))
+        other_admins = (
+            Membership.objects.exclude(id=membership.id)
+            .filter(team=request.team, groups__permissions__in=perms)
+            .distinct()
+            .count()
+        )
+        if not other_admins:
             # trying to remove the last admin. this will get us in trouble.
             messages.error(
                 request,

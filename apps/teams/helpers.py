@@ -1,13 +1,11 @@
 from django.http import HttpRequest
-from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 
 from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
 
-from . import roles
-from .backends import get_team_owner_role
-from .models import Membership, Team
+from .backends import make_user_team_owner
+from .models import Team
 
 
 def get_default_team_name_for_user(user: CustomUser):
@@ -58,6 +56,5 @@ def create_default_team_for_user(user: CustomUser, team_name: str = None):
     team_name = team_name or get_default_team_name_for_user(user)
     slug = get_next_unique_team_slug(team_name)
     team = Team.objects.create(name=team_name, slug=slug)
-    membership = Membership.objects.create(team=team, user=user, role=roles.ROLE_ADMIN)
-    membership.groups.set([get_team_owner_role()])
+    make_user_team_owner(team, user)
     return team

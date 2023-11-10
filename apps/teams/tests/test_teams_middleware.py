@@ -1,10 +1,9 @@
-from django.http import Http404
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.teams.backends import get_team_owner_role
-from apps.teams.models import Invitation, Membership, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
+from apps.teams.backends import add_user_to_team, make_user_team_owner
+from apps.teams.models import Invitation, Team
+from apps.teams.roles import ROLE_MEMBER
 from apps.users.models import CustomUser
 
 PASSWORD = "123"
@@ -18,11 +17,10 @@ class TeamsAuthTest(TestCase):
         cls.yanks = Team.objects.create(name="Yankees", slug="yanks")
 
         cls.sox_admin = _create_user("tito@redsox.com")
-        membership = Membership.objects.create(team=cls.sox, user=cls.sox_admin)
-        membership.groups.set([get_team_owner_role()])
+        make_user_team_owner(cls.sox, cls.sox_admin)
 
         cls.yanks_member = _create_user("derek.jeter@yankees.com")
-        cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MEMBER})
+        add_user_to_team(cls.yanks, cls.yanks_member)
 
     def test_unauthenticated_view(self):
         response = self.client.get(reverse("web:home"))

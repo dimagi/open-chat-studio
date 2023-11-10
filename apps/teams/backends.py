@@ -6,6 +6,8 @@ from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.models import Group, Permission
 from django.db import models
 
+from apps.teams import roles
+from apps.teams.models import Membership
 from apps.teams.utils import get_current_team
 
 SUPER_ADMIN_GROUP = "Super Admin"
@@ -133,5 +135,22 @@ def create_default_groups():
     _groups_created = True
 
 
-def get_team_owner_role():
-    return Group.objects.get(name=SUPER_ADMIN_GROUP)
+def make_user_team_owner(team, user) -> Membership:
+    membership = Membership.objects.create(team=team, user=user, role=roles.ROLE_ADMIN)
+    membership.groups.set(get_team_owner_groups())
+    return membership
+
+
+def add_user_to_team(team, user, groups=None) -> Membership:
+    membership = Membership.objects.create(team=team, user=user, role=roles.ROLE_MEMBER)
+    if groups:
+        membership.groups.set(groups)
+    return membership
+
+
+def get_team_owner_groups():
+    return [Group.objects.get(name=SUPER_ADMIN_GROUP)]
+
+
+def get_groups():
+    return {group.name: group for group in Group.objects.all()}
