@@ -127,6 +127,7 @@ def create_default_groups():
     """
     global _groups_created
     if _groups_created:
+        # avoid calling this multiple times
         return
 
     for group_def in GROUPS:
