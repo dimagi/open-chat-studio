@@ -1,7 +1,8 @@
 from django import forms
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
+from apps.teams.models import Team
 
 
 class ChannelForm(forms.ModelForm):
@@ -13,16 +14,20 @@ class ChannelForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
-        initial = kwargs.get("initial", {})
-        platform = initial.get("platform", None)
-        if platform:
-            provider_types = MessagingProviderType.platform_supported_provider_types(platform)
-            if provider_types:
-                self.fields["messaging_provider"].queryset = MessagingProvider.objects.filter(
-                    type__in=provider_types, team=team
-                )
-            else:
-                self.fields["messaging_provider"].widget = forms.HiddenInput()
+        if self.is_bound:
+            return
+        platform = self.initial["platform"]
+        self._populate_available_message_providers(team, platform)
+
+    def _populate_available_message_providers(self, team: Team, platform: ChannelPlatform):
+        provider_types = MessagingProviderType.platform_supported_provider_types(platform)
+        queryset = MessagingProvider.objects.filter(team=team)
+        # We must let the default queryset filter for the specific team
+        self.fields["messaging_provider"].queryset = queryset
+        if provider_types:
+            self.fields["messaging_provider"].queryset = queryset.filter(type__in=provider_types)
+        else:
+            self.fields["messaging_provider"].widget = forms.HiddenInput()
 
     def save(self, experiment, config_data: dict):
         self.instance.experiment = experiment
