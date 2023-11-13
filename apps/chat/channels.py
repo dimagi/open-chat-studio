@@ -359,7 +359,7 @@ class TelegramChannel(ChannelBase):
 class WhatsappChannel(ChannelBase):
     def initialize(self):
         self.voice_replies_supported = bool(settings.AWS_ACCESS_KEY_ID)
-        self.messaging_service = self.experiment.messaging_provider.get_messaging_service()
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data["number"]
