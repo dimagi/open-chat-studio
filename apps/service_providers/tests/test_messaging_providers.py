@@ -2,7 +2,7 @@ import mock
 import pytest
 from pydantic import ValidationError
 
-from apps.experiments.models import SyntheticVoice
+from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
 
@@ -35,6 +35,20 @@ def test_twilio_messaging_provider_error(config_key):
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
     _test_messaging_provider_error(MessagingProviderType.twilio, data=form.cleaned_data)
+
+
+@pytest.mark.parametrize(
+    "platform,expected_provider_types",
+    [
+        ("whatsapp", ["twilio"]),
+        ("telegram", []),
+    ],
+)
+def test_platform_supported_platforms(platform: str, expected_provider_types: list):
+    """Test that the correct services are being returned that supports a platform"""
+    provider_types = MessagingProviderType.platform_supported_provider_types(platform=ChannelPlatform(platform))
+    expected_provider_types = [MessagingProviderType(p_type) for p_type in expected_provider_types]
+    assert provider_types == expected_provider_types
 
 
 def _test_messaging_provider_error(provider_type: MessagingProviderType, data):
