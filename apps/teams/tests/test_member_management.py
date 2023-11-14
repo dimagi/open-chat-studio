@@ -147,5 +147,6 @@ class TeamMemberManagementViewTest(TestCase):
         self.assertTrue(Membership.objects.filter(pk=self.admin_membership.pk).exists())
 
     def _check_groups(self, membership, expected_group_ids):
+        # do full reload from the DB to clearn M2M cache
         membership = Membership.objects.get(id=membership.id)
         self.assertEqual(expected_group_ids, set(membership.groups.values_list("id", flat=True)))
