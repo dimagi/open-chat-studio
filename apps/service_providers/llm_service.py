@@ -54,9 +54,9 @@ class AzureLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return AzureChatOpenAI(
-            openai_api_base=self.openai_api_base,
+            azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
-            deployment_name=llm_model,
+            azure_deployment=llm_model,
             temperature=temperature,
         )
