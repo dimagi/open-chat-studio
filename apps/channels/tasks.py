@@ -21,7 +21,7 @@ def handle_telegram_message(message_data: str, channel_external_id: uuid):
 
 @shared_task
 def handle_whatsapp_message(message_data: str):
-    message = WhatsappMessage.parse_obj(json.loads(message_data))
+    message = WhatsappMessage.model_validate(json.loads(message_data))
     experiment_channel = ExperimentChannel.objects.filter(extra_data__contains={"number": message.to_number}).first()
     if not experiment_channel:
         return
