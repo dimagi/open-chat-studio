@@ -72,8 +72,6 @@ class ExperimentViewMixin:
         return form
 
     def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.owner = self.request.user
         if _source_material_is_missing(form.instance):
             messages.error(request=self.request, message="The prompt expects source material, but none were specified")
             return render(self.request, self.template_name, self.get_context_data())
@@ -115,6 +113,11 @@ class CreateExperiment(ExperimentViewMixin, CreateView):
 
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
 
 
 class EditExperiment(ExperimentViewMixin, UpdateView):
