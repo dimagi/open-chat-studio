@@ -19,7 +19,7 @@ celery[redis]
 openai
 sentry-sdk
 whitenoise[brotli]
-langchain==0.0.260
+langchain
 Markdown
 # unstructured  # langchain loaders
 # chromadb  # langchain queries
@@ -28,7 +28,7 @@ pyTelegramBotAPI==4.12.0
 pydub # Audio transcription
 ffmpeg # Audio transcription
 twilio
-pydantic==1.10.7
-django_celery_beat==2.5.0
+pydantic
+django_celery_beat
 azure-cognitiveservices-speech
 taskbadger

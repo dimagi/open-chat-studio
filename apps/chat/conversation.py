@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 import pytz
-from langchain import ConversationChain
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.callbacks import get_openai_callback
+from langchain.chains import ConversationChain
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,

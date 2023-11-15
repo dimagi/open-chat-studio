@@ -9,14 +9,14 @@ from apps.chat.channels import MESSAGE_TYPES
 class TestWhatsappMessage(TestCase):
     def test_parse_text_message(self):
         incoming_message = _whatsapp_text_message()
-        whatsapp_message = WhatsappMessage.parse_obj(json.loads(incoming_message))
+        whatsapp_message = WhatsappMessage.model_validate(json.loads(incoming_message))
         self.assertEqual(whatsapp_message.chat_id, whatsapp_message.from_number)
         self.assertEqual(whatsapp_message.content_type, MESSAGE_TYPES.TEXT)
         self.assertEqual(whatsapp_message.media_url, None)
 
     def test_parse_media_message(self):
         incoming_message = _whatsapp_audio_message()
-        whatsapp_message = WhatsappMessage.parse_obj(json.loads(incoming_message))
+        whatsapp_message = WhatsappMessage.model_validate(json.loads(incoming_message))
         self.assertEqual(whatsapp_message.chat_id, whatsapp_message.from_number)
         self.assertEqual(whatsapp_message.content_type, MESSAGE_TYPES.VOICE)
         self.assertEqual(whatsapp_message.media_url, "http://example.com/media")

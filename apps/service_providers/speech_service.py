@@ -1,12 +1,11 @@
 import tempfile
 from contextlib import closing
 from io import BytesIO
-from typing import Tuple
+from typing import ClassVar, Tuple
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
 import pydantic
-from django.conf import settings
 from pydub import AudioSegment
 
 from apps.chat.exceptions import AudioSynthesizeException
@@ -14,8 +13,8 @@ from apps.experiments.models import SyntheticVoice
 
 
 class SpeechService(pydantic.BaseModel):
-    _type: str
-    supports_transcription = False
+    _type: ClassVar[str]
+    supports_transcription: ClassVar[bool] = False
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
         assert synthetic_voice.service == self._type
@@ -32,7 +31,7 @@ class SpeechService(pydantic.BaseModel):
 
 
 class AWSSpeechService(SpeechService):
-    _type = SyntheticVoice.AWS
+    _type: ClassVar[str] = SyntheticVoice.AWS
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str
@@ -63,8 +62,8 @@ class AWSSpeechService(SpeechService):
 
 
 class AzureSpeechService(SpeechService):
-    _type = SyntheticVoice.Azure
-    supports_transcription = True
+    _type: ClassVar[str] = SyntheticVoice.Azure
+    supports_transcription: ClassVar[bool] = True
     azure_subscription_key: str
     azure_region: str
 
