@@ -1,7 +1,6 @@
 import json
 from collections import defaultdict
 from datetime import timedelta
-from typing import Any, Dict
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
@@ -19,7 +18,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Prompt, PromptBuilderHistory, SourceMaterial
 from apps.experiments.tables import PromptTable
 from apps.experiments.tasks import get_prompt_builder_response_task
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required
 
 PROMPT_DATA_SESSION_KEY = "prompt_data"
 

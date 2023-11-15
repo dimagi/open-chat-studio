@@ -2,9 +2,16 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.teams import roles
+from apps.teams.backends import (
+    CHAT_VIEWER_GROUP,
+    EXPERIMENT_ADMIN_GROUP,
+    SUPER_ADMIN_GROUP,
+    add_user_to_team,
+    get_groups,
+    make_user_team_owner,
+)
 from apps.teams.exceptions import TeamPermissionError
 from apps.teams.models import Membership, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
 from apps.users.models import CustomUser
 
 
@@ -22,15 +29,16 @@ class TeamMemberManagementViewTest(TestCase):
         self.member = CustomUser.objects.create(username="papi@redsox.com")
         self.member2 = CustomUser.objects.create(username="manny@redsox.com")
 
-        self.team.members.add(self.admin, through_defaults={"role": ROLE_ADMIN})
-        self.team.members.add(self.admin2, through_defaults={"role": ROLE_ADMIN})
-        self.team.members.add(self.member, through_defaults={"role": ROLE_MEMBER})
-        self.team.members.add(self.member2, through_defaults={"role": ROLE_MEMBER})
+        self.admin_membership = make_user_team_owner(self.team, self.admin)
+        self.admin_membership2 = make_user_team_owner(self.team, self.admin2)
+        self.normal_membership = add_user_to_team(self.team, self.member)
+        self.normal_membership2 = add_user_to_team(self.team, self.member2)
 
-        self.admin_membership = Membership.objects.get(user=self.admin, team=self.team)
-        self.admin_membership2 = Membership.objects.get(user=self.admin2, team=self.team)
-        self.normal_membership = Membership.objects.get(user=self.member, team=self.team)
-        self.normal_membership2 = Membership.objects.get(user=self.member2, team=self.team)
+        self.groups = get_groups()
+        self.admin_groups = [self.groups[SUPER_ADMIN_GROUP]]
+        self.admin_group_ids = {g.id for g in self.admin_groups}
+        self.member_groups = [self.groups[EXPERIMENT_ADMIN_GROUP], self.groups[CHAT_VIEWER_GROUP]]
+        self.member_group_ids = {g.id for g in self.member_groups}
 
     def _get_membership_url(self, membership):
         return reverse("single_team:team_membership_details", args=[self.team.slug, membership.pk])
@@ -38,8 +46,8 @@ class TeamMemberManagementViewTest(TestCase):
     def _get_remove_membership_url(self, membership):
         return reverse("single_team:remove_team_membership", args=[self.team.slug, membership.pk])
 
-    def _change_role(self, client, membership, role):
-        return client.post(self._get_membership_url(membership), {"role": role})
+    def _change_role(self, client, membership, groups):
+        return client.post(self._get_membership_url(membership), {"groups": [g.id for g in groups]})
 
     def _remove_member(self, client, membership):
         return client.post(self._get_remove_membership_url(membership))
@@ -57,17 +65,16 @@ class TeamMemberManagementViewTest(TestCase):
         c = Client()
         c.force_login(self.admin)
         # change member to admin
-        response = self._change_role(c, self.normal_membership, roles.ROLE_ADMIN)
+        response = self._change_role(c, self.normal_membership, self.admin_groups)
         self.assertEqual(200, response.status_code)
         # confirm updated
-        self.normal_membership.refresh_from_db()
-        self.assertEqual(roles.ROLE_ADMIN, self.normal_membership.role)
+        self._check_groups(self.normal_membership, self.admin_group_ids)
+
         # change back
-        response = self._change_role(c, self.normal_membership, roles.ROLE_MEMBER)
+        response = self._change_role(c, self.normal_membership, self.member_groups)
         self.assertEqual(200, response.status_code)
         # confirm updated
-        self.normal_membership.refresh_from_db()
-        self.assertEqual(roles.ROLE_MEMBER, self.normal_membership.role)
+        self._check_groups(self.normal_membership, self.member_group_ids)
 
     def test_admins_can_remove_members(self):
         c = Client()
@@ -109,21 +116,19 @@ class TeamMemberManagementViewTest(TestCase):
     def test_members_cant_change_others_roles(self):
         c = Client()
         c.force_login(self.member)
-        response = self._change_role(c, self.normal_membership2, roles.ROLE_ADMIN)
+        response = self._change_role(c, self.normal_membership2, self.admin_groups)
         self.assertNotEqual(200, response.status_code)
         # confirm not changed
-        self.normal_membership2.refresh_from_db()
-        self.assertEqual(roles.ROLE_MEMBER, self.normal_membership2.role)
+        self._check_groups(self.normal_membership2, set())
 
     def test_members_cant_change_own_role(self):
         for membership in [self.normal_membership, self.admin_membership]:
             original_role = membership.role
-            new_role = roles.ROLE_ADMIN if original_role == roles.ROLE_MEMBER else roles.ROLE_MEMBER
             c = Client()
             c.force_login(membership.user)
             # trying to change fails hard
             with self.assertRaises(TeamPermissionError):
-                self._change_role(c, membership, new_role)
+                self._change_role(c, membership, self.admin_groups)
 
             # confirm unchanged
             membership.refresh_from_db()
@@ -134,9 +139,14 @@ class TeamMemberManagementViewTest(TestCase):
         c.force_login(self.admin)
 
         # demote other admin
-        self._change_role(c, self.admin_membership2, roles.ROLE_MEMBER)
+        self._change_role(c, self.admin_membership2, self.member_groups)
 
         # confirm it doesn't work
         response = self._remove_member(c, self.admin_membership)
         self.assertNotEqual(200, response.status_code)
         self.assertTrue(Membership.objects.filter(pk=self.admin_membership.pk).exists())
+
+    def _check_groups(self, membership, expected_group_ids):
+        # do full reload from the DB to clearn M2M cache
+        membership = Membership.objects.get(id=membership.id)
+        self.assertEqual(expected_group_ids, set(membership.groups.values_list("id", flat=True)))

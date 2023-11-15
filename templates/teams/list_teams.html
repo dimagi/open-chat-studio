@@ -1,7 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% load static %}
-{% load team_tags %}
 {% block app %}
 <div class="app-card">
   {% if teams %}
@@ -25,7 +24,7 @@
                 <span class="pg-icon">
                   <i class="fa fa-gear"></i>
                 </span>
-                <span class="pg-hidden-mobile-inline">{% if  request.user|is_admin_of:team %}{% translate "Edit" %}{% else %}{% translate "View Details" %}{% endif %}</span>
+                <span class="pg-hidden-mobile-inline">{% if perms.teams.change_team %}{% translate "Edit" %}{% else %}{% translate "View Details" %}{% endif %}</span>
               </a>
             </td>
           </tr>

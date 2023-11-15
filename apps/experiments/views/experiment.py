@@ -7,7 +7,7 @@ import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.decorators import permission_required, user_passes_test
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
@@ -31,7 +31,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required
 from apps.users.models import CustomUser
 
 
@@ -477,7 +477,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
     )
 
 
-@team_admin_required
+@login_and_team_required
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def experiment_invitations(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
@@ -522,7 +522,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 
 
 @require_POST
-@team_admin_required
+@permission_required("chats.view_chat", raise_exception=True)
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
