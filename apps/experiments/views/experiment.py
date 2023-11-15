@@ -11,7 +11,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -64,7 +64,21 @@ class ExperimentTableView(SingleTableView):
         return query_set
 
 
-class CreateExperiment(CreateView):
+class ExperimentViewMixin:
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        _apply_voice_provider_alpine_attrs(form)
+        return form
+
+    def form_valid(self, form):
+        if _source_material_is_missing(form.instance):
+            messages.error(request=self.request, message="The prompt expects source material, but none were specified")
+            return render(self.request, self.template_name, self.get_context_data())
+        return super().form_valid(form)
+
+
+class CreateExperiment(ExperimentViewMixin, CreateView):
     model = Experiment
     fields = [
         "name",
@@ -100,19 +114,13 @@ class CreateExperiment(CreateView):
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
-    def get_form(self):
-        form = super().get_form()
-        _apply_related_model_querysets(self.request.team, form)
-        _apply_voice_provider_alpine_attrs(form)
-        return form
-
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
 
-class EditExperiment(UpdateView):
+class EditExperiment(ExperimentViewMixin, UpdateView):
     model = Experiment
     fields = [
         "name",
@@ -148,14 +156,16 @@ class EditExperiment(UpdateView):
     def get_queryset(self):
         return Experiment.objects.filter(team=self.request.team)
 
-    def get_form(self):
-        form = super().get_form()
-        _apply_related_model_querysets(self.request.team, form)
-        _apply_voice_provider_alpine_attrs(form)
-        return form
-
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+
+def _source_material_is_missing(experiment: Experiment) -> bool:
+    prompt = experiment.chatbot_prompt.prompt
+    prompt_expects_source_material = "{source_material}" in prompt
+    if not prompt_expects_source_material:
+        return False
+    return not bool(experiment.source_material)
 
 
 def _apply_related_model_querysets(team, form):
