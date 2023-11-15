@@ -1,4 +1,5 @@
 from io import BytesIO
+from typing import ClassVar
 
 import pydantic
 import requests
@@ -9,8 +10,8 @@ from apps.channels.models import ChannelPlatform
 
 
 class MessagingService(pydantic.BaseModel):
-    _type: str
-    _supported_platforms: list
+    _type: ClassVar[str]
+    _supported_platforms: ClassVar[list]
 
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         raise NotImplementedError
@@ -24,15 +25,11 @@ class MessagingService(pydantic.BaseModel):
 
 
 class TwilioService(MessagingService):
-    _type = "twilio"
-    _supported_platforms: list = [ChannelPlatform.WHATSAPP]
+    _type: ClassVar[str] = "twilio"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
 
     account_sid: str
     auth_token: str
-
-    @staticmethod
-    def supported_platforms():
-        return TwilioService._supported_platforms
 
     @property
     def client(self) -> Client:

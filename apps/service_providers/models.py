@@ -130,7 +130,7 @@ class MessagingProviderType(models.TextChoices):
         """Finds all provider types supporting the platform specified by `platform`"""
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
-            if platform in service.supported_platforms():
+            if platform in service.supported_platforms:
                 provider_types.append(MessagingProviderType(service._type))
         return provider_types
 
