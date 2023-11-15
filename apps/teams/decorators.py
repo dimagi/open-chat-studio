@@ -3,15 +3,11 @@ from functools import wraps
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 
-from .roles import is_admin, is_member
+from .roles import is_member
 
 
 def login_and_team_required(view_func):
     return _get_decorated_function(view_func, is_member)
-
-
-def team_admin_required(view_func):
-    return _get_decorated_function(view_func, is_admin)
 
 
 def _get_decorated_function(view_func, permission_test_function):

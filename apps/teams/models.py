@@ -1,7 +1,7 @@
 import uuid
 
 from django.conf import settings
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -41,14 +41,7 @@ class Team(BaseModel):
         return reverse("web_team:home", args=[self.slug])
 
 
-class Membership(BaseModel):
-    """
-    A user's team membership
-    """
-
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES)
+class PermissionsMixin(models.Model):
     groups = models.ManyToManyField(
         Group,
         verbose_name="Groups",
@@ -61,11 +54,41 @@ class Membership(BaseModel):
         related_query_name="membership",
     )
 
+    class Meta:
+        abstract = True
+
+    def _get_permissions(self):
+        perm_cache_name = "_perm_cache"
+        if not hasattr(self, perm_cache_name):
+            perms = (
+                Permission.objects.filter(group__membership=self)
+                .values_list("content_type__app_label", "codename")
+                .order_by()
+            )
+            setattr(self, perm_cache_name, {"%s.%s" % (ct, name) for ct, name in perms})
+        return getattr(self, perm_cache_name)
+
+    def has_perm(self, perm):
+        return perm in self._get_permissions()
+
+    def has_perms(self, perm_list):
+        return all(self.has_perm(perm) for perm in perm_list)
+
+
+class Membership(BaseModel, PermissionsMixin):
+    """
+    A user's team membership
+    """
+
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES)
+
     def __str__(self):
         return f"{self.user}: {self.team}"
 
-    def is_admin(self) -> bool:
-        return self.role == roles.ROLE_ADMIN
+    def is_team_admin(self) -> bool:
+        return self.has_perms(["teams.change_team", "teams.delete_team"])
 
 
 class Invitation(BaseModel):
@@ -81,6 +104,12 @@ class Invitation(BaseModel):
     is_accepted = models.BooleanField(default=False)
     accepted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="accepted_invitations", null=True, blank=True
+    )
+    groups = models.ManyToManyField(
+        Group,
+        verbose_name="Groups",
+        blank=True,
+        help_text="The groups to assign to the user when they accept the invitation.",
     )
 
     def get_url(self) -> str:
