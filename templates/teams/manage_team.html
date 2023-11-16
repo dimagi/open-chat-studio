@@ -32,6 +32,7 @@
 {% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
 {% translate "Speech to text and visa versa" as speech_subtitle %}
 {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider"%}
+{% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider"%}
 <section class="app-card">
   <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
   <div class='table-responsive'>

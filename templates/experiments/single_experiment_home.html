@@ -93,7 +93,7 @@
         <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
         <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}">
           {% csrf_token %}
-          {% render_form_fields platform.form %}
+          {% render_form_fields platform_forms|dict_lookup:platform %}
           {% if platform.extra_form %}
             {% render_form_fields platform.extra_form %}
           {% endif %}

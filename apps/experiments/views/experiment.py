@@ -233,6 +233,12 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     channels = experiment.experimentchannel_set.exclude(platform="web").all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = set(ChannelPlatform.for_dropdown()) - used_platforms
+    platform_forms = {}
+    form_kwargs = {"team": request.team}
+    for platform in available_platforms:
+        if platform.form(**form_kwargs):
+            platform_forms[platform] = platform.form(**form_kwargs)
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -241,6 +247,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "experiment": experiment,
             "user_sessions": user_sessions,
             "platforms": available_platforms,
+            "platform_forms": platform_forms,
             "channels": channels,
         },
     )

@@ -7,7 +7,8 @@ from django.db.models import JSONField
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment
+from apps.teams.models import Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -28,10 +29,10 @@ class ChannelPlatform(models.TextChoices):
             cls.WHATSAPP,
         ]
 
-    def form(self):
+    def form(self, team: Team):
         from apps.channels.forms import ChannelForm
 
-        return ChannelForm(initial={"platform": self})
+        return ChannelForm(initial={"platform": self}, team=team)
 
     def extra_form(self, *args, **kwargs):
         from apps.channels.forms import TelegramChannelForm, WhatsappChannelForm
@@ -53,6 +54,13 @@ class ExperimentChannel(BaseModel):
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
+    messaging_provider = models.ForeignKey(
+        "service_providers.MessagingProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Messaging Provider",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -76,7 +84,7 @@ class ExperimentChannel(BaseModel):
     def form(self, *args, **kwargs):
         from apps.channels.forms import ChannelForm
 
-        return ChannelForm(instance=self, *args, **kwargs)
+        return ChannelForm(instance=self, team=self.experiment.team, *args, **kwargs)
 
     def extra_form(self, *args, **kwargs):
         return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)

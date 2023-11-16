@@ -89,3 +89,10 @@ class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     azure_subscription_key = forms.CharField(label=_("Subscription Key"))
     azure_region = forms.CharField(label=_("Region"))
+
+
+class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["auth_token"]
+
+    account_sid = forms.CharField(label=_("Account SID"))
+    auth_token = forms.CharField(label=_("Auth Token"))
