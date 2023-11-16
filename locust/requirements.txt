@@ -1,0 +1,2 @@
+locust==2.18.3
+beautifulsoup4==4.12.2
