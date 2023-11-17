@@ -88,6 +88,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -410,10 +411,6 @@ LOGGING = {
 
 # Telegram webhook config
 TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
-
-TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", default=None)
-TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN", default=None)
-
 
 # Django tables
 

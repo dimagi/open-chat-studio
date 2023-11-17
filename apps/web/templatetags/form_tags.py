@@ -10,6 +10,11 @@ def render_form_fields(form):
     return mark_safe("".join(rendered_values))
 
 
+@register.filter
+def dict_lookup(dictionary, key):
+    return dictionary.get(key, None)
+
+
 @register.simple_tag
 def render_field(form_field):
     render_function = {

@@ -61,7 +61,7 @@ def test_team_backend(group1, group2):
 
 
 @pytest.mark.django_db()
-def test_team_backend_user_permissions(group1, group2):
+def test_team_backend_user_permissions(group1):
     membership = MembershipFactory(groups=[group1])
     user = membership.user
     with current_team(membership.team):

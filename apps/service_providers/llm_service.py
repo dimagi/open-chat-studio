@@ -1,9 +1,9 @@
 from io import BytesIO
 
-import openai
 import pydantic
 from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
+from openai import OpenAI
 
 
 class LlmService(pydantic.BaseModel):
@@ -35,12 +35,12 @@ class OpenAILlmService(LlmService):
         )
 
     def transcribe_audio(self, audio: BytesIO) -> str:
-        transcript = openai.Audio.transcribe(
+        client = OpenAI(
+            api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base
+        )
+        transcript = client.audio.transcriptions.create(
             model="whisper-1",
             file=audio,
-            api_key=self.openai_api_key,
-            api_base=self.openai_api_base,
-            organization=self.openai_organization,
         )
         return transcript["text"]
 
@@ -54,9 +54,9 @@ class AzureLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return AzureChatOpenAI(
-            openai_api_base=self.openai_api_base,
+            azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
-            deployment_name=llm_model,
+            azure_deployment=llm_model,
             temperature=temperature,
         )

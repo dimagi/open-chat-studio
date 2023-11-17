@@ -1,8 +1,8 @@
 from allauth.account.signals import user_signed_up
 from django.core.signals import request_finished
-from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 
+from ..web.signals import migrate_finished
 from .backends import create_default_groups
 from .helpers import create_default_team_for_user
 from .invitations import get_invitation_id_from_request, process_invitation
@@ -34,9 +34,17 @@ def clear_team_context(sender, **kwargs):
     unset_current_team()
 
 
-@post_migrate.connect
+_groups_created = []
+
+
+@migrate_finished.connect
 def sync_groups(sender, **kwargs):
     """
     Syncs the groups with the permissions.
     """
-    create_default_groups()
+    if not _groups_created:
+        # all the apps we care about have been migrated
+        print("Creating groups")
+        create_default_groups()
+
+    _groups_created.append(1)

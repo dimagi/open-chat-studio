@@ -7,11 +7,11 @@ import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.decorators import permission_required, user_passes_test
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -31,7 +31,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required
 from apps.users.models import CustomUser
 
 
@@ -64,7 +64,21 @@ class ExperimentTableView(SingleTableView):
         return query_set
 
 
-class CreateExperiment(CreateView):
+class ExperimentViewMixin:
+    def get_form(self):
+        form = super().get_form()
+        _apply_related_model_querysets(self.request.team, form)
+        _apply_voice_provider_alpine_attrs(form)
+        return form
+
+    def form_valid(self, form):
+        if _source_material_is_missing(form.instance):
+            messages.error(request=self.request, message="The prompt expects source material, but none were specified")
+            return render(self.request, self.template_name, self.get_context_data())
+        return super().form_valid(form)
+
+
+class CreateExperiment(ExperimentViewMixin, CreateView):
     model = Experiment
     fields = [
         "name",
@@ -100,19 +114,13 @@ class CreateExperiment(CreateView):
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
-    def get_form(self):
-        form = super().get_form()
-        _apply_related_model_querysets(self.request.team, form)
-        _apply_voice_provider_alpine_attrs(form)
-        return form
-
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.owner = self.request.user
         return super().form_valid(form)
 
 
-class EditExperiment(UpdateView):
+class EditExperiment(ExperimentViewMixin, UpdateView):
     model = Experiment
     fields = [
         "name",
@@ -148,14 +156,16 @@ class EditExperiment(UpdateView):
     def get_queryset(self):
         return Experiment.objects.filter(team=self.request.team)
 
-    def get_form(self):
-        form = super().get_form()
-        _apply_related_model_querysets(self.request.team, form)
-        _apply_voice_provider_alpine_attrs(form)
-        return form
-
     def get_success_url(self):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+
+def _source_material_is_missing(experiment: Experiment) -> bool:
+    prompt = experiment.chatbot_prompt.prompt
+    prompt_expects_source_material = "{source_material}" in prompt
+    if not prompt_expects_source_material:
+        return False
+    return not bool(experiment.source_material)
 
 
 def _apply_related_model_querysets(team, form):
@@ -223,6 +233,12 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     channels = experiment.experimentchannel_set.exclude(platform="web").all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = set(ChannelPlatform.for_dropdown()) - used_platforms
+    platform_forms = {}
+    form_kwargs = {"team": request.team}
+    for platform in available_platforms:
+        if platform.form(**form_kwargs):
+            platform_forms[platform] = platform.form(**form_kwargs)
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -231,6 +247,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "experiment": experiment,
             "user_sessions": user_sessions,
             "platforms": available_platforms,
+            "platform_forms": platform_forms,
             "channels": channels,
         },
     )
@@ -467,7 +484,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
     )
 
 
-@team_admin_required
+@login_and_team_required
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def experiment_invitations(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
@@ -512,7 +529,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 
 
 @require_POST
-@team_admin_required
+@permission_required("chats.view_chat", raise_exception=True)
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now

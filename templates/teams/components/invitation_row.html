@@ -2,7 +2,7 @@
 <tr>
   <td>{{ invitation.email }}</td>
   <td>{{ invitation.created_at }}</td>
-  <td>{{ invitation.role }}</td>
+  <td>{{ invitation.groups.all|join:", " }}</td>
 {% if request.team_membership.role == 'admin' %}
   <td class="pg-inline-buttons pg-justify-content-end">
     <form hx-post="{% url 'single_team:resend_invitation' request.team.slug invitation.id %}" hx-target="this" hx-swap="outerHTML">

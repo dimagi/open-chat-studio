@@ -14,7 +14,6 @@ from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
-from twilio.rest import Client
 
 from apps.channels import audio
 from apps.channels.models import ExperimentChannel
@@ -360,13 +359,13 @@ class TelegramChannel(ChannelBase):
 
 class WhatsappChannel(ChannelBase):
     def initialize(self):
-        self.client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
         self.voice_replies_supported = bool(settings.AWS_ACCESS_KEY_ID)
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
-        self.client.messages.create(from_=f"whatsapp:{from_number}", body=text, to=f"whatsapp:{to_number}")
+        self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
 
     @property
     def chat_id(self) -> int:
@@ -384,12 +383,10 @@ class WhatsappChannel(ChannelBase):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.experiment_session.external_chat_id
-        self.client.messages.create(from_=f"whatsapp:{from_number}", body=bot_message, to=f"whatsapp:{to_number}")
+        self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
 
     def get_message_audio(self) -> BytesIO:
-        auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-        ogg_audio = BytesIO(requests.get(self.message.media_url, auth=auth).content)
-        return audio.convert_audio_to_wav(ogg_audio)
+        return self.messaging_service.get_message_audio(url=self.message.media_url)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
@@ -429,7 +426,9 @@ class WhatsappChannel(ChannelBase):
         )
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
-        self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[public_url])
+        self.messaging_service.send_whatsapp_voice_message(
+            media_url=public_url, from_number=from_number, to_number=to_number
+        )
 
 
 class FacebookMessengerChannel(ChannelBase, BaseMessenger):

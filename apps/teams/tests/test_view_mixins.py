@@ -4,7 +4,7 @@ from django.test import RequestFactory, TestCase
 from django.views import View
 
 from apps.teams.middleware import TeamsMiddleware
-from apps.teams.mixins import LoginAndTeamRequiredMixin, TeamAdminRequiredMixin
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Team
 from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
 from apps.users.models import CustomUser
@@ -16,10 +16,6 @@ class BaseView(View):
 
 
 class MemberView(LoginAndTeamRequiredMixin, BaseView):
-    pass
-
-
-class AdminView(TeamAdminRequiredMixin, BaseView):
     pass
 
 
@@ -74,9 +70,8 @@ class TeamMixinTest(TestCase):
             self._call_view(view_cls, user, team_slug)
 
     def test_anonymous_user_redirect_to_login(self):
-        for view_cls in [MemberView, AdminView]:
-            self.assertRedirectToLogin(view_cls, AnonymousUser(), "sox")
-            self.assertRedirectToLogin(view_cls, AnonymousUser(), "yanks")
+        self.assertRedirectToLogin(MemberView, AnonymousUser(), "sox")
+        self.assertRedirectToLogin(MemberView, AnonymousUser(), "yanks")
 
     def test_member_view_logged_in(self):
         for user in [self.sox_member, self.sox_member]:
@@ -85,9 +80,3 @@ class TeamMixinTest(TestCase):
         for user in [self.yanks_member, self.yanks_admin]:
             self.assertSuccessfulRequest(MemberView, user, "yanks")
             self.assertNotFound(MemberView, user, "sox")
-
-    def test_admin_only_views(self):
-        self.assertSuccessfulRequest(AdminView, self.sox_admin, "sox")
-        self.assertNotFound(AdminView, self.sox_member, "sox")
-        self.assertNotFound(AdminView, self.yanks_admin, "sox")
-        self.assertNotFound(AdminView, self.yanks_member, "sox")

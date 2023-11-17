@@ -30,7 +30,7 @@ class WhatsappMessage(BaseModel):
     to_number: str = Field(alias="To")
     body: str = Field(alias="Body")
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT, alias="MediaContentType0")
-    media_url: Optional[str] = Field(alias="MediaUrl0")
+    media_url: Optional[str] = Field(default=None, alias="MediaUrl0")
 
     @validator("to_number", "from_number", pre=True)
     def strip_prefix(cls, value):
