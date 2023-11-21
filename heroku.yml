@@ -20,5 +20,9 @@ run:
     image: django
   worker:
     command:
-      - celery -A gpt_playground worker -l INFO --beat --concurrency 2
+      - celery -A gpt_playground worker -l INFO --pool gevent --concurrency 100
+    image: django
+  beat:
+    command:
+      - celery -A gpt_playground beat -l INFO
     image: django
