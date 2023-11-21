@@ -14,6 +14,7 @@ locust --headless --users 1 --spawn-rate 1 -H http://localhost:8000 \
   --team dimagi \
   --experiment 152 \
   --transcripts transcripts.csv
+  --locustfile locustfile.py,step_load.py
 ```
 
 With 1password:
