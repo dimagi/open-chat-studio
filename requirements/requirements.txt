@@ -143,6 +143,8 @@ djangorestframework-api-key==3.0.0
     # via -r requirements/requirements.in
 drf-spectacular==0.26.5
     # via -r requirements/requirements.in
+fbmessenger==6.0.0
+    # via -r requirements/requirements.in
 ffmpeg==1.4
     # via -r requirements/requirements.in
 frozenlist==1.4.0
@@ -264,6 +266,7 @@ requests==2.31.0
     # via
     #   django-allauth
     #   django-anymail
+    #   fbmessenger
     #   langchain
     #   langsmith
     #   pytelegrambotapi

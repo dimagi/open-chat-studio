@@ -3,30 +3,34 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.db.models import JSONField
+from django.db.models import JSONField, Q
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
 from apps.experiments.models import Experiment
 from apps.teams.models import Team
+from apps.teams.utils import get_current_team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 WEB = "web"
 TELEGRAM = "telegram"
 WHATSAPP = "whatsapp"
+FACEBOOK = "facebook"
 
 
 class ChannelPlatform(models.TextChoices):
     TELEGRAM = "telegram", "Telegram"
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
+    FACEBOOK = "facebook", "Facebook"
 
     @classmethod
     def for_dropdown(cls):
         return [
             cls.TELEGRAM,
             cls.WHATSAPP,
+            cls.FACEBOOK,
         ]
 
     def form(self, team: Team):
@@ -35,18 +39,35 @@ class ChannelPlatform(models.TextChoices):
         return ChannelForm(initial={"platform": self}, team=team)
 
     def extra_form(self, *args, **kwargs):
-        from apps.channels.forms import TelegramChannelForm, WhatsappChannelForm
+        from apps.channels import forms
 
         match self:
             case self.TELEGRAM:
-                return TelegramChannelForm(*args, **kwargs)
+                return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
-                return WhatsappChannelForm(*args, **kwargs)
+                return forms.WhatsappChannelForm(*args, **kwargs)
+            case self.FACEBOOK:
+                team_slug = get_current_team().slug
+                webhook_url = absolute_url(
+                    reverse("channels:new_facebook_message", kwargs={"team_slug": team_slug}), is_secure=True
+                )
+                initial = kwargs.get("initial", {})
+                initial.setdefault("verify_token", str(uuid.uuid4()))
+                initial.setdefault("webook_url", webhook_url)
+                kwargs["initial"] = initial
+                return forms.FacebookChannelForm(*args, **kwargs)
+
+
+class ExperimentChannelObjectManager(models.Manager):
+    def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
+        extra_data_filter = Q(extra_data__contains={key: value})
+        return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
 
 class ExperimentChannel(BaseModel):
+    objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
-    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"))
+    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"), (FACEBOOK, "Facebook"))
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)

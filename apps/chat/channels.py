@@ -11,6 +11,7 @@ import requests
 from botocore.client import Config
 from django.conf import settings
 from django.utils import timezone
+from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
 
@@ -335,7 +336,7 @@ class TelegramChannel(ChannelBase):
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
-        return audio.convert_ogg_to_wav(ogg_audio)
+        return audio.convert_audio_to_wav(ogg_audio)
 
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
@@ -428,3 +429,40 @@ class WhatsappChannel(ChannelBase):
         self.messaging_service.send_whatsapp_voice_message(
             media_url=public_url, from_number=from_number, to_number=to_number
         )
+
+
+class FacebookMessengerChannel(ChannelBase, BaseMessenger):
+    voice_replies_supported = False
+
+    def initialize(self):
+        page_access_token = self.experiment_channel.extra_data["page_access_token"]
+        self.client = MessengerClient(page_access_token, api_version=18.0)
+
+    @property
+    def chat_id(self) -> int:
+        return self.message.user_id
+
+    @property
+    def message_content_type(self):
+        return self.message.content_type
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def send_text_to_user(self, text: str):
+        typing_off = sender_actions.SenderAction(sender_action="typing_off")
+        self.client.send_action(typing_off.to_dict(), recipient_id=self.chat_id)
+        self.client.send({"text": text}, recipient_id=self.chat_id, messaging_type="RESPONSE")
+
+    def submit_input_to_llm(self):
+        typing_on = sender_actions.SenderAction(sender_action="typing_on")
+        self.client.send_action(typing_on.to_dict(), recipient_id=self.chat_id)
+
+    def get_message_audio(self) -> BytesIO:
+        raw_data = requests.get(self.message.media_url).content
+        mp4_audio = BytesIO(raw_data)
+        return audio.convert_audio_to_wav(mp4_audio, source_format="mp4")
+
+    def transcription_finished(self, transcript: str):
+        self.send_text_to_user(f'I heard: "{transcript}"')
