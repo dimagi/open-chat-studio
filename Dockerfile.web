@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
   ffmpeg \
   # Azure cognitive audio dependencies
   build-essential libssl-dev ca-certificates libasound2 wget \
+  # curl for heroku log shipping
+  curl \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*
