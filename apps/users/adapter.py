@@ -1,10 +1,9 @@
 from allauth.account import app_settings
-from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.utils import user_email, user_field
 from allauth_2fa.adapter import OTPAdapter as AllAuthOtpAdapter
 
 
-class EmailAsUsernameAdapter(DefaultAccountAdapter):
+class EmailAsUsernameAdapter(AllAuthOtpAdapter):
     """
     Adapter that always sets the username equal to the user's email address.
     """
@@ -14,7 +13,7 @@ class EmailAsUsernameAdapter(DefaultAccountAdapter):
         user_field(user, app_settings.USER_MODEL_USERNAME_FIELD, user_email(user))
 
 
-class NoNewUsersAccountAdapter(DefaultAccountAdapter):
+class NoNewUsersAccountAdapter(EmailAsUsernameAdapter):
     """
     Adapter that can be used to disable public sign-ups for your app.
     """
@@ -24,5 +23,5 @@ class NoNewUsersAccountAdapter(DefaultAccountAdapter):
         return False
 
 
-class AccountAdapter(EmailAsUsernameAdapter, AllAuthOtpAdapter):
+class AccountAdapter(EmailAsUsernameAdapter):
     pass
