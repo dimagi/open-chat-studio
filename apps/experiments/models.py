@@ -2,7 +2,8 @@ import uuid
 
 import markdown
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -307,15 +308,20 @@ class Experiment(BaseTeamModel):
 
 
 class Participant(BaseTeamModel):
-    email = models.EmailField()
+    identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
 
+    @property
+    def email(self):
+        validate_email(self.identifier)
+        return self.identifier
+
     def __str__(self):
-        return self.email
+        return self.identifier
 
     class Meta:
-        ordering = ["email"]
-        unique_together = ("team", "email")
+        ordering = ["identifier"]
+        unique_together = ("team", "identifier")
 
 
 class SessionStatus(models.TextChoices):

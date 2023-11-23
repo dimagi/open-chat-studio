@@ -15,17 +15,17 @@ class ParticipantMigrationTest(TestCase):
         cls.team2 = Team.objects.create(name="team2", slug="team2")
         cls.team3 = Team.objects.create(name="team3", slug="team3")
 
-        cls.default_team_p1 = Participant.objects.create(team=cls.default_team, email="p1@test.com")
-        cls.default_team_p2 = Participant.objects.create(team=cls.default_team, email="p2@test.com")
-        cls.default_team_p3 = Participant.objects.create(team=cls.default_team, email="p3@test.com")
+        cls.default_team_p1 = Participant.objects.create(team=cls.default_team, identifier="p1@test.com")
+        cls.default_team_p2 = Participant.objects.create(team=cls.default_team, identifier="p2@test.com")
+        cls.default_team_p3 = Participant.objects.create(team=cls.default_team, identifier="p3@test.com")
         cls.create_participant_and_session(cls.team2, "p2@test.com")
         cls.create_participant_and_session(cls.team3, "p2@test.com")
         cls.create_participant_and_session(cls.team3, "p3@test.com")
         cls.create_participant_and_session(cls.team3, "p4@test.com")
 
     @classmethod
-    def create_participant_and_session(cls, team, email):
-        participant = Participant.objects.create(team=team, email=email)
+    def create_participant_and_session(cls, team, identifier):
+        participant = Participant.objects.create(team=team, identifier=identifier)
 
         exp = Experiment.objects.create(
             team=cls.default_team,

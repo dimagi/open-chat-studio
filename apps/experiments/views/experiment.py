@@ -451,7 +451,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
             participant = None
             if form.cleaned_data["email_address"]:
                 participant = Participant.objects.get_or_create(
-                    team=request.team, email=form.cleaned_data["email_address"]
+                    team=request.team, identifier=form.cleaned_data["email_address"]
                 )[0]
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
@@ -496,7 +496,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
-            participant = Participant.objects.get_or_create(team=request.team, email=post_form.cleaned_data["email"])[0]
+            participant = Participant.objects.get_or_create(
+                team=request.team, identifier=post_form.cleaned_data["email"]
+            )[0]
             if ExperimentSession.objects.filter(
                 team=request.team,
                 experiment=experiment,
