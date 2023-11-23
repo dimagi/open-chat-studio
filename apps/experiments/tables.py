@@ -112,6 +112,9 @@ class ConsentFormTable(tables.Table):
         model = ConsentForm
         fields = (
             "name",
+            "capture_identifier",
+            "identifier_label",
+            "identifier_type",
             "is_default",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS

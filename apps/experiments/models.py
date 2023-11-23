@@ -131,6 +131,9 @@ class ConsentForm(BaseTeamModel):
 
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
+    capture_identifier = models.BooleanField(default=True)
+    identifier_label = models.CharField(max_length=200, default="Email Address")
+    identifier_type = models.CharField(choices=(("email", "Email"), ("text", "Text")), default="email", max_length=16)
     is_default = models.BooleanField(default=False, editable=False)
 
     class Meta:
