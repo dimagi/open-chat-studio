@@ -58,7 +58,10 @@ class PromptTableView(SingleTableView):
 class PromptViewMixin:
     def form_valid(self, form):
         if "{input}" in form.data["prompt"]:
-            error_message = "Unexpected {input} key. Use the input formatter to format the user input"
+            error_message = (
+                """Unexpected {input} key found in the prompmt. Use the input formatter to format"""
+                """the user input"""
+            )
             messages.error(request=self.request, message=error_message)
             return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
