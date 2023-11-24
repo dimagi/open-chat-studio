@@ -49,7 +49,7 @@ class SafetyLayerAdmin(admin.ModelAdmin):
 
 @admin.register(models.Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("email", "team", "public_id")
+    list_display = ("identifier", "team", "public_id")
     readonly_fields = ("public_id",)
     list_filter = ("team",)
 

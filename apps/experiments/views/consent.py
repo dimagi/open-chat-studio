@@ -39,6 +39,9 @@ class CreateConsentForm(CreateView):
     fields = [
         "name",
         "consent_text",
+        "capture_identifier",
+        "identifier_label",
+        "identifier_type",
     ]
     template_name = "generic/object_form.html"
     extra_context = {
@@ -61,6 +64,9 @@ class EditConsentForm(UpdateView):
     fields = [
         "name",
         "consent_text",
+        "capture_identifier",
+        "identifier_label",
+        "identifier_type",
     ]
     template_name = "generic/object_form.html"
     extra_context = {

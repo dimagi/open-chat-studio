@@ -444,14 +444,16 @@ def start_experiment(request, team_slug: str, experiment_id: str):
     except ValidationError:
         # old links dont have uuids
         raise Http404
+
+    consent = experiment.consent_form
     if request.method == "POST":
-        form = ConsentForm(request.POST)
+        form = ConsentForm(consent, request.POST)
         if form.is_valid():
             # start anonymous experiment
             participant = None
-            if form.cleaned_data["email_address"]:
+            if form.cleaned_data.get("identifier"):
                 participant = Participant.objects.get_or_create(
-                    team=request.team, email=form.cleaned_data["email_address"]
+                    team=request.team, identifier=form.cleaned_data["identifier"]
                 )[0]
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
@@ -466,12 +468,13 @@ def start_experiment(request, team_slug: str, experiment_id: str):
 
     else:
         form = ConsentForm(
+            consent,
             initial={
                 "experiment_id": experiment.id,
-            }
+            },
         )
 
-    consent_notice = experiment.consent_form.get_rendered_content()
+    consent_notice = consent.get_rendered_content()
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
@@ -496,7 +499,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
-            participant = Participant.objects.get_or_create(team=request.team, email=post_form.cleaned_data["email"])[0]
+            participant = Participant.objects.get_or_create(
+                team=request.team, identifier=post_form.cleaned_data["email"]
+            )[0]
             if ExperimentSession.objects.filter(
                 team=request.team,
                 experiment=experiment,
@@ -575,27 +580,27 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 def start_experiment_session(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
+    consent = experiment.consent_form
+
+    initial = {
+        "experiment_id": experiment.id,
+    }
+    if experiment_session.participant:
+        initial["participant_id"] = experiment_session.participant.id
+        initial["identifier"] = experiment_session.participant.identifier
+    elif not request.user.is_anonymous:
+        initial["identifier"] = request.user.email
 
     if request.method == "POST":
-        form = ConsentForm(request.POST)
+        form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
             _check_and_process_seed_message(experiment_session)
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:
-        initial = {
-            "experiment_id": experiment.id,
-        }
-        if experiment_session.participant:
-            initial["participant_id"] = experiment_session.participant.id
-            initial["email_address"] = experiment_session.participant.email
-        elif not request.user.is_anonymous:
-            initial["email_address"] = request.user.email
-        form = ConsentForm(
-            initial=initial,
-        )
+        form = ConsentForm(consent, initial=initial)
 
-    consent_notice = experiment.consent_form.get_rendered_content()
+    consent_notice = consent.get_rendered_content()
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
