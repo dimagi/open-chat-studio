@@ -4,9 +4,10 @@ from datetime import timedelta
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django.contrib import messages
 from django.contrib.postgres.search import SearchVector
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -54,7 +55,16 @@ class PromptTableView(SingleTableView):
         return query_set
 
 
-class CreatePrompt(CreateView):
+class PromptViewMixin:
+    def form_valid(self, form):
+        if "{input}" in form.data["prompt"]:
+            error_message = "Unexpected {input} key. Use the input formatter to format the user input"
+            messages.error(request=self.request, message=error_message)
+            return render(self.request, self.template_name, self.get_context_data())
+        return super().form_valid(form)
+
+
+class CreatePrompt(PromptViewMixin, CreateView):
     model = Prompt
     fields = [
         "name",
@@ -85,7 +95,7 @@ class CreatePrompt(CreateView):
         return super().form_valid(form)
 
 
-class EditPrompt(UpdateView):
+class EditPrompt(PromptViewMixin, UpdateView):
     model = Prompt
     fields = [
         "name",
