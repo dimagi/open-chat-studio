@@ -233,6 +233,9 @@ class ChannelBase:
 
         Checks if an experiment session already exists for the specified experiment and chat ID.
         If not, a new experiment session is created and associated with the chat.
+
+        If the user requested a new session (by sending the reset command), this will create a new experiment
+        session.
         """
         if self.experiment_session and not self.experiment_channel:
             # TODO: Remove
