@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from langchain.prompts import PromptTemplate
 
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Prompt, PromptBuilderHistory, SourceMaterial
@@ -56,11 +57,14 @@ class PromptTableView(SingleTableView):
 
 
 class PromptViewMixin:
+    ALLOWED_PROMPT_VARIABLES = ["source_material"]
+
     def form_valid(self, form):
-        if "{input}" in form.data["prompt"]:
-            error_message = (
-                """Unexpected {input} key found in the prompt. Use the input formatter to format the user input"""
-            )
+        input_variables = set(PromptTemplate.from_template(form.data["prompt"]).input_variables)
+        disallowed_variables = input_variables - set(self.ALLOWED_PROMPT_VARIABLES)
+        if disallowed_variables:
+            error_message = f"""Unexpected variables found in the prompt: {disallowed_variables}. Use the input formatter to
+                format the user input"""
             messages.error(request=self.request, message=error_message)
             return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
