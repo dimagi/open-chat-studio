@@ -135,6 +135,11 @@ class ConsentForm(BaseTeamModel):
     identifier_label = models.CharField(max_length=200, default="Email Address")
     identifier_type = models.CharField(choices=(("email", "Email"), ("text", "Text")), default="email", max_length=16)
     is_default = models.BooleanField(default=False, editable=False)
+    accept_keywords = models.CharField(
+        default="yes",
+        max_length=200,
+        help_text=("A list of words (separated by a comma) that the user should respond with to give consent"),
+    )
 
     class Meta:
         ordering = ["name"]
