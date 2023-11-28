@@ -428,3 +428,7 @@ class ExperimentSession(BaseTeamModel):
 
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
+
+    def update_status(self, new_status: SessionStatus):
+        self.status = new_status
+        self.save()
