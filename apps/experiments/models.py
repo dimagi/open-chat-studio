@@ -138,7 +138,10 @@ class ConsentForm(BaseTeamModel):
     accept_keywords = models.CharField(
         default="yes",
         max_length=200,
-        help_text=("A list of words (separated by a comma) that the user should respond with to give consent"),
+        help_text=(
+            "A list of words (separated by a comma) that the user should respond with to give consent. "
+            "Webchats are not supported"
+        ),
     )
 
     class Meta:

@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name="accept_keywords",
             field=models.CharField(
                 default="yes",
-                help_text="A list of words (separated by a comma) that the user should respond with to give consent",
+                help_text="A list of words (separated by a comma) that the user should respond with to give consent. Webchats are not supported",
                 max_length=200,
             ),
         ),
