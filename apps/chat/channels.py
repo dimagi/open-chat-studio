@@ -17,8 +17,9 @@ from telebot.util import smart_split
 
 from apps.channels import audio
 from apps.channels.models import ExperimentChannel
-from apps.chat.bots import get_bot_from_session
+from apps.chat.bots import get_bot_from_experiment, get_bot_from_session
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 
 
@@ -160,14 +161,48 @@ class ChannelBase:
         """
         self._add_message(message)
         if self.experiment_channel.platform != "web":
-            # Webchats' statuses are updated through an "external" flow
-            self.experiment_session.status = SessionStatus.ACTIVE
-            self.experiment_session.save()
-
             if self._is_reset_conversation_request():
-                # Why not include webchats? They can be reset by creating a new chat.
+                # Webchats' statuses are updated through an "external" flow
                 return
 
+            if self._should_get_consent():
+                # We manually add the message to the history here, since this doesn't follow the normal flow
+                self._add_message_to_history(self.message_text, ChatMessageType.HUMAN)
+
+                if self.experiment_session.status == SessionStatus.SETUP:
+                    self._chat_initiated()
+                elif self._user_gave_consent():
+                    self.experiment_session.update_status(SessionStatus.ACTIVE)
+                    # This is technically the start of the conversation
+                    if self.experiment.seed_message:
+                        self.send_message_as_bot(self.experiment.seed_message)
+                return
+
+        return self._handle_message()
+
+    def _should_get_consent(self):
+        """Pre-conversation is the phase where the user starts the chat and gives consent to continue"""
+        return self.experiment_session.status in [SessionStatus.SETUP, SessionStatus.PENDING_PRE_SURVEY]
+
+    def _user_gave_consent(self) -> bool:
+        """Match the user's input to the configured "acceptance" keywords"""
+        consent_keywords = self.experiment.consent_form.accept_keywords.split(",")
+        return self.message_text in [word.lstrip() for word in consent_keywords]
+
+    def send_message_as_bot(self, message: str):
+        """Send a message to the user as the bot and adds it to the chat history"""
+        self._add_message_to_history(message, ChatMessageType.AI)
+        self.send_text_to_user(message)
+
+    def _chat_initiated(self):
+        """The user initiated the chat and we need to get their consent before continuing the conversation"""
+        self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+        consent_text = self.experiment.consent_form.consent_text
+        accept_keywords = self.experiment.consent_form.accept_keywords
+        consent_text = f"{consent_text}\n\n{accept_keywords}"  # TODO: Find a better way
+        return self.send_message_as_bot(consent_text)
+
+    def _handle_message(self):
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
             response = self._get_llm_response(self.message_text)
@@ -226,6 +261,10 @@ class ChannelBase:
         self.experiment_session.no_activity_ping_count = 0
         self.experiment_session.save()
         return answer
+
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType):
+        topic_bot = get_bot_from_experiment(self.experiment, self.experiment_session.chat)
+        topic_bot._save_message_to_history(message, message_type)
 
     def _ensure_sessions_exists(self):
         """
