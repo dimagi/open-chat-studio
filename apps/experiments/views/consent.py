@@ -67,7 +67,7 @@ class EditConsentForm(UpdateView):
         "capture_identifier",
         "identifier_label",
         "identifier_type",
-        "accept_keywords",
+        "conversational_consent",
     ]
     template_name = "generic/object_form.html"
     extra_context = {

@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from abc import abstractmethod
 from datetime import datetime, timedelta
@@ -175,10 +176,25 @@ class ChannelBase:
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
                     # This is technically the start of the conversation
                     if self.experiment.seed_message:
-                        self.send_message_as_bot(self.experiment.seed_message)
+                        self._send_message_as_bot(self.experiment.seed_message)
                 return
 
         return self._handle_message()
+
+    def _chat_initiated(self):
+        """The user initiated the chat and we need to get their consent before continuing the conversation"""
+        self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+        consent_text = self.experiment.consent_form.consent_text
+        conversational_consent = self.experiment.consent_form.conversational_consent
+        conversational_consent = conversational_consent.replace("{", "")
+        conversational_consent = conversational_consent.replace("}", "")
+        consent_text = f"{consent_text}\n{conversational_consent}"  # TODO: Find a better way
+        return self._send_message_as_bot(consent_text)
+
+    def _send_message_as_bot(self, message: str):
+        """Send a message to the user as the bot and adds it to the chat history"""
+        self._add_message_to_history(message, ChatMessageType.AI)
+        self.send_text_to_user(message)
 
     def _should_get_consent(self):
         """Pre-conversation is the phase where the user starts the chat and gives consent to continue"""
@@ -186,21 +202,11 @@ class ChannelBase:
 
     def _user_gave_consent(self) -> bool:
         """Match the user's input to the configured "acceptance" keywords"""
-        consent_keywords = self.experiment.consent_form.accept_keywords.split(",")
+        consent_text = self.experiment.consent_form.conversational_consent
+        pattern = r"\{(.*?)\}"
+        matches = re.findall(pattern, consent_text)
+        consent_keywords = matches[0].split(",")
         return self.message_text in [word.lstrip() for word in consent_keywords]
-
-    def send_message_as_bot(self, message: str):
-        """Send a message to the user as the bot and adds it to the chat history"""
-        self._add_message_to_history(message, ChatMessageType.AI)
-        self.send_text_to_user(message)
-
-    def _chat_initiated(self):
-        """The user initiated the chat and we need to get their consent before continuing the conversation"""
-        self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-        consent_text = self.experiment.consent_form.consent_text
-        accept_keywords = self.experiment.consent_form.accept_keywords
-        consent_text = f"{consent_text}\n\n{accept_keywords}"  # TODO: Find a better way
-        return self.send_message_as_bot(consent_text)
 
     def _handle_message(self):
         response = None
