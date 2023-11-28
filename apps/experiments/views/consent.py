@@ -42,6 +42,7 @@ class CreateConsentForm(CreateView):
         "capture_identifier",
         "identifier_label",
         "identifier_type",
+        "conversational_consent",
     ]
     template_name = "generic/object_form.html"
     extra_context = {
