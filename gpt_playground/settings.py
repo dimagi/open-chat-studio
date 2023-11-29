@@ -81,6 +81,7 @@ PROJECT_APPS = [
     "apps.llm_providers",
     "apps.service_providers",
     "apps.analysis",
+    "apps.generics",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS

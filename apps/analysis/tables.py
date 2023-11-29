@@ -2,15 +2,13 @@ from django.conf import settings
 from django_tables2 import columns, tables
 
 from apps.analysis.models import Analysis
+from apps.generics.table_actions import DeleteAction, EditAction
 
 
 class AnalysisTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
-        extra_context={
-            "edit_url_name": "analysis:edit",
-            "delete_url_name": "analysis:delete",
-        },
+        extra_context={"actions": [EditAction(url_name="analysis:edit"), DeleteAction(url_name="analysis:delete")]},
     )
 
     class Meta:
