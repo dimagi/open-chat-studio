@@ -2,6 +2,10 @@
 {% load team_tags %}
 {% if request.team %}
   <li>
+    <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
+      <i class="fa-solid fa-magnifying-glass-chart"></i>
+      {% translate "Analysis Pipelines" %}
+    </a>
     <a href="{% url 'experiments:experiments_home' request.team.slug %}" {% if active_tab == 'experiments' %}class="active"{% endif %}>
       <i class="fa fa-flask fa-fw"></i>
       {% translate "Experiments" %}

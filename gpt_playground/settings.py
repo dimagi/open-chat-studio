@@ -80,7 +80,7 @@ PROJECT_APPS = [
     "apps.channels",
     "apps.llm_providers",
     "apps.service_providers",
-    "apps.pipeline",
+    "apps.analysis",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS

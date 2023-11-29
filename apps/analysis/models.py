@@ -20,6 +20,10 @@ class Resource(BaseTeamModel):
     file = models.FileField()
     content_size = models.PositiveIntegerField()
 
+    def save(self, *args, **kwargs):
+        self.content_size = self.file.size
+        super().save(*args, **kwargs)
+
 
 class Analysis(BaseTeamModel):
     name = models.CharField(max_length=255)

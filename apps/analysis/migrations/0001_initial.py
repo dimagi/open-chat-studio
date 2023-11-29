@@ -113,8 +113,8 @@ class Migration(migrations.Migration):
                 ("metadata", models.JSONField(blank=True, default=dict)),
                 ("params", models.JSONField(blank=True, default=dict)),
                 ("source_data", models.JSONField(blank=True, default=dict)),
-                ("analysis", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="pipeline.analysis")),
-                ("resources", models.ManyToManyField(to="pipeline.resource")),
+                ("analysis", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="analysis.analysis")),
+                ("resources", models.ManyToManyField(to="analysis.resource")),
                 (
                     "team",
                     models.ForeignKey(
