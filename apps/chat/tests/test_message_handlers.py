@@ -12,6 +12,7 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
 
 class TelegramMessageHandlerTest(TestCase):
@@ -192,7 +193,8 @@ def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db)
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the consent "flow".
     """
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory())
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
 
     def _user_message(message: str):
         message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
@@ -219,7 +221,7 @@ def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db)
     assert chat.messages.last().content == "Nonsense"
 
     # Make sure the bot responds with the seed message, since the conversation began
-    _user_message("yes")
+    _user_message("1")
     assert send_text_to_user_mock.call_count == 2
     # Assert seed message being sent
     assert chat.messages.last().message_type == ChatMessageType.AI
@@ -232,7 +234,8 @@ def test_bot_says_nothing_after_consent_given(_get_llm_response, send_text_to_us
     """When no seed message is specified on the experiment, the bot should say nothing and wait for the user's
     prompt again. I'm not convinced this is desirable behaviour though.
     """
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory())
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
 
     def _user_message(message: str):
         message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
