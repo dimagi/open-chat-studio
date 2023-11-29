@@ -1,0 +1,18 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">Create Analysis Run</h1>
+    <h1 class="pg-subtitle">{{ analysis.name }}</h1>
+    <div>
+      <form method="post" class="my-2" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for form in param_forms %}
+          {{ form.non_field_errors }}
+          {{ form }}
+        {% endfor %}
+        <input type="submit" class="pg-button-primary mt-2" value="Create">
+      </form>
+    </div>
+  </div>
+{% endblock %}

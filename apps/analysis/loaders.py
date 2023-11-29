@@ -30,6 +30,7 @@ class ResourceLoaderParams(Params):
 
 
 class ResourceTextLoader(BaseLoader[str]):
+    param_schema = ResourceLoaderParams
     output_type = str
 
     def load(self, params: ResourceLoaderParams) -> tuple[str, dict]:

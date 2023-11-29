@@ -1,10 +1,14 @@
 import dataclasses
+import typing
 from abc import abstractmethod
-from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Optional, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 from .log import LogEntry, Logger
+
+if typing.TYPE_CHECKING:
+    from .forms import ParamsForm
 
 T = TypeVar("T", covariant=True)
 V = TypeVar("V", covariant=True)
@@ -42,9 +46,17 @@ class Step(Protocol[T, V]):
 
 class Pipeline:
     def __init__(self, steps: list[Step], name: str = None, description: str = None):
+        self.name = name
+        self.description = description
         self.steps = steps
         self.context_chain = []
         self._validate()
+
+    def __str__(self):
+        ret = f"{self.name or 'Pipeline'}"
+        if self.description:
+            ret += f": {self.description}"
+        return ret
 
     def _validate(self):
         steps = iter(list(self.steps))
@@ -77,6 +89,9 @@ def required(type_: type):
 
 
 class Params(BaseModel):
+    def get_form_class(self) -> Optional["ParamsForm"]:
+        return None
+
     def merge(self, *params: dict) -> P:
         """Merge data into the current params, overriding any existing values"""
         original = self.model_dump(exclude_unset=True)

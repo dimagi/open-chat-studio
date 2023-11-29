@@ -24,6 +24,9 @@ class Resource(BaseTeamModel):
         self.content_size = self.file.size
         super().save(*args, **kwargs)
 
+    def __str__(self):
+        return f"{self.name} ({self.get_type_display()})"
+
 
 class Analysis(BaseTeamModel):
     name = models.CharField(max_length=255)
