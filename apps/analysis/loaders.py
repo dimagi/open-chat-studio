@@ -35,7 +35,7 @@ class ResourceTextLoader(BaseLoader[str]):
 
     def load(self, params: ResourceLoaderParams) -> tuple[str, dict]:
         with params.resource.file.open("r") as file:
-            return file.read().decode(), {}
+            return file.read(), {}
 
 
 class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):

@@ -28,6 +28,7 @@ def get_source_pipeline(name: str) -> Pipeline:
     return SOURCE_PIPELINES[name]
 
 
-def get_param_forms(name: str) -> list[type["ParamsForm"]]:
+def get_param_forms(name: str) -> dict[str, type["ParamsForm"]]:
     pipeline = SOURCE_PIPELINES[name]
-    return list(filter(None, [step.param_schema().get_form_class() for step in pipeline.steps]))
+    forms_by_step = {step.name: step.param_schema().get_form_class() for step in pipeline.steps}
+    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)

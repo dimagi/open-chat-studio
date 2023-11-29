@@ -7,7 +7,7 @@
     <div>
       <form method="post" class="my-2" enctype="multipart/form-data">
         {% csrf_token %}
-        {% for form in param_forms %}
+        {% for form in param_forms.values %}
           {{ form.non_field_errors }}
           {{ form }}
         {% endfor %}

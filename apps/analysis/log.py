@@ -1,11 +1,19 @@
 import dataclasses
 from datetime import datetime
+from enum import IntEnum, auto
 from typing import TextIO
+
+
+class LogLevel(IntEnum):
+    DEBUG = auto()
+    INFO = auto()
+    WARN = auto()
+    ERROR = auto()
 
 
 @dataclasses.dataclass
 class LogEntry:
-    level: str
+    level: LogLevel
     message: str
     metadata: dict
     timestamp: datetime = dataclasses.field(init=False, default_factory=datetime.utcnow)
@@ -14,7 +22,15 @@ class LogEntry:
         return self.format("[{level}] ({ts}): {message} {metadata}")
 
     def format(self, fmt):
-        return fmt.format(ts=self.timestamp, level=self.level, message=self.message, metadata=self.metadata or "")
+        return fmt.format(ts=self.timestamp, level=self.level.name, message=self.message, metadata=self.metadata or "")
+
+    def to_json(self):
+        return {
+            "level": self.level.name,
+            "message": self.message,
+            "metadata": self.metadata,
+            "timestamp": self.timestamp.isoformat(),
+        }
 
 
 class Logger:
@@ -26,16 +42,16 @@ class Logger:
         return list(self.log_stack[-1])
 
     def debug(self, message, metadata=None):
-        self._log("debug", message, metadata)
+        self._log(LogLevel.DEBUG, message, metadata)
 
     def info(self, message, metadata=None):
-        self._log("info", message, metadata)
+        self._log(LogLevel.INFO, message, metadata)
 
     def warn(self, message, metadata=None):
-        self._log("warn", message, metadata)
+        self._log(LogLevel.WARN, message, metadata)
 
     def error(self, message, metadata=None):
-        self._log("error", message, metadata)
+        self._log(LogLevel.ERROR, message, metadata)
 
     def _log(self, level, message, metadata=None):
         entry = LogEntry(level, message, metadata)
@@ -49,3 +65,6 @@ class Logger:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.log_stack.pop(-1)
+
+    def to_json(self, level=LogLevel.INFO):
+        return {"entries": [entry.to_json() for entry in self.log_entries() if entry.level >= level]}

@@ -1,14 +1,21 @@
+import sys
+
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.models import Analysis
-from apps.analysis.pipelines import get_param_forms, get_source_pipeline_options
+from apps.analysis.log import Logger
+from apps.analysis.models import Analysis, AnalysisRun
+from apps.analysis.pipelines import get_param_forms, get_source_pipeline, get_source_pipeline_options
+from apps.analysis.steps import PipelineContext, StepContext
 from apps.analysis.tables import AnalysisTable
+from apps.analysis.tasks import run_pipeline
 from apps.teams.decorators import login_and_team_required
 
 
@@ -83,12 +90,22 @@ def create_analysis_run(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     param_forms = get_param_forms(analysis.source)
     if request.method == "POST":
-        forms = [form(request, data=request.POST, files=request.FILES) for form in param_forms]
-        if all(form.is_valid() for form in forms):
-            for form in forms:
-                print(form.save())
+        forms = {
+            step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
+        }
+        if all(form.is_valid() for form in forms.values()):
+            step_params = {step_name: form.save().model_dump() for step_name, form in forms.items()}
+            run = AnalysisRun.objects.create(
+                team=analysis.team,
+                analysis=analysis,
+                params=step_params,
+            )
+            result = run_pipeline.delay(run.id)
+            run.task_id = result.task_id
+            run.save()
+            return redirect("analysis:run_details", team_slug=team_slug, pk=run.id)
     else:
-        forms = [form(request) for form in param_forms]
+        forms = {step_name: form(request) for step_name, form in param_forms.items()}
     return render(
         request,
         "analysis/analysis_run_create.html",
@@ -97,3 +114,31 @@ def create_analysis_run(request, team_slug: str, pk: int):
             "param_forms": forms,
         },
     )
+
+
+@login_and_team_required
+def run_details(request, team_slug: str, pk: int):
+    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
+    return render(
+        request,
+        "analysis/run_details.html",
+        {"run": run},
+    )
+
+
+@login_and_team_required
+def run_progress(request, team_slug: str, pk: int):
+    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
+    if not run.is_complete and run.task_id:
+        progress = Progress(AsyncResult(run.task_id))
+        return render(
+            request,
+            "analysis/components/run_progress.html",
+            {"run": run, **progress.get_info()},
+        )
+    else:
+        return render(
+            request,
+            "analysis/components/run_detail_tabs.html",
+            {"run": run},
+        )

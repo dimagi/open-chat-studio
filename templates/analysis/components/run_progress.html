@@ -1,0 +1,3 @@
+<div hx-get="{% url "analysis:run_progress" request.team.slug run.id %}" hx-trigger="load delay:2s">
+  {% include "analysis/components/run_detail_tabs.html" %}
+</div>

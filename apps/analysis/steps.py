@@ -21,6 +21,10 @@ class StepContext(Generic[V]):
     logs: list[LogEntry] = dataclasses.field(default_factory=list)
     metadata: dict = dataclasses.field(default_factory=dict)
 
+    @classmethod
+    def initial(cls, data: V = None):
+        return cls(data, "start", [], {})
+
     @property
     def log_str(self):
         return "\n".join([str(log) for log in self.logs])
@@ -135,11 +139,13 @@ class BaseStep(Generic[T, V]):
         self.pipeline_context = pipeline_context
 
     def __call__(self, context: StepContext[T]) -> StepContext[V]:
-        params = self._params.merge(self.pipeline_context.params)
-        params.check()
-        self.check_context(context)
+        self.log.info(f"Running step {self.name}")
         with self.log:
-            self.log.info(f"Running step {self.name}")
+            params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+            params.check()
+            self.check_context(context)
+
+            self.log.debug(f"Params: {params}")
             output, metadata = self.run(params, context.data)
             return StepContext(output, self.name, self.log.log_entries(), metadata)
 
