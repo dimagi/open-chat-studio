@@ -12,7 +12,7 @@
   {% if run.error %}
   <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error" {% if not run.is_complete %}checked{% endif %} />
   <div role="tabpanel" class="tab-content">
-    <pre class="overflow-x-auto">{{ run.get_output_display }}</pre>
+    <pre class="overflow-x-auto">{{ run.error }}</pre>
   </div>
   {% endif %}
 

@@ -140,7 +140,7 @@ class BaseStep(Generic[T, V]):
 
     def __call__(self, context: StepContext[T]) -> StepContext[V]:
         self.log.info(f"Running step {self.name}")
-        with self.log:
+        with self.log(self.name):
             params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
             params.check()
             self.check_context(context)

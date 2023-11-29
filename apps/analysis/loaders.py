@@ -35,7 +35,10 @@ class ResourceTextLoader(BaseLoader[str]):
 
     def load(self, params: ResourceLoaderParams) -> tuple[str, dict]:
         with params.resource.file.open("r") as file:
-            return file.read(), {}
+            data = file.read()
+            lines = len(data.splitlines())
+            self.log.info(f"Loaded {lines} lines of text")
+            return data, {}
 
 
 class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
@@ -46,6 +49,7 @@ class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
         parser = self._get_parser(params.resource.type)
         with params.resource.file.open("r") as file:
             data = parser(file)
+            self.log.info(f"Loaded {len(data)} rows")
             return data, {}
 
     def _get_parser(self, type_: ResourceType):

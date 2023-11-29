@@ -1,6 +1,6 @@
 <pre class="overflow-x-auto">
 {% for entry in run.log.entries %}
-{{ entry.timestamp }} {{ entry.level }} {{ entry.message }}{% endfor %}
+{{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message }}{% endfor %}
 </pre>
 {% if not run.is_complete %}
   <span class="loading loading-dots loading-md"></span>
