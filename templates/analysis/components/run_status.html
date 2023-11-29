@@ -1,0 +1,8 @@
+<div class="my-4">
+  <p><span class="font-semibold">Status:</span> {{ run.get_status_display }}</p>
+  {% if run.start_time %}
+    <p><span class="font-semibold">Run Time:</span> {{ run.start_time }} -
+      {% if run.end_time %}{{ run.end_time }} ({{ run.duration_display }}){% else %}...{% endif %}
+    </p>
+  {% endif %}
+</div>

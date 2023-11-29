@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.teams.models import BaseTeamModel
@@ -42,6 +43,9 @@ class Analysis(BaseTeamModel):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        return reverse("analysis:details", args=[self.team.slug, self.id])
+
 
 class RunStatus(models.TextChoices):
     PENDING = "pending", "Pending"
@@ -65,6 +69,9 @@ class AnalysisRun(BaseTeamModel):
 
     def __str__(self):
         return f"{self.analysis.name}: {self.id}"
+
+    def get_absolute_url(self):
+        return reverse("analysis:run_details", args=[self.team.slug, self.id])
 
     @property
     def is_complete(self):

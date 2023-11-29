@@ -1,7 +1,3 @@
-import sys
-
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -10,11 +6,9 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.log import Logger
 from apps.analysis.models import Analysis, AnalysisRun
-from apps.analysis.pipelines import get_param_forms, get_source_pipeline, get_source_pipeline_options
-from apps.analysis.steps import PipelineContext, StepContext
-from apps.analysis.tables import AnalysisTable
+from apps.analysis.pipelines import get_param_forms
+from apps.analysis.tables import AnalysisRunTable, AnalysisTable
 from apps.analysis.tasks import run_pipeline
 from apps.teams.decorators import login_and_team_required
 
@@ -31,6 +25,28 @@ def analysis_home(request, team_slug: str):
             "table_url": reverse("analysis:table", args=[team_slug]),
         },
     )
+
+
+@login_and_team_required
+def analysis_details(request, team_slug: str, pk: int):
+    analysis = get_object_or_404(Analysis, id=pk, team=request.team)
+    return TemplateResponse(
+        request,
+        "analysis/analysis_details.html",
+        {
+            "analysis": analysis,
+        },
+    )
+
+
+class AnalysisRunTableView(SingleTableView):
+    model = AnalysisRun
+    paginate_by = 25
+    table_class = AnalysisRunTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return AnalysisRun.objects.filter(team=self.request.team, analysis=self.kwargs["pk"])
 
 
 class AnalysisTableView(SingleTableView):
@@ -130,15 +146,14 @@ def run_details(request, team_slug: str, pk: int):
 def run_progress(request, team_slug: str, pk: int):
     run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
     if not run.is_complete and run.task_id:
-        progress = Progress(AsyncResult(run.task_id))
         return render(
             request,
             "analysis/components/run_progress.html",
-            {"run": run, **progress.get_info()},
+            {"run": run, "update_status": True},
         )
     else:
         return render(
             request,
             "analysis/components/run_detail_tabs.html",
-            {"run": run},
+            {"run": run, "update_status": True},
         )

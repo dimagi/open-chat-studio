@@ -1,15 +1,18 @@
+{% if update_status %}
+  <div id="run-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" %}</div>
+{% endif %}
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
   <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Output" checked/>
   <div role="tabpanel" class="tab-content">
-    <pre class="overflow-scroll">{{ run.get_output_display }}</pre>
+    <pre class="overflow-x-auto">{{ run.get_output_display }}</pre>
   </div>
   {% endif %}
 
   {% if run.error %}
   <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error" {% if not run.is_complete %}checked{% endif %} />
   <div role="tabpanel" class="tab-content">
-    <pre class="overflow-scroll">{{ run.get_output_display }}</pre>
+    <pre class="overflow-x-auto">{{ run.get_output_display }}</pre>
   </div>
   {% endif %}
 
@@ -20,6 +23,6 @@
 
   <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Parameters" />
   <div role="tabpanel" class="tab-content">
-    <pre class="overflow-scroll">{{ run.get_params_display }}</pre>
+    <pre>{{ run.get_params_display }}</pre>
   </div>
 </div>

@@ -1,17 +1,19 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
 {% block app %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
+      <li><a href="{% url 'analysis:details' request.team.slug run.analysis_id %}">"{{ run.analysis.name }}"</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">
+        Run {{ run.id }}
+      </li>
+    </ul>
+  </div>
   <div class="max-w-7xl mx-auto">
     <div class="app-card max-w-7xl mx-auto">
       <h1 class="pg-title">Analysis Run: {{ run }}</h1>
-      <div class="my-4">
-        <p><span class="font-semibold">Status:</span> {{ run.get_status_display }}</p>
-        {% if run.start_time %}
-        <p><span class="font-semibold">Run Time:</span> {{ run.start_time }} -
-          {% if run.end_time %}{{ run.end_time }} ({{ run.duration_display }}){% else %}...{% endif %}
-        </p>
-        {% endif %}
-      </div>
+      <div id="run-status">{% include "analysis/components/run_status.html" %}</div>
     </div>
     <div class="app-card">
       {% if run.is_complete %}
