@@ -1,4 +1,5 @@
 import dataclasses
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from datetime import datetime
 from enum import IntEnum, auto
@@ -34,8 +35,14 @@ class LogEntry:
         }
 
 
+class LogStream(ABC):
+    @abstractmethod
+    def write(self, entry: LogEntry):
+        raise NotImplementedError
+
+
 class Logger:
-    def __init__(self, stream: TextIO = None):
+    def __init__(self, stream: LogStream = None):
         self.log_stack = [[]]
         self.name_stack = ["root"]
         self.stream = stream
@@ -59,7 +66,7 @@ class Logger:
         entry = LogEntry(level, message, logger=self.name_stack[-1])
         self.log_stack[-1].append(entry)
         if self.stream:
-            print(str(entry), flush=True, file=self.stream)
+            self.stream.write(entry)
 
     @contextmanager
     def __call__(self, name: str):

@@ -3,7 +3,6 @@ from functools import cached_property
 
 import pandas as pd
 
-from . import forms
 from .models import Resource, ResourceType
 from .steps import BaseStep, Params, V, required
 
@@ -22,7 +21,9 @@ class ResourceLoaderParams(Params):
     resource_id: required(int) = None
 
     def get_form_class(self):
-        return forms.ResourceLoaderParamsForm
+        from apps.analysis.forms import ResourceLoaderParamsForm
+
+        return ResourceLoaderParamsForm
 
     @cached_property
     def resource(self):

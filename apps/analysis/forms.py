@@ -1,6 +1,5 @@
 from django import forms
 
-from apps.analysis.loaders import ResourceLoaderParams
 from apps.analysis.models import Analysis, Resource, ResourceType
 from apps.analysis.pipelines import get_source_pipeline_options
 from apps.analysis.steps import Params
@@ -51,6 +50,8 @@ class ResourceLoaderParamsForm(ParamsForm):
         return cleaned_data
 
     def save(self) -> Params:
+        from apps.analysis.loaders import ResourceLoaderParams
+
         if self.cleaned_data["file"]:
             resource = Resource.objects.create(
                 team=self.request.team,

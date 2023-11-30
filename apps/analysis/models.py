@@ -2,6 +2,7 @@ import json
 import math
 from datetime import timedelta
 
+import pydantic
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.urls import reverse
@@ -20,10 +21,17 @@ class ResourceType(models.TextChoices):
     IMAGE = "image", "Image"
 
 
+class ResourceMetadata(pydantic.BaseModel):
+    type: str
+    format: str
+    data_schema: dict
+
+
 class Resource(BaseTeamModel):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=128, choices=ResourceType.choices)
     file = models.FileField()
+    metadata = models.JSONField(default=dict, blank=True)
     content_size = models.PositiveIntegerField()
 
     def save(self, *args, **kwargs):
