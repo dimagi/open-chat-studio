@@ -4,11 +4,11 @@ from contextlib import contextmanager
 from celery import shared_task
 from django.utils import timezone
 
+from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.log import LogEntry, Logger, LogLevel, LogStream
 from apps.analysis.models import AnalysisRun, RunStatus
 from apps.analysis.pipelines import get_source_pipeline
 from apps.analysis.serializers import create_resource_for_data
-from apps.analysis.steps import PipelineContext, StepContext
 
 log = logging.getLogger(__name__)
 
@@ -51,8 +51,9 @@ class RunLogStream(LogStream):
 def run_pipeline(run_id: int):
     run = AnalysisRun.objects.get(id=run_id)
     log_stream = RunLogStream(run)
+    llm_service = run.analysis.llm_provider.get_llm_service()
     with run_context(run):
-        pipline_context = PipelineContext(logger=Logger(log_stream), params=run.params)
+        pipline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=run.params)
         pipeline = get_source_pipeline(run.analysis.source)
         result = pipeline.run(pipline_context, StepContext.initial())
         resource = create_resource_for_data(run.team, result.data)

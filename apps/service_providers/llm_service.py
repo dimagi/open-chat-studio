@@ -3,12 +3,17 @@ from io import BytesIO
 import pydantic
 from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
+from langchain.llms import BaseLLM
+from langchain.llms.openai import AzureOpenAI, OpenAI
 from openai import OpenAI
 
 
 class LlmService(pydantic.BaseModel):
     _type: str
     supports_transcription: bool = False
+
+    def get_llm(self, llm_model: str) -> BaseLLM:
+        raise NotImplementedError
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         raise NotImplementedError
@@ -24,6 +29,14 @@ class OpenAILlmService(LlmService):
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
+
+    def get_llm(self, llm_model: str) -> BaseLLM:
+        return OpenAI(
+            model_name=llm_model,
+            openai_api_key=self.openai_api_key,
+            openai_api_base=self.openai_api_base,
+            openai_organization=self.openai_organization,
+        )
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return ChatOpenAI(
@@ -52,11 +65,19 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
+    def get_llm(self, llm_model: str) -> BaseLLM:
+        return AzureOpenAI(
+            azure_endpoint=self.openai_api_base,
+            openai_api_version=self.openai_api_version,
+            openai_api_key=self.openai_api_key,
+            deployment_name=llm_model,
+        )
+
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
-            azure_deployment=llm_model,
+            deployment_name=llm_model,
             temperature=temperature,
         )

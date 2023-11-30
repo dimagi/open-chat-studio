@@ -1,6 +1,6 @@
 from typing import Any
 
-from apps.analysis.steps import BaseStep, Params, required
+from apps.analysis.core import BaseStep, Params, required
 
 
 class FactorSay(Params):

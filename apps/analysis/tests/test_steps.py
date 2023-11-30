@@ -1,6 +1,6 @@
 import pytest
 
-from apps.analysis.steps import Step, StepContext
+from apps.analysis.core import Step, StepContext
 
 from .demo_steps import Divide, FactorSay, Multiply
 

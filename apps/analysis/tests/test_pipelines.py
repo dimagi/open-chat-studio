@@ -1,6 +1,6 @@
 import pytest
 
-from apps.analysis.steps import NoParams, Pipeline, PipelineContext, StepContext, StepError
+from apps.analysis.core import NoParams, Pipeline, PipelineContext, StepContext, StepError
 
 from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
 
@@ -10,14 +10,14 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
     [
         (
             Pipeline([Multiply(params=FactorSay(factor=3)), Divide(params=FactorSay(factor=2))]),
-            PipelineContext(),
+            PipelineContext(None),
             StepContext[int](10),
             15,
         ),
         # params passed from previous step
         (
             Pipeline([SetFactor(params=FactorSay(factor=3)), Multiply()]),
-            PipelineContext(),
+            PipelineContext(None),
             StepContext[int](2),
             6,
         ),
@@ -30,7 +30,7 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
                     Divide(),  # / 4  (param from previous step)
                 ]
             ),
-            PipelineContext(params={"factor": 2}),
+            PipelineContext(None, params={"factor": 2}),
             StepContext[int](2),
             3,
         ),

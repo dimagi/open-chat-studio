@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from .steps import BaseStep, Params
+from apps.analysis.core import BaseStep, Params
 
 
 class WhatsappParser(BaseStep[str, pd.DataFrame]):

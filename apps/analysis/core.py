@@ -3,14 +3,13 @@ import typing
 from abc import abstractmethod
 from typing import Annotated, Any, ClassVar, Generic, Optional, Protocol, TypeVar
 
+from django import forms
 from pydantic import BaseModel
 
+from ..service_providers.llm_service import LlmService
 from .log import LogEntry, Logger
 
-if typing.TYPE_CHECKING:
-    from .forms import ParamsForm
-
-T = TypeVar("T", covariant=True)
+T = TypeVar("T", contravariant=True)
 V = TypeVar("V", covariant=True)
 
 
@@ -31,9 +30,11 @@ class StepContext(Generic[V]):
 
 
 class PipelineContext:
-    def __init__(self, logger: Logger = None, params: dict = None):
+    def __init__(self, llm_service: LlmService, logger: Logger = None, params: dict = None):
+        self.llm_service = llm_service
         self.log = logger or Logger()
         self.params = params or {}
+        self.llm_provider = None
 
 
 class Step(Protocol[T, V]):
@@ -92,8 +93,17 @@ def required(type_: type):
     return Annotated[type_, PARAM_REQUIRED]
 
 
+class ParamsForm(forms.Form):
+    def __init__(self, request, *args, **kwargs):
+        self.request = request
+        super().__init__(*args, **kwargs)
+
+    def save(self) -> "Params":
+        raise NotImplementedError
+
+
 class Params(BaseModel):
-    def get_form_class(self) -> Optional["ParamsForm"]:
+    def get_form_class(self) -> ParamsForm | None:
         return None
 
     def merge(self, *params: dict) -> P:
@@ -125,7 +135,7 @@ class BaseStep(Generic[T, V]):
 
     def __init__(self, params: Params = None):
         self._params = params or self.param_schema()
-        self.pipeline_context = PipelineContext()
+        self.pipeline_context = None
 
     @property
     def log(self):
