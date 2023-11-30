@@ -64,6 +64,7 @@ def run_pipeline(run_id: int):
 
 def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext):
     result = pipeline.run(pipeline_context, input_context)
-    resource = create_resource_for_data(run.team, result.data, f"{result.name} Output")
-    run.resources.add(resource)
+    if result.metadata.get("persist_output", True):
+        resource = create_resource_for_data(run.team, result.data, f"{result.name} Output")
+        run.resources.add(resource)
     return result
