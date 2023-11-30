@@ -203,7 +203,7 @@ class ChannelBase:
         ]
 
     def _user_gave_consent(self) -> bool:
-        return self.message_text == USER_CONSENT_TEXT
+        return self.message_text.strip() == USER_CONSENT_TEXT
 
     def _handle_message(self):
         response = None
