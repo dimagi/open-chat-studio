@@ -15,7 +15,7 @@ def create_resource_for_data(team, data: Any, name: str) -> Resource:
     resource = Resource(
         team=team,
         name=f"{name} {timezone.now().isoformat()}",
-        type=metadata.type,
+        type=metadata.format,
         metadata=metadata.model_dump(),
     )
     with tempfile.TemporaryFile(mode="w+") as file:

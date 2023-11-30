@@ -1,4 +1,4 @@
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -6,7 +6,7 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.models import Analysis, AnalysisRun
+from apps.analysis.models import Analysis, AnalysisRun, Resource
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisRunTable, AnalysisTable
 from apps.analysis.tasks import run_pipeline
@@ -160,3 +160,13 @@ def run_progress(request, team_slug: str, pk: int):
             "analysis/components/run_detail_tabs.html",
             {"run": run, "update_status": True},
         )
+
+
+@login_and_team_required
+def download_resource(request, team_slug: str, pk: int):
+    resource = get_object_or_404(Resource, id=pk, team=request.team)
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404()

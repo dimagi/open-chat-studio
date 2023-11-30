@@ -1,28 +1,43 @@
+{% load humanize %}
 {% if update_status %}
   <div id="run-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" %}</div>
 {% endif %}
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Output" checked/>
-  <div role="tabpanel" class="tab-content">
-    <pre class="overflow-x-auto">{{ run.get_output_display }}</pre>
-  </div>
+    {% if run.output %}
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Output" checked />
+    <div role="tabpanel" class="tab-content p-4">
+      <pre class="overflow-x-auto">{{ run.get_output_display }}</pre>
+    </div>
+    {% endif %}
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files" {% if not run.output %}checked{% endif %}/>
+    <div role="tabpanel" class="tab-content p-4">
+      {% for resource in run.resources.all %}
+        <div class="my-2">
+          <a href="{% url "analysis:download_resource" request.team.slug resource.id %}" class="btn btn-sm btn-outline-primary" target="_blank">{{ resource.name }}</a>
+          <span class="ml-2 text-gray-400">{{ resource.content_size|filesizeformat }}</span>
+          <div class="badge badge-sm">{{ resource.type }}</div>
+        </div>
+      {% endfor %}
+    </div>
   {% endif %}
 
   {% if run.error %}
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error" {% if not run.is_complete %}checked{% endif %} />
-  <div role="tabpanel" class="tab-content">
-    <pre class="overflow-x-auto">{{ run.error }}</pre>
-  </div>
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error"
+           {% if not run.is_complete %}checked{% endif %}/>
+    <div role="tabpanel" class="tab-content p-4">
+      <pre class="overflow-x-auto">{{ run.error }}</pre>
+    </div>
   {% endif %}
 
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Logs" {% if not run.is_complete and not run.error %}checked{% endif %}/>
-  <div role="tabpanel" class="tab-content">
+  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Logs"
+         {% if not run.is_complete and not run.error %}checked{% endif %}/>
+  <div role="tabpanel" class="tab-content p-4">
     {% include "analysis/components/run_logs.html" %}
   </div>
 
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Parameters" />
-  <div role="tabpanel" class="tab-content">
+  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Parameters"/>
+  <div role="tabpanel" class="tab-content p-4">
     <pre>{{ run.get_params_display }}</pre>
   </div>
 </div>

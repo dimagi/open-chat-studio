@@ -15,4 +15,5 @@ urlpatterns = [
     path("run/<int:pk>/", views.run_details, name="run_details"),
     path("run/<int:pk>/progress/", views.run_progress, name="run_progress"),
     path("table/", views.AnalysisTableView.as_view(), name="table"),
+    path("file/<int:pk>/", views.download_resource, name="download_resource"),
 ]
