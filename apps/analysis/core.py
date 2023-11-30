@@ -94,6 +94,8 @@ def required(type_: type):
 
 
 class ParamsForm(forms.Form):
+    form_name = None
+
     def __init__(self, request, *args, **kwargs):
         self.request = request
         super().__init__(*args, **kwargs)
@@ -103,7 +105,7 @@ class ParamsForm(forms.Form):
 
 
 class Params(BaseModel):
-    def get_form_class(self) -> ParamsForm | None:
+    def get_form_class(self) -> type[ParamsForm] | None:
         return None
 
     def merge(self, *params: dict) -> P:

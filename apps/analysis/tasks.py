@@ -7,7 +7,7 @@ from django.utils import timezone
 from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.log import LogEntry, Logger, LogLevel, LogStream
 from apps.analysis.models import AnalysisRun, RunStatus
-from apps.analysis.pipelines import get_source_pipeline
+from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
 from apps.analysis.serializers import create_resource_for_data
 
 log = logging.getLogger(__name__)
@@ -19,8 +19,12 @@ def run_context(run):
     run.status = RunStatus.RUNNING
     run.save()
 
+    log_stream = RunLogStream(run)
+    llm_service = run.analysis.llm_provider.get_llm_service()
+    pipeline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=run.params)
+
     try:
-        yield
+        yield pipeline_context
         run.status = RunStatus.SUCCESS
     except Exception as e:
         run.status = RunStatus.ERROR
@@ -50,11 +54,16 @@ class RunLogStream(LogStream):
 @shared_task
 def run_pipeline(run_id: int):
     run = AnalysisRun.objects.get(id=run_id)
-    log_stream = RunLogStream(run)
-    llm_service = run.analysis.llm_provider.get_llm_service()
-    with run_context(run):
-        pipline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=run.params)
-        pipeline = get_source_pipeline(run.analysis.source)
-        result = pipeline.run(pipline_context, StepContext.initial())
-        resource = create_resource_for_data(run.team, result.data)
-        run.resources.add(resource)
+    with run_context(run) as pipeline_context:
+        source_pipeline = get_source_pipeline(run.analysis.source)
+        source_result = _run_pipeline(run, source_pipeline, pipeline_context, StepContext.initial())
+
+        data_pipeline = get_data_pipeline(run.analysis.pipelines[0])
+        _run_pipeline(run, data_pipeline, pipeline_context, source_result)
+
+
+def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext):
+    result = pipeline.run(pipeline_context, input_context)
+    resource = create_resource_for_data(run.team, result.data, f"{result.name} Output")
+    run.resources.add(resource)
+    return result

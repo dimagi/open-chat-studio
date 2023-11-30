@@ -9,16 +9,16 @@ from django.utils import timezone
 from apps.analysis.models import Resource, ResourceMetadata
 
 
-def create_resource_for_data(team, data: Any) -> Resource:
+def create_resource_for_data(team, data: Any, name: str) -> Resource:
     serializer = get_serializer(data)
     metadata = serializer.get_metadata(data)
     resource = Resource(
         team=team,
-        name=f"{metadata.type} {timezone.now().isoformat()}",
+        name=f"{name} {timezone.now().isoformat()}",
         type=metadata.type,
         metadata=metadata.model_dump(),
     )
-    with tempfile.TemporaryFile() as file:
+    with tempfile.TemporaryFile(mode="w+") as file:
         serializer.write(data, file)
         file.seek(0)
         resource.file.save(f"{resource.name}.{metadata.format}", file)

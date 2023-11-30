@@ -10,4 +10,8 @@
   <div role="tabpanel" class="tab-content">
     {% render_field form.resource %}
   </div>
+  <input type="radio" name="resource_param_tabs" role="tab" class="tab" aria-label="Raw Text" />
+  <div role="tabpanel" class="tab-content">
+    {% render_field form.text %}
+  </div>
 </div>

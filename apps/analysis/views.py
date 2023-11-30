@@ -7,7 +7,7 @@ from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
 from apps.analysis.models import Analysis, AnalysisRun
-from apps.analysis.pipelines import get_param_forms
+from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisRunTable, AnalysisTable
 from apps.analysis.tasks import run_pipeline
 from apps.teams.decorators import login_and_team_required
@@ -104,7 +104,10 @@ def delete_analysis(request, team_slug: str, pk: int):
 @login_and_team_required
 def create_analysis_run(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
-    param_forms = get_param_forms(analysis.source)
+    param_forms = {
+        **get_param_forms(get_source_pipeline(analysis.source)),
+        **get_param_forms(get_data_pipeline(analysis.pipelines[0])),
+    }
     if request.method == "POST":
         forms = {
             step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()

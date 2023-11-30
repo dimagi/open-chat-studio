@@ -32,10 +32,11 @@ class Resource(BaseTeamModel):
     type = models.CharField(max_length=128, choices=ResourceType.choices)
     file = models.FileField()
     metadata = models.JSONField(default=dict, blank=True)
-    content_size = models.PositiveIntegerField()
+    content_size = models.PositiveIntegerField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        self.content_size = self.file.size
+        if self.file:
+            self.content_size = self.file.size
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -45,8 +46,14 @@ class Resource(BaseTeamModel):
 class Analysis(BaseTeamModel):
     name = models.CharField(max_length=255)
     source = models.CharField(max_length=255, help_text="Name of the pipeline source")
+    # TODO: make this singular
     pipelines = ArrayField(models.CharField(max_length=255), default=list, help_text="List of pipeline names")
     llm_provider = models.ForeignKey("service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True)
+    # llm_model = models.CharField(
+    #     max_length=20,
+    #     help_text="The LLM model to use.",
+    #     verbose_name="LLM Model",
+    # )
 
     def __str__(self):
         return self.name
