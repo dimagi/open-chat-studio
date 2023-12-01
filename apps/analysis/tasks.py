@@ -8,7 +8,7 @@ from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.log import LogEntry, Logger, LogLevel, LogStream
 from apps.analysis.models import AnalysisRun, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
-from apps.analysis.serializers import create_resource_for_data
+from apps.analysis.serializers import create_resource_for_data, get_serializer
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,9 @@ def run_context(run):
 
     log_stream = RunLogStream(run)
     llm_service = run.analysis.llm_provider.get_llm_service()
-    pipeline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=run.params)
+    params = run.params
+    params["llm_model"] = run.analysis.llm_model
+    pipeline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=params)
 
     try:
         yield pipeline_context
@@ -58,8 +60,9 @@ def run_pipeline(run_id: int):
         source_pipeline = get_source_pipeline(run.analysis.source)
         source_result = _run_pipeline(run, source_pipeline, pipeline_context, StepContext.initial())
 
-        data_pipeline = get_data_pipeline(run.analysis.pipelines[0])
-        _run_pipeline(run, data_pipeline, pipeline_context, source_result)
+        data_pipeline = get_data_pipeline(run.analysis.pipeline)
+        result = _run_pipeline(run, data_pipeline, pipeline_context, source_result)
+        run.output_summary = get_serializer(result.data).get_summary(result.data)
 
 
 def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext):

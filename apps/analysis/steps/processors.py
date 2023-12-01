@@ -6,10 +6,12 @@ from langchain.prompts import PromptTemplate
 from pydantic import model_validator
 
 from apps.analysis import core
+from apps.analysis.core import required
 
 
 class LlmCompletionStepParams(core.Params):
-    prompt: str = None
+    prompt: required(str) = None
+    llm_model: required(str) = None
 
     @cached_property
     def prompt_template(self):
@@ -37,8 +39,8 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
     input_type = Any
     output_type = str
 
-    def run(self, params: LlmCompletionStepParams, data: Any) -> tuple[dict, dict]:
-        llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model("gpt-3.5-turbo", 1.0)
+    def run(self, params: LlmCompletionStepParams, data: Any) -> tuple[str, dict]:
+        llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
         prompt = params.prompt_template.format_prompt(data=data)
         result = llm.invoke(prompt)
-        return result.to_json(), {}
+        return result.content, {}

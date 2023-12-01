@@ -41,6 +41,21 @@ def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
 
 
 @pytest.mark.parametrize(
+    "params, context, expected",
+    [
+        (None, {"factor": 2}, Divide.param_schema(factor=2)),
+        (Divide.param_schema(say="hi"), {"factor": 2}, Divide.param_schema(factor=2, say="hi")),
+        (None, {"factor": 2, "say": "hi", "Divide": {"factor": 3}}, Divide.param_schema(factor=3, say="hi")),
+        (Divide.param_schema(factor=1), {"factor": 2, "Divide": {"factor": 3}}, Divide.param_schema(factor=1)),
+    ],
+)
+def test_params(params, context, expected):
+    step = Divide(params)
+    step.initialize(PipelineContext(None, params=context))
+    assert step._params == expected
+
+
+@pytest.mark.parametrize(
     "chain, valid",
     [
         ([Divide, Multiply], True),

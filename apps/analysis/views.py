@@ -10,6 +10,7 @@ from apps.analysis.models import Analysis, AnalysisRun, Resource
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisRunTable, AnalysisTable
 from apps.analysis.tasks import run_pipeline
+from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 
 
@@ -62,12 +63,20 @@ class AnalysisTableView(SingleTableView):
 class CreateAnalysisPipeline(CreateView):
     model = Analysis
     form_class = AnalysisForm
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Create Analysis Pipeline",
-        "button_text": "Create",
-        "active_tab": "analysis",
-    }
+    template_name = "analysis/analysis_form.html"
+
+    @property
+    def extra_context(self):
+        return {
+            "title": "Create Analysis Pipeline",
+            "button_text": "Create",
+            "active_tab": "analysis",
+            "form_attrs": {"x-data": "analysis"},
+            "llm_options": get_llm_provider_choices(self.request.team),
+        }
+
+    def get_form(self, form_class=None):
+        return self.get_form_class()(self.request, **self.get_form_kwargs())
 
     def get_success_url(self):
         return reverse("analysis:home", args=[self.request.team.slug])
@@ -80,12 +89,20 @@ class CreateAnalysisPipeline(CreateView):
 class EditAnalysisPipeline(UpdateView):
     model = Analysis
     form_class = AnalysisForm
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Update Analysis Pipeline",
-        "button_text": "Update",
-        "active_tab": "analysis",
-    }
+    template_name = "analysis/analysis_form.html"
+
+    @property
+    def extra_context(self):
+        return {
+            "title": "Update Analysis Pipeline",
+            "button_text": "Update",
+            "active_tab": "analysis",
+            "form_attrs": {"x-data": "analysis"},
+            "llm_options": get_llm_provider_choices(self.request.team),
+        }
+
+    def get_form(self, form_class=None):
+        return self.get_form_class()(self.request, **self.get_form_kwargs())
 
     def get_queryset(self):
         return Analysis.objects.filter(team=self.request.team)
@@ -106,7 +123,7 @@ def create_analysis_run(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     param_forms = {
         **get_param_forms(get_source_pipeline(analysis.source)),
-        **get_param_forms(get_data_pipeline(analysis.pipelines[0])),
+        **get_param_forms(get_data_pipeline(analysis.pipeline)),
     }
     if request.method == "POST":
         forms = {

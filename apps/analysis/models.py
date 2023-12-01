@@ -46,14 +46,13 @@ class Resource(BaseTeamModel):
 class Analysis(BaseTeamModel):
     name = models.CharField(max_length=255)
     source = models.CharField(max_length=255, help_text="Name of the pipeline source")
-    # TODO: make this singular
-    pipelines = ArrayField(models.CharField(max_length=255), default=list, help_text="List of pipeline names")
+    pipeline = models.CharField(max_length=255, help_text="Data processing pipeline")
     llm_provider = models.ForeignKey("service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True)
-    # llm_model = models.CharField(
-    #     max_length=20,
-    #     help_text="The LLM model to use.",
-    #     verbose_name="LLM Model",
-    # )
+    llm_model = models.CharField(
+        max_length=20,
+        help_text="The LLM model to use.",
+        verbose_name="LLM Model",
+    )
 
     def __str__(self):
         return self.name
@@ -74,7 +73,7 @@ class AnalysisRun(BaseTeamModel):
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=128, choices=RunStatus.choices, default=RunStatus.PENDING)
-    output = models.JSONField(default=dict, blank=True)
+    output_summary = models.TextField(blank=True)
     error = models.TextField(blank=True)
     log = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -91,9 +90,6 @@ class AnalysisRun(BaseTeamModel):
     @property
     def is_complete(self):
         return self.status in (RunStatus.SUCCESS, RunStatus.ERROR)
-
-    def get_output_display(self):
-        return json.dumps(self.output, indent=2)
 
     def get_params_display(self):
         return json.dumps(self.params, indent=2)

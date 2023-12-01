@@ -70,7 +70,6 @@ class Logger:
 
     @contextmanager
     def __call__(self, name: str):
-        self.name = name
         self.log_stack.append([])
         self.name_stack.append(name)
         try:

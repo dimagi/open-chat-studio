@@ -38,6 +38,9 @@ class Serializer:
     def get_metadata(self, data: Any) -> ResourceMetadata:
         raise NotImplementedError()
 
+    def get_summary(self, data: Any) -> str:
+        raise NotImplementedError()
+
 
 class BasicTypeSerializer(Serializer):
     supported_types = [str, dict, list]
@@ -50,6 +53,9 @@ class BasicTypeSerializer(Serializer):
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
         return ResourceMetadata(type=type(data).__name__, format="json", data_schema={})
+
+    def get_summary(self, data: Any) -> str:
+        return json.dumps({"data": data}, indent=2, cls=DjangoJSONEncoder)
 
 
 class DataFramesSerializer(Serializer):
@@ -68,6 +74,9 @@ class DataFramesSerializer(Serializer):
             format="jsonl",
             data_schema=pd.io.json.build_table_schema(data),
         )
+
+    def get_summary(self, data: Any) -> str:
+        return str(data)
 
 
 def get_serializer(data: Any) -> Serializer:

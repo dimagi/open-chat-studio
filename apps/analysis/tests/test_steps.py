@@ -1,6 +1,6 @@
 import pytest
 
-from apps.analysis.core import Step, StepContext
+from apps.analysis.core import PipelineContext, Step, StepContext
 
 from .demo_steps import Divide, FactorSay, Multiply
 
@@ -33,4 +33,5 @@ def test_required_param(params, merge, raises):
     ],
 )
 def test_call(step: Step, context, output):
+    step.initialize(PipelineContext(None))
     assert step(context).data == output

@@ -149,16 +149,18 @@ class BaseStep(Generic[T, V]):
 
     def initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
+        self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
 
     def __call__(self, context: StepContext[T]) -> StepContext[V]:
         self.log.info(f"Running step {self.name}")
         with self.log(self.name):
-            params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
-            params.check()
+            print(self.pipeline_context.params)
+            print(self.pipeline_context.params.get(self.name, {}))
+            self._params.check()
             self.check_context(context)
 
-            self.log.debug(f"Params: {params}")
-            output, metadata = self.run(params, context.data)
+            self.log.debug(f"Params: {self._params}")
+            output, metadata = self.run(self._params, context.data)
             return StepContext(output, self.name, self.log.log_entries(), metadata)
 
     def run(self, params: Params, data: T) -> tuple[V, dict]:
