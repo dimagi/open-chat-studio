@@ -1,5 +1,6 @@
 from allauth.account.forms import SignupForm
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.safestring import mark_safe
@@ -21,11 +22,14 @@ class TeamSignupForm(SignupForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        link = '<a href={} target="_blank">{}</a>'.format(
-            reverse("web:terms"),
-            _("Terms and Conditions"),
-        )
-        self.fields["terms_agreement"].label = mark_safe(_("I agree to the {terms_link}").format(terms_link=link))
+        if settings.PROJECT_METADATA.get("TERMS_URL"):
+            link = '<a href={} target="_blank">{}</a>'.format(
+                settings.PROJECT_METADATA["TERMS_URL"],
+                _("Terms and Conditions"),
+            )
+            self.fields["terms_agreement"].label = mark_safe(_("I agree to the {terms_link}").format(terms_link=link))
+        else:
+            del self.fields["terms_agreement"]
 
     def clean(self):
         cleaned_data = super().clean()

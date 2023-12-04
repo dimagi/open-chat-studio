@@ -1,10 +1,20 @@
 {% load i18n %}
-<footer class="mt-10 mb-4">
-  <div class="text-center text-gray-700 dark:text-gray-500">
-    <p>{{project_meta.NAME}} &mdash; {% translate "Copyright" %} <span id="copyright-year">2022</span></p>
-    {% include "web/components/language_select.html" %}
-  </div>
+<footer class="footer footer-center p-4 bg-base-200 text-base-content">
+  <aside>
+    <div class="text-center text-gray-700 dark:text-gray-500">
+      <p>{{ project_meta.NAME }}</p>
+      {% include "web/components/language_select.html" %}
+      <p>{% translate "Copyright" %} <span id="copyright-year">2022</span></p>
+      {% if project_meta.TERMS_URL %}
+        <p><a href="{{ project_data.TERMS_URL}}" target="_blank" class="link">Terms of use</a>
+      {% endif %}
+      {% if project_meta.TERMS_URL and project_meta.PRIVACY_POLICY_URL %}&mdash;{% endif %}
+      {% if project_meta.PRIVACY_POLICY_URL %}
+        <a href="{{ project_data.PRIVACY_POLICY_URL }}" class="link">Privacy Policy</a></p>
+      {% endif %}
+    </div>
+  </aside>
 </footer>
 <script>
-    document.getElementById('copyright-year').innerText = (new Date()).getFullYear();
+  document.getElementById('copyright-year').innerText = (new Date()).getFullYear();
 </script>
