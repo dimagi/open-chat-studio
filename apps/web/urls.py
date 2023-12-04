@@ -6,7 +6,6 @@ from . import views
 app_name = "web"
 urlpatterns = [
     path("", views.home, name="home"),
-    path("terms/", TemplateView.as_view(template_name="web/terms.html"), name="terms"),
     path("robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain"), name="robots.txt"),
     # these views are just for testing error pages
     # actual error handling is handled by Django: https://docs.djangoproject.com/en/4.1/ref/views/#error-views
