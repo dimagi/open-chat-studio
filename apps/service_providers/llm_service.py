@@ -42,7 +42,7 @@ class OpenAILlmService(LlmService):
             model="whisper-1",
             file=audio,
         )
-        return transcript["text"]
+        return transcript.text
 
 
 class AzureLlmService(LlmService):
