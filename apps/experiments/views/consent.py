@@ -36,13 +36,7 @@ class ConsentFormTableView(SingleTableView):
 
 class CreateConsentForm(CreateView):
     model = ConsentForm
-    fields = [
-        "name",
-        "consent_text",
-        "capture_identifier",
-        "identifier_label",
-        "identifier_type",
-    ]
+    fields = ["name", "consent_text", "capture_identifier", "identifier_label", "identifier_type", "confirmation_text"]
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Consent Form",
@@ -61,13 +55,7 @@ class CreateConsentForm(CreateView):
 
 class EditConsentForm(UpdateView):
     model = ConsentForm
-    fields = [
-        "name",
-        "consent_text",
-        "capture_identifier",
-        "identifier_label",
-        "identifier_type",
-    ]
+    fields = ["name", "consent_text", "capture_identifier", "identifier_label", "identifier_type", "confirmation_text"]
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Consent Form",

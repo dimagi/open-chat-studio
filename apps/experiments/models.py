@@ -135,6 +135,11 @@ class ConsentForm(BaseTeamModel):
     identifier_label = models.CharField(max_length=200, default="Email Address")
     identifier_type = models.CharField(choices=(("email", "Email"), ("text", "Text")), default="email", max_length=16)
     is_default = models.BooleanField(default=False, editable=False)
+    confirmation_text = models.CharField(
+        null=False,
+        default="Respond with '1' if you agree",
+        help_text=("Use this text to tell the user to respond with '1' in order to give their consent"),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -295,6 +300,13 @@ class Experiment(BaseTeamModel):
         on_delete=models.SET_NULL,
         help_text="This is an experimental feature and might exhibit undesirable behaviour for external channels",
     )
+    conversational_consent_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "If enabled, the consent form will be sent at the start of a conversation for external channels. Note: "
+            "This requires the experiment to have a seed message."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -423,3 +435,7 @@ class ExperimentSession(BaseTeamModel):
 
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
+
+    def update_status(self, new_status: SessionStatus):
+        self.status = new_status
+        self.save()

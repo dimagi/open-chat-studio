@@ -72,7 +72,14 @@ class ExperimentViewMixin:
         return form
 
     def form_valid(self, form):
-        if _source_material_is_missing(form.instance):
+        experiment = form.instance
+        if experiment.conversational_consent_enabled and not experiment.seed_message:
+            messages.error(
+                request=self.request, message=("A seed message is required when conversational " "consent is enabled!")
+            )
+            return render(self.request, self.template_name, self.get_context_data())
+
+        if _source_material_is_missing(experiment):
             messages.error(request=self.request, message="The prompt expects source material, but none were specified")
             return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
@@ -89,6 +96,7 @@ class CreateExperiment(ExperimentViewMixin, CreateView):
         "chatbot_prompt",
         "safety_layers",
         "tools_enabled",
+        "conversational_consent_enabled",
         "source_material",
         "seed_message",
         "pre_survey",
@@ -131,6 +139,7 @@ class EditExperiment(ExperimentViewMixin, UpdateView):
         "chatbot_prompt",
         "safety_layers",
         "tools_enabled",
+        "conversational_consent_enabled",
         "source_material",
         "seed_message",
         "pre_survey",
