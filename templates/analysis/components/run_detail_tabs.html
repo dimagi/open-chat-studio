@@ -5,12 +5,13 @@
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
     {% if run.output_summary %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Output" checked />
+    <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Output" {% if not run.error %}checked{% endif %} />
     <div role="tabpanel" class="tab-content p-4">
       <pre class="overflow-x-auto">{{ run.output_summary }}</pre>
     </div>
     {% endif %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files"
+
+    <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Files"
            {% if not run.output_summary and not run.error %}checked{% endif %}
     />
     <div role="tabpanel" class="tab-content p-4">
@@ -25,20 +26,15 @@
   {% endif %}
 
   {% if run.error %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error" checked/>
+    <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Error" checked/>
     <div role="tabpanel" class="tab-content p-4">
       <pre class="overflow-x-auto">{{ run.error }}</pre>
     </div>
   {% endif %}
 
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Logs"
+  <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Logs"
          {% if not run.is_complete and not run.error %}checked{% endif %}/>
   <div role="tabpanel" class="tab-content p-4">
     {% include "analysis/components/run_logs.html" %}
-  </div>
-
-  <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Parameters"/>
-  <div role="tabpanel" class="tab-content p-4">
-    <pre>{{ run.get_params_display }}</pre>
   </div>
 </div>

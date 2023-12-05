@@ -30,3 +30,9 @@ class RunGroupAdmin(admin.ModelAdmin):
     inlines = [
         AnalysisRunInline,
     ]
+
+
+@admin.register(AnalysisRun)
+class AnalysisRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "group", "start_time", "end_time", "status")
+    list_filter = ("status",)

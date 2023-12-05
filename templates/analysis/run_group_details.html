@@ -1,0 +1,27 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
+      <li><a href="{% url 'analysis:details' request.team.slug group.analysis_id %}">"{{ group.analysis.name }}"</a>
+      </li>
+      <li class="pg-breadcrumb-active" aria-current="page">
+        Group {{ group.id }}
+      </li>
+    </ul>
+  </div>
+  <div class="max-w-7xl mx-auto">
+    <div class="app-card">
+      <h1 class="pg-title">Analysis Run Group: {{ group }}</h1>
+      <div id="group-status">{% include "analysis/components/run_status.html" with run=group %}</div>
+    </div>
+    <div class="app-card">
+      {% if group.is_complete %}
+        {% include "analysis/components/group_detail_tabs.html" %}
+      {% else %}
+        {% include "analysis/components/group_progress.html" %}
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

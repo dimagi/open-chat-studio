@@ -6,7 +6,7 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.models import Analysis, Resource, RunGroup
+from apps.analysis.models import Analysis, Resource, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisTable, RunGroupTable
 from apps.analysis.tasks import run_pipeline
@@ -169,29 +169,30 @@ def replay_run(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
-def run_details(request, team_slug: str, pk: int):
-    run = get_object_or_404(RunGroup, id=pk, team=request.team)
+def run_group_details(request, team_slug: str, pk: int):
+    group = get_object_or_404(RunGroup, id=pk, team=request.team)
     return render(
         request,
-        "analysis/run_details.html",
-        {"run": run},
+        "analysis/run_group_details.html",
+        {"group": group, "runs": group.analysisrun_set.all()},
     )
 
 
 @login_and_team_required
-def run_progress(request, team_slug: str, pk: int):
-    run = get_object_or_404(RunGroup, id=pk, team=request.team)
-    if not run.is_complete and run.task_id:
+def group_progress(request, team_slug: str, pk: int):
+    group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    runs = group.analysisrun_set.all()
+    if not group.is_complete and group.task_id:
         return render(
             request,
-            "analysis/components/run_progress.html",
-            {"run": run, "update_status": True},
+            "analysis/components/group_progress.html",
+            {"group": group, "update_status": True, "runs": runs},
         )
     else:
         return render(
             request,
-            "analysis/components/run_detail_tabs.html",
-            {"run": run, "update_status": True},
+            "analysis/components/group_detail_tabs.html",
+            {"group": group, "update_status": True, "runs": runs},
         )
 
 

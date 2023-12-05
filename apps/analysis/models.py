@@ -122,10 +122,12 @@ class RunGroup(BaseRun):
 class AnalysisRun(BaseRun):
     group = models.ForeignKey(RunGroup, on_delete=models.CASCADE)
     output_summary = models.TextField(blank=True)
-    error = models.TextField(blank=True)
     log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
     metadata = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
     resources = models.ManyToManyField(Resource)
 
     def __str__(self):
         return f"{self.group.analysis.name}: {self.id}"
+
+    class Meta:
+        ordering = ["created_at"]

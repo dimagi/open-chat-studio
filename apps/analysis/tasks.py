@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import contextmanager
 
 from celery import shared_task
@@ -78,11 +79,11 @@ def run_pipeline(run_group_id: int):
             result_data = [source_result.data]
 
         for data in result_data:
+            time.sleep(5)
             run = AnalysisRun.objects.create(group=group)
             with run_context(run) as pipeline_context:
                 data_pipeline = get_data_pipeline(group.analysis.pipeline)
-                result = _run_pipeline(run, data_pipeline, pipeline_context, StepContext.initial(data))
-                run.output_summary = get_serializer(result.data).get_summary(result.data)
+                _run_pipeline(run, data_pipeline, pipeline_context, StepContext.initial(data))
 
 
 def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext) -> StepContext:
@@ -90,4 +91,5 @@ def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_contex
     if result.metadata.get("persist_output", True):
         resource = create_resource_for_data(run.group.team, result.data, f"{result.name} Output")
         run.resources.add(resource)
+    run.output_summary = get_serializer(result.data).get_summary(result.data)
     return result
