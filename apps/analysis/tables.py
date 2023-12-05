@@ -40,6 +40,14 @@ class AnalysisRunTable(tables.Table):
         },
         orderable=True,
     )
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "actions": [
+                table_actions.Action("analysis:replay_run", "fa-solid fa-play"),
+            ]
+        },
+    )
 
     class Meta:
         model = AnalysisRun

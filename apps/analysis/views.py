@@ -155,6 +155,20 @@ def create_analysis_run(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
+def replay_run(request, team_slug: str, pk: int):
+    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
+    replay = AnalysisRun.objects.create(
+        team=request.team,
+        analysis=run.analysis,
+        params=run.params,
+    )
+    result = run_pipeline.delay(replay.id)
+    replay.task_id = result.task_id
+    replay.save()
+    return redirect("analysis:run_details", team_slug=team_slug, pk=replay.id)
+
+
+@login_and_team_required
 def run_details(request, team_slug: str, pk: int):
     run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
     return render(
