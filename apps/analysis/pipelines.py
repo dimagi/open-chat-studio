@@ -13,14 +13,14 @@ SOURCE_PIPELINES = {
         "Text Data",
         "Load text data from a file",
     ),
-    "whatsapp_data": Pipeline(
+    "filtered_whatsapp_data": Pipeline(
         [
             ResourceTextLoader(),
             WhatsappParser(),
             TimeseriesFilter(),
         ],
-        "WhatsApp Data",
-        "Load WhatsApp data from a file",
+        "Whatsapp Data with date filtering",
+        "Load whatsapp data from a file and filter it by date.",
     ),
 }
 
