@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.analysis.models import Analysis, AnalysisRun
+from apps.analysis.models import Analysis, AnalysisRun, RunGroup
 from apps.generics import table_actions
 
 
@@ -32,7 +32,7 @@ class AnalysisTable(tables.Table):
         empty_text = "No pipelines found."
 
 
-class AnalysisRunTable(tables.Table):
+class RunGroupTable(tables.Table):
     id = columns.Column(
         linkify=True,
         attrs={
@@ -50,7 +50,7 @@ class AnalysisRunTable(tables.Table):
     )
 
     class Meta:
-        model = AnalysisRun
+        model = RunGroup
         fields = ("id", "status", "start_time", "end_time")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False

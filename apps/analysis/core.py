@@ -37,6 +37,7 @@ class PipelineContext:
 
 
 class Step(Protocol[PipeIn, PipeOut]):
+    output_multiple: bool
     input_type: ClassVar
     output_type: ClassVar
 

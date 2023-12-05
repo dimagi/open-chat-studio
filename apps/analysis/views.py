@@ -6,9 +6,9 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.models import Analysis, AnalysisRun, Resource
+from apps.analysis.models import Analysis, Resource, RunGroup
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
-from apps.analysis.tables import AnalysisRunTable, AnalysisTable
+from apps.analysis.tables import AnalysisTable, RunGroupTable
 from apps.analysis.tasks import run_pipeline
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
@@ -40,14 +40,14 @@ def analysis_details(request, team_slug: str, pk: int):
     )
 
 
-class AnalysisRunTableView(SingleTableView):
-    model = AnalysisRun
+class RunGroupTableView(SingleTableView):
+    model = RunGroup
     paginate_by = 25
-    table_class = AnalysisRunTable
+    table_class = RunGroupTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return AnalysisRun.objects.filter(team=self.request.team, analysis=self.kwargs["pk"])
+        return RunGroup.objects.filter(team=self.request.team, analysis=self.kwargs["pk"])
 
 
 class AnalysisTableView(SingleTableView):
@@ -133,7 +133,7 @@ def create_analysis_run(request, team_slug: str, pk: int):
             step_params = {
                 step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
             }
-            run = AnalysisRun.objects.create(
+            run = RunGroup.objects.create(
                 team=analysis.team,
                 analysis=analysis,
                 params=step_params,
@@ -156,8 +156,8 @@ def create_analysis_run(request, team_slug: str, pk: int):
 
 @login_and_team_required
 def replay_run(request, team_slug: str, pk: int):
-    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
-    replay = AnalysisRun.objects.create(
+    run = get_object_or_404(RunGroup, id=pk, team=request.team)
+    replay = RunGroup.objects.create(
         team=request.team,
         analysis=run.analysis,
         params=run.params,
@@ -170,7 +170,7 @@ def replay_run(request, team_slug: str, pk: int):
 
 @login_and_team_required
 def run_details(request, team_slug: str, pk: int):
-    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
+    run = get_object_or_404(RunGroup, id=pk, team=request.team)
     return render(
         request,
         "analysis/run_details.html",
@@ -180,7 +180,7 @@ def run_details(request, team_slug: str, pk: int):
 
 @login_and_team_required
 def run_progress(request, team_slug: str, pk: int):
-    run = get_object_or_404(AnalysisRun, id=pk, team=request.team)
+    run = get_object_or_404(RunGroup, id=pk, team=request.team)
     if not run.is_complete and run.task_id:
         return render(
             request,

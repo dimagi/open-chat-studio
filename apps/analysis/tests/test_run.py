@@ -1,6 +1,6 @@
 import pytest
 
-from apps.analysis.models import Analysis, AnalysisRun, RunStatus
+from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
 from apps.analysis.tasks import run_context
 from apps.service_providers.models import LlmProvider
 
@@ -38,21 +38,23 @@ def analysis(team, llm_provider):
 )
 @pytest.mark.django_db
 def test_run_context_params(params, expected, team, analysis):
-    run = AnalysisRun.objects.create(
+    group = RunGroup.objects.create(
         team=team,
         analysis=analysis,
         params=params,
     )
+    run = AnalysisRun.objects.create(group=group)
     with run_context(run) as pipeline_context:
         assert pipeline_context.params == expected
 
 
 def test_run_context(team, analysis):
-    run = AnalysisRun.objects.create(
+    group = RunGroup.objects.create(
         team=team,
         analysis=analysis,
         params={},
     )
+    run = AnalysisRun.objects.create(group=group)
     with run_context(run) as pipeline_context:
         run.refresh_from_db()
         assert run.start_time is not None
@@ -72,11 +74,12 @@ def test_run_context(team, analysis):
 
 
 def test_run_context_error(team, analysis):
-    run = AnalysisRun.objects.create(
+    group = RunGroup.objects.create(
         team=team,
         analysis=analysis,
         params={},
     )
+    run = AnalysisRun.objects.create(group=group)
     with run_context(run):
         raise Exception("test exception")
 

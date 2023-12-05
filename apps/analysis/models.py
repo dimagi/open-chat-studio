@@ -3,13 +3,12 @@ import math
 from datetime import timedelta
 
 import pydantic
-from django.contrib.postgres.fields import ArrayField
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
-from django.utils import timezone
 
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Team
+from apps.utils.models import BaseModel
 
 
 class ResourceType(models.TextChoices):
@@ -69,31 +68,19 @@ class RunStatus(models.TextChoices):
     ERROR = "error", "Error"
 
 
-class AnalysisRun(BaseTeamModel):
-    analysis = models.ForeignKey(Analysis, on_delete=models.CASCADE)
+class BaseRun(BaseModel):
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=128, choices=RunStatus.choices, default=RunStatus.PENDING)
-    output_summary = models.TextField(blank=True)
     error = models.TextField(blank=True)
-    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    metadata = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    params = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    resources = models.ManyToManyField(Resource)
     task_id = models.CharField(max_length=255, null=True, blank=True)
 
-    def __str__(self):
-        return f"{self.analysis.name}: {self.id}"
-
-    def get_absolute_url(self):
-        return reverse("analysis:run_details", args=[self.team.slug, self.id])
+    class Meta:
+        abstract = True
 
     @property
     def is_complete(self):
         return self.status in (RunStatus.SUCCESS, RunStatus.ERROR)
-
-    def get_params_display(self):
-        return json.dumps(self.params, indent=2)
 
     @property
     def duration(self) -> timedelta | None:
@@ -118,3 +105,27 @@ class AnalysisRun(BaseTeamModel):
         if seconds < 60:
             return str(seconds) + "s"
         return timedelta(seconds=math.ceil(seconds))
+
+
+class RunGroup(BaseRun):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    analysis = models.ForeignKey(Analysis, on_delete=models.CASCADE)
+    params = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+
+    def get_params_display(self):
+        return json.dumps(self.params, indent=2)
+
+    def get_absolute_url(self):
+        return reverse("analysis:run_details", args=[self.team.slug, self.id])
+
+
+class AnalysisRun(BaseRun):
+    group = models.ForeignKey(RunGroup, on_delete=models.CASCADE)
+    output_summary = models.TextField(blank=True)
+    error = models.TextField(blank=True)
+    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    metadata = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    resources = models.ManyToManyField(Resource)
+
+    def __str__(self):
+        return f"{self.group.analysis.name}: {self.id}"

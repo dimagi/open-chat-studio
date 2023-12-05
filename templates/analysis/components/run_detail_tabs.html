@@ -10,7 +10,9 @@
       <pre class="overflow-x-auto">{{ run.output_summary }}</pre>
     </div>
     {% endif %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files" {% if not run.output_summary %}checked{% endif %}/>
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files"
+           {% if not run.output_summary and not run.error %}checked{% endif %}
+    />
     <div role="tabpanel" class="tab-content p-4">
       {% for resource in run.resources.all %}
         <div class="my-2">
@@ -23,8 +25,7 @@
   {% endif %}
 
   {% if run.error %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error"
-           {% if not run.is_complete %}checked{% endif %}/>
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Error" checked/>
     <div role="tabpanel" class="tab-content p-4">
       <pre class="overflow-x-auto">{{ run.error }}</pre>
     </div>

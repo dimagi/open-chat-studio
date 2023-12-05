@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Analysis, AnalysisRun, Resource
+from .models import Analysis, AnalysisRun, Resource, RunGroup
 
 
 @admin.register(Analysis)
@@ -17,8 +17,16 @@ class ResourceAdmin(admin.ModelAdmin):
     readonly_fields = ("content_size",)
 
 
-@admin.register(AnalysisRun)
-class AnalysisRunAdmin(admin.ModelAdmin):
+class AnalysisRunInline(admin.TabularInline):
+    model = AnalysisRun
+    fields = ("id", "status", "start_time", "end_time")
+
+
+@admin.register(RunGroup)
+class RunGroupAdmin(admin.ModelAdmin):
     list_display = ("id", "team", "analysis", "start_time", "end_time", "status")
     list_filter = ("status",)
     search_fields = ("analysis__name",)
+    inlines = [
+        AnalysisRunInline,
+    ]
