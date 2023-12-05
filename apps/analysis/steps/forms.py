@@ -69,3 +69,41 @@ class LlmCompletionStepParamsForm(ParamsForm):
             return LlmCompletionStepParams(prompt=self.cleaned_data["prompt"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
+
+
+def get_duration_choices():
+    from apps.analysis.steps.filters import DurationUnit
+
+    return [(unit.name, unit.name.title) for unit in list(DurationUnit)]
+
+
+class TimeseriesFilterForm(ParamsForm):
+    form_name = "Timeseries Filter Parameters"
+    template_name = "analysis/forms/timeseries_filter_params.html"
+    value = forms.IntegerField(required=False, label="Duration")
+    unit = forms.ChoiceField(required=False, choices=get_duration_choices(), label="Duration Unit")
+    anchor = forms.DateField(required=False, label="Starting on")
+
+    def clean_unit(self):
+        from apps.analysis.steps.filters import DurationUnit
+
+        try:
+            return DurationUnit[self.cleaned_data["unit"]]
+        except KeyError:
+            raise forms.ValidationError("Invalid duration unit.")
+
+    def clean(self):
+        self._get_params(super().clean())
+
+    def save(self):
+        return self._get_params(self.cleaned_data)
+
+    def _get_params(self, cleaned_data):
+        from .filters import DateRange, Duration, TimeseriesFilterParams
+
+        duration = Duration(unit=cleaned_data["unit"], value=cleaned_data["value"])
+        date_range = DateRange(duration=duration, anchor_type="this", anchor_point=cleaned_data["anchor"])
+        try:
+            return TimeseriesFilterParams(date_range=date_range)
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))

@@ -15,6 +15,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         splits = pattern.split(data)
         df = pd.DataFrame(data=[self._get_message(splits[i], splits[i + 1]) for i in range(1, len(splits), 2)])
         df.set_index("date", inplace=True)
+        self.log.info(f"Loaded messages from {df.index.min()} to {df.index.max()} ({len(df)} messages)")
         return df, {}
 
     def _get_message(self, head, tail):

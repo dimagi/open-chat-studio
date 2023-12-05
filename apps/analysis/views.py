@@ -130,7 +130,9 @@ def create_analysis_run(request, team_slug: str, pk: int):
             step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
         }
         if all(form.is_valid() for form in forms.values()):
-            step_params = {step_name: form.save().model_dump() for step_name, form in forms.items()}
+            step_params = {
+                step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
+            }
             run = AnalysisRun.objects.create(
                 team=analysis.team,
                 analysis=analysis,

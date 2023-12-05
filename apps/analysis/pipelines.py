@@ -2,6 +2,7 @@ from apps.analysis.steps.loaders import ResourceTextLoader
 from apps.analysis.steps.parsers import WhatsappParser
 
 from .core import ParamsForm, Pipeline
+from .steps.filters import TimeseriesFilter
 from .steps.processors import LlmCompletionStep
 
 SOURCE_PIPELINES = {
@@ -16,6 +17,7 @@ SOURCE_PIPELINES = {
         [
             ResourceTextLoader(),
             WhatsappParser(),
+            TimeseriesFilter(),
         ],
         "WhatsApp Data",
         "Load WhatsApp data from a file",

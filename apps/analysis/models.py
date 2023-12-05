@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import pydantic
 from django.contrib.postgres.fields import ArrayField
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -75,9 +76,9 @@ class AnalysisRun(BaseTeamModel):
     status = models.CharField(max_length=128, choices=RunStatus.choices, default=RunStatus.PENDING)
     output_summary = models.TextField(blank=True)
     error = models.TextField(blank=True)
-    log = models.JSONField(default=dict, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    params = models.JSONField(default=dict, blank=True)
+    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    metadata = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    params = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
     resources = models.ManyToManyField(Resource)
     task_id = models.CharField(max_length=255, null=True, blank=True)
 
