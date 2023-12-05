@@ -55,7 +55,9 @@ class BasicTypeSerializer(Serializer):
         return ResourceMetadata(type=type(data).__name__, format="json", data_schema={})
 
     def get_summary(self, data: Any) -> str:
-        return json.dumps({"data": data}, indent=2, cls=DjangoJSONEncoder)
+        if type(data) == str:
+            return data
+        return json.dumps(data, indent=2, cls=DjangoJSONEncoder)
 
 
 class DataFramesSerializer(Serializer):

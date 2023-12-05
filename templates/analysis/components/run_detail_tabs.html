@@ -4,13 +4,13 @@
 {% endif %}
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
-    {% if run.output %}
+    {% if run.output_summary %}
     <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Output" checked />
     <div role="tabpanel" class="tab-content p-4">
       <pre class="overflow-x-auto">{{ run.output_summary }}</pre>
     </div>
     {% endif %}
-    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files" {% if not run.output %}checked{% endif %}/>
+    <input type="radio" name="run_tabs" role="tab" class="tab" aria-label="Files" {% if not run.output_summary %}checked{% endif %}/>
     <div role="tabpanel" class="tab-content p-4">
       {% for resource in run.resources.all %}
         <div class="my-2">
