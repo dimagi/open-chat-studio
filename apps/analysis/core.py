@@ -1,7 +1,6 @@
 import dataclasses
-import typing
 from abc import abstractmethod
-from typing import Annotated, Any, ClassVar, Generic, Optional, Protocol, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar
 
 from django import forms
 from pydantic import BaseModel
@@ -9,19 +8,19 @@ from pydantic import BaseModel
 from ..service_providers.llm_service import LlmService
 from .log import LogEntry, Logger
 
-T = TypeVar("T", contravariant=True)
-V = TypeVar("V", covariant=True)
+PipeIn = TypeVar("PipeIn", contravariant=True)
+PipeOut = TypeVar("PipeOut", covariant=True)
 
 
 @dataclasses.dataclass
-class StepContext(Generic[V]):
-    data: V
+class StepContext(Generic[PipeOut]):
+    data: PipeOut
     name: str = "start"
     logs: list[LogEntry] = dataclasses.field(default_factory=list)
     metadata: dict = dataclasses.field(default_factory=dict)
 
     @classmethod
-    def initial(cls, data: V = None):
+    def initial(cls, data: PipeOut = None):
         return cls(data, "start", [], {})
 
     @property
@@ -37,7 +36,7 @@ class PipelineContext:
         self.llm_provider = None
 
 
-class Step(Protocol[T, V]):
+class Step(Protocol[PipeIn, PipeOut]):
     input_type: ClassVar
     output_type: ClassVar
 
@@ -45,7 +44,7 @@ class Step(Protocol[T, V]):
         ...
 
     @abstractmethod
-    def __call__(self, context: StepContext[T]) -> StepContext[V]:
+    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
         ...
 
 
@@ -129,10 +128,10 @@ class NoParams(Params):
     pass
 
 
-class BaseStep(Generic[T, V]):
+class BaseStep(Generic[PipeIn, PipeOut]):
     output_multiple = False
-    input_type: T
-    output_type: V
+    input_type: PipeIn
+    output_type: PipeOut
     param_schema: type[Params] = NoParams
 
     def __init__(self, params: Params = None):
@@ -151,11 +150,9 @@ class BaseStep(Generic[T, V]):
         self.pipeline_context = pipeline_context
         self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
 
-    def __call__(self, context: StepContext[T]) -> StepContext[V]:
+    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
         self.log.info(f"Running step {self.name}")
         with self.log(self.name):
-            print(self.pipeline_context.params)
-            print(self.pipeline_context.params.get(self.name, {}))
             self._params.check()
             self.check_context(context)
 
@@ -163,7 +160,7 @@ class BaseStep(Generic[T, V]):
             output, metadata = self.run(self._params, context.data)
             return StepContext(output, self.name, self.log.log_entries(), metadata)
 
-    def run(self, params: Params, data: T) -> tuple[V, dict]:
+    def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
         raise NotImplementedError
 
     def check_context(self, context: StepContext):

@@ -3,11 +3,11 @@ from functools import cached_property
 
 import pandas as pd
 
-from apps.analysis.core import BaseStep, Params, V, required
+from apps.analysis.core import BaseStep, Params, PipeOut, required
 from apps.analysis.models import Resource, ResourceType
 
 
-class BaseLoader(BaseStep[None, V]):
+class BaseLoader(BaseStep[None, PipeOut]):
     input_type = None
 
     def run(self, params: Params, data: None = None) -> tuple[str, dict]:
