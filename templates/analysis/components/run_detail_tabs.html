@@ -5,24 +5,30 @@
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
     {% if run.output_summary %}
-    <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Output" {% if not run.error %}checked{% endif %} />
-    <div role="tabpanel" class="tab-content p-4">
-      <pre class="overflow-x-auto">{{ run.output_summary }}</pre>
-    </div>
+      <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Output"
+             {% if not run.error %}checked{% endif %}/>
+      <div role="tabpanel" class="tab-content p-4">
+        <pre class="overflow-x-auto">{{ run.output_summary }}</pre>
+      </div>
     {% endif %}
 
-    <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Files"
-           {% if not run.output_summary and not run.error %}checked{% endif %}
-    />
-    <div role="tabpanel" class="tab-content p-4">
-      {% for resource in run.resources.all %}
-        <div class="my-2">
-          <a href="{% url "analysis:download_resource" request.team.slug resource.id %}" class="btn btn-sm btn-outline-primary" target="_blank">{{ resource.name }}</a>
-          <span class="ml-2 text-gray-400">{{ resource.content_size|filesizeformat }}</span>
-          <div class="badge badge-sm">{{ resource.type }}</div>
+    {% with resources=run.resources.all %}
+      {% if resources %}
+        <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Files"
+               {% if not run.output_summary and not run.error %}checked{% endif %}
+        />
+        <div role="tabpanel" class="tab-content p-4">
+          {% for resource in resources %}
+            <div class="my-2">
+              <a href="{% url "analysis:download_resource" request.team.slug resource.id %}"
+                 class="btn btn-sm btn-outline-primary" target="_blank">{{ resource.name }}</a>
+              <span class="ml-2 text-gray-400">{{ resource.content_size|filesizeformat }}</span>
+              <div class="badge badge-sm">{{ resource.type }}</div>
+            </div>
+          {% endfor %}
         </div>
-      {% endfor %}
-    </div>
+      {% endif %}
+    {% endwith %}
   {% endif %}
 
   {% if run.error %}

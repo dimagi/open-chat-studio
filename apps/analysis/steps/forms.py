@@ -18,7 +18,7 @@ class ResourceLoaderParamsForm(ParamsForm):
         self.fields["resource"].queryset = Resource.objects.filter(team=self.request.team)
 
     def clean(self):
-        cleaned_data = super().clean()
+        cleaned_data = self.cleaned_data
         file = cleaned_data.get("file")
         if file:
             file_type = cleaned_data.get("file_type")
@@ -26,9 +26,10 @@ class ResourceLoaderParamsForm(ParamsForm):
                 raise forms.ValidationError("File type must be provided when uploading a file.")
         elif not cleaned_data.get("text") and not cleaned_data.get("resource"):
             raise forms.ValidationError("Either a resource or a file or text must be provided.")
-        return cleaned_data
 
-    def save(self) -> Params:
+        return super().clean()
+
+    def get_params(self) -> Params:
         from apps.analysis.steps.loaders import ResourceLoaderParams
 
         if self.cleaned_data["file"]:
@@ -56,13 +57,7 @@ class LlmCompletionStepParamsForm(ParamsForm):
     form_name = "LLM Completion Parameters"
     prompt = forms.CharField(widget=forms.Textarea)
 
-    def clean(self):
-        self._get_params(super().clean())
-
-    def save(self):
-        return self._get_params(self.cleaned_data)
-
-    def _get_params(self, cleaned_data):
+    def get_params(self):
         from .processors import LlmCompletionStepParams
 
         try:
@@ -74,12 +69,12 @@ class LlmCompletionStepParamsForm(ParamsForm):
 def get_duration_choices():
     from apps.analysis.steps.filters import DurationUnit
 
-    return [(unit.name, unit.name.title) for unit in list(DurationUnit)]
+    return [(unit.value, unit.name.title) for unit in list(DurationUnit)]
 
 
 class TimeseriesFilterForm(ParamsForm):
     form_name = "Timeseries Filter Parameters"
-    template_name = "analysis/forms/timeseries_filter_params.html"
+    template_name = "analysis/forms/basic.html"
     value = forms.IntegerField(required=False, label="Duration")
     unit = forms.ChoiceField(required=False, choices=get_duration_choices(), label="Duration Unit")
     anchor = forms.DateField(required=False, label="Starting on")
@@ -88,22 +83,56 @@ class TimeseriesFilterForm(ParamsForm):
         from apps.analysis.steps.filters import DurationUnit
 
         try:
-            return DurationUnit[self.cleaned_data["unit"]]
+            return DurationUnit(self.cleaned_data["unit"])
         except KeyError:
             raise forms.ValidationError("Invalid duration unit.")
 
-    def clean(self):
-        self._get_params(super().clean())
-
-    def save(self):
-        return self._get_params(self.cleaned_data)
-
-    def _get_params(self, cleaned_data):
+    def get_params(self):
         from .filters import DateRange, Duration, TimeseriesFilterParams
 
-        duration = Duration(unit=cleaned_data["unit"], value=cleaned_data["value"])
+        duration = Duration(unit=self.cleaned_data["unit"], value=self.cleaned_data["value"])
         date_range = DateRange(duration=duration, anchor_type="this", anchor_point=cleaned_data["anchor"])
         try:
             return TimeseriesFilterParams(date_range=date_range)
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+def get_time_groups():
+    from apps.analysis.steps.splitters import TimeGroup
+
+    return [(group.value, group.name.title) for group in list(TimeGroup)]
+
+
+class TimeseriesSplitterParamsForm(ParamsForm):
+    form_name = "Timeseries Splitter Parameters"
+    template_name = "analysis/forms/basic.html"
+    time_group = forms.ChoiceField(required=False, choices=get_time_groups(), label="Group By")
+    origin = forms.ChoiceField(
+        required=False,
+        choices=[("start", "Beginning of data"), ("end", "End of data")],
+        label="Start from",
+        help_text="Whether to split the data starting from the beginning or the end.",
+        initial="start",
+    )
+    ignore_empty_groups = forms.BooleanField(required=False, label="Ignore Empty Groups", initial=True)
+
+    def clean_time_group(self):
+        from apps.analysis.steps.splitters import TimeGroup
+
+        try:
+            return TimeGroup(self.cleaned_data["time_group"])
+        except KeyError:
+            raise forms.ValidationError("Invalid time group.")
+
+    def get_params(self):
+        from .splitters import TimeseriesSplitterParams
+
+        try:
+            return TimeseriesSplitterParams(
+                time_group=self.cleaned_data["time_group"],
+                origin=self.cleaned_data["origin"],
+                ignore_empty_groups=self.cleaned_data["ignore_empty_groups"],
+            )
         except ValueError as e:
             raise forms.ValidationError(repr(e))

@@ -43,4 +43,4 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
         llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
         prompt = params.prompt_template.format_prompt(data=data)
         result = llm.invoke(prompt)
-        return result.content, {}
+        return result.content, {"persist_output": False}

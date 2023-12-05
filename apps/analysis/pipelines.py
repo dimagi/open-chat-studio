@@ -4,6 +4,7 @@ from apps.analysis.steps.parsers import WhatsappParser
 from .core import ParamsForm, Pipeline
 from .steps.filters import TimeseriesFilter
 from .steps.processors import LlmCompletionStep
+from .steps.splitters import TimeseriesSplitter
 
 SOURCE_PIPELINES = {
     "text_data": Pipeline(
@@ -19,8 +20,17 @@ SOURCE_PIPELINES = {
             WhatsappParser(),
             TimeseriesFilter(),
         ],
-        "Whatsapp Data with date filtering",
-        "Load whatsapp data from a file and filter it by date.",
+        "Filtered WhatsApp Data",
+        "Load WhatsApp data from a file and filter it by date.",
+    ),
+    "split_whatsapp_data": Pipeline(
+        [
+            ResourceTextLoader(),
+            WhatsappParser(),
+            TimeseriesSplitter(),
+        ],
+        "Split WhatsApp Data",
+        "Load whatsApp data from a file and split it into chunks by date.",
     ),
 }
 

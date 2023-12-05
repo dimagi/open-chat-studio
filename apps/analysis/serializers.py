@@ -12,9 +12,10 @@ from apps.analysis.models import Resource, ResourceMetadata
 def create_resource_for_data(team, data: Any, name: str) -> Resource:
     serializer = get_serializer(data)
     metadata = serializer.get_metadata(data)
+    time_suffix = timezone.now().replace(tzinfo=None).isoformat(timespec="milliseconds")
     resource = Resource(
         team=team,
-        name=f"{name} {timezone.now().isoformat()}",
+        name=f"{name} {time_suffix}",
         type=metadata.format,
         metadata=metadata.model_dump(),
     )

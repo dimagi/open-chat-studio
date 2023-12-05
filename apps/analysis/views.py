@@ -119,7 +119,7 @@ def delete_analysis(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
-def create_analysis_run(request, team_slug: str, pk: int):
+def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     param_forms = {
         **get_param_forms(get_source_pipeline(analysis.source)),
@@ -143,7 +143,13 @@ def create_analysis_run(request, team_slug: str, pk: int):
             run.save()
             return redirect("analysis:run_details", team_slug=team_slug, pk=run.id)
     else:
-        forms = {step_name: form(request) for step_name, form in param_forms.items()}
+        initial = {}
+        if run_id:
+            run = get_object_or_404(RunGroup, id=run_id, team=request.team)
+            initial = run.params
+        forms = {
+            step_name: form(request, initial=initial.get(step_name, {})) for step_name, form in param_forms.items()
+        }
     return render(
         request,
         "analysis/analysis_run_create.html",
@@ -157,15 +163,7 @@ def create_analysis_run(request, team_slug: str, pk: int):
 @login_and_team_required
 def replay_run(request, team_slug: str, pk: int):
     run = get_object_or_404(RunGroup, id=pk, team=request.team)
-    replay = RunGroup.objects.create(
-        team=request.team,
-        analysis=run.analysis,
-        params=run.params,
-    )
-    result = run_pipeline.delay(replay.id)
-    replay.task_id = result.task_id
-    replay.save()
-    return redirect("analysis:run_details", team_slug=team_slug, pk=replay.id)
+    return create_analysis_run(request, team_slug, run.analysis.id, run_id=pk)
 
 
 @login_and_team_required

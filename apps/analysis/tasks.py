@@ -73,13 +73,12 @@ def run_pipeline(run_group_id: int):
             source_pipeline = get_source_pipeline(group.analysis.source)
             source_result = _run_pipeline(source_run, source_pipeline, pipeline_context, StepContext.initial())
 
-        if source_pipeline.steps[-1].output_multiple and isinstance(source_result.data, list):
+        if source_result.metadata.get("output_multiple", False) and isinstance(source_result.data, list):
             result_data = source_result.data
         else:
             result_data = [source_result.data]
 
         for data in result_data:
-            time.sleep(5)
             run = AnalysisRun.objects.create(group=group)
             with run_context(run) as pipeline_context:
                 data_pipeline = get_data_pipeline(group.analysis.pipeline)
@@ -88,8 +87,17 @@ def run_pipeline(run_group_id: int):
 
 def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext) -> StepContext:
     result = pipeline.run(pipeline_context, input_context)
+
+    if result.metadata.get("output_multiple", False) and isinstance(result.data, list):
+        result_data = result.data
+        result.output_summary = f"{len(result_data)} chunks created"
+    else:
+        result_data = [result.data]
+        run.output_summary = get_serializer(result.data).get_summary(result.data)
+
     if result.metadata.get("persist_output", True):
-        resource = create_resource_for_data(run.group.team, result.data, f"{result.name} Output")
-        run.resources.add(resource)
-    run.output_summary = get_serializer(result.data).get_summary(result.data)
+        for i, data in enumerate(result_data):
+            resource = create_resource_for_data(run.group.team, data, f"{result.name} Output {i}")
+            run.resources.add(resource)
+
     return result

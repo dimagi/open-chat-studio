@@ -37,7 +37,6 @@ class PipelineContext:
 
 
 class Step(Protocol[PipeIn, PipeOut]):
-    output_multiple: bool
     input_type: ClassVar
     output_type: ClassVar
 
@@ -100,7 +99,14 @@ class ParamsForm(forms.Form):
         self.request = request
         super().__init__(*args, **kwargs)
 
+    def clean(self):
+        self.get_params()
+        return self.cleaned_data
+
     def save(self) -> "Params":
+        return self.get_params()
+
+    def get_params(self):
         raise NotImplementedError
 
 
@@ -130,7 +136,6 @@ class NoParams(Params):
 
 
 class BaseStep(Generic[PipeIn, PipeOut]):
-    output_multiple = False
     input_type: PipeIn
     output_type: PipeOut
     param_schema: type[Params] = NoParams
@@ -153,13 +158,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
         self.log.info(f"Running step {self.name}")
-        with self.log(self.name):
-            self._params.check()
-            self.check_context(context)
+        try:
+            with self.log(self.name):
+                self._params.check()
+                self.check_context(context)
 
-            self.log.debug(f"Params: {self._params}")
-            output, metadata = self.run(self._params, context.data)
-            return StepContext(output, self.name, self.log.log_entries(), metadata)
+                self.log.debug(f"Params: {self._params}")
+                output, metadata = self.run(self._params, context.data)
+                return StepContext(output, self.name, self.log.log_entries(), metadata)
+        finally:
+            self.log.info(f"Step {self.name} complete")
 
     def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
         raise NotImplementedError
