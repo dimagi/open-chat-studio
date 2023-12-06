@@ -1,12 +1,14 @@
+import json
 import uuid
 
 import markdown
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils.translation import gettext
+from django_celery_beat.models import ClockedSchedule, PeriodicTask
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.teams.models import BaseTeamModel, Team
@@ -439,3 +441,31 @@ class ExperimentSession(BaseTeamModel):
     def update_status(self, new_status: SessionStatus):
         self.status = new_status
         self.save()
+
+
+class ScheduledMessage(BaseTeamModel):
+    SCHEDULED_MESSAGE_TASK = "apps.chat.tasks.send_bot_message_to_users"
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+    chat_ids = ArrayField(
+        models.CharField(max_length=64),
+        default=list,
+        verbose_name="Chat IDs",
+        help_text="A list of chat IDs to send this message to",
+    )
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
+    is_bot_instruction = models.BooleanField(
+        default=False,
+        help_text=(
+            "Indicates whether the message should be "
+            "sent to the bot as an instruction. Set to False if the message should be sent directly to users"
+        ),
+    )
+    message = models.TextField(
+        blank=True,
+        default="",
+        help_text="The message",
+    )
+    clocked_schedule = models.DateTimeField(null=False, blank=False)
+    periodic_task = models.ForeignKey(PeriodicTask, null=True, on_delete=models.CASCADE)
