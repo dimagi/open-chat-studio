@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 @contextmanager
 def run_status_context(run, raise_errors=False):
+    """Context manager to simplify updating status and start / end times as well as error handling."""
     run.start_time = timezone.now()
     run.status = RunStatus.RUNNING
     run.save()
@@ -37,6 +38,7 @@ def run_status_context(run, raise_errors=False):
 
 @contextmanager
 def run_context(run):
+    """Context manager to create the pipeline context and manage run status."""
     log_stream = RunLogStream(run)
     llm_service = run.group.analysis.llm_provider.get_llm_service()
     params = run.group.params
@@ -48,15 +50,13 @@ def run_context(run):
 
 
 class RunLogStream(LogStream):
-    def __init__(self, run, level: LogLevel = LogLevel.INFO):
+    def __init__(self, run):
         self.run = run
-        self.level = level
         self.logs = []
 
     def write(self, entry: LogEntry):
-        if entry.level >= LogLevel.INFO:
-            self.logs.append(entry.to_json())
-            self.flush()
+        self.logs.append(entry.to_json())
+        self.flush()
 
     def flush(self):
         self.run.log = {"entries": self.logs}
@@ -64,14 +64,11 @@ class RunLogStream(LogStream):
 
 
 @shared_task
-def run_pipeline(run_group_id: int):
+def run_analysis(run_group_id: int):
     group = RunGroup.objects.get(id=run_group_id)
 
     with run_status_context(group):
-        source_run = AnalysisRun.objects.create(group=group)
-        with run_context(source_run) as pipeline_context:
-            source_pipeline = get_source_pipeline(group.analysis.source)
-            source_result = _run_pipeline(source_run, source_pipeline, pipeline_context, StepContext.initial())
+        source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
 
         if source_result.metadata.get("output_multiple", False) and isinstance(source_result.data, list):
             result_data = source_result.data
@@ -79,15 +76,19 @@ def run_pipeline(run_group_id: int):
             result_data = [source_result.data]
 
         for data in result_data:
-            run = AnalysisRun.objects.create(group=group)
-            with run_context(run) as pipeline_context:
-                data_pipeline = get_data_pipeline(group.analysis.pipeline)
-                _run_pipeline(run, data_pipeline, pipeline_context, StepContext.initial(data))
+            run_pipeline(group, group.analysis.pipeline, get_data_pipeline, data=data)
 
 
-def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_context: StepContext) -> StepContext:
-    result = pipeline.run(pipeline_context, input_context)
+def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, data=None) -> StepContext:
+    run = AnalysisRun.objects.create(group=group)
+    with run_context(run) as pipeline_context:
+        pipeline = pipeline_factory(pipeline_id)
+        result = pipeline.run(pipeline_context, StepContext.initial(data))
+        process_pipeline_output(run, result)
+        return result
 
+
+def process_pipeline_output(run, result):
     if result.metadata.get("output_multiple", False) and isinstance(result.data, list):
         result_data = result.data
         result.output_summary = f"{len(result_data)} chunks created"
@@ -99,5 +100,3 @@ def _run_pipeline(run, pipeline, pipeline_context: PipelineContext, input_contex
         for i, data in enumerate(result_data):
             resource = create_resource_for_data(run.group.team, data, f"{result.name} Output {i}")
             run.resources.add(resource)
-
-    return result

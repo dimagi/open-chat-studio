@@ -116,7 +116,7 @@ class RunGroup(BaseRun):
         return json.dumps(self.params, indent=2)
 
     def get_absolute_url(self):
-        return reverse("analysis:run_details", args=[self.team.slug, self.id])
+        return reverse("analysis:group_details", args=[self.team.slug, self.id])
 
 
 class AnalysisRun(BaseRun):

@@ -9,7 +9,7 @@ from apps.analysis.forms import AnalysisForm
 from apps.analysis.models import Analysis, Resource, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisTable, RunGroupTable
-from apps.analysis.tasks import run_pipeline
+from apps.analysis.tasks import run_analysis
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 
@@ -133,15 +133,15 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
             step_params = {
                 step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
             }
-            run = RunGroup.objects.create(
+            group = RunGroup.objects.create(
                 team=analysis.team,
                 analysis=analysis,
                 params=step_params,
             )
-            result = run_pipeline.delay(run.id)
-            run.task_id = result.task_id
-            run.save()
-            return redirect("analysis:run_details", team_slug=team_slug, pk=run.id)
+            result = run_analysis.delay(group.id)
+            group.task_id = result.task_id
+            group.save()
+            return redirect("analysis:group_details", team_slug=team_slug, pk=group.id)
     else:
         initial = {}
         if run_id:
