@@ -44,7 +44,7 @@ def manage_team(request, team_slug):
             messages.error(request, "Sorry you don't have permission to do that.")
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-    if request.team_membership.role != "admin":
+    if request.team_membership.is_team_admin:
         set_form_fields_disabled(team_form, True)
 
     return render(
