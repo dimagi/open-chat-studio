@@ -469,3 +469,46 @@ class ScheduledMessage(BaseTeamModel):
     )
     clocked_schedule = models.DateTimeField(null=False, blank=False)
     periodic_task = models.ForeignKey(PeriodicTask, null=True, on_delete=models.CASCADE)
+
+    def _add_periodic_task(self) -> PeriodicTask:
+        if self.periodic_task and self.periodic_task.clocked:
+            clocked = self.periodic_task.clocked
+        else:
+            clocked = ClockedSchedule.objects.create(clocked_time=self.clocked_schedule)
+
+        task_kwargs = {
+            "chat_ids": self.chat_ids,
+            "experiment_public_id": str(self.experiment.public_id),
+            "is_bot_instruction": self.is_bot_instruction,
+            "message": self.message,
+        }
+
+        periodic_task_kwargs = {
+            "name": f"{self.team.slug}-{self.name}",
+            "task": self.SCHEDULED_MESSAGE_TASK,
+            "clocked": clocked,
+            "kwargs": json.dumps(task_kwargs),
+            "one_off": True,
+        }
+        if self.periodic_task:
+            PeriodicTask.objects.filter(id=self.periodic_task.id).update(**periodic_task_kwargs)
+        else:
+            self.periodic_task = PeriodicTask.objects.create(**periodic_task_kwargs)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        """
+        Saving the (this) model should update the underlying `PeriodicTask` and `ClockedSchedule` records as well
+        """
+        self._add_periodic_task()
+        super().save(*args, **kwargs)
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        periodic_task = self.periodic_task
+        super().delete(*args, **kwargs)
+        periodic_task.delete()
+        periodic_task.clocked.delete()
+
+    class Meta:
+        ordering = ["created_at"]
