@@ -1,7 +1,7 @@
 import pytest
 
 from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
-from apps.analysis.tasks import run_context
+from apps.analysis.tasks import run_context, run_status_context
 from apps.service_providers.models import LlmProvider
 
 
@@ -80,10 +80,26 @@ def test_run_context_error(team, analysis):
         params={},
     )
     run = AnalysisRun.objects.create(group=group)
-    with run_context(run):
-        raise Exception("test exception")
+    with pytest.raises(Exception):
+        with run_context(run):
+            raise Exception("test exception")
 
     run.refresh_from_db()
     assert run.end_time is not None
     assert run.status == RunStatus.ERROR
     assert run.error == """Exception('test exception')"""
+
+
+def test_run_status_context_error(team, analysis):
+    group = RunGroup.objects.create(
+        team=team,
+        analysis=analysis,
+        params={},
+    )
+    with run_status_context(group, raise_errors=False):
+        raise Exception("test exception")
+
+    group.refresh_from_db()
+    assert group.end_time is not None
+    assert group.status == RunStatus.ERROR
+    assert group.error == """Exception('test exception')"""
