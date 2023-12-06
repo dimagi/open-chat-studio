@@ -5,17 +5,14 @@
   <div role="tablist" class="tabs tabs-bordered">
     <input type="radio" name="group_tabs_{{ group.id }}" role="tab" class="tab" aria-label="Logs" checked/>
     <div role="tabpanel" class="tab-content p-4">
-      <pre>
-  {% for run in runs reversed %}
-    # Step {{ forloop.revcounter }}
-    {% for entry in run.log.entries %}
-      {{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message|wordwrap:60 }}{% endfor %}
-    {% if forloop.first %}
-      <span class="loading loading-dots loading-md"></span>
-    {% endif %}
-    <hr>
-  {% endfor %}
-  </pre>
+      {% for run in runs reversed %}
+        <p class="my-2 font-medium">Step {{ forloop.revcounter }} ({{ run.get_status_display }})</p>
+        {% include "analysis/components/run_logs.html" %}
+        {% if forloop.first %}
+          <span class="loading loading-dots loading-md"></span>
+        {% endif %}
+        <div class="divider divider-info"></div>
+      {% endfor %}
     </div>
 
     <input type="radio" name="group_tabs_{{ group.id }}" role="tab" class="tab" aria-label="Parameters"/>

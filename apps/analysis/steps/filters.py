@@ -91,7 +91,5 @@ class TimeseriesFilter(TimeseriesStep):
     def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
         result = data.loc[params.start : params.end]
-        self.log.info(
-            f"Filtered timeseries data from {params.date_range.start} to {params.date_range.end} ({len(result)} rows)"
-        )
+        self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
         return result, {}

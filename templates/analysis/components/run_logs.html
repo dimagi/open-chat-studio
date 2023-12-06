@@ -1,7 +1,4 @@
-<pre class="overflow-x-auto">
-{% for entry in run.log.entries %}
-{{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message }}{% endfor %}
-</pre>
-{% if not run.is_complete %}
-  <span class="loading loading-dots loading-md"></span>
-{% endif %}
+<div class="font-mono whitespace-pre-wrap">
+{% for entry in run.log.entries %}{{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message }}
+{% endfor %}
+</div>

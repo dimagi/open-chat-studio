@@ -8,7 +8,7 @@
       <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Output"
              {% if not run.error %}checked{% endif %}/>
       <div role="tabpanel" class="tab-content p-4">
-        <pre class="overflow-x-auto">{{ run.output_summary|wordwrap:100 }}</pre>
+        <pre class="whitespace-pre-wrap">{{ run.output_summary }}</pre>
       </div>
     {% endif %}
 
@@ -34,7 +34,7 @@
   {% if run.error %}
     <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Error" checked/>
     <div role="tabpanel" class="tab-content p-4">
-      <pre class="overflow-x-auto">{{ run.error }}</pre>
+      <pre class="whitespace-pre-wrap">{{ run.error }}</pre>
     </div>
   {% endif %}
 
