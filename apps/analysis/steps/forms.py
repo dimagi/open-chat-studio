@@ -82,35 +82,34 @@ def get_duration_choices():
 class TimeseriesFilterForm(ParamsForm):
     form_name = "Timeseries Filter Parameters"
     template_name = "analysis/forms/basic.html"
-    value = forms.IntegerField(required=False, label="Duration")
-    unit = forms.ChoiceField(required=False, choices=get_duration_choices(), label="Duration Unit")
-    anchor = forms.DateField(required=False, label="Starting on")
+    duration_value = forms.IntegerField(required=False, label="Duration")
+    duration_unit = forms.TypedChoiceField(
+        required=False, choices=get_duration_choices(), label="Duration Unit", coerce=int
+    )
+    anchor_point = forms.DateField(required=False, label="Starting on")
 
     def reformat_initial(self, initial):
         date_range = initial.get("date_range")
         if date_range:
             return {
-                "value": date_range["duration"]["value"],
-                "unit": date_range["duration"]["unit"],
-                "anchor": datetime.datetime.fromisoformat(date_range["anchor_point"]),
+                "duration_value": date_range["duration"]["value"],
+                "duration_unit": date_range["duration"]["unit"],
+                "anchor_point": datetime.datetime.fromisoformat(date_range["anchor_point"]),
             }
 
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
 
         try:
-            return DurationUnit(int(self.cleaned_data["unit"]))
-        except KeyError:
+            return DurationUnit(self.cleaned_data["duration_unit"])
+        except ValueError:
             raise forms.ValidationError("Invalid duration unit.")
 
     def get_params(self):
-        from .filters import DateRange, Duration, TimeseriesFilterParams
+        from .filters import TimeseriesFilterParams
 
-        cleaned_data = self.cleaned_data
-        duration = Duration(unit=cleaned_data["unit"], value=cleaned_data["value"])
-        date_range = DateRange(duration=duration, anchor_type="this", anchor_point=cleaned_data["anchor"])
         try:
-            return TimeseriesFilterParams(date_range=date_range)
+            return TimeseriesFilterParams(**self.cleaned_data)
         except ValueError as e:
             raise forms.ValidationError(repr(e))
 

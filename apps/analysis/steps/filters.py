@@ -23,42 +23,19 @@ class DurationUnit(IntEnum):
         return relativedelta(**{self.name: quantity})
 
 
-class Duration(BaseModel):
-    unit: DurationUnit
-    value: PositiveInt
-
-    def delta(self) -> relativedelta:
-        return self.unit.delta(self.value)
-
-    def anchor_adjustment(self) -> relativedelta:
-        delta = relativedelta(second=0, microsecond=0)
-        if self.unit >= DurationUnit.hours:
-            delta += relativedelta(minute=0)
-        if self.unit >= DurationUnit.days:
-            delta += relativedelta(hour=0)
-
-        if self.unit == DurationUnit.weeks:
-            return relativedelta(weeks=-1, weekday=0)
-
-        if self.unit >= DurationUnit.months:
-            delta += relativedelta(day=1)
-        if self.unit >= DurationUnit.years:
-            delta += relativedelta(month=1)
-        return delta
-
-
-class DateRange(BaseModel):
-    duration: Duration
-    anchor_type: Literal["this", "last"]
+class TimeseriesFilterParams(Params):
+    duration_unit: DurationUnit = DurationUnit.months
+    duration_value: PositiveInt = 1
+    anchor_type: Literal["this", "last"] = "this"
     anchor_point: Annotated[datetime, Field(default_factory=datetime.utcnow)]
 
     @cached_property
     def range_tuple(self) -> tuple[datetime, datetime]:
         anchor = self.anchor_point
-        start = anchor + self.duration.anchor_adjustment()
+        start = anchor + self.anchor_adjustment()
         if self.anchor_type == "last":
-            start -= self.duration.delta()
-        return start, start + self.duration.delta()
+            start -= self.delta()
+        return start, start + self.delta()
 
     @property
     def start(self):
@@ -72,9 +49,24 @@ class DateRange(BaseModel):
         start, end = self.range_tuple
         return start <= date < end
 
+    def delta(self) -> relativedelta:
+        return self.duration_unit.delta(self.duration_value)
 
-class TimeseriesFilterParams(Params):
-    date_range: DateRange = None
+    def anchor_adjustment(self) -> relativedelta:
+        delta = relativedelta(second=0, microsecond=0)
+        if self.duration_unit >= DurationUnit.hours:
+            delta += relativedelta(minute=0)
+        if self.duration_unit >= DurationUnit.days:
+            delta += relativedelta(hour=0)
+
+        if self.duration_unit == DurationUnit.weeks:
+            return relativedelta(weeks=-1, weekday=0)
+
+        if self.duration_unit >= DurationUnit.months:
+            delta += relativedelta(day=1)
+        if self.duration_unit >= DurationUnit.years:
+            delta += relativedelta(month=1)
+        return delta
 
     def get_form_class(self) -> type[ParamsForm] | None:
         from apps.analysis.steps.forms import TimeseriesFilterForm
@@ -98,7 +90,7 @@ class TimeseriesFilter(TimeseriesStep):
 
     def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
-        result = data.loc[params.date_range.start : params.date_range.end]
+        result = data.loc[params.start : params.end]
         self.log.info(
             f"Filtered timeseries data from {params.date_range.start} to {params.date_range.end} ({len(result)} rows)"
         )
