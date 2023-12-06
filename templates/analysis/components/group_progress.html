@@ -4,11 +4,13 @@
 <div hx-get="{% url "analysis:group_progress" request.team.slug group.id %}" hx-trigger="load delay:2s">
   <h3 class="pg-subtitle">Logs</h3>
   <pre>
-  <span class="loading loading-dots loading-md"></span>
   {% for run in runs reversed %}
     # Step {{ forloop.revcounter }}
     {% for entry in run.log.entries %}
     {{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message|wordwrap:60 }}{% endfor %}
+    {% if forloop.first %}
+    <span class="loading loading-dots loading-md"></span>
+    {% endif %}
     <hr>
   {% endfor %}
   </pre>

@@ -3,7 +3,7 @@ from apps.analysis.steps.parsers import WhatsappParser
 
 from .core import ParamsForm, Pipeline
 from .steps.filters import TimeseriesFilter
-from .steps.processors import LlmCompletionStep
+from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
 SOURCE_PIPELINES = {
@@ -42,6 +42,13 @@ PIPELINES = {
         ],
         "LLM Processing",
         "Pass data to the LLM with a prompt",
+    ),
+    "assistant": Pipeline(
+        [
+            AssistantStep(),
+        ],
+        "OpenAI Assistant",
+        "Pass data to an OpenAI Assistant with a prompt",
     ),
 }
 

@@ -31,7 +31,7 @@ class LogEntry:
             "level": self.level.name,
             "message": self.message,
             "logger": self.logger,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": self.timestamp.isoformat(timespec="milliseconds"),
         }
 
 

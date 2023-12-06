@@ -43,7 +43,7 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
     input_type = pd.DataFrame
     output_type = list[pd.DataFrame]
 
-    def check_context(self, context: StepContext):
+    def preflight_check(self, context: StepContext):
         if not ptypes.is_datetime64_any_dtype(context.data.index):
             raise StepError("Dataframe must have a datetime index")
 

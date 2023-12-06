@@ -1,3 +1,5 @@
+import datetime
+
 from django import forms
 from django.core.files.base import ContentFile
 
@@ -16,6 +18,11 @@ class ResourceLoaderParamsForm(ParamsForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["resource"].queryset = Resource.objects.filter(team=self.request.team)
+
+    def reformat_initial(self, initial):
+        resource_id = initial.get("resource_id")
+        if resource_id:
+            return {"resource": Resource.objects.get(id=resource_id)}
 
     def clean(self):
         cleaned_data = self.cleaned_data
@@ -79,18 +86,28 @@ class TimeseriesFilterForm(ParamsForm):
     unit = forms.ChoiceField(required=False, choices=get_duration_choices(), label="Duration Unit")
     anchor = forms.DateField(required=False, label="Starting on")
 
+    def reformat_initial(self, initial):
+        date_range = initial.get("date_range")
+        if date_range:
+            return {
+                "value": date_range["duration"]["value"],
+                "unit": date_range["duration"]["unit"],
+                "anchor": datetime.datetime.fromisoformat(date_range["anchor_point"]),
+            }
+
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
 
         try:
-            return DurationUnit(self.cleaned_data["unit"])
+            return DurationUnit(int(self.cleaned_data["unit"]))
         except KeyError:
             raise forms.ValidationError("Invalid duration unit.")
 
     def get_params(self):
         from .filters import DateRange, Duration, TimeseriesFilterParams
 
-        duration = Duration(unit=self.cleaned_data["unit"], value=self.cleaned_data["value"])
+        cleaned_data = self.cleaned_data
+        duration = Duration(unit=cleaned_data["unit"], value=cleaned_data["value"])
         date_range = DateRange(duration=duration, anchor_type="this", anchor_point=cleaned_data["anchor"])
         try:
             return TimeseriesFilterParams(date_range=date_range)
@@ -134,5 +151,20 @@ class TimeseriesSplitterParamsForm(ParamsForm):
                 origin=self.cleaned_data["origin"],
                 ignore_empty_groups=self.cleaned_data["ignore_empty_groups"],
             )
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+class AssistantParamsForm(ParamsForm):
+    form_name = "Assistant Parameters"
+    template_name = "analysis/forms/basic.html"
+    assistant_id = forms.CharField()
+    prompt = forms.CharField(widget=forms.Textarea)
+
+    def get_params(self):
+        from .processors import AssistantParams
+
+        try:
+            return AssistantParams(assistant_id=self.cleaned_data["assistant_id"], prompt=self.cleaned_data["prompt"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))

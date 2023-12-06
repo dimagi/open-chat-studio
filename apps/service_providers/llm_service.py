@@ -1,14 +1,20 @@
 from io import BytesIO
+from typing import ClassVar
 
 import pydantic
 from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
 from openai import OpenAI
+from openai._base_client import SyncAPIClient
 
 
 class LlmService(pydantic.BaseModel):
-    _type: str
-    supports_transcription: bool = False
+    _type: ClassVar[str]
+    supports_transcription: ClassVar[bool] = False
+    supports_assistant: ClassVar[bool] = False
+
+    def get_raw_client(self) -> SyncAPIClient:
+        raise NotImplementedError
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         raise NotImplementedError
@@ -19,11 +25,15 @@ class LlmService(pydantic.BaseModel):
 
 class OpenAILlmService(LlmService):
     _type = "openai"
-    supports_transcription: bool = True
+    supports_transcription = True
+    supports_assistant = True
 
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
+
+    def get_raw_client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return ChatOpenAI(
@@ -35,10 +45,7 @@ class OpenAILlmService(LlmService):
         )
 
     def transcribe_audio(self, audio: BytesIO) -> str:
-        client = OpenAI(
-            api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base
-        )
-        transcript = client.audio.transcriptions.create(
+        transcript = self.get_raw_client().audio.transcriptions.create(
             model="whisper-1",
             file=audio,
         )

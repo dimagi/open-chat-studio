@@ -86,7 +86,7 @@ class TimeseriesStep(BaseStep[pd.DataFrame, pd.DataFrame]):
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 
-    def check_context(self, context: StepContext):
+    def preflight_check(self, context: StepContext):
         if not ptypes.is_datetime64_any_dtype(context.data.index):
             raise StepError("Dataframe must have a datetime index")
 

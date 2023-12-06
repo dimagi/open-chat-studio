@@ -97,7 +97,14 @@ class ParamsForm(forms.Form):
 
     def __init__(self, request, *args, **kwargs):
         self.request = request
+        initial = kwargs.get("initial")
+        if initial:
+            kwargs["initial"] = self.reformat_initial(initial)
         super().__init__(*args, **kwargs)
+
+    def reformat_initial(self, initial):
+        """Override this to change the structure of the initial data which comes from serialized parameter objects."""
+        return initial
 
     def clean(self):
         self.get_params()
@@ -161,7 +168,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         try:
             with self.log(self.name):
                 self._params.check()
-                self.check_context(context)
+                self.preflight_check(context)
 
                 self.log.debug(f"Params: {self._params}")
                 output, metadata = self.run(self._params, context.data)
@@ -172,7 +179,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
         raise NotImplementedError
 
-    def check_context(self, context: StepContext):
+    def preflight_check(self, context: StepContext):
         pass
 
 
