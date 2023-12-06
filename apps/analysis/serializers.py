@@ -28,18 +28,25 @@ def create_resource_for_data(team, data: Any, name: str) -> Resource:
 
 
 class Serializer:
+    """Base class for serializing data output from a pipeline step"""
+
     supported_types: list[type] = None
+    """Data types supported by this serializer"""
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
+        """Given a file and metadata, read the data from the file and return it."""
         raise NotImplementedError()
 
     def write(self, data: Any, file: IO):
+        """Given data and a file, write the data to the file."""
         raise NotImplementedError()
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
+        """Given data, return the metadata for the resource."""
         raise NotImplementedError()
 
     def get_summary(self, data: Any) -> str:
+        """Given data, return a summary of the data as a string"""
         raise NotImplementedError()
 
 

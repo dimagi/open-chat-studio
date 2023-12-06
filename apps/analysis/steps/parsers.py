@@ -7,6 +7,15 @@ from apps.analysis.core import BaseStep, Params
 
 
 class WhatsappParser(BaseStep[str, pd.DataFrame]):
+    """Parse a whatsapp chat log into a dataframe.
+
+    Assumes the following format:
+
+        01/01/2021, 00:00 - System Message
+        01/01/2021, 00:00 - Sender: Message which can
+        go across multiple lines
+    """
+
     input_type = str
     output_type = pd.DataFrame
 

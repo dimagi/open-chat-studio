@@ -6,7 +6,7 @@ import pandas as pd
 from pandas.api import types as ptypes
 from pandas.core.resample import TimeGrouper
 
-from ..core import BaseStep, Params, ParamsForm, StepContext, StepError
+from ..core import BaseStep, Params, ParamsForm, StepContext, StepError, required
 
 
 class TimeGroup(StrEnum):
@@ -24,8 +24,8 @@ class TimeGroup(StrEnum):
 
 
 class TimeseriesSplitterParams(Params):
-    time_group: TimeGroup = None
-    origin: Literal["start", "end"] | datetime = "start"
+    time_group: required(TimeGroup) = None
+    origin: required(Literal["start", "end"] | datetime) = None
     ignore_empty_groups: bool = True
 
     def get_form_class(self) -> type[ParamsForm] | None:
@@ -39,6 +39,8 @@ class TimeseriesSplitterParams(Params):
 
 
 class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
+    """Splits input data by a time group to produce multiple output dataframes."""
+
     param_schema = TimeseriesSplitterParams
     input_type = pd.DataFrame
     output_type = list[pd.DataFrame]

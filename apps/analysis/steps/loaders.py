@@ -8,6 +8,8 @@ from apps.analysis.models import Resource, ResourceType
 
 
 class BaseLoader(BaseStep[None, PipeOut]):
+    """Base class for steps that load data from a resource."""
+
     input_type = None
 
     def run(self, params: Params, data: None = None) -> tuple[str, dict]:

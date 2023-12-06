@@ -1,6 +1,6 @@
 import dataclasses
 from abc import abstractmethod
-from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
 
 from django import forms
 from pydantic import BaseModel
@@ -14,6 +14,8 @@ PipeOut = TypeVar("PipeOut", covariant=True)
 
 @dataclasses.dataclass
 class StepContext(Generic[PipeOut]):
+    """Context for a step in a pipeline. This is used as input and output for each step."""
+
     data: PipeOut
     name: str = "start"
     logs: list[LogEntry] = dataclasses.field(default_factory=list)
@@ -29,6 +31,8 @@ class StepContext(Generic[PipeOut]):
 
 
 class PipelineContext:
+    """Context for a pipeline. This is passed to each step before it is run."""
+
     def __init__(self, llm_service: LlmService, logger: Logger = None, params: dict = None):
         self.llm_service = llm_service
         self.log = logger or Logger()
@@ -37,6 +41,8 @@ class PipelineContext:
 
 
 class Step(Protocol[PipeIn, PipeOut]):
+    """Step protocol. This is the interface for a step in a pipeline."""
+
     input_type: ClassVar
     output_type: ClassVar
 
@@ -49,6 +55,9 @@ class Step(Protocol[PipeIn, PipeOut]):
 
 
 class Pipeline:
+    """A pipeline is a sequence of steps that are run in order. A pipeline is valid
+    the steps match the input and output types."""
+
     def __init__(self, steps: list[Step], name: str = None, description: str = None):
         self.name = name
         self.description = description
@@ -83,16 +92,28 @@ class Pipeline:
         return self.context_chain[-1]
 
 
-P = TypeVar("P", bound="Params")
 PARAM_REQUIRED = "param_required"
 
 
-def required(type_: type):
-    """Mark a parameter as required"""
-    return Annotated[type_, PARAM_REQUIRED]
+def required(origin):
+    """Mark a parameter as required.
+
+    This can be used for annotating parameter fields in a Params class:
+
+        class MyParams(Params):
+            my_field: required(int) = None
+
+    MyParams().check() will raise an error if my_field is None.
+    """
+    if isinstance(origin, _AnnotatedAlias):
+        origin.__metadata__ = origin.__metadata__ + (PARAM_REQUIRED,)
+        return origin
+    return Annotated[origin, PARAM_REQUIRED]
 
 
 class ParamsForm(forms.Form):
+    """Base class for parameter forms. This is used to edit the parameters for a step."""
+
     form_name = None
 
     def __init__(self, request, *args, **kwargs):
@@ -114,14 +135,22 @@ class ParamsForm(forms.Form):
         return self.get_params()
 
     def get_params(self):
+        """Return a Params object from the form data."""
         raise NotImplementedError
 
 
 class Params(BaseModel):
+    """Base class for step parameters. This is a pydantic model that can be used to
+    validate and serialize parameters for a step. The class must be able to be instantiated
+    with no arguments. Use the `required` type annotation to mark fields as required.
+
+    Subclasses can override get_form_class() to provide a form for editing the parameters.
+    """
+
     def get_form_class(self) -> type[ParamsForm] | None:
         return None
 
-    def merge(self, *params: dict) -> P:
+    def merge(self, *params: dict) -> "Params":
         """Merge data into the current params, overriding any existing values"""
         original = self.model_dump(exclude_unset=True)
         updated = {}
@@ -132,6 +161,7 @@ class Params(BaseModel):
         return self.__class__(**dump)
 
     def check(self):
+        """Check that required fields are set."""
         for name, field in self.model_fields.items():
             for metadata in field.metadata:
                 if metadata == PARAM_REQUIRED and getattr(self, name) is None:
@@ -143,6 +173,12 @@ class NoParams(Params):
 
 
 class BaseStep(Generic[PipeIn, PipeOut]):
+    """Base class for steps in a pipeline. This is a callable that takes a StepContext
+    and returns a new StepContext.
+
+    Subclasses must implement the run() method.
+    """
+
     input_type: PipeIn
     output_type: PipeOut
     param_schema: type[Params] = NoParams
@@ -177,9 +213,11 @@ class BaseStep(Generic[PipeIn, PipeOut]):
             self.log.info(f"Step {self.name} complete")
 
     def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
+        """Run the step and return the output data and metadata."""
         raise NotImplementedError
 
     def preflight_check(self, context: StepContext):
+        """Perform any preflight checks on the input data or pipeline context."""
         pass
 
 

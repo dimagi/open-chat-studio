@@ -14,6 +14,11 @@ from apps.analysis.core import ParamsForm, required
 
 
 class PromptParams(core.Params):
+    """Base class for steps that use a prompt.
+
+    The prompt template must have a variable named 'data' that will be
+    filled in with the data from the pipeline."""
+
     prompt: required(str) = None
 
     @cached_property
@@ -42,6 +47,8 @@ class LlmCompletionStepParams(PromptParams):
 
 
 class LlmCompletionStep(core.BaseStep[Any, str]):
+    """Pass the incoming data to the LLM in the prompt and return the result."""
+
     param_schema = LlmCompletionStepParams
     input_type = Any
     output_type = str
@@ -73,6 +80,8 @@ class AssistantOutput(pydantic.BaseModel):
 
 
 class AssistantStep(core.BaseStep[Any, str]):
+    """Experimental assistant step."""
+
     param_schema = AssistantParams
     input_type = Any
     output_type = str

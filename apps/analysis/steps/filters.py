@@ -6,9 +6,9 @@ from typing import Annotated, Literal
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pandas.api import types as ptypes
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import Field, PositiveInt
 
-from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, StepError
+from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, StepError, required
 
 
 class DurationUnit(IntEnum):
@@ -24,8 +24,12 @@ class DurationUnit(IntEnum):
 
 
 class TimeseriesFilterParams(Params):
-    duration_unit: DurationUnit = DurationUnit.months
-    duration_value: PositiveInt = 1
+    """Filter a timeseries dataframe by a duration and anchor point.
+    This creates a time window either before or after the anchor point. The length
+    of the window is determined by the duration and duration unit."""
+
+    duration_unit: required(DurationUnit) = None
+    duration_value: required(PositiveInt) = None
     anchor_type: Literal["this", "last"] = "this"
     anchor_point: Annotated[datetime, Field(default_factory=datetime.utcnow)]
 
@@ -75,6 +79,8 @@ class TimeseriesFilterParams(Params):
 
 
 class TimeseriesStep(BaseStep[pd.DataFrame, pd.DataFrame]):
+    """Base class for steps that operate on timeseries data."""
+
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 
@@ -84,12 +90,17 @@ class TimeseriesStep(BaseStep[pd.DataFrame, pd.DataFrame]):
 
 
 class TimeseriesFilter(TimeseriesStep):
+    """Filter timeseries data based on the date index to extract a time window."""
+
     param_schema = TimeseriesFilterParams
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 
     def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
+        print(data)
+        print(params.start)
+        print(params.end)
         result = data.loc[params.start : params.end]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
         return result, {}

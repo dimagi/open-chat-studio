@@ -88,15 +88,6 @@ class TimeseriesFilterForm(ParamsForm):
     )
     anchor_point = forms.DateField(required=False, label="Starting on")
 
-    def reformat_initial(self, initial):
-        date_range = initial.get("date_range")
-        if date_range:
-            return {
-                "duration_value": date_range["duration"]["value"],
-                "duration_unit": date_range["duration"]["unit"],
-                "anchor_point": datetime.datetime.fromisoformat(date_range["anchor_point"]),
-            }
-
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
 
