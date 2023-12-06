@@ -7,6 +7,7 @@ from apps.experiments.models import (
     NoActivityMessageConfig,
     Prompt,
     SafetyLayer,
+    ScheduledMessage,
     SourceMaterial,
     Survey,
 )
@@ -176,3 +177,24 @@ class PromptTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No prompts found."
+
+
+class ScheduledMessageTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "edit_url_name": "experiments:scheduled_message_edit",
+            "delete_url_name": "experiments:scheduled_message_delete",
+        },
+    )
+
+    class Meta:
+        model = ScheduledMessage
+        fields = (
+            "name",
+            "clocked_schedule",
+            "experiment",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No scheduled messages found."

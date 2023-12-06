@@ -49,6 +49,13 @@
           {% translate "No Activity Config" %}
         </a>
       </li>
+      <li>
+        <a href="{% url 'experiments:scheduled_message_home' request.team.slug %}"
+           {% if active_tab == 'scheduled_message' %}class="active"{% endif %}>
+          <i class="fa-solid fa-clock fa-fw"></i>
+          {% translate "Scheduled Messages" %}
+        </a>
+      </li>
     </ul>
   </li>
   <li>
