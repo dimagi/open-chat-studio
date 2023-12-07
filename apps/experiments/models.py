@@ -2,7 +2,8 @@ import uuid
 
 import markdown
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
@@ -130,7 +131,15 @@ class ConsentForm(BaseTeamModel):
 
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
+    capture_identifier = models.BooleanField(default=True)
+    identifier_label = models.CharField(max_length=200, default="Email Address")
+    identifier_type = models.CharField(choices=(("email", "Email"), ("text", "Text")), default="email", max_length=16)
     is_default = models.BooleanField(default=False, editable=False)
+    confirmation_text = models.CharField(
+        null=False,
+        default="Respond with '1' if you agree",
+        help_text=("Use this text to tell the user to respond with '1' in order to give their consent"),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -291,6 +300,13 @@ class Experiment(BaseTeamModel):
         on_delete=models.SET_NULL,
         help_text="This is an experimental feature and might exhibit undesirable behaviour for external channels",
     )
+    conversational_consent_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "If enabled, the consent form will be sent at the start of a conversation for external channels. Note: "
+            "This requires the experiment to have a seed message."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -307,15 +323,20 @@ class Experiment(BaseTeamModel):
 
 
 class Participant(BaseTeamModel):
-    email = models.EmailField()
+    identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
 
+    @property
+    def email(self):
+        validate_email(self.identifier)
+        return self.identifier
+
     def __str__(self):
-        return self.email
+        return self.identifier
 
     class Meta:
-        ordering = ["email"]
-        unique_together = ("team", "email")
+        ordering = ["identifier"]
+        unique_together = ("team", "identifier")
 
 
 class SessionStatus(models.TextChoices):
@@ -414,3 +435,7 @@ class ExperimentSession(BaseTeamModel):
 
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
+
+    def update_status(self, new_status: SessionStatus):
+        self.status = new_status
+        self.save()

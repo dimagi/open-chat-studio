@@ -341,6 +341,8 @@ PROJECT_METADATA = {
     "DESCRIPTION": gettext_lazy("Experiments with AI, GPT and LLMs"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
     "IMAGE": "https://chatbots.dimagi.com/static/images/dimagi-logo.png",
+    "TERMS_URL": env("TERMS_URL", default=""),
+    "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http

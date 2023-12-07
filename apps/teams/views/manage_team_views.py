@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
+from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
@@ -44,7 +45,7 @@ def manage_team(request, team_slug):
             messages.error(request, "Sorry you don't have permission to do that.")
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-    if request.team_membership.role != "admin":
+    if request.team_membership.is_team_admin:
         set_form_fields_disabled(team_form, True)
 
     return render(
@@ -67,8 +68,8 @@ def create_team(request):
         form = TeamChangeForm(request.POST)
         if form.is_valid():
             team = form.save()
-            team.members.add(request.user, through_defaults={"role": "admin"})
             team.save()
+            make_user_team_owner(team=team, user=request.user)
             return HttpResponseRedirect(reverse("teams:manage_teams"))
     else:
         form = TeamChangeForm()

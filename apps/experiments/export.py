@@ -20,7 +20,7 @@ def experiment_to_message_export_rows(experiment: Experiment):
                 session.llm,
                 experiment.public_id,
                 experiment.name,
-                session.participant.email if session.participant else None,
+                session.participant.identifier if session.participant else None,
                 session.participant.public_id if session.participant else None,
             ]
 

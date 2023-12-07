@@ -1,6 +1,6 @@
 import factory
 
-from apps.service_providers.models import LlmProvider, MessagingProvider
+from apps.service_providers.models import LlmProvider, LlmProviderType, MessagingProvider
 from apps.utils.factories.team import TeamFactory
 
 
@@ -16,8 +16,8 @@ class LlmProviderFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = LlmProvider
 
-    name = factory.Faker("name")
     team = factory.SubFactory(TeamFactory)
-    type = "openai"
+    type = LlmProviderType.openai
+    name = factory.Faker("name")
     llm_models = ["gtp-4", "gpt-3.5-turbo"]
-    config = {"openai_api_key": "123123"}
+    config = {"openai_api_key": "123"}

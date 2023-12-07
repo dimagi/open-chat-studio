@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from abc import abstractmethod
 from datetime import datetime, timedelta
@@ -17,9 +18,12 @@ from telebot.util import smart_split
 
 from apps.channels import audio
 from apps.channels.models import ExperimentChannel
-from apps.chat.bots import get_bot_from_session
+from apps.chat.bots import get_bot_from_experiment, get_bot_from_session
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
+
+USER_CONSENT_TEXT = "1"
 
 
 class MESSAGE_TYPES(Enum):
@@ -160,14 +164,48 @@ class ChannelBase:
         """
         self._add_message(message)
         if self.experiment_channel.platform != "web":
-            # Webchats' statuses are updated through an "external" flow
-            self.experiment_session.status = SessionStatus.ACTIVE
-            self.experiment_session.save()
-
             if self._is_reset_conversation_request():
-                # Why not include webchats? They can be reset by creating a new chat.
+                # Webchats' statuses are updated through an "external" flow
                 return
 
+            if self._should_prompt_for_consent():
+                # We manually add the message to the history here, since this doesn't follow the normal flow
+                self._add_message_to_history(self.message_text, ChatMessageType.HUMAN)
+
+                if self.experiment_session.status == SessionStatus.SETUP:
+                    self._chat_initiated()
+                elif self._user_gave_consent():
+                    self.experiment_session.update_status(SessionStatus.ACTIVE)
+                    # This is technically the start of the conversation
+                    if self.experiment.seed_message:
+                        self._send_message_as_bot(self.experiment.seed_message)
+                return
+
+        return self._handle_message()
+
+    def _chat_initiated(self):
+        """The user initiated the chat and we need to get their consent before continuing the conversation"""
+        self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+        consent_text = self.experiment.consent_form.consent_text
+        confirmation_text = self.experiment.consent_form.confirmation_text
+        return self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+
+    def _send_message_as_bot(self, message: str):
+        """Send a message to the user as the bot and adds it to the chat history"""
+        self._add_message_to_history(message, ChatMessageType.AI)
+        self.send_text_to_user(message)
+
+    def _should_prompt_for_consent(self):
+        """Pre-conversation is the phase where the user starts the chat and gives consent to continue"""
+        return self.experiment.conversational_consent_enabled and self.experiment_session.status in [
+            SessionStatus.SETUP,
+            SessionStatus.PENDING_PRE_SURVEY,
+        ]
+
+    def _user_gave_consent(self) -> bool:
+        return self.message_text.strip() == USER_CONSENT_TEXT
+
+    def _handle_message(self):
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
             response = self._get_llm_response(self.message_text)
@@ -227,12 +265,19 @@ class ChannelBase:
         self.experiment_session.save()
         return answer
 
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType):
+        topic_bot = get_bot_from_experiment(self.experiment, self.experiment_session.chat)
+        topic_bot._save_message_to_history(message, message_type)
+
     def _ensure_sessions_exists(self):
         """
         Ensures an experiment session exists for the given experiment and chat ID.
 
         Checks if an experiment session already exists for the specified experiment and chat ID.
         If not, a new experiment session is created and associated with the chat.
+
+        If the user requested a new session (by sending the reset command), this will create a new experiment
+        session.
         """
         if self.experiment_session and not self.experiment_channel:
             # TODO: Remove

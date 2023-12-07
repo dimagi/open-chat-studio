@@ -4,15 +4,17 @@ from datetime import timedelta
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django.contrib import messages
 from django.contrib.postgres.search import SearchVector
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from langchain.prompts import PromptTemplate
 
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Prompt, PromptBuilderHistory, SourceMaterial
@@ -54,7 +56,21 @@ class PromptTableView(SingleTableView):
         return query_set
 
 
-class CreatePrompt(CreateView):
+class PromptViewMixin:
+    ALLOWED_PROMPT_VARIABLES = ["source_material"]
+
+    def form_valid(self, form):
+        input_variables = set(PromptTemplate.from_template(form.data["prompt"]).input_variables)
+        disallowed_variables = input_variables - set(self.ALLOWED_PROMPT_VARIABLES)
+        if disallowed_variables:
+            error_message = f"""Unexpected variables found in the prompt: {disallowed_variables}. Use the input formatter to
+                format the user input"""
+            messages.error(request=self.request, message=error_message)
+            return render(self.request, self.template_name, self.get_context_data())
+        return super().form_valid(form)
+
+
+class CreatePrompt(PromptViewMixin, CreateView):
     model = Prompt
     fields = [
         "name",
@@ -85,7 +101,7 @@ class CreatePrompt(CreateView):
         return super().form_valid(form)
 
 
-class EditPrompt(UpdateView):
+class EditPrompt(PromptViewMixin, UpdateView):
     model = Prompt
     fields = [
         "name",
