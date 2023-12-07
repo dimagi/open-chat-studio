@@ -238,7 +238,7 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.2/howto/static-files/
+# https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
 
 STATIC_ROOT = BASE_DIR / "static_root"
 STATIC_URL = "/static/"
@@ -256,6 +256,8 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+# File storage: https://docs.djangoproject.com/en/4.2/topics/files/
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
@@ -283,7 +285,6 @@ if AWS_ACCESS_KEY_ID:
                 "region_name": AWS_S3_REGION,
             },
         }
-
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
