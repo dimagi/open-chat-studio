@@ -6,8 +6,12 @@ from .steps.filters import TimeseriesFilter
 from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
+LLM_PIPE = "llm"
+
+TEXT_DATA_PIPE = "text_data"
+
 SOURCE_PIPELINES = {
-    "text_data": Pipeline(
+    TEXT_DATA_PIPE: Pipeline(
         [
             ResourceTextLoader(),
         ],
@@ -36,7 +40,7 @@ SOURCE_PIPELINES = {
 
 
 PIPELINES = {
-    "llm": Pipeline(
+    LLM_PIPE: Pipeline(
         [
             LlmCompletionStep(),
         ],

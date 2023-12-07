@@ -54,3 +54,11 @@ class IntStr(BaseStep[int, str]):
 
     def run(self, params: Params, data: int) -> tuple[str, dict]:
         return str(data), {}
+
+
+class StrReverse(BaseStep[str, str]):
+    input_type = str
+    output_type = str
+
+    def run(self, params: Params, data: str) -> tuple[str, dict]:
+        return data[::-1], {}
