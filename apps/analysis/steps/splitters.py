@@ -59,7 +59,7 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
             groups.append(group)
             names.append(str(params.time_group.get_group_value(origin)))
 
-        self.log.info(f"Split timeseries data into {len(data)} groups")
-        for name, group in zip(names, groups):
-            self.log.info(f"Split timeseries data for {name} ({len(group)} rows)")
+        self.log.info(f"Split timeseries data into {len(groups)} groups")
+        for i, (name, group) in enumerate(zip(names, groups)):
+            self.log.info(f"    Group {i + 1}: {name} ({len(group)} rows)")
         return groups, {"names": names, "output_multiple": True}
