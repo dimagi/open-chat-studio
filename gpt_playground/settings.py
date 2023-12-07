@@ -266,15 +266,24 @@ if AWS_ACCESS_KEY_ID:
     AWS_S3_REGION = env("AWS_S3_REGION", default=None)
     WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="ocs-whatsapp-voice")
 
-USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
-if USE_S3_MEDIA:
-    # Media file storage in S3
-    # Using this will require configuration of the S3 bucket
-    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
-    AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-    PUBLIC_MEDIA_LOCATION = "media"
-    MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
-    DEFAULT_FILE_STORAGE = "apps.web.storage_backends.PublicMediaStorage"
+    USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
+    if USE_S3_MEDIA:
+        # Media file storage in S3
+        # Using this will require configuration of the S3 bucket
+        AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
+        AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
+        PUBLIC_MEDIA_LOCATION = "media"
+        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
+        STORAGES["default"] = {
+            "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
+            "OPTIONS": {
+                "access_key": AWS_ACCESS_KEY_ID,
+                "secret_key": AWS_SECRET_ACCESS_KEY,
+                "bucket_name": AWS_STORAGE_BUCKET_NAME,
+                "region_name": AWS_S3_REGION,
+            },
+        }
+
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
