@@ -18,16 +18,11 @@ class StepContext(Generic[PipeOut]):
 
     data: PipeOut
     name: str = "start"
-    logs: list[LogEntry] = dataclasses.field(default_factory=list)
     metadata: dict = dataclasses.field(default_factory=dict)
 
     @classmethod
     def initial(cls, data: PipeOut = None):
-        return cls(data, "start", [], {})
-
-    @property
-    def log_str(self):
-        return "\n".join([str(log) for log in self.logs])
+        return cls(data, "start", {})
 
     def clone_with(self, data: PipeOut = None):
         return dataclasses.replace(self, data=data or self.data)
@@ -211,7 +206,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
                 self.log.debug(f"Params: {self._params}")
                 output, metadata = self.run(self._params, context.data)
-                return StepContext(output, self.name, self.log.log_entries(), metadata)
+                return StepContext(output, self.name, metadata)
         finally:
             self.log.info(f"Step {self.name} complete")
 
