@@ -36,7 +36,6 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         return df, {}
 
     def _get_message(self, head, tail):
-        print(head, tail)
         date = datetime.strptime(head, "%d/%m/%Y, %H:%M")
         if ":" not in tail:
             return {"date": date, "sender": "system", "message": tail.strip()}
