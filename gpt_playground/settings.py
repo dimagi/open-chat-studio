@@ -247,10 +247,15 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
-# uncomment to use manifest storage to bust cache when file change
-# note: this may break some image references in sass files which is why it is not enabled by default
-# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
