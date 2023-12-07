@@ -33,7 +33,7 @@ class AnalysisTable(tables.Table):
 
 
 class RunGroupTable(tables.Table):
-    id = columns.Column(
+    created_at = columns.DateTimeColumn(
         linkify=True,
         attrs={
             "a": {"class": "link"},
@@ -51,7 +51,7 @@ class RunGroupTable(tables.Table):
 
     class Meta:
         model = RunGroup
-        fields = ("id", "status", "start_time", "end_time")
+        fields = ("created_at", "status", "start_time", "end_time")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."

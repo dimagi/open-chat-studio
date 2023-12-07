@@ -1,0 +1,8 @@
+{% for run in runs reversed %}
+  <p class="my-2 font-medium">Step {{ forloop.revcounter }} ({{ run.get_status_display }})</p>
+  {% include "analysis/components/run_logs.html" %}
+  {% if forloop.first %}
+    <span class="loading loading-dots loading-md"></span>
+  {% endif %}
+  <div class="divider divider-info"></div>
+{% endfor %}

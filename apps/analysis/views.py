@@ -183,15 +183,11 @@ def group_progress(request, team_slug: str, pk: int):
     if not group.is_complete and group.task_id:
         return render(
             request,
-            "analysis/components/group_progress.html",
+            "analysis/components/group_progress_inner.html",
             {"group": group, "update_status": True, "runs": runs},
         )
     else:
-        return render(
-            request,
-            "analysis/components/group_detail_tabs.html",
-            {"group": group, "update_status": True, "runs": runs},
-        )
+        return HttpResponse(headers={"HX-Redirect": reverse("analysis:group_details", args=[team_slug, pk])})
 
 
 @login_and_team_required
