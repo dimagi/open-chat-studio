@@ -42,6 +42,11 @@ def sync_groups(sender, **kwargs):
     """
     Syncs the groups with the permissions.
     """
+    create_groups_after_migrate()
+
+
+def create_groups_after_migrate():
+    """Use a separate function since you can't call signal handlers directly."""
     if not _groups_created:
         # all the apps we care about have been migrated
         print("Creating groups")
