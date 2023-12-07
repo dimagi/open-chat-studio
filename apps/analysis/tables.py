@@ -17,9 +17,19 @@ class AnalysisTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.Action("analysis:create_run", "fa-solid fa-play"),
-                table_actions.EditAction("analysis:edit"),
-                table_actions.DeleteAction("analysis:delete"),
+                table_actions.Action(
+                    "analysis:create_run",
+                    "fa-solid fa-play",
+                    ["analysis.add_analysisrun"],
+                ),
+                table_actions.EditAction(
+                    "analysis:edit",
+                    required_permissions=["analysis.change_analysis"],
+                ),
+                table_actions.DeleteAction(
+                    "analysis:delete",
+                    required_permissions=["analysis.delete_analysis"],
+                ),
             ]
         },
     )
@@ -44,7 +54,11 @@ class RunGroupTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.Action("analysis:replay_run", "fa-solid fa-play"),
+                table_actions.Action(
+                    "analysis:replay_run",
+                    "fa-solid fa-play",
+                    required_permissions=["analysis.add_rungroup"],
+                ),
             ]
         },
     )

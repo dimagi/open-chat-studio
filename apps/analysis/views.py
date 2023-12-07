@@ -1,3 +1,5 @@
+from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -6,7 +8,7 @@ from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
-from apps.analysis.models import Analysis, Resource, RunGroup, RunStatus
+from apps.analysis.models import Analysis, Resource, RunGroup
 from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
 from apps.analysis.tables import AnalysisTable, RunGroupTable
 from apps.analysis.tasks import run_analysis
@@ -15,6 +17,7 @@ from apps.teams.decorators import login_and_team_required
 
 
 @login_and_team_required
+@permission_required("analysis.view_analysis")
 def analysis_home(request, team_slug: str):
     return TemplateResponse(
         request,
@@ -24,11 +27,13 @@ def analysis_home(request, team_slug: str):
             "title": "Analysis Pipelines",
             "new_object_url": reverse("analysis:new", args=[team_slug]),
             "table_url": reverse("analysis:table", args=[team_slug]),
+            "allow_new": request.user.has_perm("analysis.add_analysis"),
         },
     )
 
 
 @login_and_team_required
+@permission_required("analysis.view_analysis")
 def analysis_details(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     return TemplateResponse(
@@ -40,30 +45,33 @@ def analysis_details(request, team_slug: str, pk: int):
     )
 
 
-class RunGroupTableView(SingleTableView):
+class RunGroupTableView(SingleTableView, PermissionRequiredMixin):
     model = RunGroup
     paginate_by = 25
     table_class = RunGroupTable
     template_name = "table/single_table.html"
+    permission_required = "analysis.view_analysis"
 
     def get_queryset(self):
         return RunGroup.objects.filter(team=self.request.team, analysis=self.kwargs["pk"])
 
 
-class AnalysisTableView(SingleTableView):
+class AnalysisTableView(SingleTableView, PermissionRequiredMixin):
     model = Analysis
     paginate_by = 25
     table_class = AnalysisTable
     template_name = "table/single_table.html"
+    permission_required = "analysis.view_analysis"
 
     def get_queryset(self):
         return Analysis.objects.filter(team=self.request.team)
 
 
-class CreateAnalysisPipeline(CreateView):
+class CreateAnalysisPipeline(CreateView, PermissionRequiredMixin):
     model = Analysis
     form_class = AnalysisForm
     template_name = "analysis/analysis_form.html"
+    permission_required = "analysis.add_analysis"
 
     @property
     def extra_context(self):
@@ -86,10 +94,11 @@ class CreateAnalysisPipeline(CreateView):
         return super().form_valid(form)
 
 
-class EditAnalysisPipeline(UpdateView):
+class EditAnalysisPipeline(UpdateView, PermissionRequiredMixin):
     model = Analysis
     form_class = AnalysisForm
     template_name = "analysis/analysis_form.html"
+    permission_required = "analysis.change_analysis"
 
     @property
     def extra_context(self):
@@ -112,6 +121,7 @@ class EditAnalysisPipeline(UpdateView):
 
 
 @login_and_team_required
+@permission_required("analysis.delete_analysis")
 def delete_analysis(request, team_slug: str, pk: int):
     prompt = get_object_or_404(Analysis, id=pk, team=request.team)
     prompt.delete()
@@ -119,6 +129,7 @@ def delete_analysis(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
+@permission_required("analysis.add_rungroup")
 def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     param_forms = {
@@ -161,12 +172,14 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
 
 
 @login_and_team_required
+@permission_required("analysis.add_rungroup")
 def replay_run(request, team_slug: str, pk: int):
     run = get_object_or_404(RunGroup, id=pk, team=request.team)
     return create_analysis_run(request, team_slug, run.analysis.id, run_id=pk)
 
 
 @login_and_team_required
+@permission_required("analysis.view_rungroup")
 def run_group_details(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
     return render(
@@ -177,6 +190,7 @@ def run_group_details(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
+@permission_required("analysis.view_rungroup")
 def group_progress(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
     runs = group.analysisrun_set.all()
@@ -191,6 +205,7 @@ def group_progress(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
+@permission_required("analysis.view_resource")
 def download_resource(request, team_slug: str, pk: int):
     resource = get_object_or_404(Resource, id=pk, team=request.team)
     try:
