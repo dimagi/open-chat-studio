@@ -73,16 +73,26 @@ class DataFramesSerializer(Serializer):
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
         date_cols = [field["name"] for field in metadata.data_schema["fields"] if field["type"] == "datetime"]
-        return pd.read_json(file, orient="records", lines=True, convert_dates=date_cols)
+        data = pd.read_json(file, orient="records", lines=True, convert_dates=date_cols)
+        if "index" in metadata.data_schema:
+            data = data.set_index(metadata.data_schema["index"])
+        return data
 
-    def write(self, data: Any, file: IO):
+    def write(self, data: pd.DataFrame, file: IO):
+        if not isinstance(data.index, pd.RangeIndex):
+            data = data.reset_index()
         data.to_json(file, orient="records", lines=True, date_format="iso")
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
+        schema = pd.io.json.build_table_schema(data, version=False)
+        if not isinstance(data.index, pd.RangeIndex):
+            schema["index"] = data.index.name or "index"
+        if "primaryKey" in schema:
+            del schema["primaryKey"]
         return ResourceMetadata(
             type="dataframe",
             format="jsonl",
-            data_schema=pd.io.json.build_table_schema(data),
+            data_schema=schema,
         )
 
     def get_summary(self, data: Any) -> str:
