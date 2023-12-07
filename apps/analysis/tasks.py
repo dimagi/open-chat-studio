@@ -71,19 +71,19 @@ def run_analysis(run_group_id: int):
         source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
 
         if source_result.metadata.get("output_multiple", False) and isinstance(source_result.data, list):
-            result_data = source_result.data
+            results = [source_result.clone_with(data) for data in source_result.data]
         else:
-            result_data = [source_result.data]
+            results = [source_result]
 
-        for data in result_data:
-            run_pipeline(group, group.analysis.pipeline, get_data_pipeline, data=data)
+        for result in results:
+            run_pipeline(group, group.analysis.pipeline, get_data_pipeline, context=result)
 
 
-def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, data=None) -> StepContext:
+def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=None) -> StepContext:
     run = AnalysisRun.objects.create(group=group)
     with run_context(run) as pipeline_context:
         pipeline = pipeline_factory(pipeline_id)
-        result = pipeline.run(pipeline_context, StepContext.initial(data))
+        result = pipeline.run(pipeline_context, context or StepContext.initial())
         process_pipeline_output(run, result)
         return result
 

@@ -29,6 +29,9 @@ class StepContext(Generic[PipeOut]):
     def log_str(self):
         return "\n".join([str(log) for log in self.logs])
 
+    def clone_with(self, data: PipeOut = None):
+        return dataclasses.replace(self, data=data or self.data)
+
 
 class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
