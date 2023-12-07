@@ -43,6 +43,8 @@ IGNORE_APPS = {
     "messages",
     "runserver_nostatic",
     "account",
+    "generics",
+    "humanize",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}
