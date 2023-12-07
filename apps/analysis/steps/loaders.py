@@ -58,6 +58,12 @@ class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
     def _get_parser(self, type_: ResourceType):
         if type_ == ResourceType.CSV:
             return pd.read_csv
+        elif type_ == ResourceType.JSON:
+
+            def _json_parser(file):
+                return pd.json_normalize(json.load(file))
+
+            return _json_parser
         elif type_ == ResourceType.JSONL:
 
             def _jsonl_parser(file):
