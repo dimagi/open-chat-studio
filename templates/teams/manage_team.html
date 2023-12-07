@@ -20,7 +20,7 @@
   <form method="post">
     {% csrf_token %}
     {% render_form_fields team_form %}
-    {% if create or request.team_membership.role == 'admin' %}
+    {% if create or request.team_membership.is_team_admin %}
       <div class="pg-inline-buttons">
         <input class="pg-button-secondary" type="submit" value="{% translate 'Save Details' %}">
       </div>
@@ -47,7 +47,7 @@
       {% for membership in team.sorted_memberships.all %}
         <tr>
           <td>
-            {% if request.team_membership.is_admin or request.team_membership == membership %}
+            {% if request.team_membership.is_team_admin or request.team_membership == membership %}
               <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
             {% else %}
               {{ membership.user }}
@@ -61,7 +61,7 @@
   </div>
 </section>
 {% include 'teams/components/team_invitations.html' %}
-{% if request.team_membership.role == 'admin' %}
+{% if request.team_membership.is_team_admin %}
   <section class="app-card">
     <h3 class="pg-subtitle">
       {% translate "Danger Zone" %}
