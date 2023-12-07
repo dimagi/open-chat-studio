@@ -25,7 +25,7 @@ class TimeGroup(StrEnum):
 
 class TimeseriesSplitterParams(Params):
     time_group: required(TimeGroup) = None
-    origin: required(Literal["start", "end"] | datetime) = None
+    origin: required(Literal["start", "end"]) = None
     ignore_empty_groups: bool = True
 
     def get_form_class(self) -> type[ParamsForm] | None:

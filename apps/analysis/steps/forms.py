@@ -119,7 +119,7 @@ class TimeseriesSplitterParamsForm(ParamsForm):
         required=False,
         choices=[("start", "Beginning of data"), ("end", "End of data")],
         label="Start from",
-        help_text="Whether to split the data starting from the beginning or the end.",
+        help_text="Align the groups with the beginning or end of the data.",
         initial="start",
     )
     ignore_empty_groups = forms.BooleanField(required=False, label="Ignore Empty Groups", initial=True)
