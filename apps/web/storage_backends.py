@@ -1,17 +1,12 @@
-from django.conf import settings
-from django.core.files.storage import FileSystemStorage, storages
-from storages.backends.s3boto3 import S3Boto3Storage
+from django.core.files.storage import storages
+from storages.backends.s3 import S3Storage
 
 
-class PublicMediaStorage(S3Boto3Storage):
-    location = "media"
-    default_acl = "public-read"
+class PublicMediaStorage(S3Storage):
     file_overwrite = False
 
 
-class PrivateMediaStorage(S3Boto3Storage):
-    location = "private"
-    default_acl = "private"
+class PrivateMediaStorage(S3Storage):
     file_overwrite = False
     custom_domain = False
 

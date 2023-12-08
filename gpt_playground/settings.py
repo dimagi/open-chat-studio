@@ -271,21 +271,28 @@ if AWS_ACCESS_KEY_ID:
     AWS_S3_REGION = env("AWS_S3_REGION", default=None)
     WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="ocs-whatsapp-voice")
 
-    USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
-    if USE_S3_MEDIA:
-        # Media file storage in S3
-        # Using this will require configuration of the S3 bucket
-        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID  # match names in django-storages
-        AWS_S3_REGION_NAME = AWS_S3_REGION  # match names in django-storages
-        AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
-        AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-        PUBLIC_MEDIA_LOCATION = "media"
-        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
+    USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
+    if USE_S3_STORAGE:
+        # match names in django-storages
+        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
+        AWS_S3_REGION_NAME = AWS_S3_REGION
+
+        # use private storage by default
         STORAGES["default"] = {
             "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
+            "OPTIONS": {
+                "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME", default="ocs-resources"),
+                "location": "resources",
+            },
         }
+
+        # public storge for media files e.g. user profile pictures
+        AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME", default="ocs-media")
+        PUBLIC_MEDIA_LOCATION = "media"
+        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
         STORAGES["public"] = {
             "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
+            "OPTIONS": {"bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME, "location": PUBLIC_MEDIA_LOCATION},
         }
 
 # Default primary key field type

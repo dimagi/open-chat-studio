@@ -12,7 +12,7 @@ djangorestframework-api-key
 drf-spectacular
 django-anymail
 django-hijack
-django-storages
+django-storages[s3]
 celery-progress
 celery
 celery[redis]
