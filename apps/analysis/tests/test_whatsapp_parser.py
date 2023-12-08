@@ -1,3 +1,4 @@
+from pathlib import Path
 from textwrap import dedent
 
 import pandas as pd
@@ -29,6 +30,11 @@ def valid_whatsapp_log():
     ).strip()
 
 
+@pytest.fixture
+def valid_whatsapp_log_unicode_rtl():
+    return Path(__file__).parent.joinpath("data/unicode_rtl_whatsapp_data.txt").read_text()
+
+
 def test_whatsapp_parser_parses_valid_log(whatsapp_parser, valid_whatsapp_log):
     params = WhatsappParserParams(
         remove_deleted_messages=False, remove_system_messages=False, remove_media_omitted_messages=False
@@ -50,7 +56,24 @@ def test_whatsapp_parser_message_filtering(whatsapp_parser, valid_whatsapp_log):
     _check_message(df, "2021-01-21 00:03", "User1", "Let's meet at 10:00\nWe can meet at the cafe")
 
 
+def test_whatsapp_parser_parses_valid_log_unicode_rtl(whatsapp_parser, valid_whatsapp_log_unicode_rtl):
+    params = Params()
+    df, _ = whatsapp_parser.run(params, valid_whatsapp_log_unicode_rtl)
+    assert not df.empty
+    _check_message(df, "2023-03-11 21:27", "User1", "Hello")
+    _check_message(df, "2023-03-11 21:28", "User2", "Hi\nHow are you?")
+    _check_message(
+        df,
+        "2023-07-13 15:54",
+        "123456",
+        "اولا.لسلام عليكم  : كل من كان هذه المجموعة.  بعد السلام: اشكركم\n\n  جميعا خاصة المعلمون المدرسون فى المجموعة. اتمنى  لكم النجاح.\n‏",
+    )
+    _check_message(df, "2023-07-13 16:23", "123123", "وعليكم السلام مرحبا يااخي💙🌸")
+    _check_message(df, "2023-07-13 20:28", "Coach", "Halkan baad ka daawan kartaan casharka oo muuqaal ah.")
+
+
 def _check_message(df, date, sender, message):
+    print(df.loc[pd.Timestamp(date)]["sender"])
     assert df.loc[pd.Timestamp(date)]["sender"] == sender
     assert df.loc[pd.Timestamp(date)]["message"] == message
 
