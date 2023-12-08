@@ -2,12 +2,6 @@
 {% load team_tags %}
 {% if request.team %}
   <li>
-  {% if perms.analysis.view_analysis %}
-    <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
-      <i class="fa-solid fa-magnifying-glass-chart"></i>
-      {% translate "Analysis Pipelines" %}
-    </a>
-  {% endif %}
     <a href="{% url 'experiments:experiments_home' request.team.slug %}" {% if active_tab == 'experiments' %}class="active"{% endif %}>
       <i class="fa fa-flask fa-fw"></i>
       {% translate "Experiments" %}
@@ -63,6 +57,12 @@
       {% translate "Prompt Builder" %}
     </a>
   </li>
+  {% if perms.analysis.view_analysis %}
+    <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
+      <i class="fa-solid fa-magnifying-glass-chart"></i>
+      {% translate "Analysis Pipelines" %}
+    </a>
+  {% endif %}
 {#  <li>#}
 {#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
 {#      <i class="fa fa-comments fa-fw"></i>#}
