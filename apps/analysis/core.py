@@ -26,7 +26,9 @@ class StepContext(Generic[PipeOut]):
         return cls(data, "start", {})
 
     def clone_with(self, data: PipeOut = None):
-        return dataclasses.replace(self, data=data or self.data)
+        if data is None:
+            data = self.data
+        return dataclasses.replace(self, data=data)
 
 
 class PipelineContext:
