@@ -1,7 +1,7 @@
 from apps.analysis.steps.loaders import ResourceTextLoader
 from apps.analysis.steps.parsers import WhatsappParser
 
-from .core import ParamsForm, Pipeline
+from .core import ParamsForm, Pipeline, Step
 from .steps.filters import TimeseriesFilter
 from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
@@ -14,28 +14,42 @@ LLM_PIPE = "llm"
 ASSISTANT_PIPE = "assistant"
 
 
+class PiplineDefinition:
+    def __init__(self, steps: list[type], name: str, description: str):
+        self.name = name
+        self.description = description
+        self.steps = steps
+
+    def build(self):
+        steps = [step() for step in self.steps]
+        return Pipeline(steps)
+
+    def __str__(self):
+        return f"{self.name}: {self.description}"
+
+
 SOURCE_PIPELINES = {
-    TEXT_DATA_PIPE: Pipeline(
+    TEXT_DATA_PIPE: PiplineDefinition(
         [
-            ResourceTextLoader(),
+            ResourceTextLoader,
         ],
         "Text Data",
         "Load text data from a file",
     ),
-    FILTERED_WHATSAPP_DATA_PIPE: Pipeline(
+    FILTERED_WHATSAPP_DATA_PIPE: PiplineDefinition(
         [
-            ResourceTextLoader(),
-            WhatsappParser(),
-            TimeseriesFilter(),
+            ResourceTextLoader,
+            WhatsappParser,
+            TimeseriesFilter,
         ],
         "Filtered WhatsApp Data",
         "Load WhatsApp data from a file and filter it by date.",
     ),
-    SPLIT_WHATSAPP_DATA_PIPE: Pipeline(
+    SPLIT_WHATSAPP_DATA_PIPE: PiplineDefinition(
         [
-            ResourceTextLoader(),
-            WhatsappParser(),
-            TimeseriesSplitter(),
+            ResourceTextLoader,
+            WhatsappParser,
+            TimeseriesSplitter,
         ],
         "Split WhatsApp Data",
         "Load whatsApp data from a file and split it into chunks by date.",
@@ -44,16 +58,16 @@ SOURCE_PIPELINES = {
 
 
 PIPELINES = {
-    LLM_PIPE: Pipeline(
+    LLM_PIPE: PiplineDefinition(
         [
-            LlmCompletionStep(),
+            LlmCompletionStep,
         ],
         "LLM Processing",
         "Pass data to the LLM with a prompt",
     ),
-    ASSISTANT_PIPE: Pipeline(
+    ASSISTANT_PIPE: PiplineDefinition(
         [
-            AssistantStep(),
+            AssistantStep,
         ],
         "OpenAI Assistant",
         "Pass data to an OpenAI Assistant with a prompt",
@@ -64,19 +78,19 @@ PIPELINES = {
 
 
 def get_source_pipeline_options() -> list[tuple[str, str]]:
-    return [(name, str(pipeline)) for name, pipeline in SOURCE_PIPELINES.items()]
+    return [(name, str(pipeline_def)) for name, pipeline_def in SOURCE_PIPELINES.items()]
 
 
 def get_source_pipeline(name: str) -> Pipeline:
-    return SOURCE_PIPELINES[name]
+    return SOURCE_PIPELINES[name].build()
 
 
 def get_data_pipeline_options() -> list[tuple[str, str]]:
-    return [(name, str(pipeline)) for name, pipeline in PIPELINES.items()]
+    return [(name, str(pipeline_def)) for name, pipeline_def in PIPELINES.items()]
 
 
 def get_data_pipeline(name: str) -> Pipeline:
-    return PIPELINES[name]
+    return PIPELINES[name].build()
 
 
 def get_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
