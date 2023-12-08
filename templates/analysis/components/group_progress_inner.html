@@ -1,3 +1,6 @@
+{% if not runs %}
+<span class="loading loading-dots loading-md"></span>
+{% endif %}
 {% for run in runs reversed %}
   <p class="my-2 font-medium">Step {{ forloop.revcounter }} ({{ run.get_status_display }})</p>
   {% include "analysis/components/run_logs.html" %}
