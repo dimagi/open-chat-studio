@@ -125,7 +125,10 @@ class EditAnalysisPipeline(UpdateView, PermissionRequiredMixin):
 def delete_analysis(request, team_slug: str, pk: int):
     prompt = get_object_or_404(Analysis, id=pk, team=request.team)
     prompt.delete()
-    return HttpResponse()
+    if request.headers.get("HX-Request"):
+        return HttpResponse()
+    else:
+        return redirect("analysis:home", team_slug=team_slug)
 
 
 @login_and_team_required
