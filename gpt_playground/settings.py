@@ -252,6 +252,9 @@ STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
+    "public": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
@@ -272,18 +275,17 @@ if AWS_ACCESS_KEY_ID:
     if USE_S3_MEDIA:
         # Media file storage in S3
         # Using this will require configuration of the S3 bucket
+        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID  # match names in django-storages
+        AWS_S3_REGION_NAME = AWS_S3_REGION  # match names in django-storages
         AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
         AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
         PUBLIC_MEDIA_LOCATION = "media"
         MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
         STORAGES["default"] = {
             "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
-            "OPTIONS": {
-                "access_key": AWS_ACCESS_KEY_ID,
-                "secret_key": AWS_SECRET_ACCESS_KEY,
-                "bucket_name": AWS_STORAGE_BUCKET_NAME,
-                "region_name": AWS_S3_REGION,
-            },
+        }
+        STORAGES["public"] = {
+            "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         }
 
 # Default primary key field type

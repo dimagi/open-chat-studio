@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.files.storage import FileSystemStorage
+from django.core.files.storage import FileSystemStorage, storages
 from storages.backends.s3boto3 import S3Boto3Storage
 
 
@@ -17,7 +17,4 @@ class PrivateMediaStorage(S3Boto3Storage):
 
 
 def get_public_media_storage():
-    if not settings.USE_S3_MEDIA:
-        return FileSystemStorage()
-    else:
-        return PublicMediaStorage()
+    return storages["public"]
