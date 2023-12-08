@@ -3,13 +3,15 @@ import hashlib
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from apps.web.storage_backends import get_public_media_storage
+
 
 class CustomUser(AbstractUser):
     """
     Add additional fields to the user model here.
     """
 
-    avatar = models.FileField(upload_to="profile-pictures/", blank=True)
+    avatar = models.FileField(upload_to="profile-pictures/", blank=True, storage=get_public_media_storage)
     language = models.CharField(max_length=10, blank=True, null=True)
 
     def __str__(self):

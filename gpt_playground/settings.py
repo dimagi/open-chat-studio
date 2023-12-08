@@ -238,7 +238,7 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.2/howto/static-files/
+# https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
 
 STATIC_ROOT = BASE_DIR / "static_root"
 STATIC_URL = "/static/"
@@ -247,10 +247,20 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
-# uncomment to use manifest storage to bust cache when file change
-# note: this may break some image references in sass files which is why it is not enabled by default
-# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "public": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
+
+# File storage: https://docs.djangoproject.com/en/4.2/topics/files/
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
@@ -261,15 +271,29 @@ if AWS_ACCESS_KEY_ID:
     AWS_S3_REGION = env("AWS_S3_REGION", default=None)
     WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="ocs-whatsapp-voice")
 
-USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
-if USE_S3_MEDIA:
-    # Media file storage in S3
-    # Using this will require configuration of the S3 bucket
-    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="ocs-media")
-    AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-    PUBLIC_MEDIA_LOCATION = "media"
-    MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
-    DEFAULT_FILE_STORAGE = "apps.web.storage_backends.PublicMediaStorage"
+    USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
+    if USE_S3_STORAGE:
+        # match names in django-storages
+        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
+        AWS_S3_REGION_NAME = AWS_S3_REGION
+
+        # use private storage by default
+        STORAGES["default"] = {
+            "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
+            "OPTIONS": {
+                "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME", default="ocs-resources"),
+                "location": "resources",
+            },
+        }
+
+        # public storge for media files e.g. user profile pictures
+        AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME", default="ocs-media")
+        PUBLIC_MEDIA_LOCATION = "media"
+        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+        STORAGES["public"] = {
+            "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
+            "OPTIONS": {"bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME, "location": PUBLIC_MEDIA_LOCATION},
+        }
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
