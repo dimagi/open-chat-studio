@@ -1,0 +1,19 @@
+{% load form_tags %}
+<div role="tablist" class="tabs tabs-bordered">
+  <input type="radio" name="resource_param_tabs" role="tab" class="tab" aria-label="Existing File" {% if form.resource.initial %}checked{% endif %}/>
+  <div role="tabpanel" class="tab-content">
+    {% render_field form.resource %}
+  </div>
+
+  <input type="radio" name="resource_param_tabs" role="tab" class="tab" aria-label="New File" {% if not form.resource.initial %}checked{% endif %}/>
+  <div role="tabpanel" class="tab-content">
+    {% render_field form.file %}
+    {% render_field form.file_type %}
+  </div>
+
+
+  <input type="radio" name="resource_param_tabs" role="tab" class="tab" aria-label="Raw Text"/>
+  <div role="tabpanel" class="tab-content">
+    {% render_field form.text %}
+  </div>
+</div>

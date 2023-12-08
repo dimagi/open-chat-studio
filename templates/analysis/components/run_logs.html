@@ -1,0 +1,4 @@
+<div class="font-mono whitespace-pre-wrap">
+{% for entry in run.log.entries %}{{ entry.timestamp }} {{ entry.level }} [{{ entry.logger }}] {{ entry.message }}
+{% endfor %}
+</div>

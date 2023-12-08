@@ -1,0 +1,21 @@
+{% extends "generic/object_form.html" %}
+{% block page_js %}
+  {{ llm_options|json_script:"llmModelOptions" }}
+  <script>
+      const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
+      document.addEventListener('alpine:init', () => {
+          Alpine.data('analysis', () => ({
+              llmProvider: null,
+              llm_model: '{{analysis.llm_model|default:'null'}}',
+              llm_model_options: [],
+              init() {
+                  this.$watch('llmProvider', () => {
+                      this.llm_model_options = llmModelOptions.filter(option => {
+                        return option.provider === this.llmProvider;
+                      });
+                  })
+              }
+          }));
+      });
+  </script>
+{% endblock page_js %}

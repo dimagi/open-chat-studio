@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "alpinejs": "^3.13.1",
-    "daisyui": "^3.9.2",
+    "daisyui": "^4",
     "htmx.org": "^1.9.6",
     "js-cookie": "^3.0.5",
     "js-tiktoken": "^1.0.7",

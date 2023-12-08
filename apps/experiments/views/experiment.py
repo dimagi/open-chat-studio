@@ -31,6 +31,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.users.models import CustomUser
 
@@ -214,14 +215,7 @@ def _get_voice_provider_alpine_context(request):
             ],
             key=lambda v: v["text"],
         ),
-        "llm_options": sorted(
-            [
-                {"value": model, "text": model, "provider": provider_id}
-                for provider_id, models in request.team.llmprovider_set.values_list("id", "llm_models")
-                for model in models
-            ],
-            key=lambda v: v["text"],
-        ),
+        "llm_options": get_llm_provider_choices(request.team),
     }
 
 

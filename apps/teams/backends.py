@@ -13,6 +13,8 @@ from apps.teams.utils import get_current_team
 SUPER_ADMIN_GROUP = "Super Admin"
 TEAM_ADMIN_GROUP = "Team Admin"
 EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
+ANALYSIS_ADMIN_GROUP = "Analysis Admin"
+ANALYSIS_USER_GROUP = "Analysis Users"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 
 
@@ -25,7 +27,9 @@ class TeamBackend(ModelBackend):
         return Permission.objects.filter(group__membership__team=current_team, group__membership__user=user_obj)
 
 
+# Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
+    "analysis": ["analysis", "rungroup", "analysisrun", "resource"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage"],
     "experiments": [
@@ -114,6 +118,21 @@ GROUPS = [
         CHAT_VIEWER_GROUP,
         [
             AppPermSetDef("chat", [VIEW]),
+        ],
+    ),
+    GroupDef(
+        ANALYSIS_ADMIN_GROUP,
+        [
+            AppPermSetDef("analysis", ALL),
+        ],
+    ),
+    GroupDef(
+        ANALYSIS_USER_GROUP,
+        [
+            ModelPermSetDef("analysis", "analysis", [VIEW]),
+            ModelPermSetDef("analysis", "rungroup", [VIEW, CHANGE, ADD]),
+            ModelPermSetDef("analysis", "analysisrun", [VIEW, CHANGE, ADD]),
+            ModelPermSetDef("analysis", "resource", [VIEW, CHANGE, ADD]),
         ],
     ),
 ]

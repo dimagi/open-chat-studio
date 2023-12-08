@@ -19,5 +19,5 @@ class LlmProviderFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = LlmProviderType.openai
     name = factory.Faker("name")
-    llm_models = ("gpt-3.5",)
+    llm_models = ["gtp-4", "gpt-3.5-turbo"]
     config = {"openai_api_key": "123"}

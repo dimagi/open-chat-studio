@@ -204,7 +204,9 @@ multidict==6.0.4
 mypy-extensions==1.0.0
     # via typing-inspect
 numpy==1.26.2
-    # via langchain
+    # via
+    #   langchain
+    #   pandas
 oauthlib==3.2.2
     # via requests-oauthlib
 openai==1.2.4
@@ -213,6 +215,8 @@ packaging==23.2
     # via
     #   djangorestframework-api-key
     #   marshmallow
+pandas==2.1.3
+    # via -r requirements/requirements.in
 prompt-toolkit==3.0.41
     # via click-repl
 psycopg2-binary==2.9.9
@@ -246,12 +250,15 @@ python-dateutil==2.8.2
     # via
     #   botocore
     #   celery
+    #   pandas
     #   python-crontab
     #   taskbadger
 python3-openid==3.2.0
     # via django-allauth
 pytz==2023.3.post1
-    # via djangorestframework
+    # via
+    #   djangorestframework
+    #   pandas
 pyyaml==6.0.1
     # via
     #   drf-spectacular
@@ -328,6 +335,7 @@ tzdata==2023.3
     # via
     #   celery
     #   django-celery-beat
+    #   pandas
 uritemplate==4.1.1
     # via drf-spectacular
 urllib3==2.0.7

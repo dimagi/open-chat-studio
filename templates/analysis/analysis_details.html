@@ -1,0 +1,52 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">"{{ analysis.name }}"</li>
+    </ul>
+  </div>
+  <div class="max-w-7xl mx-auto">
+    <div class="app-card">
+      <div class="flex">
+        <div class="flex-1">
+          <h1 class="pg-title">Analysis: {{ analysis.name }}</h1>
+        </div>
+        <div class="justify-self-end">
+          <div class="join">
+              <div class="tooltip" data-tip="Create new run">
+                <a class="btn btn-primary join-item"
+                   href="{% url 'analysis:create_run' team.slug analysis.id %}">
+                  <i class="fa-solid fa-play"></i>
+                </a>
+              </div>
+            <div class="tooltip" data-tip="Edit">
+              <a class="btn btn-primary join-item"
+                 href="{% url 'analysis:edit' team.slug analysis.id %}">
+                <i class="fa-solid fa-pencil"></i>
+              </a>
+            </div>
+            <div class="tooltip" data-tip="Delete">
+              <a class="btn btn-primary join-item rounded-r-full"
+                 href="{% url 'analysis:delete' team.slug analysis.id %}">
+                <i class="fa-solid fa-trash"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="my-4">
+        <p><span class="font-semibold">Source:</span> {{ analysis.source }}</p>
+        <p><span class="font-semibold">Pipelines:</span> {{ analysis.pipelines|join:", " }}</p>
+        <p><span class="font-semibold">LLM Provider:</span> {{ analysis.llm_provider }}</p>
+      </div>
+    </div>
+    <div class="app-card">
+      <h2 class="font-semibold">Runs</h2>
+      <div hx-get="{% url "analysis:runs_table" request.team.slug analysis.pk %}" hx-trigger="load" hx-swap="outerHTML">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    </div>
+  </div>
+{% endblock %}

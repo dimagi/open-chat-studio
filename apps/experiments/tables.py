@@ -10,6 +10,7 @@ from apps.experiments.models import (
     SourceMaterial,
     Survey,
 )
+from apps.generics import table_actions
 
 
 class ExperimentTable(tables.Table):
@@ -40,8 +41,10 @@ class SafetyLayerTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:safety_edit",
-            "delete_url_name": "experiments:safety_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:safety_edit"),
+                table_actions.DeleteAction(url_name="experiments:safety_delete"),
+            ]
         },
     )
 
@@ -62,8 +65,10 @@ class SourceMaterialTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:source_material_edit",
-            "delete_url_name": "experiments:source_material_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:source_material_edit"),
+                table_actions.DeleteAction(url_name="experiments:source_material_delete"),
+            ]
         },
     )
 
@@ -83,8 +88,10 @@ class SurveyTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:survey_edit",
-            "delete_url_name": "experiments:survey_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:survey_edit"),
+                table_actions.DeleteAction(url_name="experiments:survey_delete"),
+            ]
         },
     )
 
@@ -103,8 +110,10 @@ class ConsentFormTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:consent_edit",
-            "delete_url_name": "experiments:consent_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:consent_edit"),
+                table_actions.DeleteAction(url_name="experiments:consent_delete"),
+            ]
         },
     )
 
@@ -126,8 +135,10 @@ class NoActivityMessageConfigTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:no_activity_edit",
-            "delete_url_name": "experiments:no_activity_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:no_activity_edit"),
+                table_actions.DeleteAction(url_name="experiments:no_activity_delete"),
+            ]
         },
     )
 
@@ -149,8 +160,10 @@ class PromptTable(tables.Table):
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
-            "edit_url_name": "experiments:prompt_edit",
-            "delete_url_name": "experiments:prompt_delete",
+            "actions": [
+                table_actions.EditAction(url_name="experiments:prompt_edit"),
+                table_actions.DeleteAction(url_name="experiments:prompt_delete"),
+            ]
         },
     )
 

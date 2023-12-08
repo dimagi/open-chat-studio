@@ -1,0 +1,22 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">Create Analysis Run</h1>
+    <h1 class="pg-subtitle">Analysis: {{ analysis.name }}</h1>
+    <div>
+      <form method="post" class="my-2" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for form in param_forms.values %}
+          <div class="divider divider-info"></div>
+          <h2 class="pg-subtitle">{{ form.form_name }}</h2>
+          <div class="ml-4 mt-2">
+          {{ form.non_field_errors }}
+          {{ form }}
+          </div>
+        {% endfor %}
+        <input type="submit" class="btn btn-success mt-2" value="Start Run">
+      </form>
+    </div>
+  </div>
+{% endblock %}

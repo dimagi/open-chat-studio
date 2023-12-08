@@ -1,0 +1,17 @@
+{% if update_status %}
+  <div id="group-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" with run=group %}</div>
+{% endif %}
+
+<div role="tablist" class="tabs tabs-bordered">
+  <input type="radio" name="group_tabs_{{ group.id }}" role="tab" class="tab" aria-label="Logs" checked/>
+  <div role="tabpanel" class="tab-content p-4">
+    <div hx-get="{% url "analysis:group_progress" request.team.slug group.id %}" hx-trigger="every 2s" hx-swap="innerHTML">
+      {% include "analysis/components/group_progress_inner.html" %}
+    </div>
+  </div>
+
+  <input type="radio" name="group_tabs_{{ group.id }}" role="tab" class="tab" aria-label="Parameters"/>
+  <div role="tabpanel" class="tab-content p-4">
+    <pre>{{ group.get_params_display }}</pre>
+  </div>
+</div>

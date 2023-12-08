@@ -1,0 +1,6 @@
+{% if update_status %}
+  <div id="run-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" %}</div>
+{% endif %}
+<div hx-get="{% url "analysis:run_progress" request.team.slug run.id %}" hx-trigger="load delay:2s">
+  {% include "analysis/components/run_detail_tabs.html" %}
+</div>
