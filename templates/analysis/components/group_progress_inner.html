@@ -5,7 +5,7 @@
   {% if forloop.first %}
   <p class="my-2 font-medium">Source Pipeline ({{ run.get_status_display }})</p>
   {% else %}
-  <p class="my-2 font-medium">Analysis Pipeline {{ forloop.revcounter-0 }} ({{ run.get_status_display }})</p>
+  <p class="my-2 font-medium">Analysis Pipeline {{ forloop.revcounter0 }} ({{ run.get_status_display }})</p>
   {% endif %}
   {% include "analysis/components/run_logs.html" %}
   {% if forloop.first %}
