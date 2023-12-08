@@ -1,5 +1,3 @@
-import datetime
-
 from django import forms
 from django.core.files.base import ContentFile
 
@@ -156,5 +154,27 @@ class AssistantParamsForm(ParamsForm):
 
         try:
             return AssistantParams(assistant_id=self.cleaned_data["assistant_id"], prompt=self.cleaned_data["prompt"])
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+class WhatsappParserParamsForm(ParamsForm):
+    form_name = "WhatsApp Parser Parameters"
+    template_name = "analysis/forms/basic.html"
+    remove_deleted_messages = forms.BooleanField(required=False, label="Remove Deleted Messages", initial=True)
+    remove_system_messages = forms.BooleanField(required=False, label="Remove System Messages", initial=True)
+    remove_media_omitted_messages = forms.BooleanField(
+        required=False, label="Remove 'Media Omitted' Messages", initial=True
+    )
+
+    def get_params(self):
+        from .parsers import WhatsappParserParams
+
+        try:
+            return WhatsappParserParams(
+                remove_deleted_messages=self.cleaned_data["remove_deleted_messages"],
+                remove_system_messages=self.cleaned_data["remove_system_messages"],
+                remove_media_omitted_messages=self.cleaned_data["remove_media_omitted_messages"],
+            )
         except ValueError as e:
             raise forms.ValidationError(repr(e))
