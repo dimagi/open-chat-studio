@@ -9,6 +9,7 @@ from openai._types import NOT_GIVEN
 from openai.types import FileObject
 from pydantic import model_validator
 
+import apps.analysis.exceptions
 from apps.analysis import core
 from apps.analysis.core import ParamsForm, required
 
@@ -90,7 +91,7 @@ class AssistantStep(core.BaseStep[Any, str]):
     def preflight_check(self, context: core.StepContext):
         llm_service = self.pipeline_context.llm_service
         if not llm_service.supports_assistant:
-            raise core.StepError(f"'{llm_service.type}' LLM does not support assistants")
+            raise apps.analysis.exceptions.StepError(f"'{llm_service.type}' LLM does not support assistants")
 
         self.client = self.pipeline_context.llm_service.get_raw_client()
 
@@ -117,7 +118,7 @@ class AssistantStep(core.BaseStep[Any, str]):
         run = self._wait_for_run(run.id, thread.id)
         if run.status != "completed":
             self.log.error(f"Run failed with status {run.status}")
-            raise core.StepError(f"Assistant run failed with status {run.status}")
+            raise apps.analysis.exceptions.StepError(f"Assistant run failed with status {run.status}")
 
         result.response = self._process_messages(result, thread.id)
         # TODO: Record files

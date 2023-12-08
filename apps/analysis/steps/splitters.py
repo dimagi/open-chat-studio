@@ -6,7 +6,8 @@ import pandas as pd
 from pandas.api import types as ptypes
 from pandas.core.resample import TimeGrouper
 
-from ..core import BaseStep, Params, ParamsForm, StepContext, StepError, required
+from ..core import BaseStep, Params, ParamsForm, StepContext, required
+from ..exceptions import StepError
 
 
 class TimeGroup(StrEnum):

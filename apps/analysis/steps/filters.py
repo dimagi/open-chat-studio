@@ -8,7 +8,8 @@ from dateutil.relativedelta import relativedelta
 from pandas.api import types as ptypes
 from pydantic import Field, PositiveInt
 
-from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, StepError, required
+from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, required
+from apps.analysis.exceptions import StepError
 
 
 class DurationUnit(IntEnum):

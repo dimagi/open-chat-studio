@@ -1,7 +1,8 @@
 import pytest
 
-from apps.analysis.core import NoParams, Pipeline, PipelineContext, StepContext, StepError
+from apps.analysis.core import NoParams, Pipeline, PipelineContext, StepContext
 
+from ..exceptions import StepError
 from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
 
 

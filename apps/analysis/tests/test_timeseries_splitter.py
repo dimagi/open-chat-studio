@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 from pandas import DataFrame, date_range
 
-from apps.analysis.core import PipelineContext, StepContext, StepError
+from apps.analysis.core import PipelineContext, StepContext
+from apps.analysis.exceptions import StepError
 from apps.analysis.steps.splitters import TimeGroup, TimeseriesSplitter, TimeseriesSplitterParams
 
 

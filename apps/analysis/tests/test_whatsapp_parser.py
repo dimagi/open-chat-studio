@@ -3,7 +3,8 @@ from textwrap import dedent
 import pandas as pd
 import pytest
 
-from apps.analysis.core import Params, PipelineContext, StepError
+from apps.analysis.core import Params, PipelineContext
+from apps.analysis.exceptions import StepError
 from apps.analysis.steps.parsers import WhatsappParser
 
 

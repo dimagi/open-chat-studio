@@ -6,7 +6,8 @@ from django import forms
 from pydantic import BaseModel
 
 from ..service_providers.llm_service import LlmService
-from .log import LogEntry, Logger
+from .exceptions import StepError
+from .log import Logger
 
 PipeIn = TypeVar("PipeIn", contravariant=True)
 PipeOut = TypeVar("PipeOut", covariant=True)
@@ -53,7 +54,7 @@ class Step(Protocol[PipeIn, PipeOut]):
 
 
 class Pipeline:
-    """A pipeline is a sequence of steps that are run in order. A pipeline is valid
+    """A pipeline is a sequence of steps that are run in order. A pipeline is valid when
     the steps match the input and output types."""
 
     def __init__(self, steps: list[Step], name: str = None, description: str = None):
@@ -61,7 +62,7 @@ class Pipeline:
         self.description = description
         self.steps = steps
         self.context_chain = []
-        self._validate()
+        self._validate_input_output_types()
 
     def __str__(self):
         ret = f"{self.name or 'Pipeline'}"
@@ -69,7 +70,7 @@ class Pipeline:
             ret += f": {self.description}"
         return ret
 
-    def _validate(self):
+    def _validate_input_output_types(self):
         steps = iter(list(self.steps))
         step = next(steps)
         while steps and step.output_type == Any:
@@ -217,7 +218,3 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def preflight_check(self, context: StepContext):
         """Perform any preflight checks on the input data or pipeline context."""
         pass
-
-
-class StepError(Exception):
-    pass

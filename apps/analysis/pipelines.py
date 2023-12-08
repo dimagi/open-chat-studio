@@ -6,9 +6,13 @@ from .steps.filters import TimeseriesFilter
 from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
-LLM_PIPE = "llm"
-
 TEXT_DATA_PIPE = "text_data"
+FILTERED_WHATSAPP_DATA_PIPE = "filtered_whatsapp_data"
+SPLIT_WHATSAPP_DATA_PIPE = "split_whatsapp_data"
+
+LLM_PIPE = "llm"
+ASSISTANT_PIPE = "assistant"
+
 
 SOURCE_PIPELINES = {
     TEXT_DATA_PIPE: Pipeline(
@@ -18,7 +22,7 @@ SOURCE_PIPELINES = {
         "Text Data",
         "Load text data from a file",
     ),
-    "filtered_whatsapp_data": Pipeline(
+    FILTERED_WHATSAPP_DATA_PIPE: Pipeline(
         [
             ResourceTextLoader(),
             WhatsappParser(),
@@ -27,7 +31,7 @@ SOURCE_PIPELINES = {
         "Filtered WhatsApp Data",
         "Load WhatsApp data from a file and filter it by date.",
     ),
-    "split_whatsapp_data": Pipeline(
+    SPLIT_WHATSAPP_DATA_PIPE: Pipeline(
         [
             ResourceTextLoader(),
             WhatsappParser(),
@@ -47,7 +51,7 @@ PIPELINES = {
         "LLM Processing",
         "Pass data to the LLM with a prompt",
     ),
-    "assistant": Pipeline(
+    ASSISTANT_PIPE: Pipeline(
         [
             AssistantStep(),
         ],
