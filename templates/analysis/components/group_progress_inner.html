@@ -2,7 +2,11 @@
 <span class="loading loading-dots loading-md"></span>
 {% endif %}
 {% for run in runs reversed %}
-  <p class="my-2 font-medium">Step {{ forloop.revcounter }} ({{ run.get_status_display }})</p>
+  {% if forloop.first %}
+  <p class="my-2 font-medium">Source Pipeline ({{ run.get_status_display }})</p>
+  {% else %}
+  <p class="my-2 font-medium">Analysis Pipeline {{ forloop.revcounter-0 }} ({{ run.get_status_display }})</p>
+  {% endif %}
   {% include "analysis/components/run_logs.html" %}
   {% if forloop.first %}
     <span class="loading loading-dots loading-md"></span>

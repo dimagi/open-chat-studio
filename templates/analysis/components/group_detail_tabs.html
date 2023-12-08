@@ -10,9 +10,9 @@
         <div class="app-card">
           <h2 class="pg-subtitle">
             {% if forloop.first %}
-              Source Run
+              Source Pipeline
             {% else %}
-              Processing Run {{ forloop.counter0 }}
+              Analysis Pipeline {{ forloop.counter0 }}
             {% endif %}
           </h2>
           <div id="run-status">{% include "analysis/components/run_status.html" %}</div>
