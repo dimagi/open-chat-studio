@@ -2,6 +2,7 @@ import datetime
 
 from django import forms
 from django.core.files.base import ContentFile
+from django.utils.encoding import smart_bytes
 
 from apps.analysis.core import Params, ParamsForm
 from apps.analysis.models import Resource, ResourceType
@@ -53,7 +54,9 @@ class ResourceLoaderParamsForm(ParamsForm):
                 name=f"Text ({self.cleaned_data['text'][:20]}...)",
                 type=ResourceType.TEXT,
             )
-            resource.file.save(f"{resource.name}.txt", ContentFile(self.cleaned_data["text"]))
+
+            data_bytes = smart_bytes(self.cleaned_data["text"])
+            resource.file.save(f"{resource.name}.txt", ContentFile(data_bytes))
         else:
             resource = self.cleaned_data["resource"]
 
