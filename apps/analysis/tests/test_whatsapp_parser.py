@@ -73,7 +73,6 @@ def test_whatsapp_parser_parses_valid_log_unicode_rtl(whatsapp_parser, valid_wha
 
 
 def _check_message(df, date, sender, message):
-    print(df.loc[pd.Timestamp(date)]["sender"])
     assert df.loc[pd.Timestamp(date)]["sender"] == sender
     assert df.loc[pd.Timestamp(date)]["message"] == message
 
