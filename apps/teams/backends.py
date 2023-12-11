@@ -49,6 +49,8 @@ CONTENT_TYPES = {
     "teams": ["invitation", "membership", "team"],
 }
 
+CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
+
 VIEW = "view"
 CHANGE = "change"
 DELETE = "delete"
@@ -78,6 +80,16 @@ class ModelPermSetDef:
 
 
 @dataclasses.dataclass
+class CustomPermissionSetDef:
+    app_label: str
+    permissions: list[str]
+
+    @property
+    def codenames(self):
+        return self.permissions
+
+
+@dataclasses.dataclass
 class GroupDef:
     name: str
     permission_defs: list[ModelPermSetDef | AppPermSetDef]
@@ -99,7 +111,11 @@ class GroupDef:
 
 
 GROUPS = [
-    GroupDef(SUPER_ADMIN_GROUP, [AppPermSetDef(app_label, ALL) for app_label in CONTENT_TYPES]),
+    GroupDef(
+        SUPER_ADMIN_GROUP,
+        [AppPermSetDef(app_label, ALL) for app_label in CONTENT_TYPES]
+        + [CustomPermissionSetDef(app_label, CUSTOM_PERMISSIONS[app_label]) for app_label in CUSTOM_PERMISSIONS],
+    ),
     GroupDef(
         TEAM_ADMIN_GROUP,
         [
@@ -112,6 +128,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("channels", ALL),
+            CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
         ],
     ),
     GroupDef(
