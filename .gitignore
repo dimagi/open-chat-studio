@@ -20,7 +20,6 @@ _dist/
 .envrc
 .python-version
 venv
-data/
 
 # uncomment these lines after setting up the front-end build pipeline in dev and production
 static/css/
