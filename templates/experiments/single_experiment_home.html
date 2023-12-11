@@ -142,13 +142,15 @@
     </table>
   </div>
 </div>
-{% if perms.experiments.download_chats %}
+{% if perms.experiments.view_chats %}
 <div class="app-card">
   <h2 class="pg-subtitle">All Chat Sessions</h2>
+  {% if perms.experiments.download_chats %}
   <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
     {% csrf_token %}
     <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
   </form>
+  {% endif %}
   <div class="overflow-x-auto">
     <table class="pg-table">
     <thead>
