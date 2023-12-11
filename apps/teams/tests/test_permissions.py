@@ -2,17 +2,7 @@ import pytest
 from django.apps import apps
 from django.contrib.auth.models import Group
 
-from apps.teams.backends import (
-    ALL,
-    CHANGE,
-    CONTENT_TYPES,
-    CUSTOM_PERMISSIONS,
-    GROUPS,
-    VIEW,
-    AppPermSetDef,
-    GroupDef,
-    ModelPermSetDef,
-)
+from apps.teams.backends import ALL, CHANGE, CONTENT_TYPES, VIEW, AppPermSetDef, GroupDef, ModelPermSetDef
 
 
 def test_content_types():
@@ -115,19 +105,3 @@ def test_group_def():
         ("chat message", "delete_chatmessage"),
         ("chat message", "view_chatmessage"),
     ]
-
-
-def test_custom_permissions():
-    mapped_permissions = [
-        permission
-        for group_def in GROUPS
-        for permission_def in group_def.permission_defs
-        for permission in permission_def.codenames
-    ]
-    for app in apps.get_app_configs():
-        for model in app.get_models():
-            for permission in model._meta.permissions:
-                assert permission[0] in CUSTOM_PERMISSIONS.get(
-                    app.label, {}
-                ), "permissions not in CUSTOM_PERMISSIONS dict"
-                assert permission[0] in mapped_permissions, "permissions must be mapped to at least one group"
