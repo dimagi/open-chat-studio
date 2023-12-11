@@ -25,7 +25,7 @@
             </button>
           </form>
         </div>
-        {% if perms.experiments.invite_participants %}
+        {% if request.user|is_admin_of:team %}
         <div class="tooltip" data-tip="Invitations">
           <a class="btn btn-primary join-item"
              href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
@@ -142,7 +142,7 @@
     </table>
   </div>
 </div>
-{% if perms.experiments.download_chats %}
+{% if request.user.is_superuser %}
 <div class="app-card">
   <h2 class="pg-subtitle">All Chat Sessions</h2>
   <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">

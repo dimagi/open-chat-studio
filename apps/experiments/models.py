@@ -310,10 +310,6 @@ class Experiment(BaseTeamModel):
 
     class Meta:
         ordering = ["name"]
-        permissions = [
-            ("invite_participants", "Invite experiment participants"),
-            ("download_chats", "Download experiment chats"),
-        ]
 
     def __str__(self):
         return self.name

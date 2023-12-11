@@ -491,7 +491,7 @@ def start_experiment(request, team_slug: str, experiment_id: str):
 
 
 @login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
+@user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def experiment_invitations(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     sessions = experiment.sessions.order_by("-created_at").filter(
@@ -537,7 +537,8 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 
 
 @require_POST
-@permission_required("experiments.download_chats", raise_exception=True)
+@permission_required("chats.view_chat", raise_exception=True)
+@user_passes_test(lambda u: u.is_superuser, login_url="/404")
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
