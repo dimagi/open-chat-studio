@@ -28,6 +28,10 @@ class SourceMaterialObjectManager(AuditingManager):
     pass
 
 
+class SafetyLayerObjectManager(AuditingManager):
+    pass
+
+
 @audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
@@ -90,7 +94,9 @@ class SourceMaterial(BaseTeamModel):
         return self.topic
 
 
+@audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
+    objects = SafetyLayerObjectManager()
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,

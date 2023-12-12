@@ -23,3 +23,4 @@ EXPERIMENT_FIELDS = [
 ]
 
 SOURCE_MATERIAL_FIELDS = ["owner", "topic", "description", "material", "team"]
+SAFETY_LAYER_FIELDS = ["prompt", "messages_to_review", "default_response_to_user", "prompt_to_bot", "team"]
