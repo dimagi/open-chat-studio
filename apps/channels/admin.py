@@ -13,14 +13,16 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         "team",
         "platform",
         "active",
+        "external_id",
     )
-    search_fields = ("name",)
+    search_fields = ("name", "external_id")
     list_filter = (
         "platform",
         "created_at",
         "updated_at",
     )
     readonly_fields = (
+        "external_id",
         "created_at",
         "updated_at",
     )
