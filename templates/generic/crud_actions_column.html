@@ -2,9 +2,6 @@
 {# This template is used by Tables classes to render edit and delete actions #}
 <div class="btn-group">
 {% for action in actions %}
-  {% should_display_action action as should_display %}
-  {% if should_display %}
   {% render_action action %}
-  {% endif %}
 {% endfor %}
 </div>

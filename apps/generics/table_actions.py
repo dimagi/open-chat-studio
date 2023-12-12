@@ -1,6 +1,5 @@
 import dataclasses
 
-from django.template import Context
 from django.template.loader import get_template
 
 
@@ -10,19 +9,31 @@ class Action:
     icon_class: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
+
     display_condition: callable = None
+    """A callable that takes a request and a record and returns a boolean indicating
+    whether the action should be displayed."""
+
+    enabled_condition: callable = None
+    """A callable that takes a request and a record and returns a boolean indicating
+    whether the action should be enabled. If none is provided, the action is always enabled."""
+
     template: str = "generic/action.html"
 
-    def render(self, context: Context):
-        template = get_template(self.template)
-        return template.render(self.get_context(context))
+    def render(self, request, record):
+        if not self.should_display(request, record):
+            return ""
 
-    def get_context(self, context: Context):
+        template = get_template(self.template)
+        return template.render(self.get_context(request, record))
+
+    def get_context(self, request, record):
         ctxt = {
-            "request": context["request"],
-            "record": context["record"],
+            "request": request,
+            "record": record,
             "url_name": self.url_name,
             "icon_class": self.icon_class,
+            "disabled": not self.is_enabled(request, record),
         }
         if self.extra_context:
             ctxt.update(self.extra_context)
@@ -33,6 +44,11 @@ class Action:
             return False
         if self.display_condition:
             return self.display_condition(request, record)
+        return True
+
+    def is_enabled(self, request, record):
+        if self.enabled_condition:
+            return self.enabled_condition(request, record)
         return True
 
 

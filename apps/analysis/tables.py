@@ -21,6 +21,7 @@ class AnalysisTable(tables.Table):
                     "analysis:create_run",
                     "fa-solid fa-play",
                     required_permissions=["analysis.add_analysisrun"],
+                    enabled_condition=lambda request, record: not record.needs_configuration(),
                 ),
                 table_actions.edit_action(
                     "analysis:edit",
