@@ -24,3 +24,12 @@ EXPERIMENT_FIELDS = [
 
 SOURCE_MATERIAL_FIELDS = ["owner", "topic", "description", "material", "team"]
 SAFETY_LAYER_FIELDS = ["prompt", "messages_to_review", "default_response_to_user", "prompt_to_bot", "team"]
+CONSENT_FORM_FIELDS = [
+    "name",
+    "consent_text",
+    "capture_identifier",
+    "identifier_label",
+    "identifier_type",
+    "confirmation_text",
+    "team",
+]

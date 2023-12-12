@@ -32,6 +32,10 @@ class SafetyLayerObjectManager(AuditingManager):
     pass
 
 
+class ConsentFormObjectManager(AuditingManager):
+    pass
+
+
 @audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
@@ -148,11 +152,13 @@ class Survey(BaseTeamModel):
         )
 
 
+@audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
 class ConsentForm(BaseTeamModel):
     """
     Custom markdown consent form to be used by experiments.
     """
 
+    objects = ConsentFormObjectManager()
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
     capture_identifier = models.BooleanField(default=True)
