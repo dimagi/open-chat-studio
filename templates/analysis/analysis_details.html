@@ -15,12 +15,18 @@
         </div>
         <div class="justify-self-end">
           <div class="join">
-              <div class="tooltip" data-tip="Create new run">
-                <a class="btn btn-primary join-item"
-                   href="{% url 'analysis:create_run' team.slug analysis.id %}">
-                  <i class="fa-solid fa-play"></i>
-                </a>
-              </div>
+            <div class="tooltip" data-tip="Create new run">
+              <a class="btn btn-primary join-item"
+                 href="{% url 'analysis:create_run' team.slug analysis.id %}">
+                <i class="fa-solid fa-play"></i>
+              </a>
+            </div>
+            <div class="tooltip" data-tip="Configure">
+              <a class="btn btn-primary join-item"
+                 href="{% url 'analysis:configure' team.slug analysis.id %}">
+                <i class="fa-solid fa-gear"></i>
+              </a>
+            </div>
             <div class="tooltip" data-tip="Edit">
               <a class="btn btn-primary join-item"
                  href="{% url 'analysis:edit' team.slug analysis.id %}">
