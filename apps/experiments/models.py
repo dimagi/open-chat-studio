@@ -24,6 +24,10 @@ class ExperimentObjectManager(AuditingManager):
     pass
 
 
+class SourceMaterialObjectManager(AuditingManager):
+    pass
+
+
 @audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
@@ -67,11 +71,13 @@ class PromptBuilderHistory(BaseTeamModel):
         return str(self.history)
 
 
+@audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel):
     """
     Some Source Material on a particular topic.
     """
 
+    objects = SourceMaterialObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")

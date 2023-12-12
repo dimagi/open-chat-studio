@@ -1,4 +1,4 @@
-PROMPT_FIELDS = ["owner", "name", "description", "prompt", "input_formatter"]
+PROMPT_FIELDS = ["owner", "name", "description", "prompt", "input_formatter", "team"]
 
 EXPERIMENT_FIELDS = [
     "owner",
@@ -19,4 +19,7 @@ EXPERIMENT_FIELDS = [
     "synthetic_voice",
     "no_activity_config",
     "conversational_consent_enabled",
+    "team",
 ]
+
+SOURCE_MATERIAL_FIELDS = ["owner", "topic", "description", "material", "team"]
