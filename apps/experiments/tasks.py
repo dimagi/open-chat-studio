@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 
 from celery.app import shared_task
+from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import TopicBot
@@ -9,13 +10,15 @@ from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
+from apps.utils.taskbadger import update_taskbadger_data
 
 
-@shared_task
-def get_response_for_webchat_task(experiment_session_id: int, message_text: str) -> str:
+@shared_task(bind=True, base=TaskbadgerTask)
+def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     message_handler = WebChannel(experiment_session.experiment_channel)
     message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
+    update_taskbadger_data(self, message_handler, message)
     return message_handler.new_user_message(message)
 
 
