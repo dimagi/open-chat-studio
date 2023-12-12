@@ -29,7 +29,7 @@ class TimeseriesSplitterParams(Params):
     origin: required(Literal["start", "end"]) = None
     ignore_empty_groups: bool = True
 
-    def get_form_class(self) -> type[ParamsForm] | None:
+    def get_dynamic_config_form_class(self) -> type[ParamsForm] | None:
         from .forms import TimeseriesSplitterParamsForm
 
         return TimeseriesSplitterParamsForm

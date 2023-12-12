@@ -22,7 +22,7 @@ class BaseLoader(BaseStep[None, PipeOut]):
 class ResourceLoaderParams(Params):
     resource_id: required(int) = None
 
-    def get_form_class(self):
+    def get_dynamic_config_form_class(self):
         from .forms import ResourceLoaderParamsForm
 
         return ResourceLoaderParamsForm
