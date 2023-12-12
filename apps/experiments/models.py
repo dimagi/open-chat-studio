@@ -2,14 +2,13 @@ import uuid
 
 import markdown
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.teams.models import BaseTeamModel, Team
+from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
