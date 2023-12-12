@@ -42,8 +42,8 @@ class SafetyLayerTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:safety_edit"),
-                table_actions.DeleteAction(url_name="experiments:safety_delete"),
+                table_actions.edit_action(url_name="experiments:safety_edit"),
+                table_actions.delete_action(url_name="experiments:safety_delete"),
             ]
         },
     )
@@ -66,8 +66,8 @@ class SourceMaterialTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:source_material_edit"),
-                table_actions.DeleteAction(url_name="experiments:source_material_delete"),
+                table_actions.edit_action(url_name="experiments:source_material_edit"),
+                table_actions.delete_action(url_name="experiments:source_material_delete"),
             ]
         },
     )
@@ -89,8 +89,8 @@ class SurveyTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:survey_edit"),
-                table_actions.DeleteAction(url_name="experiments:survey_delete"),
+                table_actions.edit_action(url_name="experiments:survey_edit"),
+                table_actions.delete_action(url_name="experiments:survey_delete"),
             ]
         },
     )
@@ -111,8 +111,11 @@ class ConsentFormTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:consent_edit"),
-                table_actions.DeleteAction(url_name="experiments:consent_delete"),
+                table_actions.edit_action(url_name="experiments:consent_edit"),
+                table_actions.delete_action(
+                    url_name="experiments:consent_delete",
+                    display_condition=lambda request, record: not record.is_default,
+                ),
             ]
         },
     )
@@ -136,8 +139,8 @@ class NoActivityMessageConfigTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:no_activity_edit"),
-                table_actions.DeleteAction(url_name="experiments:no_activity_delete"),
+                table_actions.edit_action(url_name="experiments:no_activity_edit"),
+                table_actions.delete_action(url_name="experiments:no_activity_delete"),
             ]
         },
     )
@@ -161,8 +164,8 @@ class PromptTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.EditAction(url_name="experiments:prompt_edit"),
-                table_actions.DeleteAction(url_name="experiments:prompt_delete"),
+                table_actions.edit_action(url_name="experiments:prompt_edit"),
+                table_actions.delete_action(url_name="experiments:prompt_delete"),
             ]
         },
     )

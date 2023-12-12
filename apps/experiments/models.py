@@ -154,10 +154,6 @@ class ConsentForm(BaseTeamModel):
     def get_rendered_content(self):
         return markdown.markdown(self.consent_text)
 
-    @property
-    def can_delete(self):
-        return not self.is_default
-
 
 class SyntheticVoice(BaseModel):
     """

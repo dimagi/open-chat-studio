@@ -20,13 +20,13 @@ class AnalysisTable(tables.Table):
                 table_actions.Action(
                     "analysis:create_run",
                     "fa-solid fa-play",
-                    ["analysis.add_analysisrun"],
+                    required_permissions=["analysis.add_analysisrun"],
                 ),
-                table_actions.EditAction(
+                table_actions.edit_action(
                     "analysis:edit",
                     required_permissions=["analysis.change_analysis"],
                 ),
-                table_actions.DeleteAction(
+                table_actions.delete_action(
                     "analysis:delete",
                     required_permissions=["analysis.delete_analysis"],
                 ),

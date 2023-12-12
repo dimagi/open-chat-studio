@@ -1,37 +1,54 @@
-from django.template import Context, Template
+import dataclasses
+
+from django.template import Context
 from django.template.loader import get_template
 
 
-class BaseAction:
-    template = None
-
-    def __init__(self, url_name: str, extra_context: dict = None, required_permissions: list = None):
-        self.url_name = url_name
-        self.extra_context = extra_context
-        self.required_permissions = required_permissions or []
+@dataclasses.dataclass
+class Action:
+    url_name: str
+    icon_class: str = None
+    extra_context: dict = None
+    required_permissions: list = dataclasses.field(default_factory=list)
+    display_condition: callable = None
+    template: str = "generic/action.html"
 
     def render(self, context: Context):
         template = get_template(self.template)
         return template.render(self.get_context(context))
 
     def get_context(self, context: Context):
-        ctxt = {"request": context["request"], "record": context["record"], "url_name": self.url_name}
+        ctxt = {
+            "request": context["request"],
+            "record": context["record"],
+            "url_name": self.url_name,
+            "icon_class": self.icon_class,
+        }
         if self.extra_context:
             ctxt.update(self.extra_context)
         return ctxt
 
-
-class Action(BaseAction):
-    template = "generic/action.html"
-
-    def __init__(self, url_name: str, icon_class: str, required_permissions: list = None):
-        super().__init__(url_name, extra_context={"icon_class": icon_class}, required_permissions=required_permissions)
-
-
-class EditAction(Action):
-    def __init__(self, url_name: str, required_permissions: list = None):
-        super().__init__(url_name, "fa-solid fa-pencil", required_permissions=required_permissions)
+    def should_display(self, request, record):
+        if self.required_permissions and not request.user.has_perms(self.required_permissions):
+            return False
+        if self.display_condition:
+            return self.display_condition(request, record)
+        return True
 
 
-class DeleteAction(BaseAction):
-    template = "generic/action_delete.html"
+def edit_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
+    return Action(
+        url_name,
+        icon_class="fa-solid fa-pencil",
+        required_permissions=required_permissions,
+        display_condition=display_condition,
+    )
+
+
+def delete_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
+    return Action(
+        url_name,
+        icon_class="fa-solid fa-trash",
+        required_permissions=required_permissions,
+        display_condition=display_condition,
+    )

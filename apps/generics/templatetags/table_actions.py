@@ -10,7 +10,5 @@ def render_action(context, action):
 
 
 @register.simple_tag(takes_context=True)
-def action_allowed(context, action):
-    if not action.required_permissions:
-        return True
-    return context["request"].user.has_perms(action.required_permissions)
+def should_display_action(context, action):
+    return action.should_display(context["request"], context["record"])
