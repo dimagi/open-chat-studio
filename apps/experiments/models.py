@@ -6,18 +6,31 @@ from django.core.validators import MaxValueValidator, MinValueValidator, validat
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
+class PromptObjectManager(AuditingManager):
+    pass
+
+
+class ExperimentObjectManager(AuditingManager):
+    pass
+
+
+@audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
     A prompt - typically the starting point for ChatGPT.
     """
 
+    objects = PromptObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(blank=True, default="", verbose_name="A longer description of what the prompt does.")
@@ -225,12 +238,14 @@ class NoActivityMessageConfig(BaseTeamModel):
         return self.name
 
 
+@audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
     """
 
+    objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
