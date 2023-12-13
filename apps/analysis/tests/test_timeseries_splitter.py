@@ -12,7 +12,7 @@ from apps.analysis.steps.splitters import TimeGroup, TimeseriesSplitter, Timeser
 @pytest.fixture
 def timeseries_splitter():
     step = TimeseriesSplitter()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 

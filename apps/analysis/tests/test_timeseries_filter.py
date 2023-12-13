@@ -114,7 +114,7 @@ def timeseries_data():
 @pytest.fixture
 def timeseries_filter():
     step = TimeseriesFilter()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 

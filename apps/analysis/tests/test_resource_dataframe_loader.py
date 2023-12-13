@@ -12,7 +12,7 @@ from apps.analysis.steps.loaders import ResourceDataframeLoader, ResourceLoaderP
 @pytest.fixture
 def resource_dataframe_loader():
     step = ResourceDataframeLoader()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 

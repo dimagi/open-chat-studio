@@ -12,7 +12,7 @@ from apps.analysis.steps.parsers import WhatsappParser, WhatsappParserParams
 @pytest.fixture
 def whatsapp_parser():
     step = WhatsappParser()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 
@@ -39,7 +39,7 @@ def test_whatsapp_parser_parses_valid_log(whatsapp_parser, valid_whatsapp_log):
     params = WhatsappParserParams(
         remove_deleted_messages=False, remove_system_messages=False, remove_media_omitted_messages=False
     )
-    whatsapp_parser.initialize(PipelineContext(None, params=params.model_dump()))
+    whatsapp_parser.initialize(PipelineContext(params=params.model_dump()))
     result = whatsapp_parser.run(params, valid_whatsapp_log)
     df = result.data
     assert len(df) == 5

@@ -1,13 +1,17 @@
 import dataclasses
 from abc import abstractmethod
+from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
 
 from django import forms
 from pydantic import BaseModel
 
-from ..service_providers.llm_service import LlmService
+from apps.service_providers.llm_service import LlmService
+from apps.teams.models import Team
+
 from .exceptions import StepError
 from .log import Logger
+from .models import AnalysisRun
 
 PipeIn = TypeVar("PipeIn", contravariant=True)
 PipeOut = TypeVar("PipeOut", covariant=True)
@@ -33,14 +37,21 @@ class StepContext(Generic[PipeOut]):
         return dataclasses.replace(self, data=data)
 
 
+@dataclasses.dataclass
 class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
-    def __init__(self, llm_service: LlmService, logger: Logger = None, params: dict = None):
-        self.llm_service = llm_service
-        self.log = logger or Logger()
-        self.params = params or {}
-        self.llm_provider = None
+    run: AnalysisRun = None
+    log: Logger = dataclasses.field(default_factory=Logger)
+    params: dict = dataclasses.field(default_factory=dict)
+
+    @cached_property
+    def llm_service(self) -> LlmService:
+        return self.run.group.analysis.llm_provider.get_llm_service()
+
+    @cached_property
+    def team(self) -> Team:
+        return self.run.group.team
 
 
 class Step(Protocol[PipeIn, PipeOut]):
