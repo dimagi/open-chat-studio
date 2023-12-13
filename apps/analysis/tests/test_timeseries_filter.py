@@ -125,16 +125,16 @@ def test_timeseries_filter_with_valid_params(timeseries_filter, timeseries_data)
         anchor_type="this",
         anchor_point=datetime.fromisoformat("2021-01-02"),
     )
-    filtered_data, _ = timeseries_filter.run(params, timeseries_data)
-    assert len(filtered_data) == 7
-    assert filtered_data["value"].tolist() == list(range(1, 8))
+    result = timeseries_filter.run(params, timeseries_data)
+    assert len(result.data) == 7
+    assert result.data["value"].tolist() == list(range(1, 8))
 
 
 def test_timeseries_filter_with_empty_data(timeseries_filter):
     params = TimeseriesFilterParams(duration_unit=DurationUnit.days, duration_value=7, anchor_type="this")
     empty_data = pd.DataFrame()
-    filtered_data, _ = timeseries_filter.run(params, empty_data)
-    assert len(filtered_data) == 0
+    result = timeseries_filter.run(params, empty_data)
+    assert len(result.data) == 0
 
 
 def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data):
@@ -144,5 +144,5 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
         anchor_type="this",
         anchor_point=datetime.now() + timedelta(days=10),
     )
-    filtered_data, _ = timeseries_filter.run(params, timeseries_data)
-    assert len(filtered_data) == 0
+    result = timeseries_filter.run(params, timeseries_data)
+    assert len(result.data) == 0

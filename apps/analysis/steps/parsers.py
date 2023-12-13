@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from apps.analysis.core import BaseStep, Params
+from apps.analysis.core import BaseStep, Params, StepContext
 from apps.analysis.exceptions import StepError
 
 
@@ -34,14 +34,14 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
     output_type = pd.DataFrame
     param_schema = WhatsappParserParams
 
-    def run(self, params: Params, data: str) -> tuple[pd.DataFrame, dict]:
+    def run(self, params: Params, data: str) -> StepContext[pd.DataFrame]:
         pattern = re.compile(r"^(\d{2}/\d{2}/\d{4},\s\d{2}:\d{2})\s-\s", flags=re.MULTILINE)
         splits = pattern.split(data)
         if len(splits) < 2:
             splits = list(filter(None, splits))
             if not splits:
                 self.log.info("No WhatsApp messages found")
-                return pd.DataFrame(), {}
+                return StepContext(pd.DataFrame(), persist=False)
 
             self.log.debug("Unable to parse WhatsApp data:\n" + "\n".join(data.splitlines()[:3]))
             raise StepError("Unable to parse WhatsApp data")
@@ -50,7 +50,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         df = pd.DataFrame(data=messages)
         df.set_index("date", inplace=True)
         self.log.info(f"Loaded messages from {df.index.min()} to {df.index.max()} ({len(df)} messages)")
-        return df, {}
+        return StepContext(df)
 
     def _get_message(self, head, tail):
         date = datetime.strptime(head, "%d/%m/%Y, %H:%M")

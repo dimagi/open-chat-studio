@@ -3,7 +3,7 @@ from functools import cached_property
 
 import pandas as pd
 
-from apps.analysis.core import BaseStep, Params, PipeOut, required
+from apps.analysis.core import BaseStep, Params, PipeOut, StepContext, required
 from apps.analysis.models import Resource, ResourceType
 
 
@@ -36,24 +36,24 @@ class ResourceTextLoader(BaseLoader[str]):
     param_schema = ResourceLoaderParams
     output_type = str
 
-    def load(self, params: ResourceLoaderParams) -> tuple[str, dict]:
+    def load(self, params: ResourceLoaderParams) -> StepContext[str]:
         with params.resource.file.open("r") as file:
             data = file.read()
             lines = len(data.splitlines())
             self.log.info(f"Loaded {lines} lines of text")
-            return data, {"persist_output": False}
+            return StepContext(data, persist=False)
 
 
 class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
     param_schema = ResourceLoaderParams
     output_type = pd.DataFrame
 
-    def load(self, params: ResourceLoaderParams) -> tuple[pd.DataFrame, dict]:
+    def load(self, params: ResourceLoaderParams) -> StepContext[pd.DataFrame]:
         parser = self._get_parser(params.resource.type)
         with params.resource.file.open("r") as file:
             data = parser(file)
             self.log.info(f"Loaded {len(data)} rows")
-            return data, {"persist_output": False}
+            return StepContext(data, persist=False)
 
     def _get_parser(self, type_: ResourceType):
         if type_ == ResourceType.CSV:

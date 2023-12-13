@@ -19,11 +19,13 @@ class StepContext(Generic[PipeOut]):
 
     data: PipeOut
     name: str = "start"
+    persist: bool = True
+    is_multiple: bool = False
     metadata: dict = dataclasses.field(default_factory=dict)
 
     @classmethod
     def initial(cls, data: PipeOut = None):
-        return cls(data, "start", {})
+        return cls(data)
 
     def clone_with(self, data: PipeOut = None):
         if data is None:
@@ -208,12 +210,13 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 self.preflight_check(context)
 
                 self.log.debug(f"Params: {self._params}")
-                output, metadata = self.run(self._params, context.data)
-                return StepContext(output, self.name, metadata)
+                result = self.run(self._params, context.data)
+                result.name = self.name
+                return result
         finally:
             self.log.info(f"Step {self.name} complete")
 
-    def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
+    def run(self, params: Params, data: PipeIn) -> StepContext[PipeOut]:
         """Run the step and return the output data and metadata."""
         raise NotImplementedError
 

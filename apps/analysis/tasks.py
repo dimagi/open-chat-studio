@@ -88,15 +88,15 @@ def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=No
         return result
 
 
-def process_pipeline_output(run, result):
-    if result.metadata.get("output_multiple", False) and isinstance(result.data, list):
+def process_pipeline_output(run, result: StepContext):
+    if result.is_multiple and isinstance(result.data, list):
         result_data = result.data
         result.output_summary = f"{len(result_data)} chunks created"
     else:
         result_data = [result.data]
         run.output_summary = get_serializer(result.data).get_summary(result.data)
 
-    if result.metadata.get("persist_output", True):
+    if result.persist:
         for i, data in enumerate(result_data):
             resource = create_resource_for_data(run.group.team, data, f"{result.name} Output {i}")
             run.resources.add(resource)
