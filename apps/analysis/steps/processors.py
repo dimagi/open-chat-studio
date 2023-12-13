@@ -58,7 +58,7 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
         llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
         prompt = params.prompt_template.format_prompt(data=data)
         result = llm.invoke(prompt)
-        return StepContext(result.content, persist=False)
+        return StepContext(result.content)
 
 
 class AssistantParams(PromptParams):
@@ -122,7 +122,7 @@ class AssistantStep(core.BaseStep[Any, str]):
 
         result.response = self._process_messages(result, thread.id)
         # TODO: Record files
-        return StepContext(result.response, persist=False, metadata={"thread_id": thread.id, "run_id": run.id})
+        return StepContext(result.response, metadata={"thread_id": thread.id, "run_id": run.id})
 
     def _process_messages(self, result: AssistantOutput, thread_id: str) -> str:
         messages = list(self.client.beta.threads.messages.list(thread_id=thread_id, order="asc"))

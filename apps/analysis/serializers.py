@@ -12,7 +12,7 @@ from apps.analysis.models import Resource, ResourceMetadata
 def create_resource_for_data(team, data: Any, name: str) -> Resource:
     serializer = get_serializer(data)
     metadata = serializer.get_metadata(data)
-    time_suffix = timezone.now().replace(tzinfo=None).isoformat(timespec="milliseconds")
+    time_suffix = timezone.now().replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
     resource = Resource(
         team=team,
         name=f"{name} {time_suffix}",

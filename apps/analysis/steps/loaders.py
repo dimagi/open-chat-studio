@@ -41,7 +41,7 @@ class ResourceTextLoader(BaseLoader[str]):
             data = file.read()
             lines = len(data.splitlines())
             self.log.info(f"Loaded {lines} lines of text")
-            return StepContext(data, persist=False)
+            return StepContext(data)
 
 
 class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
@@ -53,7 +53,7 @@ class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
         with params.resource.file.open("r") as file:
             data = parser(file)
             self.log.info(f"Loaded {len(data)} rows")
-            return StepContext(data, persist=False)
+            return StepContext(data)
 
     def _get_parser(self, type_: ResourceType):
         if type_ == ResourceType.CSV:

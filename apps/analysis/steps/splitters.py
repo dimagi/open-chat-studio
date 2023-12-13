@@ -5,8 +5,8 @@ import pandas as pd
 from pandas.api import types as ptypes
 from pandas.core.resample import TimeGrouper
 
-from ..core import BaseStep, Params, ParamsForm, StepContext, required
-from ..exceptions import StepError
+from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, required
+from apps.analysis.exceptions import StepError
 
 
 class TimeGroup(StrEnum):
@@ -57,9 +57,12 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
             if params.ignore_empty_groups and not len(group):
                 continue
             groups.append(group)
-            names.append(str(params.time_group.get_group_value(origin)))
+            name = str(params.time_group.get_group_value(origin))
+            names.append(name)
+            self.create_resource(group, f"split_{name}")
 
         self.log.info(f"Split timeseries data into {len(groups)} groups")
         for i, (name, group) in enumerate(zip(names, groups)):
             self.log.info(f"    Group {i + 1}: {name} ({len(group)} rows)")
+
         return StepContext(groups, is_multiple=True, metadata={"names": names})

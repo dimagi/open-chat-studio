@@ -41,7 +41,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
             splits = list(filter(None, splits))
             if not splits:
                 self.log.info("No WhatsApp messages found")
-                return StepContext(pd.DataFrame(), persist=False)
+                return StepContext(pd.DataFrame())
 
             self.log.debug("Unable to parse WhatsApp data:\n" + "\n".join(data.splitlines()[:3]))
             raise StepError("Unable to parse WhatsApp data")
@@ -50,6 +50,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         df = pd.DataFrame(data=messages)
         df.set_index("date", inplace=True)
         self.log.info(f"Loaded messages from {df.index.min()} to {df.index.max()} ({len(df)} messages)")
+        self.create_resource(df, "whatsapp_messages")
         return StepContext(df)
 
     def _get_message(self, head, tail):

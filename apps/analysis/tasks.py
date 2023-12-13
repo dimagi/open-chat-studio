@@ -42,7 +42,7 @@ def run_context(run):
     log_stream = RunLogStream(run)
     params = run.group.params
     params["llm_model"] = run.group.analysis.llm_model
-    pipeline_context = PipelineContext(run, log=Logger(log_stream), params=params)
+    pipeline_context = PipelineContext(run, log=Logger(log_stream), params=params, create_resources=True)
 
     with run_status_context(run, raise_errors=True):
         yield pipeline_context
@@ -89,13 +89,6 @@ def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=No
 
 def process_pipeline_output(run, result: StepContext):
     if result.is_multiple and isinstance(result.data, list):
-        result_data = result.data
-        run.output_summary = f"{len(result_data)} chunks created"
+        run.output_summary = f"{len(result.data)} groups created"
     else:
-        result_data = [result.data]
         run.output_summary = get_serializer(result.data).get_summary(result.data)
-
-    if result.persist:
-        for i, data in enumerate(result_data):
-            resource = create_resource_for_data(run.group.team, data, f"{result.name} Output {i}")
-            run.resources.add(resource)
