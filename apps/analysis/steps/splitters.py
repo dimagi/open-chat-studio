@@ -7,6 +7,7 @@ from pandas.core.resample import TimeGrouper
 
 from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, required
 from apps.analysis.exceptions import StepError
+from apps.analysis.steps.utils import format_truncated_date
 
 
 class TimeGroup(StrEnum):
@@ -19,8 +20,8 @@ class TimeGroup(StrEnum):
     quarterly = "Q"
     yearly = "Y"
 
-    def get_group_value(self, timestamp) -> pd.Period:
-        return timestamp.to_period(self.value)
+    def get_group_name(self, timestamp) -> str:
+        return format_truncated_date(timestamp, self.name)
 
 
 class TimeseriesSplitterParams(Params):
@@ -57,7 +58,7 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
             if params.ignore_empty_groups and not len(group):
                 continue
             groups.append(group)
-            name = str(params.time_group.get_group_value(origin))
+            name = params.time_group.get_group_name(origin)
             names.append(name)
             self.create_resource(group, f"split_{name}")
 

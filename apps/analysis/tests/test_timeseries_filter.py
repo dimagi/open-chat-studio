@@ -7,7 +7,7 @@ from apps.analysis.core import PipelineContext
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
-def _make_params(duration_unit, duration_value, anchor_type, anchor_point=None):
+def _make_params(duration_unit, duration_value, anchor_type="this", anchor_point=None):
     return TimeseriesFilterParams(
         duration_unit=duration_unit,
         duration_value=duration_value,
@@ -102,6 +102,22 @@ def _make_params(duration_unit, duration_value, anchor_type, anchor_point=None):
 def test_timeseries_filter_params(params, start, end):
     assert params.start == datetime.fromisoformat(start)
     assert params.end == datetime.fromisoformat(end)
+
+
+@pytest.mark.parametrize(
+    "unit, value, expected",
+    [
+        (DurationUnit.minutes, 7, "2022-04-01T15:36--2022-04-01T15:43"),
+        (DurationUnit.hours, 7, "2022-04-01T15--2022-04-01T22"),
+        (DurationUnit.days, 7, "2022-04-01--2022-04-08"),
+        (DurationUnit.weeks, 7, "2022-W13--2022-W20"),
+        (DurationUnit.months, 7, "2022-04--2022-11"),
+        (DurationUnit.years, 7, "2022--2029"),
+    ],
+)
+def test_timeseries_filter_params_period_name(unit, value, expected):
+    params = _make_params(unit, value, anchor_point="2022-04-01T15:36:45.123456")
+    assert params.period_name() == expected
 
 
 @pytest.fixture

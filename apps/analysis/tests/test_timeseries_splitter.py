@@ -1,8 +1,6 @@
-from datetime import datetime
-
 import pandas as pd
 import pytest
-from pandas import DataFrame, date_range
+from pandas import DataFrame, Period, Timestamp, date_range
 
 from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.exceptions import StepError
@@ -85,3 +83,21 @@ def test_timeseries_splitter_ignores_empty_groups(ignore_empty, group_count, tim
     data = DataFrame(index=dates, data={"value": range(len(dates))})
     result = timeseries_splitter.run(params, data)
     assert len(result.data) == group_count
+
+
+@pytest.mark.parametrize(
+    "time_group, expected",
+    [
+        (TimeGroup.secondly, "2022-03-07T15:22:05"),
+        (TimeGroup.minutely, "2022-03-07T15:22"),
+        (TimeGroup.hourly, "2022-03-07T15"),
+        (TimeGroup.daily, "2022-03-07"),
+        (TimeGroup.weekly, "2022-W10"),
+        (TimeGroup.monthly, "2022-03"),
+        (TimeGroup.quarterly, "2022-Q1"),
+        (TimeGroup.yearly, "2022"),
+    ],
+)
+def test_time_group_get_group_name(time_group, expected):
+    timestamp = Timestamp("2022-03-07 15:22:05")
+    assert time_group.get_group_name(timestamp) == expected
