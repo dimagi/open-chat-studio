@@ -41,7 +41,12 @@ class PromptParams(core.Params):
 class LlmCompletionStepParams(PromptParams):
     llm_model: required(str) = None
 
-    def get_form_class(self):
+    def get_static_config_form_class(self):
+        from apps.analysis.steps.forms import LlmCompletionStepParamsForm
+
+        return LlmCompletionStepParamsForm
+
+    def get_dynamic_config_form_class(self):
         from apps.analysis.steps.forms import LlmCompletionStepParamsForm
 
         return LlmCompletionStepParamsForm
@@ -66,7 +71,7 @@ class AssistantParams(PromptParams):
     # TODO: passing files to the assistant
     # file_ids: list[str] = None
 
-    def get_form_class(self) -> type[ParamsForm] | None:
+    def get_static_config_form_class(self) -> type[ParamsForm] | None:
         from .forms import AssistantParamsForm
 
         return AssistantParamsForm

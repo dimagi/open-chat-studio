@@ -78,7 +78,7 @@ class TimeseriesFilterParams(Params):
             delta += relativedelta(month=1)
         return delta
 
-    def get_form_class(self) -> type[ParamsForm] | None:
+    def get_dynamic_config_form_class(self) -> type[ParamsForm] | None:
         from apps.analysis.steps.forms import TimeseriesFilterForm
 
         return TimeseriesFilterForm

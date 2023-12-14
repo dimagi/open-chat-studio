@@ -9,9 +9,10 @@ from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
 from apps.analysis.models import Analysis, Resource, RunGroup
-from apps.analysis.pipelines import get_data_pipeline, get_param_forms, get_source_pipeline
+from apps.analysis.pipelines import get_dynamic_forms_for_analysis, get_static_forms_for_analysis
 from apps.analysis.tables import AnalysisTable, RunGroupTable
 from apps.analysis.tasks import run_analysis
+from apps.analysis.utils import merge_raw_params
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 
@@ -36,11 +37,45 @@ def analysis_home(request, team_slug: str):
 @permission_required("analysis.view_analysis")
 def analysis_details(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
+    if analysis.needs_configuration():
+        return redirect("analysis:configure", team_slug=team_slug, pk=pk)
     return TemplateResponse(
         request,
         "analysis/analysis_details.html",
         {
             "analysis": analysis,
+        },
+    )
+
+
+@login_and_team_required
+@permission_required("analysis.change_analysis", raise_exception=True)
+def analysis_configure(request, team_slug: str, pk: int):
+    analysis = get_object_or_404(Analysis, id=pk, team=request.team)
+    param_forms = get_static_forms_for_analysis(analysis)
+    if request.method == "POST":
+        forms = {
+            step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
+        }
+        if all(form.is_valid() for form in forms.values()):
+            step_params = {
+                step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
+            }
+            analysis.config = step_params
+            analysis.save()
+            return redirect("analysis:details", team_slug=team_slug, pk=pk)
+    else:
+        initial = analysis.config or {}
+        forms = {
+            step_name: form(request, initial=initial.get(step_name, {})) for step_name, form in param_forms.items()
+        }
+
+    return render(
+        request,
+        "analysis/analysis_configure.html",
+        {
+            "analysis": analysis,
+            "param_forms": forms,
         },
     )
 
@@ -87,7 +122,10 @@ class CreateAnalysisPipeline(CreateView, PermissionRequiredMixin):
         return self.get_form_class()(self.request, **self.get_form_kwargs())
 
     def get_success_url(self):
-        return reverse("analysis:home", args=[self.request.team.slug])
+        slug = self.request.team.slug
+        if self.object.needs_configuration():
+            return reverse("analysis:configure", args=[slug, self.object.id])
+        return reverse("analysis:home", args=[slug])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -135,10 +173,7 @@ def delete_analysis(request, team_slug: str, pk: int):
 @permission_required("analysis.add_rungroup")
 def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
-    param_forms = {
-        **get_param_forms(get_source_pipeline(analysis.source)),
-        **get_param_forms(get_data_pipeline(analysis.pipeline)),
-    }
+    param_forms = get_dynamic_forms_for_analysis(analysis)
     if request.method == "POST":
         forms = {
             step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
@@ -157,10 +192,10 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
             group.save()
             return redirect("analysis:group_details", team_slug=team_slug, pk=group.id)
     else:
-        initial = {}
+        initial = analysis.config or {}
         if run_id:
             run = get_object_or_404(RunGroup, id=run_id, team=request.team)
-            initial = run.params
+            initial = merge_raw_params(initial, run.params)
         forms = {
             step_name: form(request, initial=initial.get(step_name, {})) for step_name, form in param_forms.items()
         }

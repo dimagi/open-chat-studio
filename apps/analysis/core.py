@@ -180,7 +180,12 @@ class Params(BaseModel):
     Subclasses can override get_form_class() to provide a form for editing the parameters.
     """
 
-    def get_form_class(self) -> type[ParamsForm] | None:
+    def get_static_config_form_class(self) -> type[ParamsForm] | None:
+        """Return a form class for editing the parameters. This is used for static configuration."""
+        return None
+
+    def get_dynamic_config_form_class(self) -> type[ParamsForm] | None:
+        """Return a form class for editing the parameters. This is used for dynamic (runtime) configuration."""
         return None
 
     def merge(self, *params: dict) -> "Params":

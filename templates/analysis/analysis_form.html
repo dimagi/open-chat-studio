@@ -1,21 +1,48 @@
 {% extends "generic/object_form.html" %}
+{% load form_tags %}
+{% block title_bar_end %}
+  {% if analysis.id %}
+    <div class="join">
+      <div class="tooltip" data-tip="Configure">
+        <a class="btn btn-primary join-item"
+           href="{% url 'analysis:configure' team.slug analysis.id %}">
+          <i class="fa-solid fa-gear"></i>
+        </a>
+      </div>
+      <div class="tooltip" data-tip="Delete">
+        <a class="btn btn-primary join-item rounded-r-full"
+           href="{% url 'analysis:delete' team.slug analysis.id %}">
+          <i class="fa-solid fa-trash"></i>
+        </a>
+      </div>
+    </div>
+  {% endif %}
+{% endblock title_bar_end %}
+{% block pre_form %}
+  {% if analysis.needs_configuration %}
+    <div class="alert mt-2">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>This analysis requires static <a class="link" href="{% url "analysis:configure" request.team.slug analysis.id %}">configuration</a></span>
+    </div>
+  {% endif %}
+{% endblock pre_form %}
 {% block page_js %}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
-      const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
-      document.addEventListener('alpine:init', () => {
-          Alpine.data('analysis', () => ({
-              llmProvider: null,
-              llm_model: '{{analysis.llm_model|default:'null'}}',
-              llm_model_options: [],
-              init() {
-                  this.$watch('llmProvider', () => {
-                      this.llm_model_options = llmModelOptions.filter(option => {
-                        return option.provider === this.llmProvider;
-                      });
-                  })
-              }
-          }));
-      });
+    const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('analysis', () => ({
+        llmProvider: null,
+        llm_model: '{{analysis.llm_model|default:'null'}}',
+        llm_model_options: [],
+        init() {
+          this.$watch('llmProvider', () => {
+            this.llm_model_options = llmModelOptions.filter(option => {
+              return option.provider === this.llmProvider;
+            });
+          })
+        }
+      }));
+    });
   </script>
 {% endblock page_js %}
