@@ -55,6 +55,7 @@ IGNORE_APPS = {
     "account",
     "generics",
     "humanize",
+    "field_audit",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

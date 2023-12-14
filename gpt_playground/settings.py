@@ -68,6 +68,7 @@ THIRD_PARTY_APPS = [
     "waffle",
     "django_celery_beat",
     "django_tables2",
+    "field_audit",
 ]
 
 # Put your project-specific apps here
@@ -104,6 +105,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
+    "field_audit.middleware.FieldAuditMiddleware",
 ]
 
 
