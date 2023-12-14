@@ -37,6 +37,10 @@ class StepContext(Generic[PipeOut]):
             data = self.data
         return dataclasses.replace(self, data=data)
 
+    @property
+    def should_split(self):
+        return self.is_multiple and isinstance(self.data, list)
+
 
 @dataclasses.dataclass
 class PipelineContext:

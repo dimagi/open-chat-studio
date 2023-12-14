@@ -69,7 +69,7 @@ def run_analysis(run_group_id: int):
     with run_status_context(group):
         source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
 
-        if source_result.metadata.get("output_multiple", False) and isinstance(source_result.data, list):
+        if source_result.should_split:
             results = [source_result.clone_with(data) for data in source_result.data]
         else:
             results = [source_result]
@@ -88,7 +88,7 @@ def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=No
 
 
 def process_pipeline_output(run, result: StepContext):
-    if result.is_multiple and isinstance(result.data, list):
+    if result.should_split:
         run.output_summary = f"{len(result.data)} groups created"
     else:
         run.output_summary = get_serializer(result.data).get_summary(result.data)
