@@ -12,7 +12,7 @@
       </div>
     {% endif %}
 
-    {% with resources=run.resources.all %}
+    {% with resources=run.output_resources.all %}
       {% if resources %}
         <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Files"
                {% if not run.output_summary and not run.error %}checked{% endif %}
@@ -23,7 +23,7 @@
               <a href="{% url "analysis:download_resource" request.team.slug resource.id %}"
                  class="btn btn-sm btn-outline-primary" target="_blank">{{ resource.name }}</a>
               <span class="ml-2 text-gray-400">{{ resource.content_size|filesizeformat }}</span>
-              <div class="badge badge-sm">{{ resource.type }}</div>
+              <div class="badge badge-sm">{{ resource.wrapped_metadata.get_label }}</div>
             </div>
           {% endfor %}
         </div>

@@ -1,15 +1,14 @@
 import logging
-import time
 from contextlib import contextmanager
 
 from celery import shared_task
 from django.utils import timezone
 
 from apps.analysis.core import PipelineContext, StepContext
-from apps.analysis.log import LogEntry, Logger, LogLevel, LogStream
+from apps.analysis.log import LogEntry, Logger, LogStream
 from apps.analysis.models import AnalysisRun, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
-from apps.analysis.serializers import create_resource_for_data, get_serializer
+from apps.analysis.serializers import get_serializer_by_type
 
 log = logging.getLogger(__name__)
 
@@ -67,28 +66,53 @@ def run_analysis(run_group_id: int):
     group = RunGroup.objects.select_related("team", "analysis", "analysis__llm_provider").get(id=run_group_id)
 
     with run_status_context(group):
-        source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
+        source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
-        if source_result.should_split:
-            results = [source_result.clone_with(data) for data in source_result.data]
+        if isinstance(source_result, list) and len(source_result) > 1:
+            run_parallel_pipeline(group, source_result)
         else:
-            results = [source_result]
-
-        for result in results:
-            run_pipeline(group, group.analysis.pipeline, get_data_pipeline, context=result)
+            next_intput = source_result[0] if isinstance(source_result, list) else source_result
+            run_serial_pipeline(group, group.analysis.pipeline, get_data_pipeline, next_intput)
 
 
-def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=None) -> StepContext:
-    run = AnalysisRun.objects.create(group=group)
+def run_parallel_pipeline(group, contexts):
+    for context in contexts:
+        assert context.resource, "Parallel pipeline requires resource to be created by source pipeline"
+        run = AnalysisRun.objects.create(name=context.name, group=group, input_resource=context.resource)
+        task = run_pipline_split.delay(run.id)
+        run.task_id = task.task_id
+        run.save()
+
+
+@shared_task
+def run_pipline_split(run_id: int):
+    run = AnalysisRun.objects.select_related(
+        "group", "group__team", "group__analysis", "group__analysis__llm_provider"
+    ).get(id=run_id)
+    resource = run.input_resource
+    run_pipeline(run, run.group.analysis.pipeline, get_data_pipeline, StepContext.initial(resource=resource))
+
+
+def run_serial_pipeline(
+    group: RunGroup, pipeline_id: str, pipeline_factory, context
+) -> StepContext | list[StepContext]:
+    run = AnalysisRun.objects.create(name=context.name, group=group)
+    return run_pipeline(run, pipeline_id, pipeline_factory, context)
+
+
+def run_pipeline(run: AnalysisRun, pipeline_id: str, pipeline_factory, context) -> StepContext | list[StepContext]:
     with run_context(run) as pipeline_context:
         pipeline = pipeline_factory(pipeline_id)
-        result = pipeline.run(pipeline_context, context or StepContext.initial())
-        process_pipeline_output(run, result)
+        result = pipeline.run(pipeline_context, context)
+        process_pipeline_output(pipeline_context, result)
         return result
 
 
-def process_pipeline_output(run, result: StepContext):
-    if result.should_split:
-        run.output_summary = f"{len(result.data)} groups created"
+def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext):
+    run = pipeline_context.run
+    if isinstance(result, list):
+        run.output_summary = f"{len(result)} groups created"
+        for res in result:
+            run.output_summary += f"\n  - {res.name}"
     else:
-        run.output_summary = get_serializer(result.data).get_summary(result.data)
+        run.output_summary = get_serializer_by_type(result.data).get_summary(result.data)

@@ -44,26 +44,23 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
 
     param_schema = TimeseriesSplitterParams
     input_type = pd.DataFrame
-    output_type = list[pd.DataFrame]
+    output_type = pd.DataFrame
 
     def preflight_check(self, context: StepContext):
         if not ptypes.is_datetime64_any_dtype(context.data.index):
             raise StepError("Dataframe must have a datetime index")
 
-    def run(self, params: TimeseriesSplitterParams, data: pd.DataFrame) -> StepContext[list[pd.DataFrame]]:
+    def run(self, params: TimeseriesSplitterParams, data: pd.DataFrame) -> list[StepContext[pd.DataFrame]]:
         grouped = data.groupby(params.grouper)
-        groups = []
-        names = []
+        results = []
         for origin, group in grouped:
             if params.ignore_empty_groups and not len(group):
                 continue
-            groups.append(group)
             name = params.time_group.get_group_name(origin)
-            names.append(name)
-            self.create_resource(group, f"split_{name}")
+            results.append(StepContext(group, name=name))
 
-        self.log.info(f"Split timeseries data into {len(groups)} groups")
-        for i, (name, group) in enumerate(zip(names, groups)):
-            self.log.info(f"    Group {i + 1}: {name} ({len(group)} rows)")
+        self.log.info(f"Split timeseries data into {len(results)} groups")
+        for i, result in enumerate(results):
+            self.log.info(f"    Group {i + 1}: {result.name} ({len(result.data)} rows)")
 
-        return StepContext(groups, is_multiple=True, metadata={"names": names})
+        return results
