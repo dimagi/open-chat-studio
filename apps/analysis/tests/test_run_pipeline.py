@@ -58,9 +58,9 @@ def test_run_analysis_with_split_pipeline(mock_get_source_pipeline, mock_get_dat
     run_analysis(run_group.id)
     run_group.refresh_from_db()
     assert run_group.error == ""
-    assert run_group.status == RunStatus.SUCCESS
+    assert run_group.status == RunStatus.RUNNING
     assert run_group.start_time is not None
-    assert run_group.end_time is not None  # TODO: fixme - end should be none until all runs are complete
+    assert run_group.end_time is None
 
     runs = list(run_group.analysisrun_set.all())
     assert len(runs) == 8

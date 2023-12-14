@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("analysis", "0001_initial"),
+        ("analysis", "0002_analysis_config"),
     ]
 
     operations = [
