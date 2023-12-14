@@ -152,3 +152,6 @@ By default the signup page is `disabled`. To enable it, you should set the `SIGN
 
 #### Testing webhooks
 To test the webhooks, you can use a tool like [ngrok](https://ngrok.com/docs/getting-started/) to forward webhook data to your local machine.
+
+#### Auditing
+We use the [django-field-audit](https://github.com/dimagi/django-field-audit) library for auditing. Please see the [table of audited methods](https://github.com/dimagi/django-field-audit#audited-db-write-operations) and familiarize yourself on how to audit "special" functions like `QuerySet.bulk_create()`.

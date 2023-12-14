@@ -2,23 +2,47 @@ import uuid
 
 import markdown
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.teams.models import BaseTeamModel, Team
+from apps.experiments import model_audit_fields
+from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 
+class PromptObjectManager(AuditingManager):
+    pass
+
+
+class ExperimentObjectManager(AuditingManager):
+    pass
+
+
+class SourceMaterialObjectManager(AuditingManager):
+    pass
+
+
+class SafetyLayerObjectManager(AuditingManager):
+    pass
+
+
+class ConsentFormObjectManager(AuditingManager):
+    pass
+
+
+@audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
     A prompt - typically the starting point for ChatGPT.
     """
 
+    objects = PromptObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(blank=True, default="", verbose_name="A longer description of what the prompt does.")
@@ -55,11 +79,13 @@ class PromptBuilderHistory(BaseTeamModel):
         return str(self.history)
 
 
+@audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel):
     """
     Some Source Material on a particular topic.
     """
 
+    objects = SourceMaterialObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")
@@ -72,7 +98,9 @@ class SourceMaterial(BaseTeamModel):
         return self.topic
 
 
+@audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
+    objects = SafetyLayerObjectManager()
     prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
@@ -124,11 +152,13 @@ class Survey(BaseTeamModel):
         )
 
 
+@audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
 class ConsentForm(BaseTeamModel):
     """
     Custom markdown consent form to be used by experiments.
     """
 
+    objects = ConsentFormObjectManager()
     name = models.CharField(max_length=50)
     consent_text = models.TextField(help_text="Custom markdown text")
     capture_identifier = models.BooleanField(default=True)
@@ -226,12 +256,14 @@ class NoActivityMessageConfig(BaseTeamModel):
         return self.name
 
 
+@audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
     """
 
+    objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
