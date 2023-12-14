@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
-from apps.analysis.tasks import run_context, run_status_context
+from apps.analysis.tasks import RunStatusContext, run_context
 from apps.service_providers.models import LlmProvider
 
 
@@ -89,7 +89,7 @@ def test_run_context_error(mock_analysis_run):
 
 
 def test_run_status_context_error(mock_run_group):
-    with run_status_context(mock_run_group, raise_errors=False):
+    with RunStatusContext(mock_run_group):
         raise Exception("test exception")
 
     assert mock_run_group.end_time is not None
