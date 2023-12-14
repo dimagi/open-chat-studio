@@ -61,6 +61,11 @@ class ChannelBase:
         transcription_started:A callback indicating that the transcription process has started
         transcription_finished: A callback indicating that the transcription process has finished.
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
+
+    Public API:
+        new_user_message: Handles a message coming from the user.
+        new_bot_message: Handles a message coming from the bot.
+        get_chat_id_from_message: Returns the unique identifier of the chat from the message object.
     """
 
     voice_replies_supported = False
@@ -85,19 +90,22 @@ class ChannelBase:
         pass
 
     @property
+    def chat_id(self) -> int:
+        return self.get_chat_id_from_message(self.message)
+
     @abstractmethod
-    def chat_id(self):
-        raise Exception("Not implemented")
+    def get_chat_id_from_message(self, message):
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def message_content_type(self):
-        raise Exception("Not implemented")
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def message_text(self):
-        raise Exception("Not implemented")
+        raise NotImplementedError()
 
     @abstractmethod
     def send_voice_to_user(self, voice_audio, duration):
@@ -119,7 +127,7 @@ class ChannelBase:
     @abstractmethod
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        raise Exception("Not implemented")
+        raise NotImplementedError()
 
     @abstractmethod
     def transcription_started(self):
@@ -333,9 +341,8 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
 
-    @property
-    def chat_id(self) -> int:
-        return self.message.chat_id
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
 
     @property
     def message_content_type(self):
@@ -356,9 +363,8 @@ class TelegramChannel(ChannelBase):
     def initialize(self):
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
-    @property
-    def chat_id(self) -> int:
-        return self.message.chat.id
+    def get_chat_id_from_message(self, message):
+        return message.chat.id
 
     @property
     def message_content_type(self):
@@ -412,9 +418,8 @@ class WhatsappChannel(ChannelBase):
         to_number = self.chat_id
         self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
 
-    @property
-    def chat_id(self) -> int:
-        return self.message.chat_id
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
 
     @property
     def message_content_type(self):
@@ -483,9 +488,8 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
         page_access_token = self.experiment_channel.extra_data["page_access_token"]
         self.client = MessengerClient(page_access_token, api_version=18.0)
 
-    @property
-    def chat_id(self) -> int:
-        return self.message.user_id
+    def get_chat_id_from_message(self, message):
+        return message.user_id
 
     @property
     def message_content_type(self):
