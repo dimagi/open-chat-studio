@@ -9,7 +9,7 @@
       ({{ run.get_status_display }})</p>
   {% endif %}
   {% include "analysis/components/run_logs.html" %}
-  {% if forloop.first %}
+  {% if not run.is_complete %}
     <span class="loading loading-dots loading-md"></span>
   {% endif %}
   <div class="divider divider-info"></div>
