@@ -24,6 +24,9 @@ def run_status_context(run, raise_errors=False):
         yield
         run.status = RunStatus.SUCCESS
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
         run.status = RunStatus.ERROR
         run.error = repr(e)
         if raise_errors:

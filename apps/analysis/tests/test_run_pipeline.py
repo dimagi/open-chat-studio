@@ -4,8 +4,9 @@ from django.core.files.base import ContentFile
 
 from apps.analysis.core import Pipeline
 from apps.analysis.models import Resource, ResourceType, RunStatus
-from apps.analysis.tasks import run_analysis
-from apps.analysis.tests.demo_steps import StrReverse
+from apps.analysis.steps.loaders import ResourceTextLoader
+from apps.analysis.tasks import run_analysis, run_pipline_split
+from apps.analysis.tests.demo_steps import StrReverse, TokenizeStr
 from apps.analysis.tests.factories import RunGroupFactory
 
 INPUT_DATA = "here is some text to play with"
@@ -46,6 +47,34 @@ def test_run_analysis_with_valid_run_group(mock_get_data_pipeline, run_group):
     check_run(runs[1], RunStatus.SUCCESS)
     assert runs[0].output_summary == INPUT_DATA
     assert runs[1].output_summary == INPUT_DATA[::-1]  # reverse the input
+
+
+@mock.patch("apps.analysis.tasks.get_data_pipeline")
+@mock.patch("apps.analysis.tasks.get_source_pipeline")
+def test_run_analysis_with_split_pipeline(mock_get_source_pipeline, mock_get_data_pipeline, run_group):
+    mock_get_source_pipeline.return_value = Pipeline([ResourceTextLoader(), TokenizeStr()])
+    mock_get_data_pipeline.return_value = Pipeline([StrReverse()])
+
+    run_analysis(run_group.id)
+    run_group.refresh_from_db()
+    assert run_group.error == ""
+    assert run_group.status == RunStatus.SUCCESS
+    assert run_group.start_time is not None
+    assert run_group.end_time is not None  # TODO: fixme - end should be none until all runs are complete
+
+    runs = list(run_group.analysisrun_set.all())
+    assert len(runs) == 8
+    check_run(runs[0], RunStatus.SUCCESS)
+    assert f"{len(INPUT_DATA.split())} groups created" in runs[0].output_summary
+
+    # run each step manually since celery isn't running
+    tokens = INPUT_DATA.split()
+    for index, run in enumerate(runs[1:]):
+        run_pipline_split(run.id)
+        run.refresh_from_db()
+        assert run.error == ""
+        check_run(run, RunStatus.SUCCESS)
+        assert run.output_summary == tokens[index][::-1]
 
 
 def check_run(run, status):

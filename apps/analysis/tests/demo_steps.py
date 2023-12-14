@@ -62,3 +62,12 @@ class StrReverse(BaseStep[str, str]):
 
     def run(self, params: Params, data: str) -> StepContext[str]:
         return StepContext(data[::-1])
+
+
+class TokenizeStr(BaseStep[str, str]):
+    input_type = str
+    output_type = str
+
+    def run(self, params: Params, data: str) -> list[StepContext[str]]:
+        words = data.split()
+        return [StepContext(word, name="token") for word in words]
