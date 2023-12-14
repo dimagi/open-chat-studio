@@ -90,7 +90,8 @@ def run_pipline_split(run_id: int):
         "group", "group__team", "group__analysis", "group__analysis__llm_provider"
     ).get(id=run_id)
     resource = run.input_resource
-    run_pipeline(run, run.group.analysis.pipeline, get_data_pipeline, StepContext.initial(resource=resource))
+    step_context = StepContext.initial(resource=resource, name=run.name)
+    run_pipeline(run, run.group.analysis.pipeline, get_data_pipeline, step_context)
 
 
 def run_serial_pipeline(

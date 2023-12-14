@@ -53,7 +53,7 @@ class RunGroupTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "analysis.view_analysis"
 
     def get_queryset(self):
-        return RunGroup.objects.filter(team=self.request.team, analysis=self.kwargs["pk"])
+        return RunGroup.objects.filter(team=self.request.team, analysis=self.kwargs["pk"]).order_by("-created_at")
 
 
 class AnalysisTableView(SingleTableView, PermissionRequiredMixin):

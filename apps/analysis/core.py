@@ -23,7 +23,7 @@ class StepContext(Generic[PipeOut]):
     """Context for a step in a pipeline. This is used as input and output for each step."""
 
     data: PipeOut
-    name: str = "initial"
+    name: str = ""
     metadata: dict = dataclasses.field(default_factory=dict)
     resource: Resource = None
 
@@ -33,8 +33,8 @@ class StepContext(Generic[PipeOut]):
         return self.resource
 
     @classmethod
-    def initial(cls, data: PipeOut = None, resource=None):
-        return cls(data=data, resource=resource)
+    def initial(cls, data: PipeOut = None, resource=None, name: str = "Initial"):
+        return cls(data=data, resource=resource, name=name)
 
     def get_data(self):
         if self.data is not None:
@@ -64,7 +64,7 @@ class PipelineContext:
     def create_resource(self, data: Any, name: str):
         if not self.create_resources:
             return
-        qualified_name = f"{self.run.group.analysis.name}_{self.run.group.id}_{name}"
+        qualified_name = f"{self.run.group.analysis.name}_{self.run.group.id}_{self.run.name}_{name}"
         resource = create_resource_for_data(self.team, data, qualified_name)
         self.run.output_resources.add(resource)
         return resource
@@ -249,11 +249,11 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 self.log.debug(f"Params: {self._params}")
                 result = self.run(self._params, context.get_data())
                 for res in [result] if isinstance(result, StepContext) else result:
+                    if not res.name:
+                        res.name = self.name
                     if self.is_last:
                         # always create resources for last step
                         res.create_resource(self.pipeline_context)
-                    if not res.name:
-                        res.name = self.name
                 return result
         finally:
             self.log.info(f"Step {self.name} complete")
