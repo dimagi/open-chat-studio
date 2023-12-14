@@ -40,10 +40,9 @@ def run_status_context(run, raise_errors=False):
 def run_context(run):
     """Context manager to create the pipeline context and manage run status."""
     log_stream = RunLogStream(run)
-    llm_service = run.group.analysis.llm_provider.get_llm_service()
     params = run.group.params
     params["llm_model"] = run.group.analysis.llm_model
-    pipeline_context = PipelineContext(llm_service, logger=Logger(log_stream), params=params)
+    pipeline_context = PipelineContext(run, log=Logger(log_stream), params=params, create_resources=True)
 
     with run_status_context(run, raise_errors=True):
         yield pipeline_context
@@ -65,12 +64,12 @@ class RunLogStream(LogStream):
 
 @shared_task
 def run_analysis(run_group_id: int):
-    group = RunGroup.objects.get(id=run_group_id)
+    group = RunGroup.objects.select_related("team", "analysis", "analysis__llm_provider").get(id=run_group_id)
 
     with run_status_context(group):
         source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
 
-        if source_result.metadata.get("output_multiple", False) and isinstance(source_result.data, list):
+        if source_result.should_split:
             results = [source_result.clone_with(data) for data in source_result.data]
         else:
             results = [source_result]
@@ -88,15 +87,8 @@ def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=No
         return result
 
 
-def process_pipeline_output(run, result):
-    if result.metadata.get("output_multiple", False) and isinstance(result.data, list):
-        result_data = result.data
-        result.output_summary = f"{len(result_data)} chunks created"
+def process_pipeline_output(run, result: StepContext):
+    if result.should_split:
+        run.output_summary = f"{len(result.data)} groups created"
     else:
-        result_data = [result.data]
         run.output_summary = get_serializer(result.data).get_summary(result.data)
-
-    if result.metadata.get("persist_output", True):
-        for i, data in enumerate(result_data):
-            resource = create_resource_for_data(run.group.team, data, f"{result.name} Output {i}")
-            run.resources.add(resource)

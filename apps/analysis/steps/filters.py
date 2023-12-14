@@ -10,6 +10,7 @@ from pydantic import Field, PositiveInt
 
 from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, required
 from apps.analysis.exceptions import StepError
+from apps.analysis.steps.utils import format_truncated_date
 
 
 class DurationUnit(IntEnum):
@@ -49,6 +50,10 @@ class TimeseriesFilterParams(Params):
     @property
     def end(self):
         return self.range_tuple[1]
+
+    def period_name(self):
+        truncate_to = self.duration_unit.name
+        return f"{format_truncated_date(self.start, truncate_to)}--{format_truncated_date(self.end, truncate_to)}"
 
     def filter(self, date: datetime) -> bool:
         start, end = self.range_tuple
@@ -97,9 +102,10 @@ class TimeseriesFilter(TimeseriesStep):
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 
-    def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> StepContext[pd.DataFrame]:
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
         mask = data.index.isin(pd.date_range(params.start, params.end, inclusive="left"))
         result = data.loc[mask]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
-        return result, {}
+        self.create_resource(result, params.period_name())
+        return StepContext(result)

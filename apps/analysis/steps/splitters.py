@@ -1,4 +1,3 @@
-from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -6,8 +5,9 @@ import pandas as pd
 from pandas.api import types as ptypes
 from pandas.core.resample import TimeGrouper
 
-from ..core import BaseStep, Params, ParamsForm, StepContext, required
-from ..exceptions import StepError
+from apps.analysis.core import BaseStep, Params, ParamsForm, StepContext, required
+from apps.analysis.exceptions import StepError
+from apps.analysis.steps.utils import format_truncated_date
 
 
 class TimeGroup(StrEnum):
@@ -20,8 +20,8 @@ class TimeGroup(StrEnum):
     quarterly = "Q"
     yearly = "Y"
 
-    def get_group_value(self, timestamp) -> pd.Period:
-        return timestamp.to_period(self.value)
+    def get_group_name(self, timestamp) -> str:
+        return format_truncated_date(timestamp, self.name)
 
 
 class TimeseriesSplitterParams(Params):
@@ -50,7 +50,7 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
         if not ptypes.is_datetime64_any_dtype(context.data.index):
             raise StepError("Dataframe must have a datetime index")
 
-    def run(self, params: TimeseriesSplitterParams, data: pd.DataFrame) -> tuple[list[pd.DataFrame], dict]:
+    def run(self, params: TimeseriesSplitterParams, data: pd.DataFrame) -> StepContext[list[pd.DataFrame]]:
         grouped = data.groupby(params.grouper)
         groups = []
         names = []
@@ -58,9 +58,12 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
             if params.ignore_empty_groups and not len(group):
                 continue
             groups.append(group)
-            names.append(str(params.time_group.get_group_value(origin)))
+            name = params.time_group.get_group_name(origin)
+            names.append(name)
+            self.create_resource(group, f"split_{name}")
 
         self.log.info(f"Split timeseries data into {len(groups)} groups")
         for i, (name, group) in enumerate(zip(names, groups)):
             self.log.info(f"    Group {i + 1}: {name} ({len(group)} rows)")
-        return groups, {"names": names, "output_multiple": True}
+
+        return StepContext(groups, is_multiple=True, metadata={"names": names})

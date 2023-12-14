@@ -12,7 +12,7 @@ from apps.analysis.steps.loaders import ResourceDataframeLoader, ResourceLoaderP
 @pytest.fixture
 def resource_dataframe_loader():
     step = ResourceDataframeLoader()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 
@@ -47,9 +47,9 @@ def get_params(resource):
 def test_resource_dataframe_loader(resource_type, raw_data, expected, resource_dataframe_loader):
     resource = make_resource(resource_type, raw_data)
     params = get_params(resource)
-    data, _ = resource_dataframe_loader.load(params)
-    assert isinstance(data, pd.DataFrame)
-    assert data.to_csv(index=False) == expected
+    result = resource_dataframe_loader.load(params)
+    assert isinstance(result.data, pd.DataFrame)
+    assert result.data.to_csv(index=False) == expected
 
 
 def test_resource_dataframe_loader_raises_error_with_invalid_resource_type(resource_dataframe_loader):

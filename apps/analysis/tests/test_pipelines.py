@@ -11,14 +11,14 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
     [
         (
             Pipeline([Multiply(params=FactorSay(factor=3)), Divide(params=FactorSay(factor=2))]),
-            PipelineContext(None),
+            PipelineContext(),
             StepContext[int](10),
             15,
         ),
         # params passed from previous step
         (
             Pipeline([SetFactor(params=FactorSay(factor=3)), Multiply()]),
-            PipelineContext(None),
+            PipelineContext(),
             StepContext[int](2),
             6,
         ),
@@ -31,7 +31,7 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
                     Divide(),  # / 4  (param from previous step)
                 ]
             ),
-            PipelineContext(None, params={"factor": 2}),
+            PipelineContext(params={"factor": 2}),
             StepContext[int](2),
             3,
         ),
@@ -52,7 +52,7 @@ def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
 )
 def test_params(params, context, expected):
     step = Divide(params)
-    step.initialize(PipelineContext(None, params=context))
+    step.initialize(PipelineContext(params=context))
     assert step._params == expected
 
 

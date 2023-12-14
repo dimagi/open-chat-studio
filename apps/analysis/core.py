@@ -1,13 +1,18 @@
 import dataclasses
 from abc import abstractmethod
+from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
 
 from django import forms
 from pydantic import BaseModel
 
-from ..service_providers.llm_service import LlmService
+from apps.service_providers.llm_service import LlmService
+from apps.teams.models import Team
+
 from .exceptions import StepError
 from .log import Logger
+from .models import AnalysisRun
+from .serializers import create_resource_for_data
 
 PipeIn = TypeVar("PipeIn", contravariant=True)
 PipeOut = TypeVar("PipeOut", covariant=True)
@@ -19,26 +24,48 @@ class StepContext(Generic[PipeOut]):
 
     data: PipeOut
     name: str = "start"
+    is_multiple: bool = False
     metadata: dict = dataclasses.field(default_factory=dict)
+    resources: list = dataclasses.field(default_factory=list)
 
     @classmethod
     def initial(cls, data: PipeOut = None):
-        return cls(data, "start", {})
+        return cls(data)
 
     def clone_with(self, data: PipeOut = None):
         if data is None:
             data = self.data
         return dataclasses.replace(self, data=data)
 
+    @property
+    def should_split(self):
+        return self.is_multiple and isinstance(self.data, list)
 
+
+@dataclasses.dataclass
 class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
-    def __init__(self, llm_service: LlmService, logger: Logger = None, params: dict = None):
-        self.llm_service = llm_service
-        self.log = logger or Logger()
-        self.params = params or {}
-        self.llm_provider = None
+    run: AnalysisRun = None
+    log: Logger = dataclasses.field(default_factory=Logger)
+    params: dict = dataclasses.field(default_factory=dict)
+    create_resources: bool = False
+
+    @cached_property
+    def llm_service(self) -> LlmService:
+        return self.run.group.analysis.llm_provider.get_llm_service()
+
+    @cached_property
+    def team(self) -> Team:
+        return self.run.group.team
+
+    def create_resource(self, data: Any, name: str):
+        if not self.create_resources:
+            return
+        qualified_name = f"{self.run.group.analysis.name}_{self.run.id}_{name}"
+        resource = create_resource_for_data(self.team, data, qualified_name)
+        self.run.resources.add(resource)
+        return resource
 
 
 class Step(Protocol[PipeIn, PipeOut]):
@@ -47,7 +74,7 @@ class Step(Protocol[PipeIn, PipeOut]):
     input_type: ClassVar
     output_type: ClassVar
 
-    def initialize(self, pipeline_context: PipelineContext):
+    def initialize(self, pipeline_context: PipelineContext, step_count: int, current_step_index: int):
         ...
 
     @abstractmethod
@@ -86,8 +113,9 @@ class Pipeline:
 
     def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext:
         self.context_chain.append(initial_context)
-        for step in self.steps:
-            step.initialize(pipeline_context)
+        step_count = len(self.steps)
+        for index, step in enumerate(self.steps):
+            step.initialize(pipeline_context, step_count, index)
             out_context = step(self.context_chain[-1])
             self.context_chain.append(out_context)
         return self.context_chain[-1]
@@ -186,7 +214,11 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     def __init__(self, params: Params = None):
         self._params = params or self.param_schema()
-        self.pipeline_context = None
+        self.pipeline_context: PipelineContext | None = None
+        self.step_count = -1
+        self.current_step_index = -1
+        self.is_last = False
+        self.resources = []
 
     @property
     def log(self):
@@ -196,9 +228,12 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def name(self):
         return self.__class__.__name__
 
-    def initialize(self, pipeline_context: PipelineContext):
+    def initialize(self, pipeline_context: PipelineContext, step_count: int = 1, current_step_index: int = 0):
         self.pipeline_context = pipeline_context
         self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        self.step_count = step_count
+        self.current_step_index = current_step_index
+        self.is_last = current_step_index == step_count - 1
 
     def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
         self.log.info(f"Running step {self.name}")
@@ -208,15 +243,28 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 self.preflight_check(context)
 
                 self.log.debug(f"Params: {self._params}")
-                output, metadata = self.run(self._params, context.data)
-                return StepContext(output, self.name, metadata)
+                result = self.run(self._params, context.data)
+                result.name = self.name
+                result.resources = self.resources
+                return result
         finally:
             self.log.info(f"Step {self.name} complete")
 
-    def run(self, params: Params, data: PipeIn) -> tuple[PipeOut, dict]:
+    def run(self, params: Params, data: PipeIn) -> StepContext[PipeOut]:
         """Run the step and return the output data and metadata."""
         raise NotImplementedError
 
     def preflight_check(self, context: StepContext):
         """Perform any preflight checks on the input data or pipeline context."""
         pass
+
+    def create_resource(self, data: Any, name: str, force=False):
+        """Create a Resource for the data and add it to the step.
+        This will only create resources if the pipeline context is configured to do so and this step is the last
+        step in the pipeline (or force=True).
+        """
+
+        if force or self.is_last:
+            resource = self.pipeline_context.create_resource(data, name)
+            if resource:
+                self.resources.append(resource)

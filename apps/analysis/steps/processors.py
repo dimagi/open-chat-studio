@@ -11,7 +11,7 @@ from pydantic import model_validator
 
 import apps.analysis.exceptions
 from apps.analysis import core
-from apps.analysis.core import ParamsForm, required
+from apps.analysis.core import ParamsForm, StepContext, required
 
 
 class PromptParams(core.Params):
@@ -54,11 +54,11 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
     input_type = Any
     output_type = str
 
-    def run(self, params: LlmCompletionStepParams, data: Any) -> tuple[str, dict]:
+    def run(self, params: LlmCompletionStepParams, data: Any) -> StepContext[str]:
         llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
         prompt = params.prompt_template.format_prompt(data=data)
         result = llm.invoke(prompt)
-        return result.content, {"persist_output": False}
+        return StepContext(result.content)
 
 
 class AssistantParams(PromptParams):
@@ -95,7 +95,7 @@ class AssistantStep(core.BaseStep[Any, str]):
 
         self.client = self.pipeline_context.llm_service.get_raw_client()
 
-    def run(self, params: AssistantParams, data: Any) -> tuple[str, dict]:
+    def run(self, params: AssistantParams, data: Any) -> StepContext[str]:
         result = AssistantOutput()
         prompt = params.prompt_template.format_prompt(data=data)
         thread = self.client.beta.threads.create(
@@ -122,7 +122,7 @@ class AssistantStep(core.BaseStep[Any, str]):
 
         result.response = self._process_messages(result, thread.id)
         # TODO: Record files
-        return result.response, {"thread_id": thread.id, "run_id": run.id}
+        return StepContext(result.response, metadata={"thread_id": thread.id, "run_id": run.id})
 
     def _process_messages(self, result: AssistantOutput, thread_id: str) -> str:
         messages = list(self.client.beta.threads.messages.list(thread_id=thread_id, order="asc"))

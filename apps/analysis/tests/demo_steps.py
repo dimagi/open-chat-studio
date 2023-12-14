@@ -1,6 +1,6 @@
 from typing import Any
 
-from apps.analysis.core import BaseStep, Params, required
+from apps.analysis.core import BaseStep, Params, StepContext, required
 
 
 class FactorSay(Params):
@@ -13,10 +13,10 @@ class Multiply(BaseStep[int, int]):
     input_type = int
     output_type = int
 
-    def run(self, params: FactorSay, data: int) -> tuple[int, dict]:
+    def run(self, params: FactorSay, data: int) -> StepContext[int]:
         if params.say:
             self.log.debug(params.say)
-        return data * params.factor, {"some": "metadata"}
+        return StepContext(data * params.factor, metadata={"some": "metadata"})
 
 
 class Divide(BaseStep[int, int]):
@@ -24,10 +24,10 @@ class Divide(BaseStep[int, int]):
     input_type = int
     output_type = int
 
-    def run(self, params: FactorSay, data: int) -> tuple[int, dict]:
+    def run(self, params: FactorSay, data: int) -> StepContext[int]:
         if params.say:
             self.log.debug(params.say)
-        return data / params.factor, {}
+        return StepContext(data / params.factor)
 
 
 class SetFactor(BaseStep[Any, Any]):
@@ -35,30 +35,30 @@ class SetFactor(BaseStep[Any, Any]):
     input_type = Any
     output_type = Any
 
-    def run(self, params: FactorSay, data: Any) -> tuple[Any, dict]:
+    def run(self, params: FactorSay, data: Any) -> StepContext[Any]:
         self.pipeline_context.params["factor"] = params.factor
-        return data, {}
+        return StepContext(data)
 
 
 class StrInt(BaseStep[str, int]):
     input_type = str
     output_type = int
 
-    def run(self, params: Params, data: str) -> tuple[int, dict]:
-        return int(data), {}
+    def run(self, params: Params, data: str) -> StepContext[int]:
+        return StepContext(int(data))
 
 
 class IntStr(BaseStep[int, str]):
     input_type = int
     output_type = str
 
-    def run(self, params: Params, data: int) -> tuple[str, dict]:
-        return str(data), {}
+    def run(self, params: Params, data: int) -> StepContext[str]:
+        return StepContext(str(data))
 
 
 class StrReverse(BaseStep[str, str]):
     input_type = str
     output_type = str
 
-    def run(self, params: Params, data: str) -> tuple[str, dict]:
-        return data[::-1], {}
+    def run(self, params: Params, data: str) -> StepContext[str]:
+        return StepContext(data[::-1])

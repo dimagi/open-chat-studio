@@ -7,7 +7,7 @@ from apps.analysis.core import PipelineContext
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
-def _make_params(duration_unit, duration_value, anchor_type, anchor_point=None):
+def _make_params(duration_unit, duration_value, anchor_type="this", anchor_point=None):
     return TimeseriesFilterParams(
         duration_unit=duration_unit,
         duration_value=duration_value,
@@ -104,6 +104,22 @@ def test_timeseries_filter_params(params, start, end):
     assert params.end == datetime.fromisoformat(end)
 
 
+@pytest.mark.parametrize(
+    "unit, value, expected",
+    [
+        (DurationUnit.minutes, 7, "2022-04-01T15:36--2022-04-01T15:43"),
+        (DurationUnit.hours, 7, "2022-04-01T15--2022-04-01T22"),
+        (DurationUnit.days, 7, "2022-04-01--2022-04-08"),
+        (DurationUnit.weeks, 7, "2022-W13--2022-W20"),
+        (DurationUnit.months, 7, "2022-04--2022-11"),
+        (DurationUnit.years, 7, "2022--2029"),
+    ],
+)
+def test_timeseries_filter_params_period_name(unit, value, expected):
+    params = _make_params(unit, value, anchor_point="2022-04-01T15:36:45.123456")
+    assert params.period_name() == expected
+
+
 @pytest.fixture
 def timeseries_data():
     dates = pd.date_range(start="2021-01-01", end="2021-01-31")
@@ -114,7 +130,7 @@ def timeseries_data():
 @pytest.fixture
 def timeseries_filter():
     step = TimeseriesFilter()
-    step.initialize(PipelineContext(None))
+    step.initialize(PipelineContext())
     return step
 
 
@@ -125,16 +141,16 @@ def test_timeseries_filter_with_valid_params(timeseries_filter, timeseries_data)
         anchor_type="this",
         anchor_point=datetime.fromisoformat("2021-01-02"),
     )
-    filtered_data, _ = timeseries_filter.run(params, timeseries_data)
-    assert len(filtered_data) == 7
-    assert filtered_data["value"].tolist() == list(range(1, 8))
+    result = timeseries_filter.run(params, timeseries_data)
+    assert len(result.data) == 7
+    assert result.data["value"].tolist() == list(range(1, 8))
 
 
 def test_timeseries_filter_with_empty_data(timeseries_filter):
     params = TimeseriesFilterParams(duration_unit=DurationUnit.days, duration_value=7, anchor_type="this")
     empty_data = pd.DataFrame()
-    filtered_data, _ = timeseries_filter.run(params, empty_data)
-    assert len(filtered_data) == 0
+    result = timeseries_filter.run(params, empty_data)
+    assert len(result.data) == 0
 
 
 def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data):
@@ -144,5 +160,5 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
         anchor_type="this",
         anchor_point=datetime.now() + timedelta(days=10),
     )
-    filtered_data, _ = timeseries_filter.run(params, timeseries_data)
-    assert len(filtered_data) == 0
+    result = timeseries_filter.run(params, timeseries_data)
+    assert len(result.data) == 0
