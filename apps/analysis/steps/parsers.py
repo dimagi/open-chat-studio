@@ -14,7 +14,7 @@ class WhatsappParserParams(Params):
     remove_system_messages: bool = True
     remove_media_omitted_messages: bool = True
 
-    def get_form_class(self):
+    def get_dynamic_config_form_class(self):
         from apps.analysis.steps.forms import WhatsappParserParamsForm
 
         return WhatsappParserParamsForm

@@ -53,12 +53,18 @@ class Analysis(BaseTeamModel):
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
+    config = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
 
     def __str__(self):
         return self.name
 
     def get_absolute_url(self):
         return reverse("analysis:details", args=[self.team.slug, self.id])
+
+    def needs_configuration(self):
+        from apps.analysis.pipelines import get_static_forms_for_analysis
+
+        return not self.config and get_static_forms_for_analysis(self)
 
 
 class RunStatus(models.TextChoices):

@@ -1,7 +1,7 @@
 from apps.analysis.steps.loaders import ResourceTextLoader
 from apps.analysis.steps.parsers import WhatsappParser
 
-from .core import ParamsForm, Pipeline, Step
+from .core import ParamsForm, Pipeline
 from .steps.filters import TimeseriesFilter
 from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
@@ -93,6 +93,25 @@ def get_data_pipeline(name: str) -> Pipeline:
     return PIPELINES[name].build()
 
 
-def get_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
-    forms_by_step = {step.name: step.param_schema().get_form_class() for step in pipeline.steps}
+def get_static_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
+    forms_by_step = {step.name: step.param_schema().get_static_config_form_class() for step in pipeline.steps}
     return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+
+
+def get_dynamic_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
+    forms_by_step = {step.name: step.param_schema().get_dynamic_config_form_class() for step in pipeline.steps}
+    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+
+
+def get_static_forms_for_analysis(analysis):
+    return {
+        **get_static_param_forms(get_source_pipeline(analysis.source)),
+        **get_static_param_forms(get_data_pipeline(analysis.pipeline)),
+    }
+
+
+def get_dynamic_forms_for_analysis(analysis):
+    return {
+        **get_dynamic_param_forms(get_source_pipeline(analysis.source)),
+        **get_dynamic_param_forms(get_data_pipeline(analysis.pipeline)),
+    }

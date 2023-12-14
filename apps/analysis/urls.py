@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.analysis_home, name="home"),
     path("new/", views.CreateAnalysisPipeline.as_view(), name="new"),
     path("<int:pk>/", views.analysis_details, name="details"),
+    path("<int:pk>/configure/", views.analysis_configure, name="configure"),
     path("<int:pk>/edit/", views.EditAnalysisPipeline.as_view(), name="edit"),
     path("<int:pk>/delete/", views.delete_analysis, name="delete"),
     path("<int:pk>/run_groups_table/", views.RunGroupTableView.as_view(), name="runs_table"),

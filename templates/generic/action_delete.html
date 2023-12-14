@@ -1,7 +1,5 @@
-{% if record.can_delete|default_if_none:True %}
-<button class="btn btn-sm btn-ghost"
+<button class="btn btn-sm btn-ghost" {% if disabled %}disabled="disabled"{% endif %}>
         hx-delete="{% url url_name request.team.slug record.id %}"
         hx-target="#record-{{ record.id }}">
     <i class="fa fa-trash"></i>
 </button>
-{% endif %}
