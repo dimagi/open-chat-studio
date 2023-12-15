@@ -10,12 +10,11 @@ from apps.analysis.models import Resource, ResourceMetadata
 
 
 def create_resource_for_data(team, data: Any, name: str) -> Resource:
-    serializer = get_serializer(data)
+    serializer = get_serializer_by_type(data)
     metadata = serializer.get_metadata(data)
-    time_suffix = timezone.now().replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
     resource = Resource(
         team=team,
-        name=f"{name} {time_suffix}",
+        name=name,
         type=metadata.format,
         metadata=metadata.model_dump(),
     )
@@ -31,6 +30,7 @@ class Serializer:
     """Base class for serializing data output from a pipeline step"""
 
     supported_types: list[type] = None
+    supported_type_names: list[str] = None
     """Data types supported by this serializer"""
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
@@ -52,6 +52,7 @@ class Serializer:
 
 class BasicTypeSerializer(Serializer):
     supported_types = [str, dict, list]
+    supported_type_names = [d.__name__ for d in supported_types]
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
         return json.loads(file.read())["data"]
@@ -70,6 +71,7 @@ class BasicTypeSerializer(Serializer):
 
 class DataFramesSerializer(Serializer):
     supported_types = [pd.DataFrame]
+    supported_type_names = ["dataframe"]
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
         date_cols = [field["name"] for field in metadata.data_schema["fields"] if field["type"] == "datetime"]
@@ -99,8 +101,15 @@ class DataFramesSerializer(Serializer):
         return str(data)
 
 
-def get_serializer(data: Any) -> Serializer:
+def get_serializer_by_type(data: Any) -> Serializer:
     for serializer in [BasicTypeSerializer, DataFramesSerializer]:
         if type(data) in serializer.supported_types:
             return serializer()
     raise NotImplementedError(f"No serializer found for {type(data)}")
+
+
+def get_serializer_by_name(type_name: str) -> Serializer:
+    for serializer in [BasicTypeSerializer, DataFramesSerializer]:
+        if type_name in serializer.supported_type_names:
+            return serializer()
+    raise NotImplementedError(f"No serializer found for {type_name}")

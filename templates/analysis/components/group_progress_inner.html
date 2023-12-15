@@ -1,14 +1,15 @@
 {% if not runs %}
-<span class="loading loading-dots loading-md"></span>
+  <span class="loading loading-dots loading-md"></span>
 {% endif %}
 {% for run in runs reversed %}
-  {% if forloop.first %}
-  <p class="my-2 font-medium">Source Pipeline ({{ run.get_status_display }})</p>
+  {% if forloop.last %}
+    <p class="my-2 font-medium">Source Pipeline ({{ run.get_status_display }})</p>
   {% else %}
-  <p class="my-2 font-medium">Analysis Pipeline {{ forloop.revcounter0 }} ({{ run.get_status_display }})</p>
+    <p class="my-2 font-medium">{{ run.name }}: Analysis Pipeline {{ forloop.revcounter0 }}
+      ({{ run.get_status_display }})</p>
   {% endif %}
   {% include "analysis/components/run_logs.html" %}
-  {% if forloop.first %}
+  {% if not run.is_complete %}
     <span class="loading loading-dots loading-md"></span>
   {% endif %}
   <div class="divider divider-info"></div>

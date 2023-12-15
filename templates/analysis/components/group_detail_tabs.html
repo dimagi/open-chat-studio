@@ -12,7 +12,7 @@
             {% if forloop.first %}
               Source Pipeline
             {% else %}
-              Analysis Pipeline {{ forloop.counter0 }}
+              {{ run.name }}: Analysis Pipeline {{ forloop.counter0 }}
             {% endif %}
           </h2>
           <div id="run-status">{% include "analysis/components/run_status.html" %}</div>

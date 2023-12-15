@@ -1,50 +1,59 @@
 import logging
-import time
 from contextlib import contextmanager
 
+from celery import chord
+from celery import group as celery_group
 from celery import shared_task
 from django.utils import timezone
 
 from apps.analysis.core import PipelineContext, StepContext
-from apps.analysis.log import LogEntry, Logger, LogLevel, LogStream
+from apps.analysis.log import LogEntry, Logger, LogStream
 from apps.analysis.models import AnalysisRun, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
-from apps.analysis.serializers import create_resource_for_data, get_serializer
+from apps.analysis.serializers import get_serializer_by_type
 
 log = logging.getLogger(__name__)
 
 
-@contextmanager
-def run_status_context(run, raise_errors=False):
-    """Context manager to simplify updating status and start / end times as well as error handling."""
-    run.start_time = timezone.now()
-    run.status = RunStatus.RUNNING
-    run.save()
+class PipelineSplitSignal(Exception):
+    """Exception used to signal that the pipeline has split"""
 
-    try:
-        yield
-        run.status = RunStatus.SUCCESS
-    except Exception as e:
-        run.status = RunStatus.ERROR
-        run.error = repr(e)
-        if raise_errors:
-            raise
-        else:
+    pass
+
+
+class RunStatusContext:
+    def __init__(self, run: RunGroup | AnalysisRun, bubble_errors=True):
+        self.run = run
+        self.bubble_errors = bubble_errors
+
+    def __enter__(self):
+        self.run.start_time = timezone.now()
+        self.run.status = RunStatus.RUNNING
+        self.run.save()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            if exc_type == PipelineSplitSignal:
+                return True
             log.exception("Error running analysis")
-    finally:
-        run.end_time = timezone.now()
-        run.save()
+            self.run.status = RunStatus.ERROR
+            self.run.error = repr(exc_val)
+        else:
+            self.run.status = RunStatus.SUCCESS
+        self.run.end_time = timezone.now()
+        self.run.save()
+        return not self.bubble_errors
 
 
 @contextmanager
-def run_context(run):
+def run_context(run, bubble_errors=True):
     """Context manager to create the pipeline context and manage run status."""
     log_stream = RunLogStream(run)
     params = run.group.params
     params["llm_model"] = run.group.analysis.llm_model
     pipeline_context = PipelineContext(run, log=Logger(log_stream), params=params, create_resources=True)
 
-    with run_status_context(run, raise_errors=True):
+    with RunStatusContext(run, bubble_errors=bubble_errors):
         yield pipeline_context
 
 
@@ -66,29 +75,87 @@ class RunLogStream(LogStream):
 def run_analysis(run_group_id: int):
     group = RunGroup.objects.select_related("team", "analysis", "analysis__llm_provider").get(id=run_group_id)
 
-    with run_status_context(group):
-        source_result = run_pipeline(group, group.analysis.source, get_source_pipeline)
+    with RunStatusContext(group):
+        source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
-        if source_result.should_split:
-            results = [source_result.clone_with(data) for data in source_result.data]
+        if isinstance(source_result, list) and len(source_result) > 1:
+            run_parallel_pipeline(group, source_result)
+            raise PipelineSplitSignal()
         else:
-            results = [source_result]
-
-        for result in results:
-            run_pipeline(group, group.analysis.pipeline, get_data_pipeline, context=result)
+            next_intput = source_result[0] if isinstance(source_result, list) else source_result
+            run_serial_pipeline(group, group.analysis.pipeline, get_data_pipeline, next_intput)
 
 
-def run_pipeline(group: RunGroup, pipeline_id: str, pipeline_factory, context=None) -> StepContext:
-    run = AnalysisRun.objects.create(group=group)
-    with run_context(run) as pipeline_context:
+def run_parallel_pipeline(group, contexts):
+    tasks = []
+    for context in contexts:
+        assert context.resource, "Parallel pipeline requires resource to be created by source pipeline"
+        run = AnalysisRun.objects.create(name=context.name, group=group, input_resource=context.resource)
+        tasks.append(run_pipline_split.s(run.id))
+
+    task_group = celery_group(tasks)
+    callback_chord = chord(task_group, update_group_run_status.s(group_id=group.id))
+    callback_chord.link_error(on_chord_error.s(group_id=group.id))
+    callback_chord.apply_async()
+
+
+@shared_task
+def update_group_run_status(task_results, group_id: int):
+    group = RunGroup.objects.get(id=group_id)
+    group_status = (
+        RunStatus.ERROR
+        if any(status == RunStatus.ERROR for status in group.analysisrun_set.values_list("status", flat=True))
+        else RunStatus.SUCCESS
+    )
+    group.status = group_status
+    group.end_time = timezone.now()
+    group.save()
+
+
+@shared_task
+def on_chord_error(request, exc, traceback, group_id: int):
+    group = RunGroup.objects.get(id=group_id)
+    group.status = RunStatus.ERROR
+    group.error = repr(exc)
+    group.end_time = timezone.now()
+    group.save()
+
+
+@shared_task(bind=True)
+def run_pipline_split(self, run_id: int):
+    run = AnalysisRun.objects.select_related(
+        "group", "group__team", "group__analysis", "group__analysis__llm_provider"
+    ).get(id=run_id)
+    run.task_id = self.request.id
+    run.save()
+
+    resource = run.input_resource
+    step_context = StepContext.initial(resource=resource, name=run.name)
+    run_pipeline(run, run.group.analysis.pipeline, get_data_pipeline, step_context, bubble_errors=False)
+
+
+def run_serial_pipeline(
+    group: RunGroup, pipeline_id: str, pipeline_factory, context
+) -> StepContext | list[StepContext]:
+    run = AnalysisRun.objects.create(name=context.name, group=group)
+    return run_pipeline(run, pipeline_id, pipeline_factory, context)
+
+
+def run_pipeline(
+    run: AnalysisRun, pipeline_id: str, pipeline_factory, context, bubble_errors=True
+) -> StepContext | list[StepContext]:
+    with run_context(run, bubble_errors=bubble_errors) as pipeline_context:
         pipeline = pipeline_factory(pipeline_id)
-        result = pipeline.run(pipeline_context, context or StepContext.initial())
-        process_pipeline_output(run, result)
+        result = pipeline.run(pipeline_context, context)
+        process_pipeline_output(pipeline_context, result)
         return result
 
 
-def process_pipeline_output(run, result: StepContext):
-    if result.should_split:
-        run.output_summary = f"{len(result.data)} groups created"
+def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext):
+    run = pipeline_context.run
+    if isinstance(result, list):
+        run.output_summary = f"{len(result)} groups created"
+        for res in result:
+            run.output_summary += f"\n  - {res.name}"
     else:
-        run.output_summary = get_serializer(result.data).get_summary(result.data)
+        run.output_summary = get_serializer_by_type(result.data).get_summary(result.data)

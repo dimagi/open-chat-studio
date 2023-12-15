@@ -107,5 +107,4 @@ class TimeseriesFilter(TimeseriesStep):
         mask = data.index.isin(pd.date_range(params.start, params.end, inclusive="left"))
         result = data.loc[mask]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
-        self.create_resource(result, params.period_name())
-        return StepContext(result)
+        return StepContext(result, name=params.period_name())

@@ -26,6 +26,9 @@ class ResourceMetadata(pydantic.BaseModel):
     format: str
     data_schema: dict
 
+    def get_label(self):
+        return f"{self.type} ({self.format})"
+
 
 class Resource(BaseTeamModel):
     name = models.CharField(max_length=255)
@@ -41,6 +44,10 @@ class Resource(BaseTeamModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_type_display()})"
+
+    @property
+    def wrapped_metadata(self):
+        return ResourceMetadata(**self.metadata)
 
 
 class Analysis(BaseTeamModel):
@@ -126,11 +133,13 @@ class RunGroup(BaseRun):
 
 
 class AnalysisRun(BaseRun):
+    name = models.CharField(max_length=255, blank=True)
     group = models.ForeignKey(RunGroup, on_delete=models.CASCADE)
     output_summary = models.TextField(blank=True)
     log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
     metadata = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    resources = models.ManyToManyField(Resource)
+    input_resource = models.ForeignKey(Resource, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    output_resources = models.ManyToManyField(Resource, related_name="+")
 
     def __str__(self):
         return f"{self.group.analysis.name}: {self.id}"

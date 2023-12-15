@@ -11,8 +11,8 @@ from apps.teams.models import Team
 
 from .exceptions import StepError
 from .log import Logger
-from .models import AnalysisRun
-from .serializers import create_resource_for_data
+from .models import AnalysisRun, Resource
+from .serializers import create_resource_for_data, get_serializer_by_name
 
 PipeIn = TypeVar("PipeIn", contravariant=True)
 PipeOut = TypeVar("PipeOut", covariant=True)
@@ -23,23 +23,25 @@ class StepContext(Generic[PipeOut]):
     """Context for a step in a pipeline. This is used as input and output for each step."""
 
     data: PipeOut
-    name: str = "start"
-    is_multiple: bool = False
+    name: str = ""
     metadata: dict = dataclasses.field(default_factory=dict)
-    resources: list = dataclasses.field(default_factory=list)
+    resource: Resource = None
+
+    def create_resource(self, context: "PipelineContext"):
+        if not self.resource:
+            self.resource = context.create_resource(self.data, self.name)
+        return self.resource
 
     @classmethod
-    def initial(cls, data: PipeOut = None):
-        return cls(data)
+    def initial(cls, data: PipeOut = None, resource=None, name: str = "Initial"):
+        return cls(data=data, resource=resource, name=name)
 
-    def clone_with(self, data: PipeOut = None):
-        if data is None:
-            data = self.data
-        return dataclasses.replace(self, data=data)
-
-    @property
-    def should_split(self):
-        return self.is_multiple and isinstance(self.data, list)
+    def get_data(self):
+        if self.data is not None:
+            return self.data
+        if self.resource:
+            metadata = self.resource.wrapped_metadata
+            return get_serializer_by_name(metadata.type).read(self.resource.file, metadata)
 
 
 @dataclasses.dataclass
@@ -62,9 +64,9 @@ class PipelineContext:
     def create_resource(self, data: Any, name: str):
         if not self.create_resources:
             return
-        qualified_name = f"{self.run.group.analysis.name}_{self.run.id}_{name}"
+        qualified_name = f"{self.run.group.analysis.name}_{self.run.group.id}_{self.run.name}_{name}"
         resource = create_resource_for_data(self.team, data, qualified_name)
-        self.run.resources.add(resource)
+        self.run.output_resources.add(resource)
         return resource
 
 
@@ -111,10 +113,12 @@ class Pipeline:
             if step.output_type != Any:
                 current_out_type = step.output_type
 
-    def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext:
+    def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext | list[StepContext]:
         self.context_chain.append(initial_context)
         step_count = len(self.steps)
         for index, step in enumerate(self.steps):
+            # TODO: handle splitting the pipeline if step returns list
+            assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
             step.initialize(pipeline_context, step_count, index)
             out_context = step(self.context_chain[-1])
             self.context_chain.append(out_context)
@@ -240,7 +244,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self.current_step_index = current_step_index
         self.is_last = current_step_index == step_count - 1
 
-    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
+    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         self.log.info(f"Running step {self.name}")
         try:
             with self.log(self.name):
@@ -248,14 +252,18 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 self.preflight_check(context)
 
                 self.log.debug(f"Params: {self._params}")
-                result = self.run(self._params, context.data)
-                result.name = self.name
-                result.resources = self.resources
+                result = self.run(self._params, context.get_data())
+                for res in [result] if isinstance(result, StepContext) else result:
+                    if not res.name:
+                        res.name = self.name
+                    if self.is_last:
+                        # always create resources for last step
+                        res.create_resource(self.pipeline_context)
                 return result
         finally:
             self.log.info(f"Step {self.name} complete")
 
-    def run(self, params: Params, data: PipeIn) -> StepContext[PipeOut]:
+    def run(self, params: Params, data: PipeIn) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""
         raise NotImplementedError
 
@@ -273,3 +281,4 @@ class BaseStep(Generic[PipeIn, PipeOut]):
             resource = self.pipeline_context.create_resource(data, name)
             if resource:
                 self.resources.append(resource)
+            return resource

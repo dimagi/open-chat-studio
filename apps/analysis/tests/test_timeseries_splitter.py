@@ -34,8 +34,8 @@ def test_timeseries_splitter_splits_data_into_correct_groups(
 ):
     params = TimeseriesSplitterParams(time_group=time_group, origin="start")
     result = timeseries_splitter.run(params, timeseries_data)
-    assert len(result.data) == expected_groups
-    assert [len(group) for group in result.data] == group_lengths
+    assert len(result) == expected_groups
+    assert [len(res.data) for res in result] == group_lengths
 
 
 @pytest.mark.parametrize(
@@ -55,9 +55,9 @@ def test_timeseries_splitter_splits_data_into_correct_groups_with_origin(origin,
 
     params = TimeseriesSplitterParams(time_group=TimeGroup.hourly, origin=origin)
     result = timeseries_splitter.run(params, data)
-    assert len(result.data) == 2
-    assert list(result.data[0].index) == [pd.Timestamp(d) for d in expected_groups[0]]
-    assert list(result.data[1].index) == [pd.Timestamp(d) for d in expected_groups[1]]
+    assert len(result) == 2
+    assert list(result[0].data.index) == [pd.Timestamp(d) for d in expected_groups[0]]
+    assert list(result[1].data.index) == [pd.Timestamp(d) for d in expected_groups[1]]
 
 
 def test_timeseries_splitter_raises_error_with_non_datetime_index(timeseries_splitter):
@@ -82,7 +82,7 @@ def test_timeseries_splitter_ignores_empty_groups(ignore_empty, group_count, tim
     ]
     data = DataFrame(index=dates, data={"value": range(len(dates))})
     result = timeseries_splitter.run(params, data)
-    assert len(result.data) == group_count
+    assert len(result) == group_count
 
 
 @pytest.mark.parametrize(

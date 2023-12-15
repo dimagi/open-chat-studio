@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
-from apps.analysis.tasks import run_context, run_status_context
+from apps.analysis.tasks import PipelineSplitSignal, RunStatusContext, run_context
 from apps.service_providers.models import LlmProvider
 
 
@@ -88,10 +88,29 @@ def test_run_context_error(mock_analysis_run):
     assert mock_analysis_run.error == """Exception('test exception')"""
 
 
+def test_run_status_context(mock_run_group):
+    with RunStatusContext(mock_run_group):
+        assert mock_run_group.start_time is not None
+        assert mock_run_group.status == RunStatus.RUNNING
+
+    assert mock_run_group.end_time is not None
+    assert mock_run_group.status == RunStatus.SUCCESS
+    assert mock_run_group.error == ""
+
+
 def test_run_status_context_error(mock_run_group):
-    with run_status_context(mock_run_group, raise_errors=False):
+    with RunStatusContext(mock_run_group, bubble_errors=False):
         raise Exception("test exception")
 
     assert mock_run_group.end_time is not None
     assert mock_run_group.status == RunStatus.ERROR
     assert mock_run_group.error == """Exception('test exception')"""
+
+
+def test_run_status_context_split(mock_run_group):
+    with RunStatusContext(mock_run_group):
+        raise PipelineSplitSignal()
+
+    assert mock_run_group.end_time is None
+    assert mock_run_group.status == RunStatus.RUNNING
+    assert mock_run_group.error == ""
