@@ -59,16 +59,15 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
     input_type = Any
     output_type = str
 
-    def run(self, params: LlmCompletionStepParams, data: Any) -> StepContext[str]:
+    def run(self, params: LlmCompletionStepParams, context: StepContext[Any]) -> StepContext[str]:
         llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
-        prompt = params.prompt_template.format_prompt(data=data)
+        prompt = params.prompt_template.format_prompt(data=context.get_data())
         result = llm.invoke(prompt)
         return StepContext(result.content, name="llm_output")
 
 
 class AssistantParams(PromptParams):
     assistant_id: required(str) = None
-    # TODO: passing files to the assistant
     # file_ids: list[str] = None
 
     def get_static_config_form_class(self) -> type[ParamsForm] | None:
@@ -100,9 +99,9 @@ class AssistantStep(core.BaseStep[Any, str]):
 
         self.client = self.pipeline_context.llm_service.get_raw_client()
 
-    def run(self, params: AssistantParams, data: Any) -> StepContext[str]:
+    def run(self, params: AssistantParams, context: StepContext[Any]) -> StepContext[str]:
         result = AssistantOutput()
-        prompt = params.prompt_template.format_prompt(data=data)
+        prompt = params.prompt_template.format_prompt(data=context.get_data())
         thread = self.client.beta.threads.create(
             messages=[
                 {

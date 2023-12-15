@@ -252,7 +252,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 self.preflight_check(context)
 
                 self.log.debug(f"Params: {self._params}")
-                result = self.run(self._params, context.get_data())
+                result = self.run(self._params, context)
                 for res in [result] if isinstance(result, StepContext) else result:
                     if not res.name:
                         res.name = self.name
@@ -263,7 +263,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         finally:
             self.log.info(f"Step {self.name} complete")
 
-    def run(self, params: Params, data: PipeIn) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
+    def run(self, params: Params, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""
         raise NotImplementedError
 

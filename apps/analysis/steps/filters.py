@@ -102,7 +102,8 @@ class TimeseriesFilter(TimeseriesStep):
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 
-    def run(self, params: TimeseriesFilterParams, data: pd.DataFrame) -> StepContext[pd.DataFrame]:
+    def run(self, params: TimeseriesFilterParams, context: StepContext[pd.DataFrame]) -> StepContext[pd.DataFrame]:
+        data = context.get_data()
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
         mask = data.index.isin(pd.date_range(params.start, params.end, inclusive="left"))
         result = data.loc[mask]
