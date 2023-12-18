@@ -4,7 +4,7 @@ from textwrap import dedent
 import pandas as pd
 import pytest
 
-from apps.analysis.core import Params, PipelineContext
+from apps.analysis.core import Params, PipelineContext, StepContext
 from apps.analysis.exceptions import StepError
 from apps.analysis.steps.parsers import WhatsappParser, WhatsappParserParams
 
@@ -40,7 +40,7 @@ def test_whatsapp_parser_parses_valid_log(whatsapp_parser, valid_whatsapp_log):
         remove_deleted_messages=False, remove_system_messages=False, remove_media_omitted_messages=False
     )
     whatsapp_parser.initialize(PipelineContext(params=params.model_dump()))
-    result = whatsapp_parser.run(params, valid_whatsapp_log)
+    result = whatsapp_parser.run(params, StepContext(valid_whatsapp_log))
     df = result.data
     assert len(df) == 5
     _check_message(df, "2021-01-01 00:00", "system", "System Message")
@@ -51,7 +51,7 @@ def test_whatsapp_parser_parses_valid_log(whatsapp_parser, valid_whatsapp_log):
 
 
 def test_whatsapp_parser_message_filtering(whatsapp_parser, valid_whatsapp_log):
-    result = whatsapp_parser.run(whatsapp_parser._params, valid_whatsapp_log)
+    result = whatsapp_parser.run(whatsapp_parser._params, StepContext(valid_whatsapp_log))
     df = result.data
     assert len(df) == 2
     _check_message(df, "2021-01-01 00:01", "User1", "Hello World")
@@ -60,7 +60,7 @@ def test_whatsapp_parser_message_filtering(whatsapp_parser, valid_whatsapp_log):
 
 def test_whatsapp_parser_parses_valid_log_unicode_rtl(whatsapp_parser, valid_whatsapp_log_unicode_rtl):
     params = Params()
-    result = whatsapp_parser.run(params, valid_whatsapp_log_unicode_rtl)
+    result = whatsapp_parser.run(params, StepContext(valid_whatsapp_log_unicode_rtl))
     df = result.data
     assert not df.empty
     _check_message(df, "2023-03-11 21:27", "User1", "Hello")
@@ -83,10 +83,10 @@ def _check_message(df, date, sender, message):
 def test_whatsapp_parser_handles_invalid_log(whatsapp_parser):
     params = Params()
     with pytest.raises(StepError):
-        whatsapp_parser.run(params, "This is not a valid whatsapp log on 01/01/2021, 00:00")
+        whatsapp_parser.run(params, StepContext("This is not a valid whatsapp log on 01/01/2021, 00:00"))
 
 
 def test_whatsapp_parser_handles_empty_log(whatsapp_parser):
     params = Params()
-    result = whatsapp_parser.run(params, "")
+    result = whatsapp_parser.run(params, StepContext(""))
     assert result.data.empty

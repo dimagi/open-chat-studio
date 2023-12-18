@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from pandas import DataFrame, Period, Timestamp, date_range
+from pandas import DataFrame, Timestamp, date_range
 
 from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.exceptions import StepError
@@ -33,7 +33,7 @@ def test_timeseries_splitter_splits_data_into_correct_groups(
     time_group, expected_groups, group_lengths, timeseries_splitter, timeseries_data
 ):
     params = TimeseriesSplitterParams(time_group=time_group, origin="start")
-    result = timeseries_splitter.run(params, timeseries_data)
+    result = timeseries_splitter.run(params, StepContext(timeseries_data))
     assert len(result) == expected_groups
     assert [len(res.data) for res in result] == group_lengths
 
@@ -54,7 +54,7 @@ def test_timeseries_splitter_splits_data_into_correct_groups_with_origin(origin,
     data = DataFrame(index=dates, data={"value": range(len(dates))})
 
     params = TimeseriesSplitterParams(time_group=TimeGroup.hourly, origin=origin)
-    result = timeseries_splitter.run(params, data)
+    result = timeseries_splitter.run(params, StepContext(data))
     assert len(result) == 2
     assert list(result[0].data.index) == [pd.Timestamp(d) for d in expected_groups[0]]
     assert list(result[1].data.index) == [pd.Timestamp(d) for d in expected_groups[1]]
@@ -81,7 +81,7 @@ def test_timeseries_splitter_ignores_empty_groups(ignore_empty, group_count, tim
         pd.Timestamp("2021-01-04"),
     ]
     data = DataFrame(index=dates, data={"value": range(len(dates))})
-    result = timeseries_splitter.run(params, data)
+    result = timeseries_splitter.run(params, StepContext(data))
     assert len(result) == group_count
 
 

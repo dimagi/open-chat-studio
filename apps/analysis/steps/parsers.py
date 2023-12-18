@@ -36,7 +36,8 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
 
     def run(self, params: Params, context: StepContext[str]) -> StepContext[pd.DataFrame]:
         pattern = re.compile(r"^(\d{2}/\d{2}/\d{4},\s\d{2}:\d{2})\s-\s", flags=re.MULTILINE)
-        splits = pattern.split(context.get_data())
+        data = context.get_data()
+        splits = pattern.split(data)
         if len(splits) < 2:
             splits = list(filter(None, splits))
             if not splits:
