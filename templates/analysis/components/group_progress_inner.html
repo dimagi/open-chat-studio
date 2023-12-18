@@ -2,12 +2,19 @@
   <span class="loading loading-dots loading-md"></span>
 {% endif %}
 {% for run in runs reversed %}
-  {% if forloop.last %}
-    <p class="my-2 font-medium">Source Pipeline ({{ run.get_status_display }})</p>
-  {% else %}
-    <p class="my-2 font-medium">{{ run.name }}: Analysis Pipeline {{ forloop.revcounter0 }}
-      ({{ run.get_status_display }})</p>
-  {% endif %}
+  <div class="my-2 font-medium">
+    {% if forloop.last %}
+      Source Pipeline
+    {% else %}
+      {{ run.name }}: Analysis Pipeline {{ forloop.revcounter0 }}
+      <div class="badge
+    {% if run.status == "running" %}badge-primary
+    {% elif run.status == "success" %}badge-success
+    {% elif run.status == "error" %}badge-danger
+    {% endif %}
+    ">{{ run.get_status_display|upper }}</div>
+      </div>
+    {% endif %}
   {% include "analysis/components/run_logs.html" %}
   {% if not run.is_complete %}
     <span class="loading loading-dots loading-md"></span>
