@@ -44,8 +44,11 @@ class TimeseriesFilterParams(Params):
         if self.calendar_time:
             start = start + self.anchor_adjustment()
         if self.anchor_type == "last":
-            # adjust to include the anchor point
-            start -= self.duration_unit.delta(self.duration_value - 1)
+            adjustment = self.duration_value
+            if self.anchor_mode == "relative_end":
+                # adjust to include the anchor point (range is right-exclusive)
+                adjustment = adjustment - 1
+            start -= self.duration_unit.delta(adjustment)
         return start, start + self.delta()
 
     @property
