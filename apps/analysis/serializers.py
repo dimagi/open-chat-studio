@@ -95,7 +95,7 @@ class BasicTypeSerializer(Serializer):
 
 
 class DataFramesSerializer(Serializer):
-    supported_types = [pd.DataFrame]
+    supported_types = []
     supported_type_names = ["dataframe"]
 
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
@@ -106,20 +106,30 @@ class DataFramesSerializer(Serializer):
         return data
 
     def write(self, data: pd.DataFrame, file: IO):
-        if not isinstance(data.index, pd.RangeIndex):
-            data = data.reset_index()
+        raise NotImplementedError("Deprecated. Use DataFramesSerializerV1")
+
+    def get_metadata(self, data: Any) -> ResourceMetadata:
+        raise NotImplementedError("Deprecated. Use DataFramesSerializerV1")
+
+    def get_summary(self, data: Any) -> str:
+        return str(data)
+
+
+class DataFramesSerializerV1(Serializer):
+    supported_types = [pd.DataFrame]
+    supported_type_names = ["dataframe.v1"]
+
+    def read(self, file: IO, metadata: ResourceMetadata) -> Any:
+        return pd.read_json(file, orient="table")
+
+    def write(self, data: pd.DataFrame, file: IO):
         data.to_json(file, orient="table", date_format="iso")
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
-        schema = pd.io.json.build_table_schema(data, version=False)
-        if not isinstance(data.index, pd.RangeIndex):
-            schema["index"] = data.index.name or "index"
-        if "primaryKey" in schema:
-            del schema["primaryKey"]
         return ResourceMetadata(
             type="dataframe",
             format="json",
-            data_schema=schema,
+            data_schema={},
             content_type="application/json",
         )
 
@@ -128,14 +138,14 @@ class DataFramesSerializer(Serializer):
 
 
 def get_serializer_by_type(data: Any) -> Serializer:
-    for serializer in [BasicTypeSerializer, DataFramesSerializer]:
+    for serializer in [BasicTypeSerializer, DataFramesSerializerV1]:
         if type(data) in serializer.supported_types:
             return serializer()
     raise NotImplementedError(f"No serializer found for {type(data)}")
 
 
 def get_serializer_by_name(type_name: str) -> Serializer:
-    for serializer in [BasicTypeSerializer, DataFramesSerializer]:
+    for serializer in [BasicTypeSerializer, DataFramesSerializer, DataFramesSerializerV1]:
         if type_name in serializer.supported_type_names:
             return serializer()
     raise NotImplementedError(f"No serializer found for {type_name}")
