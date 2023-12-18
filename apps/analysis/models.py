@@ -25,6 +25,8 @@ class ResourceMetadata(pydantic.BaseModel):
     type: str
     format: str
     data_schema: dict
+    openai_file_id: str | None = None
+    content_type: str | None = None
 
     def get_label(self):
         return f"{self.type} ({self.format})"
@@ -36,6 +38,7 @@ class Resource(BaseTeamModel):
     file = models.FileField()
     metadata = models.JSONField(default=dict, blank=True)
     content_size = models.PositiveIntegerField(null=True, blank=True)
+    content_type = models.CharField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self.file:
@@ -47,7 +50,7 @@ class Resource(BaseTeamModel):
 
     @property
     def wrapped_metadata(self):
-        return ResourceMetadata(**self.metadata)
+        return ResourceMetadata(**{"content_type": self.content_type, **self.metadata})
 
 
 class Analysis(BaseTeamModel):

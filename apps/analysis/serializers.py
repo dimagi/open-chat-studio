@@ -1,8 +1,10 @@
+import contextlib
 import json
 import tempfile
 from typing import IO, Any
 
 import pandas as pd
+from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
@@ -16,14 +18,35 @@ def create_resource_for_data(team, data: Any, name: str) -> Resource:
         team=team,
         name=name,
         type=metadata.format,
-        metadata=metadata.model_dump(),
+        metadata=metadata.model_dump(exclude={"content_type"}),
+        content_type=metadata.content_type,
     )
-    with tempfile.TemporaryFile(mode="w+") as file:
-        serializer.write(data, file)
-        file.seek(0)
+    with temporary_data_file(data) as file:
         resource.file.save(f"{resource.name}.{metadata.format}", file)
     resource.save()
     return resource
+
+
+def create_resource_for_raw_data(team, data: Any, name: str, metadata: ResourceMetadata) -> Resource:
+    resource = Resource(
+        team=team,
+        name=name,
+        type=metadata.format,
+        metadata=metadata.model_dump(exclude={"content_type"}),
+        content_type=metadata.content_type,
+    )
+    resource.file.save(f"{resource.name}.{metadata.format}", ContentFile(data))
+    resource.save()
+    return resource
+
+
+@contextlib.contextmanager
+def temporary_data_file(data: Any) -> IO:
+    serializer = get_serializer_by_type(data)
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=f".{serializer.get_metadata(data).format}") as file:
+        serializer.write(data, file)
+        file.seek(0)
+        yield file
 
 
 class Serializer:
@@ -61,7 +84,9 @@ class BasicTypeSerializer(Serializer):
         json.dump({"data": data}, file, cls=DjangoJSONEncoder)
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
-        return ResourceMetadata(type=type(data).__name__, format="json", data_schema={})
+        return ResourceMetadata(
+            type=type(data).__name__, format="json", data_schema={}, content_type="application/json"
+        )
 
     def get_summary(self, data: Any) -> str:
         if type(data) == str:
@@ -83,7 +108,7 @@ class DataFramesSerializer(Serializer):
     def write(self, data: pd.DataFrame, file: IO):
         if not isinstance(data.index, pd.RangeIndex):
             data = data.reset_index()
-        data.to_json(file, orient="records", lines=True, date_format="iso")
+        data.to_json(file, orient="table", date_format="iso")
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
         schema = pd.io.json.build_table_schema(data, version=False)
@@ -93,8 +118,9 @@ class DataFramesSerializer(Serializer):
             del schema["primaryKey"]
         return ResourceMetadata(
             type="dataframe",
-            format="jsonl",
+            format="json",
             data_schema=schema,
+            content_type="application/json",
         )
 
     def get_summary(self, data: Any) -> str:

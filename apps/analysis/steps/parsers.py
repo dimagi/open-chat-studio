@@ -50,7 +50,6 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         df = pd.DataFrame(data=messages)
         df.set_index("date", inplace=True)
         self.log.info(f"Loaded messages from {df.index.min()} to {df.index.max()} ({len(df)} messages)")
-        self.create_resource(df, "whatsapp_messages")
         return StepContext(df, name="whatsapp_data")
 
     def _get_message(self, head, tail):

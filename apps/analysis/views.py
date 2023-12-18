@@ -180,7 +180,8 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
         }
         if all(form.is_valid() for form in forms.values()):
             step_params = {
-                step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
+                step_name: {**analysis.config.get(step_name, {}), **form.save().model_dump(exclude_defaults=True)}
+                for step_name, form in forms.items()
             }
             group = RunGroup.objects.create(
                 team=analysis.team,

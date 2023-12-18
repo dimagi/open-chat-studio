@@ -27,7 +27,7 @@ class StepContext(Generic[PipeOut]):
     metadata: dict = dataclasses.field(default_factory=dict)
     resource: Resource = None
 
-    def create_resource(self, context: "PipelineContext"):
+    def get_or_create_resource(self, context: "PipelineContext"):
         if not self.resource:
             self.resource = context.create_resource(self.data, self.name)
         return self.resource
@@ -258,7 +258,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                         res.name = self.name
                     if self.is_last:
                         # always create resources for last step
-                        res.create_resource(self.pipeline_context)
+                        res.get_or_create_resource(self.pipeline_context)
                 return result
         finally:
             self.log.info(f"Step {self.name} complete")

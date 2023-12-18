@@ -47,6 +47,7 @@ class ResourceLoaderParamsForm(ParamsForm):
                 type=self.cleaned_data["file_type"],
                 file=self.cleaned_data["file"],
                 content_size=self.cleaned_data["file"].size,
+                content_type=self.cleaned_data["file"].content_type,
             )
         elif self.cleaned_data["text"]:
             resource = Resource.objects.create(
@@ -173,7 +174,7 @@ class TimeseriesSplitterParamsForm(ParamsForm):
             raise forms.ValidationError(repr(e))
 
 
-class AssistantParamsForm(ParamsForm):
+class StaticAssistantParamsForm(ParamsForm):
     form_name = "Assistant Parameters"
     template_name = "analysis/forms/basic.html"
     assistant_id = forms.CharField()
@@ -184,6 +185,20 @@ class AssistantParamsForm(ParamsForm):
 
         try:
             return AssistantParams(assistant_id=self.cleaned_data["assistant_id"], prompt=self.cleaned_data["prompt"])
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+class DynamicAssistantParamsForm(ParamsForm):
+    form_name = "Assistant Parameters"
+    template_name = "analysis/forms/basic.html"
+    prompt = forms.CharField(widget=forms.Textarea)
+
+    def get_params(self):
+        from .processors import AssistantParams
+
+        try:
+            return AssistantParams(prompt=self.cleaned_data["prompt"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
 
