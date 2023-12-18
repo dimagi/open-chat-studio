@@ -180,7 +180,8 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
         }
         if all(form.is_valid() for form in forms.values()):
             step_params = {
-                step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
+                step_name: {**analysis.config.get(step_name, {}), **form.save().model_dump(exclude_defaults=True)}
+                for step_name, form in forms.items()
             }
             group = RunGroup.objects.create(
                 team=analysis.team,
@@ -220,10 +221,11 @@ def replay_run(request, team_slug: str, pk: int):
 @permission_required("analysis.view_rungroup")
 def run_group_details(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    runs = list(group.analysisrun_set.all())
     return render(
         request,
         "analysis/run_group_details.html",
-        {"group": group, "runs": group.analysisrun_set.all()},
+        {"group": group, "runs": runs},
     )
 
 

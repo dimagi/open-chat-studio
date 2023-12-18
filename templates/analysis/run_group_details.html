@@ -13,10 +13,28 @@
   </div>
   <div class="max-w-7xl mx-auto">
     <div class="app-card">
-      <h1 class="pg-title">Analysis Run Group: {{ group }}</h1>
+       <div class="flex">
+        <div class="flex-1">
+          <h1 class="pg-title">Analysis Run Group: {{ group.id }}</h1>
+        </div>
+        <div class="justify-self-end">
+          <div class="btn btn-sm btn-active no-animation hover:cursor-auto
+            {% if group.status == "running" %}btn-primary
+            {% elif group.status == "success" %}btn-success
+            {% elif group.status == "error" %}btn-danger
+            {% endif %}
+          ">{{ group.status|upper }}</div>
+          <div class="join">
+            <div class="tooltip" data-tip="Replay Run">
+              <a class="btn btn-sm btn-primary join-item rounded-r-full"
+                 href="{% url 'analysis:replay_run' team.slug group.id %}">
+                <i class="fa-solid fa-play"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="group-status">{% include "analysis/components/run_status.html" with run=group %}</div>
-    </div>
-    <div class="app-card">
       {% if group.is_complete %}
         {% include "analysis/components/group_detail_tabs.html" %}
       {% else %}

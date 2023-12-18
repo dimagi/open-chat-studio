@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django import forms
 from django.core.files.base import ContentFile
 from django.utils.encoding import smart_bytes
@@ -45,6 +47,7 @@ class ResourceLoaderParamsForm(ParamsForm):
                 type=self.cleaned_data["file_type"],
                 file=self.cleaned_data["file"],
                 content_size=self.cleaned_data["file"].size,
+                content_type=self.cleaned_data["file"].content_type,
             )
         elif self.cleaned_data["text"]:
             resource = Resource.objects.create(
@@ -82,12 +85,35 @@ def get_duration_choices():
 
 class TimeseriesFilterForm(ParamsForm):
     form_name = "Timeseries Filter Parameters"
-    template_name = "analysis/forms/basic.html"
+    template_name = "analysis/forms/timeseries_filter.html"
     duration_value = forms.IntegerField(required=False, label="Duration")
     duration_unit = forms.TypedChoiceField(
         required=False, choices=get_duration_choices(), label="Duration Unit", coerce=int
     )
-    anchor_point = forms.DateField(required=False, label="Starting on")
+    anchor_mode = forms.ChoiceField(
+        required=False,
+        label="Starting from",
+        choices=[
+            ("relative_start", "Beginning of data"),
+            ("relative_end", "End of data"),
+            ("absolute", "Specific date"),
+        ],
+    )
+    anchor_point = forms.DateField(required=False, label="Starting on", initial="today")
+    minimum_data_points = forms.IntegerField(required=False, label="Minimum Data Points for Dataset", initial=10)
+    calendar_time = forms.BooleanField(
+        required=False,
+        label="Use calendar periods",
+        initial=True,
+        help_text="If checked, the start and end times of the window will be adjusted to the nearest calendar period. "
+        "For example, if the duration is 1 day, the window will start at midnight and end at 11:59:59 PM.",
+    )
+
+    def reformat_initial(self, initial):
+        anchor_point = initial.get("anchor_point")
+        if anchor_point and isinstance(anchor_point, str):
+            initial["anchor_point"] = datetime.fromisoformat(anchor_point).date()
+        return initial
 
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
@@ -100,6 +126,10 @@ class TimeseriesFilterForm(ParamsForm):
     def get_params(self):
         from .filters import TimeseriesFilterParams
 
+        if self.cleaned_data["anchor_mode"] != "absolute":
+            self.cleaned_data["calendar_time"] = False
+        elif self.cleaned_data["anchor_mode"] == "relative_end":
+            self.cleaned_data["anchor_type"] = "last"
         try:
             return TimeseriesFilterParams(**self.cleaned_data)
         except ValueError as e:
@@ -146,7 +176,7 @@ class TimeseriesSplitterParamsForm(ParamsForm):
             raise forms.ValidationError(repr(e))
 
 
-class AssistantParamsForm(ParamsForm):
+class StaticAssistantParamsForm(ParamsForm):
     form_name = "Assistant Parameters"
     template_name = "analysis/forms/basic.html"
     assistant_id = forms.CharField()
@@ -157,6 +187,20 @@ class AssistantParamsForm(ParamsForm):
 
         try:
             return AssistantParams(assistant_id=self.cleaned_data["assistant_id"], prompt=self.cleaned_data["prompt"])
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+class DynamicAssistantParamsForm(ParamsForm):
+    form_name = "Assistant Parameters"
+    template_name = "analysis/forms/basic.html"
+    prompt = forms.CharField(widget=forms.Textarea)
+
+    def get_params(self):
+        from .processors import AssistantParams
+
+        try:
+            return AssistantParams(prompt=self.cleaned_data["prompt"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
 

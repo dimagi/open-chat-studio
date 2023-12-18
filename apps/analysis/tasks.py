@@ -7,6 +7,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.analysis.core import PipelineContext, StepContext
+from apps.analysis.exceptions import StepError
 from apps.analysis.log import LogEntry, Logger, LogStream
 from apps.analysis.models import AnalysisRun, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
@@ -37,7 +38,10 @@ class RunStatusContext:
                 return True
             log.exception("Error running analysis")
             self.run.status = RunStatus.ERROR
-            self.run.error = repr(exc_val)
+            if exc_type == StepError:
+                self.run.error = str(exc_val)
+            else:
+                self.run.error = repr(exc_val)
         else:
             self.run.status = RunStatus.SUCCESS
         self.run.end_time = timezone.now()

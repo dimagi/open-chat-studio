@@ -12,7 +12,7 @@ class BaseLoader(BaseStep[None, PipeOut]):
 
     input_type = None
 
-    def run(self, params: Params, data: None = None) -> tuple[str, dict]:
+    def run(self, params: Params, context: StepContext = None) -> tuple[str, dict]:
         return self.load(params)
 
     def load(self, params: Params) -> tuple[str, dict]:

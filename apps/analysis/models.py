@@ -6,7 +6,9 @@ import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
+from apps.analysis.log import LogEntry
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
@@ -19,12 +21,15 @@ class ResourceType(models.TextChoices):
     XML = "xml", "XML"
     XLSX = "xlsx", "XLSX"
     IMAGE = "image", "Image"
+    UNKNOWN = "unknown", "Unknown"
 
 
 class ResourceMetadata(pydantic.BaseModel):
     type: str
-    format: str
+    format: ResourceType
     data_schema: dict
+    openai_file_id: str | None = None
+    content_type: str | None = None
 
     def get_label(self):
         return f"{self.type} ({self.format})"
@@ -36,6 +41,7 @@ class Resource(BaseTeamModel):
     file = models.FileField()
     metadata = models.JSONField(default=dict, blank=True)
     content_size = models.PositiveIntegerField(null=True, blank=True)
+    content_type = models.CharField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self.file:
@@ -47,7 +53,7 @@ class Resource(BaseTeamModel):
 
     @property
     def wrapped_metadata(self):
-        return ResourceMetadata(**self.metadata)
+        return ResourceMetadata(**{"content_type": self.content_type, **self.metadata})
 
 
 class Analysis(BaseTeamModel):
@@ -99,6 +105,8 @@ class BaseRun(BaseModel):
     def duration(self) -> timedelta | None:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
+        elif self.status == RunStatus.RUNNING:
+            return timezone.now() - self.start_time
 
     @property
     def duration_seconds(self):
@@ -146,3 +154,6 @@ class AnalysisRun(BaseRun):
 
     class Meta:
         ordering = ["created_at"]
+
+    def get_log_entries(self):
+        return [LogEntry.from_json(entry) for entry in self.log["entries"]]

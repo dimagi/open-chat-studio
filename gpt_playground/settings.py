@@ -448,10 +448,11 @@ TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "w-full table-fixed",
-    "thead": {"class": "bg-gray-200 text-gray-600 uppercase text-sm leading-normal"},
+    "thead": {"class": "bg-base-200 base-content uppercase text-sm leading-normal"},
     "th": {"class": "py-3 px-6 text-left"},
     "td": {"class": "py-3 px-6 text-left overflow-hidden"},
 }
+# bg-error text-error-content
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": "border-b border-gray-200 hover:bg-gray-100",
     "id": lambda record: f"record-{record.id}",

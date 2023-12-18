@@ -39,7 +39,7 @@ class TimeseriesSplitterParams(Params):
         return TimeGrouper(freq=self.time_group.value, origin=self.origin)
 
 
-class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
+class TimeseriesSplitter(BaseStep[pd.DataFrame, pd.DataFrame]):
     """Splits input data by a time group to produce multiple output dataframes."""
 
     param_schema = TimeseriesSplitterParams
@@ -50,8 +50,10 @@ class TimeseriesSplitter(BaseStep[pd.DataFrame, dict[pd.Period, pd.DataFrame]]):
         if not ptypes.is_datetime64_any_dtype(context.data.index):
             raise StepError("Dataframe must have a datetime index")
 
-    def run(self, params: TimeseriesSplitterParams, data: pd.DataFrame) -> list[StepContext[pd.DataFrame]]:
-        grouped = data.groupby(params.grouper)
+    def run(
+        self, params: TimeseriesSplitterParams, context: StepContext[pd.DataFrame]
+    ) -> list[StepContext[pd.DataFrame]]:
+        grouped = context.get_data().groupby(params.grouper)
         results = []
         for origin, group in grouped:
             if params.ignore_empty_groups and not len(group):

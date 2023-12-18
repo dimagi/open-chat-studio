@@ -1,0 +1,6 @@
+<div class="badge
+            {% if run.status == "running" %}badge-primary
+            {% elif run.status == "success" %}badge-success
+            {% elif run.status == "error" %}badge-danger
+            {% endif %}
+          ">{{ run.status|upper }}</div>

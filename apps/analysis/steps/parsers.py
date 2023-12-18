@@ -34,8 +34,9 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
     output_type = pd.DataFrame
     param_schema = WhatsappParserParams
 
-    def run(self, params: Params, data: str) -> StepContext[pd.DataFrame]:
+    def run(self, params: Params, context: StepContext[str]) -> StepContext[pd.DataFrame]:
         pattern = re.compile(r"^(\d{2}/\d{2}/\d{4},\s\d{2}:\d{2})\s-\s", flags=re.MULTILINE)
+        data = context.get_data()
         splits = pattern.split(data)
         if len(splits) < 2:
             splits = list(filter(None, splits))
@@ -50,7 +51,6 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         df = pd.DataFrame(data=messages)
         df.set_index("date", inplace=True)
         self.log.info(f"Loaded messages from {df.index.min()} to {df.index.max()} ({len(df)} messages)")
-        self.create_resource(df, "whatsapp_messages")
         return StepContext(df, name="whatsapp_data")
 
     def _get_message(self, head, tail):
