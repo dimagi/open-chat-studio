@@ -7,12 +7,7 @@
       Source Pipeline
     {% else %}
       {{ run.name }}: Analysis Pipeline {{ forloop.revcounter0 }}
-      <div class="badge
-    {% if run.status == "running" %}badge-primary
-    {% elif run.status == "success" %}badge-success
-    {% elif run.status == "error" %}badge-danger
-    {% endif %}
-    ">{{ run.get_status_display|upper }}</div>
+      {% include "analysis/components/runs_status_badge.html" %}
       </div>
     {% endif %}
   {% include "analysis/components/run_logs.html" %}

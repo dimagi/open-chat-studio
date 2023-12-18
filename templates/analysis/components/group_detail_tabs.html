@@ -33,12 +33,7 @@
             </h2>
           </div>
           <div class="justify-self-end">
-            <div class="badge
-            {% if run.status == "running" %}badge-primary
-            {% elif run.status == "success" %}badge-success
-            {% elif run.status == "error" %}badge-danger
-            {% endif %}
-          ">{{ run.status|upper }}</div>
+            {% include "analysis/components/runs_status_badge.html" %}
           </div>
         </div>
         <div id="run-status">{% include "analysis/components/run_status.html" %}</div>
