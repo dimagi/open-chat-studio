@@ -181,11 +181,8 @@ class AssistantStep(core.BaseStep[Any, str]):
                             cited_file = self.client.files.retrieve(file_citation.file_id)
                             citations.append(f"[{index}] {file_citation.quote} from {cited_file.filename}")
                         elif file_path := getattr(annotation, "file_path", None):
-                            cited_file = self.client.files.retrieve(file_path.file_id)
                             resource = self.make_resource_from_file(file_path.file_id, ResourceType.UNKNOWN)
-                            citations.append(f"[{index}]: Click <here> to download {cited_file.filename}")
                             citations.append(get_resource_markdown_link(resource, link_text=index, image=False))
-                            self.log.info(f"Received file {cited_file.filename} from assistant")
 
                     # Add footnotes to the end of the message before displaying to user
                     output.response += "\n" + message_content.value + "\n" + "\n".join(citations)

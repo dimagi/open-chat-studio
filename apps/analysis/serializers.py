@@ -8,7 +8,7 @@ from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
-from apps.analysis.models import Resource, ResourceMetadata
+from apps.analysis.models import Resource, ResourceMetadata, ResourceType
 
 
 def create_resource_for_data(team, data: Any, name: str) -> Resource:
@@ -35,7 +35,10 @@ def create_resource_for_raw_data(team, data: Any, name: str, metadata: ResourceM
         metadata=metadata.model_dump(exclude={"content_type"}),
         content_type=metadata.content_type,
     )
-    resource.file.save(f"{resource.name}.{metadata.format}", ContentFile(data))
+    ext = f".{metadata.format}"
+    if ext in (ResourceType.UNKNOWN, ResourceType.IMAGE):
+        ext = ""
+    resource.file.save(f"{resource.name}{ext}", ContentFile(data))
     resource.save()
     return resource
 
