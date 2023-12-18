@@ -85,7 +85,7 @@ def get_duration_choices():
 
 class TimeseriesFilterForm(ParamsForm):
     form_name = "Timeseries Filter Parameters"
-    template_name = "analysis/forms/basic.html"
+    template_name = "analysis/forms/timeseries_filter.html"
     duration_value = forms.IntegerField(required=False, label="Duration")
     duration_unit = forms.TypedChoiceField(
         required=False, choices=get_duration_choices(), label="Duration Unit", coerce=int
@@ -104,7 +104,7 @@ class TimeseriesFilterForm(ParamsForm):
     calendar_time = forms.BooleanField(
         required=False,
         label="Use calendar periods",
-        initial=False,
+        initial=True,
         help_text="If checked, the start and end times of the window will be adjusted to the nearest calendar period. "
         "For example, if the duration is 1 day, the window will start at midnight and end at 11:59:59 PM.",
     )
@@ -126,7 +126,9 @@ class TimeseriesFilterForm(ParamsForm):
     def get_params(self):
         from .filters import TimeseriesFilterParams
 
-        if self.cleaned_data["anchor_mode"] == "relative_end":
+        if self.cleaned_data["anchor_mode"] != "absolute":
+            self.cleaned_data["calendar_time"] = False
+        elif self.cleaned_data["anchor_mode"] == "relative_end":
             self.cleaned_data["anchor_type"] = "last"
         try:
             return TimeseriesFilterParams(**self.cleaned_data)
