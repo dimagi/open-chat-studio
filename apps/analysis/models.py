@@ -6,7 +6,9 @@ import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
+from apps.analysis.log import LogEntry
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
@@ -103,6 +105,8 @@ class BaseRun(BaseModel):
     def duration(self) -> timedelta | None:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
+        elif self.status == RunStatus.RUNNING:
+            return timezone.now() - self.start_time
 
     @property
     def duration_seconds(self):
@@ -150,3 +154,6 @@ class AnalysisRun(BaseRun):
 
     class Meta:
         ordering = ["created_at"]
+
+    def get_log_entries(self):
+        return [LogEntry.from_json(entry) for entry in self.log["entries"]]

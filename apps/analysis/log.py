@@ -18,7 +18,7 @@ class LogEntry:
     level: LogLevel
     message: str
     logger: str = ""
-    timestamp: datetime = dataclasses.field(init=False, default_factory=datetime.utcnow)
+    timestamp: datetime = dataclasses.field(default_factory=datetime.utcnow)
 
     def __str__(self, fmt: str = None):
         return self.format("[{level}] [{logger}] ({ts}): {message}")
@@ -33,6 +33,27 @@ class LogEntry:
             "logger": self.logger,
             "timestamp": self.timestamp.isoformat(timespec="milliseconds"),
         }
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(
+            level=LogLevel[data["level"]],
+            message=data["message"],
+            logger=data["logger"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+        )
+
+    def is_debug(self):
+        return self.level == LogLevel.DEBUG
+
+    def is_info(self):
+        return self.level == LogLevel.INFO
+
+    def is_warn(self):
+        return self.level == LogLevel.WARN
+
+    def is_error(self):
+        return self.level == LogLevel.ERROR
 
 
 class LogStream(ABC):

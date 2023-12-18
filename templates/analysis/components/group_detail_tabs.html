@@ -12,7 +12,8 @@
         <pre class="whitespace-pre-wrap">{{ run.error }}</pre>
       {% else %}
         {# remove backticks around inline code with prose-code:... #}
-        <div class="prose prose-code:before:hidden prose-code:after:hidden">{{ run.output_summary|render_markdown }}</div>
+        <div
+            class="prose prose-code:before:hidden prose-code:after:hidden">{{ run.output_summary|render_markdown }}</div>
       {% endif %}
     {% endwith %}
   </div>
@@ -21,13 +22,25 @@
   <div role="tabpanel" class="tab-content p-4">
     {% for run in runs %}
       <div class="app-card">
-        <h2 class="pg-subtitle">
-          {% if forloop.first %}
-            Source Pipeline
-          {% else %}
-            {{ run.name }}: Analysis Pipeline {{ forloop.counter0 }}
-          {% endif %}
-        </h2>
+        <div class="flex">
+          <div class="flex-1">
+            <h2 class="pg-subtitle">
+              {% if forloop.first %}
+                Source Pipeline
+              {% else %}
+                {{ run.name }}: Analysis Pipeline {{ forloop.counter0 }}
+              {% endif %}
+            </h2>
+          </div>
+          <div class="justify-self-end">
+            <div class="badge
+            {% if run.status == "running" %}badge-primary
+            {% elif run.status == "success" %}badge-success
+            {% elif run.status == "error" %}badge-danger
+            {% endif %}
+          ">{{ run.status|upper }}</div>
+          </div>
+        </div>
         <div id="run-status">{% include "analysis/components/run_status.html" %}</div>
         {% include "analysis/components/run_detail_tabs.html" %}
       </div>
