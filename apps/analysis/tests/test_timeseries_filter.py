@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from apps.analysis.core import PipelineContext, StepContext
+from apps.analysis.log import Logger, StdoutLogStream
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
@@ -132,7 +133,7 @@ def timeseries_data():
 @pytest.fixture
 def timeseries_filter():
     step = TimeseriesFilter()
-    step.initialize(PipelineContext())
+    step.initialize(PipelineContext(log=Logger(StdoutLogStream())))
     return step
 
 
@@ -175,3 +176,25 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
     )
     result = timeseries_filter.run(params, StepContext(timeseries_data))
     assert len(result.data) == 0
+
+
+@pytest.mark.parametrize(
+    "anchor_type, anchor_mode, expected",
+    [
+        ("this", "absolute", [1, 2]),
+        ("this", "relative_start", [0, 1]),
+        ("last", "relative_end", [29, 30]),
+    ],
+)
+def test_timeseries_filter_anchor_mode(anchor_type, anchor_mode, expected, timeseries_filter, timeseries_data):
+    params = TimeseriesFilterParams(
+        duration_unit=DurationUnit.days,
+        duration_value=2,
+        anchor_type=anchor_type,
+        anchor_mode=anchor_mode,
+        anchor_point=datetime.fromisoformat("2021-01-02"),
+        minimum_data_points=0,
+    )
+    result = timeseries_filter.run(params, StepContext(timeseries_data))
+    assert len(result.data) == 2
+    assert result.data["value"].tolist() == expected

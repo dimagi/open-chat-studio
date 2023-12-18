@@ -41,6 +41,11 @@ class LogStream(ABC):
         raise NotImplementedError
 
 
+class StdoutLogStream(LogStream):
+    def write(self, entry: LogEntry):
+        print(entry)
+
+
 class Logger:
     def __init__(self, stream: LogStream = None):
         self.log_stack = [[]]

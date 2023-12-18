@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django import forms
 from django.core.files.base import ContentFile
 from django.utils.encoding import smart_bytes
@@ -105,6 +107,12 @@ class TimeseriesFilterForm(ParamsForm):
         help_text="If checked, the start and end times of the window will be adjusted to the nearest calendar period. "
         "For example, if the duration is 1 day, the window will start at midnight and end at 11:59:59 PM.",
     )
+
+    def reformat_initial(self, initial):
+        anchor_point = initial.get("anchor_point")
+        if anchor_point and isinstance(anchor_point, str):
+            initial["anchor_point"] = datetime.fromisoformat(anchor_point).date()
+        return initial
 
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
