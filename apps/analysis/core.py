@@ -11,8 +11,8 @@ from apps.teams.models import Team
 
 from .exceptions import StepError
 from .log import Logger
-from .models import AnalysisRun, Resource
-from .serializers import create_resource_for_data, get_serializer_by_name
+from .models import AnalysisRun, Resource, ResourceMetadata
+from .serializers import create_resource_for_data, create_resource_for_raw_data, get_serializer_by_name
 
 PipeIn = TypeVar("PipeIn", contravariant=True)
 PipeOut = TypeVar("PipeOut", covariant=True)
@@ -61,11 +61,17 @@ class PipelineContext:
     def team(self) -> Team:
         return self.run.group.team
 
-    def create_resource(self, data: Any, name: str):
+    def create_resource(
+        self, data: Any, name: str, serialize: bool = True, metadata: ResourceMetadata = None
+    ) -> Resource | None:
         if not self.create_resources:
             return
         qualified_name = f"{self.run.group.analysis.name}_{self.run.group.id}_{self.run.name}_{name}"
-        resource = create_resource_for_data(self.team, data, qualified_name)
+        if not serialize:
+            assert metadata, "Metadata must be provided for raw data"
+            resource = create_resource_for_raw_data(self.team, data, qualified_name, metadata)
+        else:
+            resource = create_resource_for_data(self.team, data, qualified_name)
         self.run.output_resources.add(resource)
         return resource
 
@@ -271,14 +277,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         """Perform any preflight checks on the input data or pipeline context."""
         pass
 
-    def create_resource(self, data: Any, name: str, force=False):
+    def create_resource(
+        self, data: Any, name: str, force=False, serialize=True, metadata: ResourceMetadata = None
+    ) -> Resource | None:
         """Create a Resource for the data and add it to the step.
         This will only create resources if the pipeline context is configured to do so and this step is the last
         step in the pipeline (or force=True).
         """
 
         if force or self.is_last:
-            resource = self.pipeline_context.create_resource(data, name)
+            resource = self.pipeline_context.create_resource(data, name, serialize, metadata)
             if resource:
                 self.resources.append(resource)
             return resource

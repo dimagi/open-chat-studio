@@ -19,11 +19,12 @@ class ResourceType(models.TextChoices):
     XML = "xml", "XML"
     XLSX = "xlsx", "XLSX"
     IMAGE = "image", "Image"
+    UNKNOWN = "unknown", "Unknown"
 
 
 class ResourceMetadata(pydantic.BaseModel):
     type: str
-    format: str
+    format: ResourceType
     data_schema: dict
     openai_file_id: str | None = None
     content_type: str | None = None

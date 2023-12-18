@@ -221,10 +221,11 @@ def replay_run(request, team_slug: str, pk: int):
 @permission_required("analysis.view_rungroup")
 def run_group_details(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    runs = list(group.analysisrun_set.all())
     return render(
         request,
         "analysis/run_group_details.html",
-        {"group": group, "runs": group.analysisrun_set.all()},
+        {"group": group, "runs": runs},
     )
 
 

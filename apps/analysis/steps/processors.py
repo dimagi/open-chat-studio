@@ -8,7 +8,6 @@ import openai
 import pydantic
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts import PromptTemplate
-from openai._types import NOT_GIVEN
 from openai.types import FileObject
 from openai.types.beta.threads import MessageContentImageFile, MessageContentText
 from pydantic import model_validator
@@ -17,8 +16,8 @@ import apps.analysis.exceptions
 from apps.analysis import core
 from apps.analysis.core import ParamsForm, StepContext, required
 from apps.analysis.exceptions import StepError
-from apps.analysis.models import ResourceMetadata
-from apps.analysis.serializers import create_resource_for_raw_data, temporary_data_file
+from apps.analysis.models import Resource, ResourceMetadata, ResourceType
+from apps.analysis.serializers import temporary_data_file
 
 
 class PromptParams(core.Params):
@@ -135,13 +134,6 @@ class AssistantStep(core.BaseStep[Any, str]):
             raise apps.analysis.exceptions.StepError(f"Assistant run failed with status {run.status}")
 
         result = self._process_messages(thread.id)
-        if self.pipeline_context.create_resources:
-            for file in result.files:
-                content = self.client.files.retrieve_content(file.id)
-                metadata = ResourceMetadata(type="", format="", data_schema={}, openai_file_id=file.id)
-                resource = create_resource_for_raw_data(self.pipeline_context.team, content, file.filename, metadata)
-                self.pipeline_context.run.output_resources.add(resource)
-
         return StepContext(result.response, metadata={"thread_id": thread.id, "run_id": run.id})
 
     def create_file(self, context):
@@ -155,19 +147,13 @@ class AssistantStep(core.BaseStep[Any, str]):
                 self.log.info(f"Uploading resource {context.resource.id} to assistant")
                 with context.resource.file.open("rb") as fh:
                     bytesio = BytesIO(fh.read())
-                openai_file = self.client.files.create(
-                    file=bytesio,  # (context.resource.file.name, bytesio, "application/octet-stream"),
-                    purpose="assistants",
-                )
+                openai_file = self.client.files.create(file=bytesio, purpose="assistants")
                 context.resource.metadata["openai_file_id"] = openai_file.id
                 context.resource.save()
         if not openai_file:
             self.log.info(f"Uploading data to assistant")
             with temporary_data_file(context.get_data()) as file:
-                openai_file = self.client.files.create(
-                    file=file,
-                    purpose="assistants",
-                )
+                openai_file = self.client.files.create(file=file, purpose="assistants")
         return openai_file
 
     def _process_messages(self, thread_id: str) -> AssistantOutput:
@@ -178,10 +164,8 @@ class AssistantStep(core.BaseStep[Any, str]):
         for message in messages:
             for content in message.content:
                 if isinstance(content, MessageContentImageFile):
-                    file = self.client.files.retrieve(content.image_file.file_id)
-                    output.add_file(file)
-                    output.response += f"![{file.filename}]({file.filename})\n"
-                    self.log.info(f"Received file {file.filename} from assistant")
+                    resource = self.make_resource_from_file(content.image_file.file_id, ResourceType.IMAGE)
+                    output.response += get_resource_markdown_link(resource, image=True)
                 elif isinstance(content, MessageContentText):
                     message_content = content.text
                     annotations = message_content.annotations
@@ -195,13 +179,12 @@ class AssistantStep(core.BaseStep[Any, str]):
                         # Gather citations based on annotation attributes
                         if file_citation := getattr(annotation, "file_citation", None):
                             cited_file = self.client.files.retrieve(file_citation.file_id)
-                            output.add_file(cited_file)
                             citations.append(f"[{index}] {file_citation.quote} from {cited_file.filename}")
-                            self.log.info(f"Received file {cited_file.filename} from assistant")
                         elif file_path := getattr(annotation, "file_path", None):
                             cited_file = self.client.files.retrieve(file_path.file_id)
-                            output.add_file(cited_file)
-                            citations.append(f"[{index}] Click <here> to download {cited_file.filename}")
+                            resource = self.make_resource_from_file(file_path.file_id, ResourceType.UNKNOWN)
+                            citations.append(f"[{index}]: Click <here> to download {cited_file.filename}")
+                            citations.append(get_resource_markdown_link(resource, link_text=index, image=False))
                             self.log.info(f"Received file {cited_file.filename} from assistant")
 
                     # Add footnotes to the end of the message before displaying to user
@@ -210,31 +193,61 @@ class AssistantStep(core.BaseStep[Any, str]):
 
     def _wait_for_run(self, run_id: str, thread_id: str) -> Any:
         in_progress = True
-        last_step = NOT_GIVEN
+        seen = set()
         while in_progress:
             run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             in_progress = run.status in ("in_progress", "queued")
             if in_progress:
                 time.sleep(2)
 
-            steps = list(self.client.beta.threads.runs.steps.list(thread_id=thread_id, run_id=run_id, after=last_step))
+            steps = list(self.client.beta.threads.runs.steps.list(thread_id=thread_id, run_id=run_id))
             for step in steps:
+                if step.id in seen:
+                    continue
                 if step.status != "in_progress":
                     details = step.step_details
                     if details.type == "message_creation":
-                        message = self.client.beta.threads.messages.retrieve(
-                            thread_id=thread_id, message_id=details.message_creation.message_id
-                        )
-                        content = "\n".join(
-                            [
-                                content.text.value
-                                for content in message.content
-                                if isinstance(content, MessageContentText)
-                            ]
-                        )
-                        self.log.debug(f"Message: {content}")
+                        log_message_creation(self, thread_id, details.message_creation)
                     elif details.type == "tool_calls":
-                        self.log.debug(f"Tool: {details.tool_calls}")
+                        for call in details.tool_calls:
+                            log_tool_call(self, call)
                     self.log.debug(f"Step: {step.status} ({step.id})")
-                    last_step = step.id
+                    seen.add(step.id)
         return run
+
+    def make_resource_from_file(self, file_id, resource_type):
+        file = self.client.files.retrieve(file_id)
+        self.log.info(f"Received {resource_type} file {file.filename} from assistant")
+        content = self.client.files.content(file.id)
+        metadata = ResourceMetadata(type="", format=resource_type, data_schema={}, openai_file_id=file.id)
+        return self.create_resource(content.read(), file.filename, force=True, serialize=False, metadata=metadata)
+
+
+def get_resource_markdown_link(resource: Resource, link_text: str = None, image=False) -> str:
+    link_text = link_text or resource.name
+    prefix = "!" if image else ""
+    return f"{prefix}[{link_text}](resource:{resource.team.slug}:{resource.id})\n"
+
+
+def log_message_creation(step, thread_id, message_creation):
+    message = step.client.beta.threads.messages.retrieve(thread_id=thread_id, message_id=message_creation.message_id)
+    content = "\n".join([content.text.value for content in message.content if isinstance(content, MessageContentText)])
+    step.log.info(f"{message.role}: {content}")
+
+
+def log_tool_call(step, call):
+    step.log.info(f"Calling tool: {call.type}")
+    match call.type:
+        case "code_interpreter":
+            step.log.debug(f"\n{call.code_interpreter.input}")
+            for output in call.code_interpreter.outputs:
+                match output.type:
+                    case "logs":
+                        step.log.debug(f"\nLogs:\n{output.logs}")
+                    case "image":
+                        step.log.debug(f"\nImage:\n{output.image.file_id}")
+        case "retrieval":
+            pass
+        case "function":
+            step.log.debug(f"\nCall:\n{call.function.name} ({call.function.arguments})")
+            step.log.debug(f"\nOutput:\n{call.function.output}")
