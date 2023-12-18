@@ -35,9 +35,9 @@ def create_resource_for_raw_data(team, data: Any, name: str, metadata: ResourceM
         metadata=metadata.model_dump(exclude={"content_type"}),
         content_type=metadata.content_type,
     )
-    ext = f".{metadata.format}"
-    if ext in (ResourceType.UNKNOWN, ResourceType.IMAGE):
-        ext = ""
+    ext = ""
+    if "." not in name and metadata.format not in (ResourceType.UNKNOWN, ResourceType.IMAGE):
+        ext = f".{metadata.format}"
     resource.file.save(f"{resource.name}{ext}", ContentFile(data))
     resource.save()
     return resource

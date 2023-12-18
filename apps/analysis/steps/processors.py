@@ -1,4 +1,5 @@
-import os
+import mimetypes
+import pathlib
 import time
 from functools import cached_property
 from io import BytesIO
@@ -174,15 +175,15 @@ class AssistantStep(core.BaseStep[Any, str]):
                     # Iterate over the annotations and add footnotes
                     for index, annotation in enumerate(annotations):
                         # Replace the text with a footnote
-                        message_content.value = message_content.value.replace(annotation.text, f"[{index}]")
+                        message_content.value = message_content.value.replace(f"({annotation.text})", f"[{index}]")
 
                         # Gather citations based on annotation attributes
                         if file_citation := getattr(annotation, "file_citation", None):
                             cited_file = self.client.files.retrieve(file_citation.file_id)
-                            citations.append(f"[{index}] {file_citation.quote} from {cited_file.filename}")
+                            citations.append(f"[{index}]: {file_citation.quote} from {cited_file.filename}")
                         elif file_path := getattr(annotation, "file_path", None):
                             resource = self.make_resource_from_file(file_path.file_id, ResourceType.UNKNOWN)
-                            citations.append(get_resource_markdown_link(resource, link_text=index, image=False))
+                            citations.append(f"[{index}]: resource:{resource.team.slug}:{resource.id}")
 
                     # Add footnotes to the end of the message before displaying to user
                     output.response += "\n" + message_content.value + "\n" + "\n".join(citations)
@@ -214,10 +215,19 @@ class AssistantStep(core.BaseStep[Any, str]):
 
     def make_resource_from_file(self, file_id, resource_type):
         file = self.client.files.retrieve(file_id)
-        self.log.info(f"Received {resource_type} file {file.filename} from assistant")
+        filename = file.filename
+        try:
+            filename = pathlib.Path(file.filename).name
+        except Exception:
+            pass
+
+        content_type = mimetypes.guess_type(filename)[0]
+        self.log.info(f"Received {resource_type} file {filename} from assistant")
         content = self.client.files.content(file.id)
-        metadata = ResourceMetadata(type="", format=resource_type, data_schema={}, openai_file_id=file.id)
-        return self.create_resource(content.read(), file.filename, force=True, serialize=False, metadata=metadata)
+        metadata = ResourceMetadata(
+            type="", format=resource_type, data_schema={}, openai_file_id=file.id, content_type=content_type
+        )
+        return self.create_resource(content.read(), filename, force=True, serialize=False, metadata=metadata)
 
 
 def get_resource_markdown_link(resource: Resource, link_text: str = None, image=False) -> str:
