@@ -87,7 +87,24 @@ class TimeseriesFilterForm(ParamsForm):
     duration_unit = forms.TypedChoiceField(
         required=False, choices=get_duration_choices(), label="Duration Unit", coerce=int
     )
-    anchor_point = forms.DateField(required=False, label="Starting on")
+    anchor_mode = forms.ChoiceField(
+        required=False,
+        label="Starting from",
+        choices=[
+            ("relative_start", "Beginning of data"),
+            ("relative_end", "End of data"),
+            ("absolute", "Specific date"),
+        ],
+    )
+    anchor_point = forms.DateField(required=False, label="Starting on", initial="today")
+    minimum_data_points = forms.IntegerField(required=False, label="Minimum Data Points for Dataset", initial=10)
+    calendar_time = forms.BooleanField(
+        required=False,
+        label="Use calendar periods",
+        initial=False,
+        help_text="If checked, the start and end times of the window will be adjusted to the nearest calendar period. "
+        "For example, if the duration is 1 day, the window will start at midnight and end at 11:59:59 PM.",
+    )
 
     def clean_unit(self):
         from apps.analysis.steps.filters import DurationUnit
@@ -100,6 +117,8 @@ class TimeseriesFilterForm(ParamsForm):
     def get_params(self):
         from .filters import TimeseriesFilterParams
 
+        if self.cleaned_data["anchor_mode"] == "relative_end":
+            self.cleaned_data["anchor_type"] = "last"
         try:
             return TimeseriesFilterParams(**self.cleaned_data)
         except ValueError as e:

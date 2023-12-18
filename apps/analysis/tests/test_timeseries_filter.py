@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytest
 
-from apps.analysis.core import PipelineContext
+from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
@@ -13,6 +13,8 @@ def _make_params(duration_unit, duration_value, anchor_type="this", anchor_point
         duration_value=duration_value,
         anchor_type=anchor_type,
         anchor_point=datetime.fromisoformat(anchor_point or "2022-04-01"),
+        calendar_time=True,
+        minimum_data_points=1,
     )
 
 
@@ -139,17 +141,26 @@ def test_timeseries_filter_with_valid_params(timeseries_filter, timeseries_data)
         duration_unit=DurationUnit.days,
         duration_value=7,
         anchor_type="this",
+        anchor_mode="absolute",
         anchor_point=datetime.fromisoformat("2021-01-02"),
+        minimum_data_points=1,
+        calendar_time=True,
     )
-    result = timeseries_filter.run(params, timeseries_data)
+    result = timeseries_filter.run(params, StepContext(timeseries_data))
     assert len(result.data) == 7
     assert result.data["value"].tolist() == list(range(1, 8))
 
 
 def test_timeseries_filter_with_empty_data(timeseries_filter):
-    params = TimeseriesFilterParams(duration_unit=DurationUnit.days, duration_value=7, anchor_type="this")
+    params = TimeseriesFilterParams(
+        duration_unit=DurationUnit.days,
+        duration_value=7,
+        anchor_type="this",
+        anchor_mode="absolute",
+        minimum_data_points=0,
+    )
     empty_data = pd.DataFrame()
-    result = timeseries_filter.run(params, empty_data)
+    result = timeseries_filter.run(params, StepContext(empty_data))
     assert len(result.data) == 0
 
 
@@ -159,6 +170,8 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
         duration_value=7,
         anchor_type="this",
         anchor_point=datetime.now() + timedelta(days=10),
+        anchor_mode="absolute",
+        minimum_data_points=0,
     )
-    result = timeseries_filter.run(params, timeseries_data)
+    result = timeseries_filter.run(params, StepContext(timeseries_data))
     assert len(result.data) == 0

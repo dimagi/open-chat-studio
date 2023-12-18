@@ -33,12 +33,16 @@ class TimeseriesFilterParams(Params):
     duration_unit: required(DurationUnit) = None
     duration_value: required(PositiveInt) = None
     anchor_type: Literal["this", "last"] = "this"
+    anchor_mode: Literal["relative_start", "relative_end", "absolute"] = "relative_start"
     anchor_point: Annotated[datetime, Field(default_factory=datetime.utcnow)]
+    minimum_data_points: int = 10
+    calendar_time: bool = False
 
     @cached_property
     def range_tuple(self) -> tuple[datetime, datetime]:
-        anchor = self.anchor_point
-        start = anchor + self.anchor_adjustment()
+        start = self.anchor_point
+        if self.calendar_time:
+            start = start + self.anchor_adjustment()
         if self.anchor_type == "last":
             start -= self.delta()
         return start, start + self.delta()
@@ -104,8 +108,16 @@ class TimeseriesFilter(TimeseriesStep):
 
     def run(self, params: TimeseriesFilterParams, context: StepContext[pd.DataFrame]) -> StepContext[pd.DataFrame]:
         data = context.get_data()
+        if params.anchor_mode == "relative_start":
+            params.anchor_point = data.index.min()
+        elif params.anchor_mode == "relative_end":
+            params.anchor_point = data.index.max()
+
         self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
-        mask = data.index.isin(pd.date_range(params.start, params.end, inclusive="left"))
-        result = data.loc[mask]
+        result = data.loc[(data.index >= params.start) & (data.index < params.end)]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
+        if len(result) < params.minimum_data_points:
+            raise StepError(
+                f"Filtered timeseries data has {len(result)} rows, but minimum is {params.minimum_data_points}."
+            )
         return StepContext(result, name=params.period_name())
