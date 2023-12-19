@@ -53,6 +53,8 @@ class PipelineContext:
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
+    _is_cancelled = False
+
     @cached_property
     def llm_service(self) -> LlmService:
         return self.run.group.analysis.llm_provider.get_llm_service()
@@ -65,8 +67,11 @@ class PipelineContext:
     def is_cancelled(self):
         if not self.run:
             return  # unit test
+        if self._is_cancelled:
+            return self._is_cancelled
         self.run.refresh_from_db()
-        return self.run.is_cancelled
+        self._is_cancelled = self.run.is_cancelled
+        return self._is_cancelled
 
     def create_resource(
         self, data: Any, name: str, serialize: bool = True, metadata: ResourceMetadata = None
@@ -275,7 +280,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
                 for res in [result] if isinstance(result, StepContext) else result:
                     if not res.name:
                         res.name = self.name
-                    if self.is_last:
+                    if self.is_last and not self.is_cancelled:
                         # always create resources for last step
                         res.get_or_create_resource(self.pipeline_context)
                 return result
