@@ -252,6 +252,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def name(self):
         return self.__class__.__name__
 
+    @property
+    def is_cancelled(self):
+        return self.pipeline_context.is_cancelled
+
     def initialize(self, pipeline_context: PipelineContext, step_count: int = 1, current_step_index: int = 0):
         self.pipeline_context = pipeline_context
         self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
