@@ -81,7 +81,7 @@ class RunGroupTable(tables.Table):
             "actions": [
                 table_actions.Action(
                     "analysis:replay_run",
-                    "fa-solid fa-play",
+                    "fa-solid fa-arrow-rotate-left",
                     required_permissions=["analysis.add_rungroup"],
                 ),
                 table_actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
