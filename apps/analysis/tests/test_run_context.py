@@ -36,6 +36,7 @@ def mock_run_group():
     analysis.llm_provider.get_llm_service = mock.MagicMock()
     group = RunGroup(analysis=analysis, params={})
     group.save = mock.MagicMock()
+    group.refresh_from_db = mock.MagicMock()
     return group
 
 
@@ -43,6 +44,7 @@ def mock_run_group():
 def mock_analysis_run(mock_run_group):
     run = AnalysisRun(group=mock_run_group)
     run.save = mock.MagicMock()
+    run.refresh_from_db = mock.MagicMock()
     return run
 
 
