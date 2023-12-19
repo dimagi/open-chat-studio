@@ -361,6 +361,7 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
+WAFFLE_CREATE_MISSING_FLAGS = True
 
 # replace any values below with specifics for your project
 PROJECT_METADATA = {
