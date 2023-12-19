@@ -36,11 +36,11 @@ class RunStatusContext:
         if exc_type:
             if exc_type == PipelineSplitSignal:
                 return True
-            log.exception("Error running analysis")
             self.run.status = RunStatus.ERROR
             if exc_type == StepError:
                 self.run.error = str(exc_val)
             else:
+                log.exception("Error running analysis")
                 self.run.error = repr(exc_val)
         elif not self.run.is_cancelled:
             self.run.status = RunStatus.SUCCESS

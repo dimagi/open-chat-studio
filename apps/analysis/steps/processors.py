@@ -130,7 +130,7 @@ class AssistantStep(core.BaseStep[Any, str]):
         self.log.info(f"Running query with assistant ({run.id})")
 
         run = self._wait_for_run(run.id, thread.id)
-        if run.status != "completed":
+        if run.status != "completed" and run.status not in ("cancelling", "cancelled"):
             self.log.error(f"Run failed with status {run.status}")
             raise apps.analysis.exceptions.StepError(f"Assistant run failed with status {run.status}")
 
@@ -193,10 +193,14 @@ class AssistantStep(core.BaseStep[Any, str]):
         in_progress = True
         seen = set()
         while in_progress:
-            run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
-            in_progress = run.status in ("in_progress", "queued")
-            if in_progress:
-                time.sleep(2)
+            if self.is_cancelled:
+                run = self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                in_progress = False
+            else:
+                run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+                in_progress = run.status in ("in_progress", "queued")
+                if in_progress:
+                    time.sleep(2)
 
             steps = list(self.client.beta.threads.runs.steps.list(thread_id=thread_id, run_id=run_id))
             for step in steps:
