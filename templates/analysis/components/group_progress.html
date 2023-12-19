@@ -8,7 +8,11 @@
 <div role="tablist" class="tabs tabs-bordered">
   <input type="radio" name="group_tabs_{{ group.id }}" role="tab" class="tab" aria-label="Logs" checked/>
   <div role="tabpanel" class="tab-content p-4">
-    <div hx-get="{% url "analysis:group_progress" request.team.slug group.id %}" hx-trigger="every 2s" hx-swap="innerHTML">
+    <div hx-get="{% url "analysis:group_progress" request.team.slug group.id %}"
+         hx-trigger="every 2s"
+         hx-swap="innerHTML"
+         x-data="{ showDebug: false }"
+    >
       {% include "analysis/components/group_progress_inner.html" %}
     </div>
   </div>
