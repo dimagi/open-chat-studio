@@ -1,6 +1,11 @@
 <div class="font-mono">
+
+  <div class="flex items-center cursor-pointer float-right">
+    <span class="label-text mr-2">Show Debug</span>
+    <input x-model="showDebug" type="checkbox" class="toggle" />
+  </div>
   {% for entry in run.get_log_entries %}
-    <div class="log log-{{ entry.level.name|lower }}">
+    <div class="log log-{{ entry.level.name|lower }}" {% if entry.is_debug %}x-show="showDebug"{% endif %}>
       <time datetime="{{ entry.timestamp.isoformat }}"
             title="{{ entry.timestamp }}">{{ entry.timestamp|time:"H:i:s" }}</time>
       <div class="badge

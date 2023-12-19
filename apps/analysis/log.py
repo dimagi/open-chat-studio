@@ -12,6 +12,9 @@ class LogLevel(IntEnum):
     WARN = auto()
     ERROR = auto()
 
+    def is_debug(self):
+        return self == LogLevel.DEBUG
+
 
 @dataclasses.dataclass
 class LogEntry:
