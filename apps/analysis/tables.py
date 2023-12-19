@@ -45,10 +45,19 @@ class AnalysisTable(tables.Table):
 
 def get_run_group_row_attrs():
     class_attr = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
-    class_attr_error = class_attr + " bg-error text-error-content"
+
+    def _get_class(record):
+        # if you change these styles, also change them in settings.py (see DJANGO_TABLES2_ROW_ATTRS)
+        match record.status:
+            case RunStatus.ERROR:
+                return class_attr + " text-error"
+            case RunStatus.CANCELLED | RunStatus.CANCELLING:
+                return class_attr + " text-neutral"
+        return class_attr
+
     attrs = {
         **settings.DJANGO_TABLES2_ROW_ATTRS,
-        "class": lambda record: class_attr_error if record.status == RunStatus.ERROR else "",
+        "class": _get_class,
     }
     return attrs
 

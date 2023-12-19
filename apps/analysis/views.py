@@ -1,3 +1,5 @@
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import FileResponse, Http404, HttpResponse
@@ -236,7 +238,7 @@ def run_group_details(request, team_slug: str, pk: int):
 def group_progress(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
     if request.method == "POST" and request.POST.get("action") == "cancel":
-        group.status = RunStatus.CANCELLED
+        group.status = RunStatus.CANCELLING
         group.save()
         group.analysisrun_set.filter(status__in=(RunStatus.PENDING, RunStatus.RUNNING)).update(
             status=RunStatus.CANCELLED
