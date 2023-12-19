@@ -108,12 +108,6 @@ class DataFramesSerializer(Serializer):
             data = data.set_index(metadata.data_schema["index"])
         return data
 
-    def write(self, data: pd.DataFrame, file: IO):
-        raise NotImplementedError("Deprecated. Use DataFramesSerializerV1")
-
-    def get_metadata(self, data: Any) -> ResourceMetadata:
-        raise NotImplementedError("Deprecated. Use DataFramesSerializerV1")
-
     def get_summary(self, data: Any) -> str:
         return str(data)
 
@@ -125,14 +119,36 @@ class DataFramesSerializerV1(Serializer):
     def read(self, file: IO, metadata: ResourceMetadata) -> Any:
         return pd.read_json(file, orient="table")
 
+    def get_summary(self, data: Any) -> str:
+        return str(data)
+
+
+class DataFramesSerializerV2(Serializer):
+    supported_types = [pd.DataFrame]
+    supported_type_names = ["dataframe.v2"]
+
+    def read(self, file: IO, metadata: ResourceMetadata) -> Any:
+        date_cols = [field["name"] for field in metadata.data_schema["fields"] if field["type"] == "datetime"]
+        data = pd.read_json(file, orient="records", convert_dates=date_cols)
+        if "index" in metadata.data_schema:
+            data = data.set_index(metadata.data_schema["index"])
+        return data
+
     def write(self, data: pd.DataFrame, file: IO):
-        data.to_json(file, orient="table", date_format="iso")
+        if not isinstance(data.index, pd.RangeIndex):
+            data = data.reset_index()
+        data.to_json(file, orient="records", date_format="iso")
 
     def get_metadata(self, data: Any) -> ResourceMetadata:
+        schema = pd.io.json.build_table_schema(data, version=False)
+        if not isinstance(data.index, pd.RangeIndex):
+            schema["index"] = data.index.name or "index"
+        if "primaryKey" in schema:
+            del schema["primaryKey"]
         return ResourceMetadata(
-            type="dataframe",
-            format="json",
-            data_schema={},
+            type="dataframe.v2",
+            format=ResourceType.JSON,
+            data_schema=schema,
             content_type="application/json",
         )
 
@@ -141,14 +157,14 @@ class DataFramesSerializerV1(Serializer):
 
 
 def get_serializer_by_type(data: Any) -> Serializer:
-    for serializer in [BasicTypeSerializer, DataFramesSerializerV1]:
+    for serializer in [BasicTypeSerializer, DataFramesSerializerV2]:
         if type(data) in serializer.supported_types:
             return serializer()
     raise NotImplementedError(f"No serializer found for {type(data)}")
 
 
 def get_serializer_by_name(type_name: str) -> Serializer:
-    for serializer in [BasicTypeSerializer, DataFramesSerializer, DataFramesSerializerV1]:
+    for serializer in [BasicTypeSerializer, DataFramesSerializer, DataFramesSerializerV2]:
         if type_name in serializer.supported_type_names:
             return serializer()
     raise NotImplementedError(f"No serializer found for {type_name}")

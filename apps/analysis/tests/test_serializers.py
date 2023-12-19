@@ -5,7 +5,7 @@ import pytest
 from pandas import DataFrame, date_range
 
 from apps.analysis.models import ResourceType
-from apps.analysis.serializers import DataFramesSerializerV1, ResourceMetadata
+from apps.analysis.serializers import DataFramesSerializerV2, ResourceMetadata
 
 
 @pytest.fixture
@@ -27,36 +27,29 @@ def valid_metadata():
 
 def test_dataframes_serializer_writes_valid_dataframe(valid_dataframe):
     file = io.StringIO()
-    DataFramesSerializerV1().write(valid_dataframe, file)
-    assert json.loads(file.getvalue()) == {
-        "schema": {
-            "fields": [
-                {"name": "index", "type": "datetime"},
-                {"name": "value", "type": "integer"},
-            ],
-            "primaryKey": ["index"],
-            "pandas_version": "1.4.0",
-        },
-        "data": [
-            {"index": "2021-01-01T00:00:00.000", "value": 0},
-            {"index": "2021-01-02T00:00:00.000", "value": 1},
-            {"index": "2021-01-03T00:00:00.000", "value": 2},
-            {"index": "2021-01-04T00:00:00.000", "value": 3},
-            {"index": "2021-01-05T00:00:00.000", "value": 4},
-        ],
-    }
+    DataFramesSerializerV2().write(valid_dataframe, file)
+    assert json.loads(file.getvalue()) == [
+        {"index": "2021-01-01T00:00:00.000", "value": 0},
+        {"index": "2021-01-02T00:00:00.000", "value": 1},
+        {"index": "2021-01-03T00:00:00.000", "value": 2},
+        {"index": "2021-01-04T00:00:00.000", "value": 3},
+        {"index": "2021-01-05T00:00:00.000", "value": 4},
+    ]
 
 
 def test_dataframes_serializer_round_trip(valid_dataframe, valid_metadata):
     file = io.StringIO()
-    DataFramesSerializerV1().write(valid_dataframe, file)
+    DataFramesSerializerV2().write(valid_dataframe, file)
     file.seek(0)
-    df = DataFramesSerializerV1().read(file, valid_metadata)
+    df = DataFramesSerializerV2().read(file, valid_metadata)
     assert df.equals(valid_dataframe)
 
 
 def test_dataframes_serializer_gets_correct_metadata(valid_dataframe):
-    metadata = DataFramesSerializerV1().get_metadata(valid_dataframe)
-    assert metadata.type == "dataframe"
+    metadata = DataFramesSerializerV2().get_metadata(valid_dataframe)
+    assert metadata.type == "dataframe.v2"
     assert metadata.format == ResourceType.JSON
-    assert metadata.data_schema == {}
+    assert metadata.data_schema == {
+        "fields": [{"name": "index", "type": "datetime"}, {"name": "value", "type": "integer"}],
+        "index": "index",
+    }
