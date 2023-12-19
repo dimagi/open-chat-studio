@@ -1,3 +1,4 @@
+{% load waffle_tags %}
 {% load i18n %}
 {% load team_tags %}
 {% if request.team %}
@@ -58,12 +59,14 @@
     </a>
   </li>
   <li>
+  {% flag "pipelines" %}
   {% if perms.analysis.view_analysis %}
     <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
       <i class="fa-solid fa-magnifying-glass-chart"></i>
       {% translate "Analysis Pipelines" %}<span class="badge badge-sm">beta</span>
     </a>
   {% endif %}
+  {% endflag %}
   </li>
 {#  <li>#}
 {#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
