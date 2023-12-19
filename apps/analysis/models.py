@@ -174,4 +174,4 @@ class AnalysisRun(BaseRun):
         ordering = ["created_at"]
 
     def get_log_entries(self):
-        return [LogEntry.from_json(entry) for entry in self.log.get("entries", None)]
+        return [LogEntry.from_json(entry) for entry in self.log.get("entries", [])]
