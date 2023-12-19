@@ -108,11 +108,11 @@ class BaseRun(BaseModel):
 
     @property
     def is_running(self):
-        return self.status == RunStatus.RUNNING and not self.is_expired
+        return self.status in (RunStatus.RUNNING, RunStatus.PENDING) and not self.is_expired
 
     @property
     def is_expired(self):
-        return (timezone.now() - self.start_time) > timedelta(hours=1)
+        return self.start_time and (timezone.now() - self.start_time) > timedelta(hours=1)
 
     @property
     def duration(self) -> timedelta | None:
