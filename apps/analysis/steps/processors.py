@@ -194,7 +194,10 @@ class AssistantStep(core.BaseStep[Any, str]):
         seen = set()
         while in_progress:
             if self.is_cancelled:
-                run = self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                try:
+                    run = self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                except openai.BadRequestError:
+                    pass
                 in_progress = False
             else:
                 run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
