@@ -1,8 +1,8 @@
 {% load form_tags %}
-<div x-data="{ mode: 'absolute'}">
+<div x-data="{ mode: null}">
 {% render_field form.duration_value %}
 {% render_field form.duration_unit %}
-<div x-model="mode">
+<div x-model.fill="mode">
   {% render_field form.anchor_mode %}
 </div>
 <div x-show="mode === 'absolute'" x-cloak>
