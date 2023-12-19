@@ -63,6 +63,8 @@ class PipelineContext:
 
     @property
     def is_cancelled(self):
+        if not self.run:
+            return  # unit test
         self.run.refresh_from_db()
         return self.run.is_cancelled
 
