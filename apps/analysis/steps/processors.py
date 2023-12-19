@@ -167,7 +167,7 @@ class AssistantStep(core.BaseStep[Any, str]):
         output = AssistantOutput()
         messages = list(self.client.beta.threads.messages.list(thread_id=thread_id, order="asc"))
         # ignore user message
-        self.log.debug(f"Analysis completed. Got {len(messages) - 1} messages")
+        self.log.debug(f"Analysis completed. Got {len(messages)} messages")
 
         for message in messages:
             if message.role == "user":

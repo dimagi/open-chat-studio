@@ -33,7 +33,7 @@ class RunStatusContext:
         self.run.save()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.run.refresh_from_db()
+        self.run.refresh_from_db(fields=["status"])
 
         if exc_type:
             if exc_type == PipelineSplitSignal:
@@ -92,7 +92,7 @@ def run_analysis(run_group_id: int):
     with RunStatusContext(group):
         source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
-        group.refresh_from_db()
+        group.refresh_from_db(fields=["status"])
         if group.is_cancelled:
             return
 

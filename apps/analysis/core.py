@@ -69,7 +69,7 @@ class PipelineContext:
             return  # unit test
         if self._is_cancelled:
             return self._is_cancelled
-        self.run.refresh_from_db()
+        self.run.refresh_from_db(fields=["status"])
         self._is_cancelled = self.run.is_cancelled
         return self._is_cancelled
 
