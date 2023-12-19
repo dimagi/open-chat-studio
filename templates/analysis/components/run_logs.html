@@ -5,7 +5,7 @@
             title="{{ entry.timestamp }}">{{ entry.timestamp|time:"H:i:s" }}</time>
       <div class="badge
     {% if entry.is_debug %}badge-neutral
-    {% elif entry.is_info %}badge-success
+    {% elif entry.is_info %}badge-info
     {% elif entry.is_warning %}badge-warning
     {% elif entry.is_error %}badge-error
     {% endif %}
