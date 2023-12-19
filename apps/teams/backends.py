@@ -2,6 +2,7 @@ import dataclasses
 import operator
 from functools import reduce
 
+from django.conf import settings
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.models import Group, Permission
 from django.db import models
@@ -16,6 +17,17 @@ EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
 ANALYSIS_ADMIN_GROUP = "Analysis Admin"
 ANALYSIS_USER_GROUP = "Analysis Users"
 CHAT_VIEWER_GROUP = "Chat Viewer"
+
+
+class PermissionCheckBackend(ModelBackend):
+    """Check that permissions exist when in DEBUG mode"""
+
+    def has_perm(self, user_obj, perm, obj=None):
+        if settings.DEBUG:
+            app_label, codename = perm.split(".")
+            if not Permission.objects.filter(content_type__app_label=app_label, codename=codename).exists():
+                raise Exception(f"Permission not found {perm}")
+        return False  # pass check to next backend
 
 
 class TeamBackend(ModelBackend):

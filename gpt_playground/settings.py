@@ -216,6 +216,8 @@ ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="none")
 ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 AUTHENTICATION_BACKENDS = (
+    # check permissions exist (DEBUG only)
+    "apps.teams.backends.PermissionCheckBackend",
     # login etc. + team membership based permissions
     "apps.teams.backends.TeamBackend",
     # `allauth` specific authentication methods, such as login by e-mail
