@@ -15,7 +15,7 @@
     <div class="app-card">
        <div class="flex">
         <div class="flex-1">
-          <h1 class="pg-title">Analysis Run Group: {{ group.id }}</h1>
+          <h1 class="pg-title">Analysis Run Group {{ group.id }}</h1>
         </div>
         <div class="justify-self-end">
           <div class="btn btn-sm btn-active no-animation hover:cursor-auto
@@ -24,6 +24,12 @@
             {% elif group.status == "error" %}btn-danger
             {% endif %}
           ">{{ group.status|upper }}</div>
+          {% if group.is_running %}
+          <div class="btn btn-sm btn-warning"
+               hx-post="{% url "analysis:group_progress" request.team.slug group.id %}"
+               hx-vals='{"action": "cancel"}'
+          ><i class="fa-solid fa-ban"></i> Cancel</div>
+          {% endif %}
           <div class="join">
             <div class="tooltip" data-tip="Replay Run">
               <a class="btn btn-sm btn-primary join-item rounded-r-full"
@@ -31,10 +37,17 @@
                 <i class="fa-solid fa-play"></i>
               </a>
             </div>
+            <div class="tooltip" data-tip="Delete">
+              <a class="btn btn-sm btn-primary join-item rounded-r-full"
+                 href="{% url 'analysis:delete_group' team.slug group.id %}">
+                <i class="fa-solid fa-trash"></i>
+              </a>
+            </div>
           </div>
         </div>
       </div>
       <div id="group-status">{% include "analysis/components/run_status.html" with run=group %}</div>
+{#      {% if group.is_complete or group.is_expired %}#}
       {% if group.is_complete %}
         {% include "analysis/components/group_detail_tabs.html" %}
       {% else %}

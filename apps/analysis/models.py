@@ -85,6 +85,7 @@ class RunStatus(models.TextChoices):
     RUNNING = "running", "Running"
     SUCCESS = "success", "Success"
     ERROR = "error", "Error"
+    CANCELLED = "cancelled", "Cancelled"
 
 
 class BaseRun(BaseModel):
@@ -99,7 +100,19 @@ class BaseRun(BaseModel):
 
     @property
     def is_complete(self):
-        return self.status in (RunStatus.SUCCESS, RunStatus.ERROR)
+        return self.status in (RunStatus.SUCCESS, RunStatus.ERROR, RunStatus.CANCELLED)
+
+    @property
+    def is_cancelled(self):
+        return self.status == RunStatus.CANCELLED
+
+    @property
+    def is_running(self):
+        return self.status == RunStatus.RUNNING and not self.is_expired
+
+    @property
+    def is_expired(self):
+        return (timezone.now() - self.start_time) > timedelta(hours=1)
 
     @property
     def duration(self) -> timedelta | None:

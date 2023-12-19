@@ -42,7 +42,7 @@ class RunStatusContext:
                 self.run.error = str(exc_val)
             else:
                 self.run.error = repr(exc_val)
-        else:
+        elif not self.run.is_cancelled:
             self.run.status = RunStatus.SUCCESS
         self.run.end_time = timezone.now()
         self.run.save()
@@ -82,10 +82,14 @@ def run_analysis(run_group_id: int):
     with RunStatusContext(group):
         source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
+        group.refresh_from_db()
+        if group.is_cancelled:
+            return
+
         if isinstance(source_result, list) and len(source_result) > 1:
             run_parallel_pipeline(group, source_result)
             raise PipelineSplitSignal()
-        else:
+        elif source_result:
             next_intput = source_result[0] if isinstance(source_result, list) else source_result
             run_serial_pipeline(group, group.analysis.pipeline, get_data_pipeline, next_intput)
 
@@ -130,6 +134,9 @@ def run_pipline_split(self, run_id: int):
     run = AnalysisRun.objects.select_related(
         "group", "group__team", "group__analysis", "group__analysis__llm_provider"
     ).get(id=run_id)
+    if run.is_cancelled:
+        return
+
     run.task_id = self.request.id
     run.save()
 

@@ -75,6 +75,7 @@ class RunGroupTable(tables.Table):
                     "fa-solid fa-play",
                     required_permissions=["analysis.add_rungroup"],
                 ),
+                table_actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
             ]
         },
     )
