@@ -2,6 +2,7 @@ from datetime import datetime
 
 from django import forms
 from django.core.files.base import ContentFile
+from django.utils import timezone
 from django.utils.encoding import smart_bytes
 
 from apps.analysis.core import Params, ParamsForm
@@ -99,7 +100,7 @@ class TimeseriesFilterForm(ParamsForm):
             ("absolute", "Specific date"),
         ],
     )
-    anchor_point = forms.DateField(required=False, label="Starting on", initial="today")
+    anchor_point = forms.DateField(required=False, label="Starting on", initial=timezone.now)
     minimum_data_points = forms.IntegerField(required=False, label="Minimum Data Points for Dataset", initial=10)
     calendar_time = forms.BooleanField(
         required=False,
@@ -126,12 +127,15 @@ class TimeseriesFilterForm(ParamsForm):
     def get_params(self):
         from .filters import TimeseriesFilterParams
 
-        if self.cleaned_data["anchor_mode"] != "absolute":
-            self.cleaned_data["calendar_time"] = False
-        elif self.cleaned_data["anchor_mode"] == "relative_end":
-            self.cleaned_data["anchor_type"] = "last"
+        data = dict(self.cleaned_data)
+        if data["anchor_mode"] != "absolute":
+            del data["anchor_point"]
+
+        if data["minimum_data_points"] is None:
+            del data["minimum_data_points"]
+
         try:
-            return TimeseriesFilterParams(**self.cleaned_data)
+            return TimeseriesFilterParams(**data)
         except ValueError as e:
             raise forms.ValidationError(repr(e))
 

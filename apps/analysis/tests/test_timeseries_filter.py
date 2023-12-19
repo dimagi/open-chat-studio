@@ -98,6 +98,18 @@ def _make_params(
             id="weeks, anchor point on Monday",
         ),
         pytest.param(
+            _make_params(DurationUnit.weeks, 2, "this", anchor_mode="relative_start"),
+            "2022-04-01",
+            "2022-04-15",
+            id="weeks, relative_start, this",
+        ),
+        pytest.param(
+            _make_params(DurationUnit.weeks, 2, "last", anchor_mode="relative_end"),
+            "2022-03-18",
+            "2022-04-01",
+            id="weeks, relative_end, last",
+        ),
+        pytest.param(
             _make_params(DurationUnit.months, 1, "this"),
             "2022-04-01",
             "2022-05-01",
@@ -237,3 +249,13 @@ def test_timeseries_filter_anchor_mode(anchor_type, anchor_mode, expected, times
     result = timeseries_filter.run(params, StepContext(timeseries_data))
     assert len(result.data) == 2
     assert result.data["value"].tolist() == expected
+
+
+def test_timeseries_filter_form():
+    form_cls = TimeseriesFilterParams().get_dynamic_config_form_class()
+    form = form_cls(None, data={"duration_unit": 2, "duration_value": 2, "anchor_mode": "relative_end"})
+    assert form.is_valid(), form.errors
+    params = form.get_params()
+    assert params.anchor_mode == "relative_end"
+    assert params.anchor_type == "last"
+    assert not params.calendar_time

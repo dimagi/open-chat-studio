@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import IntEnum
 from functools import cached_property
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -38,17 +38,20 @@ class TimeseriesFilterParams(Params):
     minimum_data_points: int = 10
     calendar_time: bool = False
 
+    def model_post_init(self, __context: Any) -> None:
+        if self.anchor_mode != "absolute":
+            self.calendar_time = False
+
+        if self.anchor_mode == "relative_end":
+            self.anchor_type = "last"
+
     @cached_property
     def range_tuple(self) -> tuple[datetime, datetime]:
         start = self.anchor_point
         if self.calendar_time:
             start = start + self.anchor_adjustment()
         if self.anchor_type == "last":
-            adjustment = self.duration_value
-            if self.anchor_mode == "relative_end":
-                # adjust to include the anchor point (range is right-exclusive)
-                adjustment = adjustment - 1
-            start -= self.duration_unit.delta(adjustment)
+            start -= self.duration_unit.delta(self.duration_value)
         return start, start + self.delta()
 
     @property
@@ -112,13 +115,16 @@ class TimeseriesFilter(TimeseriesStep):
 
     def run(self, params: TimeseriesFilterParams, context: StepContext[pd.DataFrame]) -> StepContext[pd.DataFrame]:
         data = context.get_data()
+        self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
+
         if params.anchor_mode == "relative_start":
             params.anchor_point = data.index.min()
+            self.log.debug(f"Setting anchor point to start of data {params.anchor_point}")
         elif params.anchor_mode == "relative_end":
             params.anchor_point = data.index.max()
+            self.log.debug(f"Setting anchor point to end of data {params.anchor_point}")
 
-        self.log.info(f"Initial timeseries data from {data.index.min()} to {data.index.max()} ({len(data)} rows)")
-        result = data.loc[(data.index >= params.start) & (data.index < params.end)]
+        result = data.loc[(data.index >= params.start) & (data.index <= params.end)]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
         if len(result) < params.minimum_data_points:
             raise StepError(
