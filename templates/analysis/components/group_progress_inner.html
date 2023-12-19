@@ -1,3 +1,10 @@
+{% if update_status %}
+  <div id="group-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" with run=group %}</div>
+  <div id="run-group-status-buttons" hx-swap-oob="true" class="inline">
+    {% include "analysis/components/run_group_status_buttons.html" %}
+  </div>
+{% endif %}
+
 {% if not runs %}
   <span class="loading loading-dots loading-md"></span>
 {% endif %}
@@ -7,9 +14,9 @@
       Source Pipeline
     {% else %}
       {{ run.name }}: Analysis Pipeline {{ forloop.revcounter0 }}
-      {% include "analysis/components/runs_status_badge.html" %}
-      </div>
     {% endif %}
+    {% include "analysis/components/runs_status_badge.html" %}
+  </div>
   {% include "analysis/components/run_logs.html" %}
   {% if not run.is_complete %}
     <span class="loading loading-dots loading-md"></span>
