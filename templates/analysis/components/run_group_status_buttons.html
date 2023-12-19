@@ -1,11 +1,12 @@
-<div class="btn btn-sm btn-active no-animation hover:cursor-auto
-            {% if group.status == "running" %}btn-primary
-            {% elif group.status == "success" %}btn-success
-            {% elif group.status == "error" %}btn-danger
+<div class="rounded-lg font-semibold shadow-sm p-2 inline text-sm hover:cursor-auto
+            {% if group.status == "running" %}bg-primary text-primary-content
+            {% elif group.status == "success" %}bg-success text-success-content
+            {% elif group.status == "error" %}bg-error text-error-content
+            {% else %}bg-neutral text-neutral-content
             {% endif %}
           ">{{ group.status|upper }}</div>
 {% if group.is_running %}
-  <div class="btn btn-sm btn-warning"
+  <div class="btn btn-sm btn-warning no-animation"
        hx-post="{% url "analysis:group_progress" request.team.slug group.id %}"
        hx-vals='{"action": "cancel"}'
   ><i class="fa-solid fa-ban"></i> Cancel

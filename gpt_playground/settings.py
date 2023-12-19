@@ -454,7 +454,7 @@ DJANGO_TABLES2_TABLE_ATTRS = {
     "th": {"class": "py-3 px-6 text-left"},
     "td": {"class": "py-3 px-6 text-left overflow-hidden"},
 }
-# bg-error text-error-content
+# text-neutral text-error (pipeline run table styles here for tailwind build)
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": "border-b border-gray-200 hover:bg-gray-100",
     "id": lambda record: f"record-{record.id}",

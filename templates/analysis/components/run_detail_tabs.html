@@ -1,7 +1,4 @@
 {% load humanize %}
-{% if update_status %}
-  <div id="run-status" hx-swap-oob="true">{% include "analysis/components/run_status.html" %}</div>
-{% endif %}
 <div role="tablist" class="tabs tabs-bordered">
   {% if run.is_complete %}
     {% if run.output_summary %}
@@ -39,7 +36,7 @@
   {% endif %}
 
   <input type="radio" name="run_tabs_{{ run.id }}" role="tab" class="tab" aria-label="Logs"
-         {% if not run.is_complete and not run.error %}checked{% endif %}/>
+         {% if not run.output_summary and not run.error %}checked{% endif %}/>
   <div role="tabpanel" class="tab-content p-4">
     {% include "analysis/components/run_logs.html" %}
   </div>

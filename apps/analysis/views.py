@@ -4,7 +4,6 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
@@ -159,7 +158,6 @@ class EditAnalysisPipeline(UpdateView, PermissionRequiredMixin):
         return reverse("analysis:home", args=[self.request.team.slug])
 
 
-@require_http_methods(["DELETE"])
 @login_and_team_required
 @permission_required("analysis.delete_analysis")
 def delete_analysis(request, team_slug: str, pk: int):
@@ -236,7 +234,7 @@ def run_group_details(request, team_slug: str, pk: int):
 def group_progress(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
     if request.method == "POST" and request.POST.get("action") == "cancel":
-        group.status = RunStatus.CANCELLED
+        group.status = RunStatus.CANCELLING
         group.save()
         group.analysisrun_set.filter(status__in=(RunStatus.PENDING, RunStatus.RUNNING)).update(
             status=RunStatus.CANCELLED
@@ -264,7 +262,6 @@ def download_resource(request, team_slug: str, pk: int):
         raise Http404()
 
 
-@require_http_methods(["DELETE"])
 @login_and_team_required
 @permission_required("analysis.delete_rungroup")
 def delete_run_group(request, team_slug: str, pk: int):

@@ -85,6 +85,7 @@ class RunStatus(models.TextChoices):
     RUNNING = "running", "Running"
     SUCCESS = "success", "Success"
     ERROR = "error", "Error"
+    CANCELLING = "cancelling", "Cancelling"
     CANCELLED = "cancelled", "Cancelled"
 
 
@@ -103,8 +104,12 @@ class BaseRun(BaseModel):
         return self.status in (RunStatus.SUCCESS, RunStatus.ERROR, RunStatus.CANCELLED)
 
     @property
+    def is_cancelling(self):
+        return self.status == RunStatus.CANCELLING
+
+    @property
     def is_cancelled(self):
-        return self.status == RunStatus.CANCELLED
+        return self.status in (RunStatus.CANCELLING, RunStatus.CANCELLED)
 
     @property
     def is_running(self):
@@ -169,4 +174,4 @@ class AnalysisRun(BaseRun):
         ordering = ["created_at"]
 
     def get_log_entries(self):
-        return [LogEntry.from_json(entry) for entry in self.log["entries"]]
+        return [LogEntry.from_json(entry) for entry in self.log.get("entries", [])]

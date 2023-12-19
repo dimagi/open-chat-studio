@@ -33,6 +33,8 @@ class RunStatusContext:
         self.run.save()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.run.refresh_from_db(fields=["status"])
+
         if exc_type:
             if exc_type == PipelineSplitSignal:
                 return True
@@ -42,6 +44,8 @@ class RunStatusContext:
             else:
                 log.exception("Error running analysis")
                 self.run.error = repr(exc_val)
+        elif self.run.is_cancelling:
+            self.run.status = RunStatus.CANCELLED
         elif not self.run.is_cancelled:
             self.run.status = RunStatus.SUCCESS
         self.run.end_time = timezone.now()
@@ -78,11 +82,17 @@ class RunLogStream(LogStream):
 @shared_task
 def run_analysis(run_group_id: int):
     group = RunGroup.objects.select_related("team", "analysis", "analysis__llm_provider").get(id=run_group_id)
+    if group.is_cancelling:
+        group.status = RunStatus.CANCELLED
+        group.save()
+        return
+    elif group.is_complete:
+        return
 
     with RunStatusContext(group):
         source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
-        group.refresh_from_db()
+        group.refresh_from_db(fields=["status"])
         if group.is_cancelled:
             return
 

@@ -123,6 +123,9 @@ class AssistantStep(core.BaseStep[Any, str]):
         )
         self.log.info(f"Assistant Thread created ({thread.id})")
 
+        if self.is_cancelled:
+            return StepContext("")
+
         run = self.client.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=params.assistant_id,
@@ -130,7 +133,10 @@ class AssistantStep(core.BaseStep[Any, str]):
         self.log.info(f"Running query with assistant ({run.id})")
 
         run = self._wait_for_run(run.id, thread.id)
-        if run.status != "completed" and run.status not in ("cancelling", "cancelled"):
+        if run.status in ("cancelling", "cancelled"):
+            return StepContext("", metadata={"thread_id": thread.id, "run_id": run.id})
+
+        if run.status != "completed":
             self.log.error(f"Run failed with status {run.status}")
             raise apps.analysis.exceptions.StepError(f"Assistant run failed with status {run.status}")
 
@@ -160,9 +166,12 @@ class AssistantStep(core.BaseStep[Any, str]):
     def _process_messages(self, thread_id: str) -> AssistantOutput:
         output = AssistantOutput()
         messages = list(self.client.beta.threads.messages.list(thread_id=thread_id, order="asc"))
+        # ignore user message
         self.log.debug(f"Analysis completed. Got {len(messages)} messages")
 
         for message in messages:
+            if message.role == "user":
+                continue
             for content in message.content:
                 if isinstance(content, MessageContentImageFile):
                     resource = self.make_resource_from_file(content.image_file.file_id, ResourceType.IMAGE)
@@ -194,7 +203,10 @@ class AssistantStep(core.BaseStep[Any, str]):
         seen = set()
         while in_progress:
             if self.is_cancelled:
-                run = self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                try:
+                    run = self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+                except openai.BadRequestError:
+                    pass
                 in_progress = False
             else:
                 run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
