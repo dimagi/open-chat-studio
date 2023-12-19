@@ -124,7 +124,10 @@ class TimeseriesFilter(TimeseriesStep):
             params.anchor_point = data.index.max()
             self.log.debug(f"Setting anchor point to end of data {params.anchor_point}")
 
-        result = data.loc[(data.index >= params.start) & (data.index <= params.end)]
+        if params.anchor_type == "this":
+            result = data.loc[(data.index >= params.start) & (data.index < params.end)]
+        else:
+            result = data.loc[(data.index > params.start) & (data.index <= params.end)]
         self.log.info(f"Filtered timeseries data from {params.start} to {params.end} ({len(result)} rows)")
         if len(result) < params.minimum_data_points:
             raise StepError(

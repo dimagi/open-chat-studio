@@ -147,8 +147,8 @@ def _make_params(
         ),
         pytest.param(
             _make_params(DurationUnit.years, 2, "last", anchor_mode="relative_end", calendar_time=False),
-            "2021-04-01",
-            "2023-04-01",
+            "2020-04-01",
+            "2022-04-01",
             id="years last, relative_end",
         ),
     ],
