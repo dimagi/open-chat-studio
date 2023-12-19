@@ -67,4 +67,5 @@ def delete_action(url_name: str, required_permissions: list = None, display_cond
         icon_class="fa-solid fa-trash",
         required_permissions=required_permissions,
         display_condition=display_condition,
+        template="generic/action_delete.html",
     )

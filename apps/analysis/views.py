@@ -253,3 +253,14 @@ def download_resource(request, team_slug: str, pk: int):
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@login_and_team_required
+@permission_required("analysis.delete_rungroup")
+def delete_run_group(request, team_slug: str, pk: int):
+    group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    group.delete()
+    if request.headers.get("HX-Request"):
+        return HttpResponse()
+    else:
+        return redirect("analysis:details", team_slug=team_slug, pk=group.analysis_id)
