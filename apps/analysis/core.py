@@ -61,6 +61,11 @@ class PipelineContext:
     def team(self) -> Team:
         return self.run.group.team
 
+    @property
+    def is_cancelled(self):
+        self.run.refresh_from_db()
+        return self.run.is_cancelled
+
     def create_resource(
         self, data: Any, name: str, serialize: bool = True, metadata: ResourceMetadata = None
     ) -> Resource | None:
@@ -128,6 +133,8 @@ class Pipeline:
             step.initialize(pipeline_context, step_count, index)
             out_context = step(self.context_chain[-1])
             self.context_chain.append(out_context)
+            if pipeline_context.is_cancelled:
+                return self.context_chain[-1]
         return self.context_chain[-1]
 
 
