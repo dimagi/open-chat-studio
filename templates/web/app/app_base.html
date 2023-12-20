@@ -14,8 +14,10 @@
         {% endblock %}
       </div>
       <div class="w-full">
+        {% block breadcrumbs %}
+        {% endblock breadcrumbs %}
         {% block app %}
-        {% endblock %}
+        {% endblock app %}
       </div>
     </div>
   </section>
