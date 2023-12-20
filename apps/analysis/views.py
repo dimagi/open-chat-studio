@@ -112,7 +112,7 @@ class CreateAnalysisPipeline(CreateView, PermissionRequiredMixin):
     def extra_context(self):
         return {
             "title": "Create Analysis Pipeline",
-            "button_text": "Create",
+            "button_text": "Continue",
             "active_tab": "analysis",
             "form_attrs": {"x-data": "analysis"},
             "llm_options": get_llm_provider_choices(self.request.team),
@@ -123,9 +123,7 @@ class CreateAnalysisPipeline(CreateView, PermissionRequiredMixin):
 
     def get_success_url(self):
         slug = self.request.team.slug
-        if self.object.needs_configuration():
-            return reverse("analysis:configure", args=[slug, self.object.id])
-        return reverse("analysis:home", args=[slug])
+        return reverse("analysis:configure", args=[slug, self.object.id])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -155,6 +153,8 @@ class EditAnalysisPipeline(UpdateView, PermissionRequiredMixin):
         return Analysis.objects.filter(team=self.request.team)
 
     def get_success_url(self):
+        if self.request.POST.get("configure"):
+            return reverse("analysis:configure", args=[self.request.team.slug, self.object.id])
         return reverse("analysis:home", args=[self.request.team.slug])
 
 

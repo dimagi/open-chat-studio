@@ -18,7 +18,9 @@
     <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}>
     {% csrf_token %}
     {% render_form_fields form %}
-    <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
+    {% block form_actions %}
+      <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
+    {% endblock %}
   </form>
   </div>
 </div>
