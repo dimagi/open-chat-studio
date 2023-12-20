@@ -76,9 +76,14 @@ class RunGroupTable(tables.Table):
         verbose_name="Duration",
         orderable=False,
     )
-    feedback = columns.TemplateColumn(template_name="analysis/components/group_feedback.html", orderable=False)
+    feedback = columns.TemplateColumn(
+        template_name="analysis/components/group_feedback.html",
+        orderable=False,
+        attrs={"th": {"class": "text-center"}, "td": {"class": "text-center"}},
+    )
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
+        attrs={"th": {"class": "text-center"}, "td": {"class": "text-center"}},
         extra_context={
             "actions": [
                 table_actions.Action(
