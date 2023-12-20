@@ -16,20 +16,16 @@
       <i class="{% if record.starred %}fa-solid{% else %}fa-regular{% endif %} fa-star"></i>
     </button>
     <button class="btn btn-sm btn-ghost join-item"
-        {% if not record.thumbs_up %}
             hx-post="{{ view_url }}{{ query }}"
             hx-target="#group-feedback-{{ record.id }}"
-            hx-vals='{"action": "approve"}'
-        {% endif %}
+            hx-vals='{"action": {% if record.thumbs_up %}"approve_reset"{% else %}"approve"{% endif %} }'
     >
       <i class="{% if record.thumbs_up %}fa-solid{% else %}fa-regular{% endif %} fa-thumbs-up"></i>
     </button>
     <button class="btn btn-sm btn-ghost join-item"
-        {% if not record.thumbs_down %}
             hx-post="{{ view_url }}{{ query }}"
             hx-target="#group-feedback-{{ record.id }}"
-            hx-vals='{"action": "reject"}'
-        {% endif %}
+            hx-vals='{"action": {% if record.thumbs_down %}"approve_reset"{% else %}"reject"{% endif %} }'
     >
       <i class="{% if record.thumbs_down %}fa-solid{% else %}fa-regular{% endif %} fa-thumbs-down"></i>
     </button>

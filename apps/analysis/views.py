@@ -236,6 +236,8 @@ def run_group_details(request, team_slug: str, pk: int):
 @permission_required("analysis.change_rungroup")
 def group_feedback(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    if request.POST.get("action") == "approve_reset":
+        group.approved = None
     if request.POST.get("action") == "approve":
         group.approved = True
     elif request.POST.get("action") == "reject":
