@@ -19,4 +19,19 @@ class Migration(migrations.Migration):
                 blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL
             ),
         ),
+        migrations.AddField(
+            model_name="rungroup",
+            name="approved",
+            field=models.BooleanField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="rungroup",
+            name="notes",
+            field=models.TextField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="rungroup",
+            name="starred",
+            field=models.BooleanField(default=False),
+        ),
     ]

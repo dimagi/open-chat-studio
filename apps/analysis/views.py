@@ -4,6 +4,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 
@@ -227,6 +228,29 @@ def run_group_details(request, team_slug: str, pk: int):
         request,
         "analysis/run_group_details.html",
         {"group": group, "runs": runs},
+    )
+
+
+@require_POST
+@login_and_team_required
+@permission_required("analysis.change_rungroup")
+def group_feedback(request, team_slug: str, pk: int):
+    group = get_object_or_404(RunGroup, id=pk, team=request.team)
+    if request.POST.get("action") == "approve":
+        group.approved = True
+    elif request.POST.get("action") == "reject":
+        group.approved = False
+    elif request.POST.get("action") == "star":
+        group.starred = True
+    elif request.POST.get("action") == "unstar":
+        group.starred = False
+    elif request.POST.get("action") == "note":
+        group.notes = request.POST.get("notes")
+    group.save()
+    return render(
+        request,
+        "analysis/components/group_feedback.html",
+        {"record": group, "for_details": request.GET.get("details") == "true"},
     )
 
 

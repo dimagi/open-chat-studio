@@ -64,6 +64,7 @@ def get_run_group_row_attrs():
 
 class RunGroupTable(tables.Table):
     created_at = columns.DateTimeColumn(
+        verbose_name="Created",
         linkify=True,
         attrs={
             "a": {"class": "link"},
@@ -75,6 +76,7 @@ class RunGroupTable(tables.Table):
         verbose_name="Duration",
         orderable=False,
     )
+    feedback = columns.TemplateColumn(template_name="analysis/components/group_feedback.html", orderable=False)
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
@@ -91,7 +93,7 @@ class RunGroupTable(tables.Table):
 
     class Meta:
         model = RunGroup
-        fields = ("created_at", "created_by.get_display_name", "status", "start_time")
+        fields = ("created_at", "created_by.get_display_name", "status")
         row_attrs = get_run_group_row_attrs()
         orderable = False
         empty_text = "No runs found."
