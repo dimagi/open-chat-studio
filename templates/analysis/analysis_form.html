@@ -1,16 +1,29 @@
 {% extends "generic/object_form.html" %}
 {% load form_tags %}
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
+      {% if analysis.id %}
+      <li><a href="{% url 'analysis:details' request.team.slug analysis.id %}">"{{ analysis.name }}"</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Setup</li>
+      {% else %}
+      <li class="pg-breadcrumb-active" aria-current="page">Create</li>
+      {% endif %}
+    </ul>
+  </div>
+{% endblock %}
 {% block title_bar_end %}
   {% if analysis.id %}
     <div class="join">
       <div class="tooltip" data-tip="Configure">
-        <a class="btn btn-primary join-item"
+        <a class="btn btn-sm btn-primary join-item"
            href="{% url 'analysis:configure' team.slug analysis.id %}">
           <i class="fa-solid fa-gear"></i>
         </a>
       </div>
       <div class="tooltip" data-tip="Delete">
-        <a class="btn btn-primary join-item rounded-r-full"
+        <a class="btn btn-sm btn-primary join-item rounded-r-full"
            href="{% url 'analysis:delete' team.slug analysis.id %}">
           <i class="fa-solid fa-trash"></i>
         </a>
@@ -25,7 +38,23 @@
       <span>This analysis requires static <a class="link" href="{% url "analysis:configure" request.team.slug analysis.id %}">configuration</a></span>
     </div>
   {% endif %}
+  <div role="tablist" class="tabs tabs-bordered">
+      <a role="tab" class="tab tab-active !border-primary !cursor-default">1. Setup</a>
+      {% if analysis.id %}
+        <a role="tab" class="tab" href="{% url "analysis:configure" request.team.slug analysis.id %}">2. Configure</a>
+      {% else %}
+        <a role="tab" class="tab !cursor-default">2. Configure</a>
+      {% endif %}
+    </div>
 {% endblock pre_form %}
+{% block form_actions %}
+  {% if analysis.id %}
+  <input type="submit" class="pg-button-primary mt-2" value="Save" name="save">
+  <input type="submit" class="pg-button-primary mt-2" value="Save and Continue" name="configure">
+  {% else %}
+  <input type="submit" class="pg-button-primary mt-2" value="Continue">
+  {% endif %}
+{% endblock %}
 {% block page_js %}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>

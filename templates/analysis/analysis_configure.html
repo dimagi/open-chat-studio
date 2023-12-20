@@ -1,28 +1,58 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
-{% block app %}
+{% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">"{{ analysis.name }}"</li>
+      <li><a href="{% url 'analysis:details' request.team.slug analysis.id %}">"{{ analysis.name }}"</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Configure</li>
     </ul>
   </div>
-  <div class="max-w-7xl mx-auto">
-    <div class="app-card">
-      <h1 class="pg-title">Configure Analysis Static Parameters</h1>
-      <h1 class="pg-subtitle">Analysis: {{ analysis.name }}</h1>
-      <form method="post" class="my-2" enctype="multipart/form-data">
-        {% csrf_token %}
-        {% for form in param_forms.values %}
-          <div class="divider divider-info"></div>
-          <h2 class="pg-subtitle">{{ form.form_name }}</h2>
-          <div class="ml-4 mt-2">
-            {{ form.non_field_errors }}
-            {{ form }}
+{% endblock %}
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <div class="flex">
+      <div class="flex-1">
+        <h1 class="pg-title">Configure Analysis Static Parameters</h1>
+      </div>
+      <div class="justify-self-end">
+        <div class="join">
+          <div class="tooltip" data-tip="Edit">
+            <a class="btn btn-sm btn-primary join-item"
+               href="{% url 'analysis:edit' team.slug analysis.id %}">
+              <i class="fa-solid fa-pencil"></i>
+            </a>
           </div>
-        {% endfor %}
-        <input type="submit" class="btn btn-success mt-2" value="Save">
-      </form>
+          <div class="tooltip" data-tip="Delete">
+            <a class="btn btn-sm btn-primary join-item rounded-r-full"
+               href="{% url 'analysis:delete' team.slug analysis.id %}">
+              <i class="fa-solid fa-trash"></i>
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
+    <h1 class="pg-subtitle">Analysis: {{ analysis.name }}</h1>
+    <div role="tablist" class="tabs tabs-bordered">
+      <a role="tab" class="tab" href="{% url "analysis:edit" request.team.slug analysis.id %}">1. Setup</a>
+      <a role="tab" class="tab tab-active !border-primary !cursor-default">2. Configure</a>
+    </div>
+    <form method="post" class="mb-2 mt-4" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% for form in param_forms.values %}
+        {% if not forloop.first %}
+          <div class="divider divider-info"></div>
+        {% endif %}
+        <h2 class="pg-subtitle">{{ form.form_name }}</h2>
+        <div class="ml-4 mt-2">
+          {{ form.non_field_errors }}
+          {{ form }}
+        </div>
+        {% if not forloop.last %}
+          <div class="divider divider-info"></div>
+        {% endif %}
+      {% endfor %}
+      <input type="submit" class="btn btn-primary mt-2" value="Save">
+    </form>
   </div>
 {% endblock %}

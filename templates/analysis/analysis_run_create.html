@@ -1,5 +1,17 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
+      <li><a href="{% url 'analysis:details' request.team.slug analysis.id %}">"{{ analysis.name }}"</a>
+      </li>
+      <li class="pg-breadcrumb-active" aria-current="page">
+        Create Run
+      </li>
+    </ul>
+  </div>
+{% endblock %}
 {% block app %}
   <div class="app-card max-w-5xl mx-auto">
     <h1 class="pg-title">Create Analysis Run</h1>
@@ -11,8 +23,8 @@
           <div class="divider divider-info"></div>
           <h2 class="pg-subtitle">{{ form.form_name }}</h2>
           <div class="ml-4 mt-2">
-          {{ form.non_field_errors }}
-          {{ form }}
+            {{ form.non_field_errors }}
+            {{ form }}
           </div>
         {% endfor %}
         <input type="submit" class="btn btn-success mt-2" value="Start Run">
