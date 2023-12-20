@@ -452,8 +452,8 @@ DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "w-full table-fixed",
     "thead": {"class": "bg-base-200 base-content uppercase text-sm leading-normal"},
-    "th": {"class": "py-3 px-6 text-left"},
-    "td": {"class": "py-3 px-6 text-left overflow-hidden"},
+    "th": {"class": "py-3 px-3 text-left"},
+    "td": {"class": "py-3 px-3 text-left overflow-hidden"},
 }
 # text-neutral text-error (pipeline run table styles here for tailwind build)
 DJANGO_TABLES2_ROW_ATTRS = {

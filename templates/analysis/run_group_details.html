@@ -20,7 +20,8 @@
           <h1 class="pg-title">Analysis Run Group {{ group.id }}</h1>
         </div>
         <div class="justify-self-end">
-          <div id="run-group-status-buttons" class="inline">{% include "analysis/components/run_group_status_buttons.html" %}</div>
+          <div id="run-group-status-buttons"
+               class="inline">{% include "analysis/components/run_group_status_buttons.html" %}</div>
           <div class="join">
             <div class="tooltip" data-tip="Replay Run">
               <a class="btn btn-sm btn-primary join-item rounded-r-full"
@@ -37,6 +38,9 @@
           </div>
         </div>
       </div>
+      {% if not group.is_running %}
+        {% include "analysis/components/group_feedback.html" with record=group for_details=True %}
+      {% endif %}
       <div id="group-status">{% include "analysis/components/run_status.html" with run=group %}</div>
       {% if group.is_running %}
         {% include "analysis/components/group_progress.html" %}

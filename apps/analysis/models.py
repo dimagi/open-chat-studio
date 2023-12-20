@@ -3,6 +3,7 @@ import math
 from datetime import timedelta
 
 import pydantic
+from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
@@ -149,7 +150,19 @@ class BaseRun(BaseModel):
 class RunGroup(BaseRun):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     analysis = models.ForeignKey(Analysis, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     params = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    notes = models.TextField(null=True, blank=True)
+    starred = models.BooleanField(default=False)
+    approved = models.BooleanField(null=True, blank=True)
+
+    @property
+    def thumbs_up(self):
+        return self.approved
+
+    @property
+    def thumbs_down(self):
+        return self.approved is not None and not self.approved
 
     def get_params_display(self):
         return json.dumps(self.params, indent=2)
