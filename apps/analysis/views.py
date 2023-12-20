@@ -186,6 +186,7 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
             group = RunGroup.objects.create(
                 team=analysis.team,
                 analysis=analysis,
+                created_by=request.user,
                 params=step_params,
             )
             result = run_analysis.delay(group.id)

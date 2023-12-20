@@ -91,7 +91,7 @@ class RunGroupTable(tables.Table):
 
     class Meta:
         model = RunGroup
-        fields = ("created_at", "status", "start_time")
+        fields = ("created_at", "created_by.get_display_name", "status", "start_time")
         row_attrs = get_run_group_row_attrs()
         orderable = False
         empty_text = "No runs found."
