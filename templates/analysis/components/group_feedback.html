@@ -12,13 +12,16 @@
     <button class="btn btn-sm btn-ghost join-item"
             hx-post="{{ view_url }}{{ query }}"
             hx-target="#group-feedback-{{ record.id }}"
-            hx-vals='{"action": "{{ record.starred|yesno:"unstar,star" }}"}'>
+            hx-vals='{"action": "{{ record.starred|yesno:"unstar,star" }}"}'
+            hx-indicator="#hx-indicator-{{ record.id }}"
+    >
       <i class="{% if record.starred %}fa-solid{% else %}fa-regular{% endif %} fa-star"></i>
     </button>
     <button class="btn btn-sm btn-ghost join-item"
             hx-post="{{ view_url }}{{ query }}"
             hx-target="#group-feedback-{{ record.id }}"
             hx-vals='{"action": {% if record.thumbs_up %}"approve_reset"{% else %}"approve"{% endif %} }'
+            hx-indicator="#hx-indicator-{{ record.id }}"
     >
       <i class="{% if record.thumbs_up %}fa-solid{% else %}fa-regular{% endif %} fa-thumbs-up"></i>
     </button>
@@ -26,6 +29,7 @@
             hx-post="{{ view_url }}{{ query }}"
             hx-target="#group-feedback-{{ record.id }}"
             hx-vals='{"action": {% if record.thumbs_down %}"approve_reset"{% else %}"reject"{% endif %} }'
+            hx-indicator="#hx-indicator-{{ record.id }}"
     >
       <i class="{% if record.thumbs_down %}fa-solid{% else %}fa-regular{% endif %} fa-thumbs-down"></i>
     </button>
@@ -40,14 +44,14 @@
       </button>
     {% endif %}
   </div>
+  <span id="hx-indicator-{{ record.id }}" class="htmx-indicator loading loading-bars loading-xs"></span>
   {% if for_details %}
     <div x-show="showNotes" {% if not record.notes %}x-cloak{% endif %}>
-      <span id="hx-indicator" class="htmx-indicator loading loading-spinner loading-xs"></span>
       <textarea class="form-input border rounded border-neutral p-2" placeholder="Add a note..." name="notes"
                 hx-post="{{ view_url }}{{ query }}"
-                hx-trigger="keyup changed delay:1000ms"
+                hx-trigger="keyup changed delay:500ms"
                 hx-vals='{"action": "note"}'
-                hx-indicator="#hx-indicator"
+                hx-indicator="#hx-indicator-{{ record.id }}"
                 hx-swap="none">{{ record.notes|default_if_none:"" }}</textarea>
     </div>
   {% endif %}
