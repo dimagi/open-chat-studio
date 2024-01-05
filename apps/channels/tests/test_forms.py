@@ -1,9 +1,10 @@
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm
+from apps.channels.forms import ChannelForm, TelegramChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
@@ -27,3 +28,11 @@ def test_channel_form_reveals_provider_types(team, platform, expected_widget_cls
     form_queryset = form.fields["messaging_provider"].queryset
     assert form_queryset.count() == MessagingProvider.objects.filter(team=team).count()
     assert form_queryset.first() == message_provider
+
+
+def test_channel_base_form(db):
+    channel = ExperimentChannelFactory()
+    invalid_form = TelegramChannelForm({"bot_token": channel.extra_data["bot_token"]})
+    valid_form = TelegramChannelForm({"bot_token": "123123"})
+    assert invalid_form.is_valid() is False
+    assert valid_form.is_valid() is True

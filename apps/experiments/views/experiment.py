@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
@@ -265,7 +266,6 @@ def create_channel(request, team_slug: str, experiment_id: int):
         messages.error(request, "Form has errors: " + form.errors.as_text())
     else:
         platform = ChannelPlatform(form.cleaned_data["platform"])
-
         if platform in existing_platforms:
             messages.error(request, f"Channel for {platform.label} already exists")
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
@@ -276,7 +276,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, "Channel data has errors: " + extra_form.errors.as_text())
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
         form.save(experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
@@ -301,7 +301,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, "Channel data has errors: " + extra_form.errors.as_text())
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
         form.save(channel.experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
