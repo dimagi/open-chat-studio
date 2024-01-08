@@ -20,6 +20,10 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         return
 
     update = types.Update.de_json(message_data)
+    if update.my_chat_member:
+        # This is a chat member update that we don't care about.
+        # See https://core.telegram.org/bots/api-changelog#march-9-2021
+        return
     message_handler = TelegramChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, update.message)
     message_handler.new_user_message(update.message)
