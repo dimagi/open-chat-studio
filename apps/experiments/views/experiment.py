@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -26,6 +27,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
 from apps.experiments.helpers import get_real_user_or_none
@@ -278,6 +280,15 @@ def create_channel(request, team_slug: str, experiment_id: int):
             else:
                 messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
+            )
+        except ChannelAlreadyUtilizedException as exception:
+            messages.error(request, exception.html_message)
+            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
         form.save(experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
@@ -303,6 +314,17 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
             else:
                 messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+        platform = ChannelPlatform(form.cleaned_data["platform"])
+        channel_identifier = config_data[platform.channel_identifier_key]
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=channel.experiment
+            )
+        except ChannelAlreadyUtilizedException as exception:
+            messages.error(request, exception.html_message)
+            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
         form.save(channel.experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 

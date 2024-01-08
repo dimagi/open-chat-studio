@@ -5,8 +5,11 @@ from django.conf import settings
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.translation import gettext as _
 from telebot import TeleBot, apihelper, types
 
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import Team
 from apps.teams.utils import get_current_team
@@ -56,6 +59,16 @@ class ChannelPlatform(models.TextChoices):
                 initial.setdefault("webook_url", webhook_url)
                 kwargs["initial"] = initial
                 return forms.FacebookChannelForm(*args, **kwargs)
+
+    @property
+    def channel_identifier_key(self) -> str:
+        match self:
+            case self.TELEGRAM:
+                return "bot_token"
+            case self.WHATSAPP:
+                return "number"
+            case self.FACEBOOK:
+                return "page_id"
 
 
 class ExperimentChannelObjectManager(models.Manager):
@@ -109,6 +122,24 @@ class ExperimentChannel(BaseModel):
 
     def extra_form(self, *args, **kwargs):
         return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
+
+    @staticmethod
+    def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
+        """
+        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified by its `identifier`
+        and `platform`. Raises `ChannelAlreadyUtilizedException` error when another experiment uses it.
+        """
+
+        filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
+        channel = ExperimentChannel.objects.filter(**filter_params).first()
+        if channel and channel.experiment != new_experiment:
+            url = reverse(
+                "experiments:single_experiment_home",
+                kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
+            )
+            raise ChannelAlreadyUtilizedException(
+                format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
+            )
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
