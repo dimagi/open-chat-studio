@@ -1,4 +1,10 @@
+from typing import ClassVar
+
 from django import forms
+from django.forms import ValidationError
+from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.translation import gettext as _
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
@@ -35,15 +41,46 @@ class ChannelForm(forms.ModelForm):
         return super().save()
 
 
-class TelegramChannelForm(forms.Form):
+class ChannelFormBase(forms.Form):
+    """
+    Base class for channel-specific forms.
+
+    Attributes:
+        channel_identifier_key (ClassVar): The key used to identify a specific channel in the `extra_data` json
+            field on an `ExperimentChannel` instance. Subclasses need to specify this key and it will differ for
+            each channel type (Telegram, Whatsapp etc..)
+    """
+
+    channel_identifier_key: ClassVar
+
+    def clean(self):
+        cleaned_data = super().clean()
+        filter_params = {f"extra_data__{self.channel_identifier_key}": cleaned_data[self.channel_identifier_key]}
+
+        channel = ExperimentChannel.objects.filter(**filter_params).first()
+        if channel:
+            experiment = channel.experiment
+            url = reverse(
+                "experiments:single_experiment_home",
+                kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.id},
+            )
+            messsage = format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
+            raise ValidationError(messsage, code="invalid")
+        return cleaned_data
+
+
+class TelegramChannelForm(ChannelFormBase):
+    channel_identifier_key = "bot_token"
     bot_token = forms.CharField(label="Bot Token", max_length=100)
 
 
-class WhatsappChannelForm(forms.Form):
+class WhatsappChannelForm(ChannelFormBase):
+    channel_identifier_key = "number"
     number = forms.CharField(label="Number", max_length=100)
 
 
-class FacebookChannelForm(forms.Form):
+class FacebookChannelForm(ChannelFormBase):
+    channel_identifier_key = "page_id"
     page_id = forms.CharField(label="Page ID", max_length=100)
     page_access_token = forms.CharField(label="Page Access Token")
     verify_token = forms.CharField(
