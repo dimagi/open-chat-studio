@@ -1,5 +1,6 @@
 import logging
 import uuid
+from typing import Optional
 
 from django.conf import settings
 from django.db import models
@@ -57,6 +58,16 @@ class ChannelPlatform(models.TextChoices):
                 kwargs["initial"] = initial
                 return forms.FacebookChannelForm(*args, **kwargs)
 
+    @property
+    def channel_identifier_key(self) -> str:
+        match self:
+            case self.TELEGRAM:
+                return "bot_token"
+            case self.WHATSAPP:
+                return "number"
+            case self.FACEBOOK:
+                return "page_id"
+
 
 class ExperimentChannelObjectManager(models.Manager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
@@ -109,6 +120,15 @@ class ExperimentChannel(BaseModel):
 
     def extra_form(self, *args, **kwargs):
         return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
+
+    @staticmethod
+    def get_experiment_by_channel_identifier(
+        platform: ChannelPlatform, channel_identifier: str
+    ) -> Optional[Experiment]:
+        """Finds the experiment that uses the channel specified by `channel_identifier` and running on `platform`"""
+        filter_params = {f"extra_data__{platform.channel_identifier_key}": channel_identifier}
+        channel = ExperimentChannel.objects.filter(**filter_params).first()
+        return channel.experiment if channel else None
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
