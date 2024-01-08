@@ -27,6 +27,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
 from apps.experiments.helpers import get_real_user_or_none
@@ -280,15 +281,12 @@ def create_channel(request, team_slug: str, experiment_id: int):
                 messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
-        channel_identifier = config_data[platform.channel_identifier_key]
-        channel_experiment = ExperimentChannel.get_experiment_by_channel_identifier(platform, channel_identifier)
-        if channel_experiment and channel_experiment != experiment:
-            url = reverse(
-                "experiments:single_experiment_home",
-                kwargs={"team_slug": channel_experiment.team.slug, "experiment_id": channel_experiment.id},
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
             )
-            messsage = format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
-            messages.error(request, messsage)
+        except ChannelAlreadyUtilizedException as exception:
+            messages.error(request, exception.html_message)
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         form.save(experiment, config_data)
@@ -319,14 +317,12 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 
         platform = ChannelPlatform(form.cleaned_data["platform"])
         channel_identifier = config_data[platform.channel_identifier_key]
-        channel_experiment = ExperimentChannel.get_experiment_by_channel_identifier(platform, channel_identifier)
-        if channel_experiment and channel_experiment != channel.experiment:
-            url = reverse(
-                "experiments:single_experiment_home",
-                kwargs={"team_slug": channel_experiment.team.slug, "experiment_id": channel_experiment.id},
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=channel.experiment
             )
-            messsage = format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
-            messages.error(request, messsage)
+        except ChannelAlreadyUtilizedException as exception:
+            messages.error(request, exception.html_message)
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         form.save(channel.experiment, config_data)

@@ -1,13 +1,15 @@
 import logging
 import uuid
-from typing import Optional
 
 from django.conf import settings
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.translation import gettext as _
 from telebot import TeleBot, apihelper, types
 
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import Team
 from apps.teams.utils import get_current_team
@@ -122,13 +124,22 @@ class ExperimentChannel(BaseModel):
         return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
 
     @staticmethod
-    def get_experiment_by_channel_identifier(
-        platform: ChannelPlatform, channel_identifier: str
-    ) -> Optional[Experiment]:
-        """Finds the experiment that uses the channel specified by `channel_identifier` and running on `platform`"""
-        filter_params = {f"extra_data__{platform.channel_identifier_key}": channel_identifier}
+    def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
+        """
+        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified by its `identifier`
+        and `platform`. Raises `ChannelAlreadyUtilized` error when another experiment uses it.
+        """
+
+        filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
         channel = ExperimentChannel.objects.filter(**filter_params).first()
-        return channel.experiment if channel else None
+        if channel and channel.experiment != new_experiment:
+            url = reverse(
+                "experiments:single_experiment_home",
+                kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
+            )
+            raise ChannelAlreadyUtilizedException(
+                format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
+            )
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
