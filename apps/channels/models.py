@@ -127,7 +127,7 @@ class ExperimentChannel(BaseModel):
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
         """
         Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified by its `identifier`
-        and `platform`. Raises `ChannelAlreadyUtilized` error when another experiment uses it.
+        and `platform`. Raises `ChannelAlreadyUtilizedException` error when another experiment uses it.
         """
 
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
