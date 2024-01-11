@@ -5,7 +5,12 @@ from uuid import UUID
 
 import pytz
 from celery.app import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import OuterRef, Subquery
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.channels import ChannelBase
@@ -136,3 +141,26 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
         handler.new_bot_message(message)
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
+
+
+@shared_task
+def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
+    experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
+    experiment = experiment_session.experiment
+
+    url_kwargs = {"team_slug": experiment.team.slug, "experiment_id": experiment.public_id}
+    email_context = {
+        "session_link": reverse(
+            "experiments:experiment_session_view", kwargs={"session_id": experiment_session.public_id, **url_kwargs}
+        ),
+        "safety_layer_link": reverse("experiments:safety_layer_edit", kwargs={"pk": safety_layer_id, **url_kwargs}),
+    }
+    for email_address in experiment.safety_violation_notification_emails:
+        send_mail(
+            subject=_("A Safety Layer was breached"),
+            message=render_to_string("experiments/email/safety_violation.txt", context=email_context),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email_address],
+            fail_silently=False,
+            html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
+        )
