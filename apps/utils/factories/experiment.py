@@ -1,6 +1,6 @@
 import factory
 
-from apps.experiments.models import ConsentForm, Experiment, Prompt, SourceMaterial
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt, SourceMaterial
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
@@ -47,3 +47,11 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     consent_form = factory.SubFactory(ConsentFormFactory)
     team = factory.LazyAttribute(lambda obj: obj.chatbot_prompt.team)
     llm_provider = factory.SubFactory(LlmProviderFactory)
+
+
+class ExperimentSessionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ExperimentSession
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    team = factory.LazyAttribute(lambda obj: obj.experiment.team)

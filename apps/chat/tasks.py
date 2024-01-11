@@ -148,12 +148,18 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     experiment = experiment_session.experiment
 
-    url_kwargs = {"team_slug": experiment.team.slug, "experiment_id": experiment.public_id}
     email_context = {
         "session_link": reverse(
-            "experiments:experiment_session_view", kwargs={"session_id": experiment_session.public_id, **url_kwargs}
+            "experiments:experiment_session_view",
+            kwargs={
+                "session_id": experiment_session.public_id,
+                "experiment_id": experiment.public_id,
+                "team_slug": experiment.team.slug,
+            },
         ),
-        "safety_layer_link": reverse("experiments:safety_layer_edit", kwargs={"pk": safety_layer_id, **url_kwargs}),
+        "safety_layer_link": reverse(
+            "experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug}
+        ),
     }
     for email_address in experiment.safety_violation_notification_emails:
         send_mail(
