@@ -147,7 +147,6 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
 def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     experiment = experiment_session.experiment
-    print(f"\n\n\n{experiment.safety_violation_notification_emails}\n\n\n")
     if not experiment.safety_violation_notification_emails:
         return
 
