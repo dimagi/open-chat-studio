@@ -342,6 +342,8 @@ class Experiment(BaseTeamModel):
         default=list,
         verbose_name="Safety violation notification emails",
         help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
+        null=True,
+        blank=True,
     )
 
     class Meta:
