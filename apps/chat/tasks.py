@@ -147,6 +147,9 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
 def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     experiment = experiment_session.experiment
+    print(f"\n\n\n{experiment.safety_violation_notification_emails}\n\n\n")
+    if not experiment.safety_violation_notification_emails:
+        return
 
     email_context = {
         "session_link": reverse(
@@ -161,12 +164,11 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
             "experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug}
         ),
     }
-    for email_address in experiment.safety_violation_notification_emails:
-        send_mail(
-            subject=_("A Safety Layer was breached"),
-            message=render_to_string("experiments/email/safety_violation.txt", context=email_context),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[email_address],
-            fail_silently=False,
-            html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
-        )
+    send_mail(
+        subject=_("A Safety Layer was breached"),
+        message=render_to_string("experiments/email/safety_violation.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=experiment.safety_violation_notification_emails,
+        fail_silently=False,
+        html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
+    )

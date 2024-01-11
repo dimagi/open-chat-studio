@@ -32,7 +32,7 @@ def create_conversation(
 def notify_users_of_violation(session_id: int, safety_layer_id: int):
     from apps.chat.tasks import notify_users_of_safety_violations_task
 
-    notify_users_of_safety_violations_task(session_id, safety_layer_id)
+    notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
 
 
 class TopicBot:
