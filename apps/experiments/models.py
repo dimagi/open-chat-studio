@@ -2,6 +2,7 @@ import uuid
 
 import markdown
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
@@ -334,6 +335,13 @@ class Experiment(BaseTeamModel):
             "If enabled, the consent form will be sent at the start of a conversation for external channels. Note: "
             "This requires the experiment to have a seed message."
         ),
+    )
+
+    safety_violation_notification_emails = ArrayField(
+        models.CharField(max_length=512),
+        default=list,
+        verbose_name="Safety violation notification emails",
+        help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
     )
 
     class Meta:
