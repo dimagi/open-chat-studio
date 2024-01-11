@@ -17,6 +17,7 @@ from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
 
@@ -151,16 +152,18 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
         return
 
     email_context = {
-        "session_link": reverse(
-            "experiments:experiment_session_view",
-            kwargs={
-                "session_id": experiment_session.public_id,
-                "experiment_id": experiment.public_id,
-                "team_slug": experiment.team.slug,
-            },
+        "session_link": absolute_url(
+            reverse(
+                "experiments:experiment_session_view",
+                kwargs={
+                    "session_id": experiment_session.public_id,
+                    "experiment_id": experiment.public_id,
+                    "team_slug": experiment.team.slug,
+                },
+            )
         ),
-        "safety_layer_link": reverse(
-            "experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug}
+        "safety_layer_link": absolute_url(
+            reverse("experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug})
         ),
     }
     send_mail(
