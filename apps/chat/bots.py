@@ -125,6 +125,7 @@ class TopicBot:
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(input_str):
+                # the prompt builder doesn't have a session_id
                 if self.session_id:
                     notify_users_of_violation(self.session_id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
