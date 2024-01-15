@@ -29,6 +29,12 @@ def create_conversation(
         raise ChatException(str(e)) from e
 
 
+def notify_users_of_violation(session_id: int, safety_layer_id: int):
+    from apps.chat.tasks import notify_users_of_safety_violations_task
+
+    notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
+
+
 class TopicBot:
     def __init__(
         self,
@@ -119,6 +125,9 @@ class TopicBot:
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(input_str):
+                # the prompt builder doesn't have a session_id
+                if self.session_id:
+                    notify_users_of_violation(self.session_id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
         # if we made it here there weren't any relevant human safety issues

@@ -5,13 +5,19 @@ from uuid import UUID
 
 import pytz
 from celery.app import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import OuterRef, Subquery
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 
 from apps.chat.bots import get_bot_from_experiment
 from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
 
@@ -136,3 +142,35 @@ def _try_send_message(experiment_session: ExperimentSession, message: str):
         handler.new_bot_message(message)
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
+
+
+@shared_task
+def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
+    experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
+    experiment = experiment_session.experiment
+    if not experiment.safety_violation_notification_emails:
+        return
+
+    email_context = {
+        "session_link": absolute_url(
+            reverse(
+                "experiments:experiment_session_view",
+                kwargs={
+                    "session_id": experiment_session.public_id,
+                    "experiment_id": experiment.public_id,
+                    "team_slug": experiment.team.slug,
+                },
+            )
+        ),
+        "safety_layer_link": absolute_url(
+            reverse("experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug})
+        ),
+    }
+    send_mail(
+        subject=_("A Safety Layer was breached"),
+        message=render_to_string("experiments/email/safety_violation.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=experiment.safety_violation_notification_emails,
+        fail_silently=False,
+        html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
+    )

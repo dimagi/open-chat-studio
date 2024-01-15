@@ -109,6 +109,7 @@ class CreateExperiment(ExperimentViewMixin, CreateView):
         "voice_provider",
         "synthetic_voice",
         "no_activity_config",
+        "safety_violation_notification_emails",
     ]
     template_name = "experiments/experiment_form.html"
 
@@ -152,6 +153,7 @@ class EditExperiment(ExperimentViewMixin, UpdateView):
         "voice_provider",
         "synthetic_voice",
         "no_activity_config",
+        "safety_violation_notification_emails",
     ]
     template_name = "experiments/experiment_form.html"
 
