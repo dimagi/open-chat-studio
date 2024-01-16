@@ -36,10 +36,7 @@ class SurveyTableView(SingleTableView):
 
 class CreateSurvey(CreateView):
     model = Survey
-    fields = [
-        "name",
-        "url",
-    ]
+    fields = ["name", "url", "confirmation_text"]
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Survey",
@@ -58,10 +55,7 @@ class CreateSurvey(CreateView):
 
 class EditSurvey(UpdateView):
     model = Survey
-    fields = [
-        "name",
-        "url",
-    ]
+    fields = ["name", "url", "confirmation_text"]
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Survey",
