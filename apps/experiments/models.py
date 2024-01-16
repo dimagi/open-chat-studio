@@ -132,7 +132,7 @@ class Survey(BaseTeamModel):
     name = models.CharField(max_length=50)
     url = models.URLField(
         help_text=(
-            "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to"
+            "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
             "include the participant, session and experiment session ids in the url."
         ),
         max_length=500,
