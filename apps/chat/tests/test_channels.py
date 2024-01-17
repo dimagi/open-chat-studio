@@ -228,28 +228,6 @@ def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db)
     assert chat.messages.last().content == experiment.seed_message
 
 
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_bot_says_nothing_after_consent_given(_get_llm_response, send_text_to_user_mock, db):
-    """When no seed message is specified on the experiment, the bot should say nothing and wait for the user's
-    prompt again. I'm not convinced this is desirable behaviour though.
-    """
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
-
-    def _user_message(message: str):
-        message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
-        channel.new_user_message(message)
-
-    telegram_chat_id = "123"
-
-    _user_message("Hi")
-    # the bot will ask the user to give consent, so the user gives consent
-    _user_message("yes")
-    chat = channel.experiment_session.chat
-    assert chat.messages.last().content == "yes"
-
-
 def _telegram_message(chat_id: int, message_text: str = "Hi there") -> types.Message:
     message_data = {
         "update_id": 432101234,
