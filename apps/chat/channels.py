@@ -176,37 +176,85 @@ class ChannelBase:
                 # Webchats' statuses are updated through an "external" flow
                 return
 
-            if self._should_prompt_for_consent():
-                # We manually add the message to the history here, since this doesn't follow the normal flow
-                self._add_message_to_history(self.message_text, ChatMessageType.HUMAN)
-
-                if self.experiment_session.status == SessionStatus.SETUP:
-                    self._chat_initiated()
-                elif self._user_gave_consent():
-                    self.experiment_session.update_status(SessionStatus.ACTIVE)
-                    # This is technically the start of the conversation
-                    if self.experiment.seed_message:
-                        self._send_message_as_bot(self.experiment.seed_message)
+        if self.experiment.conversational_consent_enabled:
+            if self._should_handle_pre_conversation_requirements():
+                self._handle_pre_conversation_requirements()
                 return
+        else:
+            # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
+            # is ACTIVE
+            self.experiment_session.update_status(SessionStatus.ACTIVE)
 
         return self._handle_message()
 
+    def _handle_pre_conversation_requirements(self):
+        """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
+        pre-survey using the conversation thread. We use the session status and a rough state machine to achieve this.
+
+        Here's a breakdown of the flow and the expected session status for each
+        Session started -> status will be SETUP
+        (Status==SETUP) First user message -> set status to PENDING
+
+        (Status==PENDING) User gave consent -> set status to ACTIVE if there isn't a survey
+        (Status==PENDING) User gave consent -> set status to PENDING_PRE_SURVEY if there is a survey
+
+        (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
+        """
+        # We manually add the message to the history here, since this doesn't follow the normal flow
+        self._add_message_to_history(self.message_text, ChatMessageType.HUMAN)
+
+        if self.experiment_session.status == SessionStatus.SETUP:
+            self._chat_initiated()
+        elif self.experiment_session.status == SessionStatus.PENDING:
+            if self._user_gave_consent():
+                if not self.experiment.pre_survey:
+                    self.start_conversation()
+                else:
+                    self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+                    self._ask_user_to_take_survey()
+            else:
+                self._ask_user_for_consent()
+        elif self.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:
+            if self._user_gave_consent():
+                self.start_conversation()
+            else:
+                self._ask_user_to_take_survey()
+
+    def start_conversation(self):
+        self.experiment_session.update_status(SessionStatus.ACTIVE)
+        # This is technically the start of the conversation
+        if self.experiment.seed_message:
+            self._send_message_as_bot(self.experiment.seed_message)
+
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
-        self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+        self.experiment_session.update_status(SessionStatus.PENDING)
+        self._ask_user_for_consent()
+
+    def _ask_user_for_consent(self):
         consent_text = self.experiment.consent_form.consent_text
         confirmation_text = self.experiment.consent_form.confirmation_text
-        return self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+        self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+
+    def _ask_user_to_take_survey(self):
+        # TODO: Survey needs a participant. For external channels we can use the chat_id as the identifier I think
+        pre_survey_link = self.experiment_session.get_pre_survey_link()
+        confirmation_text = self.experiment.pre_survey.confirmation_text
+        self._send_message_as_bot(confirmation_text.format(survey_link=pre_survey_link))
 
     def _send_message_as_bot(self, message: str):
         """Send a message to the user as the bot and adds it to the chat history"""
         self._add_message_to_history(message, ChatMessageType.AI)
         self.send_text_to_user(message)
 
-    def _should_prompt_for_consent(self):
-        """Pre-conversation is the phase where the user starts the chat and gives consent to continue"""
-        return self.experiment.conversational_consent_enabled and self.experiment_session.status in [
+    def _should_handle_pre_conversation_requirements(self):
+        """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
+        out the survey. Since we're using and updating the session's status during this flow, simply checking the
+        session status should be enough.
+        """
+        return self.experiment_session.status in [
             SessionStatus.SETUP,
+            SessionStatus.PENDING,
             SessionStatus.PENDING_PRE_SURVEY,
         ]
 

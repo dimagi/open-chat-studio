@@ -7,7 +7,7 @@ from telebot import types
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Prompt, SessionStatus
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -189,12 +189,16 @@ class TelegramMessageHandlerTest(TestCase):
 
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db):
+def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
-    user and bot must first go through the consent "flow".
+    user and bot must first go through the pre concersation flow. The following needs to happen:
+    - The user must give consent
+    - The user must indicate that they filled out the survey
     """
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    pre_survey = experiment.pre_survey
+    assert pre_survey
 
     def _user_message(message: str):
         message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
@@ -207,47 +211,33 @@ def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db)
 
     _user_message("Hi")
     chat = channel.experiment_session.chat
-    # Lets get the experiment session that was created
-    assert send_text_to_user_mock.call_count == 1
-    # Check the user and AI message was saved
-    assert chat.messages.filter(message_type=ChatMessageType.HUMAN).count() == 1
-    assert chat.messages.filter(message_type=ChatMessageType.AI).count() == 1
-    assert chat.messages.last().message_type == ChatMessageType.AI
-
-    # Make sure the bot doesn't respond to anything other than the reserved words
-    _user_message("No")
-    assert chat.messages.last().content == "No"
-    _user_message("Nonsense")
-    assert chat.messages.last().content == "Nonsense"
-
-    # Make sure the bot responds with the seed message, since the conversation began
+    pre_survey_link = channel.experiment_session.get_pre_survey_link()
+    confirmation_text = pre_survey.confirmation_text
+    expected_survey_text = confirmation_text.format(survey_link=pre_survey_link)
+    # Let's see if the bot asked consent
+    assert experiment.consent_form.consent_text in chat.messages.last().content
+    # Check the status
+    channel.experiment_session.refresh_from_db()
+    assert channel.experiment_session.status == SessionStatus.PENDING
+    # It did, now the user gives consent
     _user_message("1")
-    assert send_text_to_user_mock.call_count == 2
-    # Assert seed message being sent
-    assert chat.messages.last().message_type == ChatMessageType.AI
-    assert chat.messages.last().content == experiment.seed_message
-
-
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_bot_says_nothing_after_consent_given(_get_llm_response, send_text_to_user_mock, db):
-    """When no seed message is specified on the experiment, the bot should say nothing and wait for the user's
-    prompt again. I'm not convinced this is desirable behaviour though.
-    """
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
-
-    def _user_message(message: str):
-        message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
-        channel.new_user_message(message)
-
-    telegram_chat_id = "123"
-
-    _user_message("Hi")
-    # the bot will ask the user to give consent, so the user gives consent
-    _user_message("yes")
-    chat = channel.experiment_session.chat
-    assert chat.messages.last().content == "yes"
+    # Check the status
+    channel.experiment_session.refresh_from_db()
+    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
+    # Let's make sure the bot presented the user with the survey
+    assert expected_survey_text in chat.messages.last().content
+    # Now the user tries to talk
+    _user_message("Hi there")
+    # Check the status. It should not have changed
+    channel.experiment_session.refresh_from_db()
+    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
+    # The bot should be persistent about that survey. Let's make sure it sends it
+    assert expected_survey_text in chat.messages.last().content
+    # The user caves, and says they did fill it out
+    _user_message("1")
+    # Check the status
+    channel.experiment_session.refresh_from_db()
+    assert channel.experiment_session.status == SessionStatus.ACTIVE
 
 
 def _telegram_message(chat_id: int, message_text: str = "Hi there") -> types.Message:
