@@ -13,9 +13,11 @@
           {{project_meta.DESCRIPTION}}
         </h2>
         <p class="buttons">
+          {% if signup_enabled %}
           <a class="pg-button-primary" href="{% url 'account_signup' %}">
             {% translate "Create account" %}
           </a>
+          {% endif %}
           <a class="pg-button-secondary" href="{% url 'account_login' %}">
             {% translate "Sign In" %}
           </a>
