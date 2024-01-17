@@ -216,13 +216,12 @@ def test_user_giving_consent_flow(_get_llm_response, send_text_to_user_mock, db)
 
     # Make sure the bot doesn't respond to anything other than the reserved words
     _user_message("No")
-    assert chat.messages.last().content == "No"
-    _user_message("Nonsense")
-    assert chat.messages.last().content == "Nonsense"
+    # The user did't give consent, so the bot asked it again. Let's make sure about that
+    assert experiment.consent_form.consent_text in chat.messages.last().content
 
     # Make sure the bot responds with the seed message, since the conversation began
     _user_message("1")
-    assert send_text_to_user_mock.call_count == 2
+    assert send_text_to_user_mock.call_count == 3
     # Assert seed message being sent
     assert chat.messages.last().message_type == ChatMessageType.AI
     assert chat.messages.last().content == experiment.seed_message
