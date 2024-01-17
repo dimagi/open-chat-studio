@@ -140,7 +140,7 @@ class Survey(BaseTeamModel):
     confirmation_text = models.TextField(
         null=False,
         default=(
-            "Before starting the experiment, we ask that you complete a short survey. Please click on the"
+            "Before starting the experiment, we ask that you complete a short survey. Please click on the "
             "survey link, fill it out, and, when you have finished, respond with '1' to let us know that you've completed"
             " it. Survey link: {survey_link}"
         ),

@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
             model_name="survey",
             name="confirmation_text",
             field=models.TextField(
-                default="Before starting the experiment, we ask that you complete a short survey. Please click on thesurvey link, fill it out, and, when you have finished, respond with '1' to let us know that you've completed it. Survey link: {survey_link}",
+                default="Before starting the experiment, we ask that you complete a short survey. Please click on the survey link, fill it out, and, when you have finished, respond with '1' to let us know that you've completed it. Survey link: {survey_link}",
                 help_text="Use this text to ask the user to complete the survey. The {survey_link} will contain the link to the survey",
             ),
         ),
