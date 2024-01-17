@@ -187,6 +187,8 @@ class ChannelBase:
                     # This is technically the start of the conversation
                     if self.experiment.seed_message:
                         self._send_message_as_bot(self.experiment.seed_message)
+                else:
+                    self._ask_user_for_consent()
                 return
 
         return self._handle_message()
@@ -194,9 +196,12 @@ class ChannelBase:
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
         self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
+        self._ask_user_for_consent()
+
+    def _ask_user_for_consent(self):
         consent_text = self.experiment.consent_form.consent_text
         confirmation_text = self.experiment.consent_form.confirmation_text
-        return self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+        self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
 
     def _send_message_as_bot(self, message: str):
         """Send a message to the user as the bot and adds it to the chat history"""
