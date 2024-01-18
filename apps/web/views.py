@@ -37,7 +37,3 @@ def team_home(request, team_slug):
             "page_title": _("{team} Dashboard").format(team=request.team),
         },
     )
-
-
-def simulate_error(request):
-    raise Exception("This is a simulated error.")

@@ -1,5 +1,4 @@
 from django.urls import path
-from rest_framework import routers
 
 from . import views
 
@@ -28,13 +27,3 @@ team_urlpatterns = (
     ],
     "single_team",
 )
-
-
-# DRF config for API views (required for React Teams, implementation, optional otherwise)
-router = routers.DefaultRouter()
-router.register("api/teams", views.TeamViewSet)
-urlpatterns += router.urls
-
-single_team_router = routers.DefaultRouter()
-single_team_router.register("api/invitations", views.InvitationViewSet)
-team_urlpatterns[0].extend(single_team_router.urls)
