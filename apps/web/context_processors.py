@@ -22,6 +22,7 @@ def project_meta(request):
             "ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE": settings.ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE,
         },
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
+        "signup_enabled": settings.SIGNUP_ENABLED,
     }
 
 
