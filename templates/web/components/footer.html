@@ -6,11 +6,11 @@
       {% include "web/components/language_select.html" %}
       <p>{% translate "Copyright" %} <span id="copyright-year">2022</span></p>
       {% if project_meta.TERMS_URL %}
-        <p><a href="{{ project_data.TERMS_URL}}" target="_blank" class="link">Terms of use</a>
+        <p><a href="{{ project_meta.TERMS_URL }}" target="_blank" class="link">Terms of use</a>
       {% endif %}
       {% if project_meta.TERMS_URL and project_meta.PRIVACY_POLICY_URL %}&mdash;{% endif %}
       {% if project_meta.PRIVACY_POLICY_URL %}
-        <a href="{{ project_data.PRIVACY_POLICY_URL }}" class="link">Privacy Policy</a></p>
+        <a href="{{ project_meta.PRIVACY_POLICY_URL }}" class="link">Privacy Policy</a></p>
       {% endif %}
     </div>
   </aside>
