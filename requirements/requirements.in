@@ -34,4 +34,4 @@ django_celery_beat
 azure-cognitiveservices-speech
 taskbadger
 fbmessenger
-django-field-audit
+django-field-audit>=1.2.7
