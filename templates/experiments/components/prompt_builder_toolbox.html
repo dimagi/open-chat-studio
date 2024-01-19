@@ -44,15 +44,16 @@
                 <!-- Model Dropdown -->
                 <label for="model-selector" class="block font-semibold mb-2">Model</label>
                 <select id="provider-selector" class="w-full select select-bordered"
-                    x-model="$store.promptBuilder.currentState.provider">
+                    x-model.number="$store.promptBuilder.currentState.provider">
                     {% for provider in llm_providers %}
                     <option value="{{ provider.id }}">{{ provider }}</option>
                     {% endfor %}
                 </select>
                 <select id="model-selector" class="w-full select select-bordered"
                     x-model="$store.promptBuilder.currentState.model">
-                    <option value="gpt-3.5-turbo">GPT-3.5</option>
-                    <option value="gpt-4" selected="">GPT-4</option>
+                    <template x-for="(option, index) in $store.promptBuilder.llm_models" :key="index">
+                      <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.model"></option>
+                    </template>
                 </select>
             </div>
             <div class="w-1/2 pr-10">
