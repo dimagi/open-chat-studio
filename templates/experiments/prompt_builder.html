@@ -45,18 +45,28 @@
 </div>
 
 <script src="{% static 'js/app-bundle.js' %}"></script>
+{{ llm_options|json_script:"llmModelOptions" }}
 <script>
     const App = SiteJS.app;
 
     // alpine:init is dispatched on the document
     document.addEventListener('alpine:init', () => {
+
+        const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
         Alpine.store('promptBuilder', {
+            llm_models: [],
+
             init() {
                 Alpine.effect(() => {
                     if (Alpine.store('promptBuilder').currentState && Alpine.store('promptBuilder').currentState.prompt !== undefined) {
                         Alpine.store('promptBuilder').promptTokenCount = `(~${window.countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)} tokens)`;
                     } else {
                         Alpine.store('promptBuilder').promptTokenCount = '';
+                    }
+                    if (this.currentState && this.currentState.provider !== undefined) {
+                      this.llm_models = llmModelOptions.filter(option => {
+                        return option.provider === this.currentState.provider;
+                      });
                     }
                 });
             },
@@ -103,7 +113,7 @@
                             prompt: '',
                             inputFormatter: '',
                             provider: {{ default_llm_provider.id|default:'null' }},
-                            model: 'gpt-4',
+                            model: '{{ default_llm_model|default:'null' }}',
                             messages: []
                         }
                     ]
