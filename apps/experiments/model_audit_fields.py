@@ -33,3 +33,6 @@ CONSENT_FORM_FIELDS = [
     "confirmation_text",
     "team",
 ]
+
+TEAM_FIELDS = ["name", "slug", "members"]
+MEMBERSHIP_FIELDS = ["team", "user", "role"]
