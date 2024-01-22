@@ -44,3 +44,5 @@ EXPERIMENT_CHANNEL_FIELDS = [
     "platform",
     "messaging_provider",
 ]
+
+NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after"]
