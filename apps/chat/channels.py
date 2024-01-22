@@ -176,14 +176,14 @@ class ChannelBase:
                 # Webchats' statuses are updated through an "external" flow
                 return
 
-        if self.experiment.conversational_consent_enabled:
-            if self._should_handle_pre_conversation_requirements():
-                self._handle_pre_conversation_requirements()
-                return
-        else:
-            # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
-            # is ACTIVE
-            self.experiment_session.update_status(SessionStatus.ACTIVE)
+            if self.experiment.conversational_consent_enabled:
+                if self._should_handle_pre_conversation_requirements():
+                    self._handle_pre_conversation_requirements()
+                    return
+            else:
+                # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
+                # is ACTIVE
+                self.experiment_session.update_status(SessionStatus.ACTIVE)
 
         return self._handle_message()
 
