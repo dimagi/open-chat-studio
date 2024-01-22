@@ -20,6 +20,14 @@ class MessagingProviderObjectManager(AuditingManager):
     pass
 
 
+class VoiceProviderObjectManager(AuditingManager):
+    pass
+
+
+class LlmProviderObjectManagerObjectManager(AuditingManager):
+    pass
+
+
 class LlmProviderType(models.TextChoices):
     openai = "openai", _("OpenAI")
     azure = "azure", _("Azure OpenAI")
@@ -50,7 +58,9 @@ class LlmProviderType(models.TextChoices):
         raise ServiceProviderConfigError(self, "No chat model configured")
 
 
+@audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class LlmProvider(BaseTeamModel):
+    objects = LlmProviderObjectManagerObjectManager()
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
     type = models.CharField(max_length=255, choices=LlmProviderType.choices)
     name = models.CharField(max_length=255)
@@ -102,7 +112,9 @@ class VoiceProviderType(models.TextChoices):
         raise ServiceProviderConfigError(self, "No voice service configured")
 
 
+@audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class VoiceProvider(BaseTeamModel):
+    objects = VoiceProviderObjectManager()
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))

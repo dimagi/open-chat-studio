@@ -45,5 +45,7 @@ EXPERIMENT_CHANNEL_FIELDS = [
     "messaging_provider",
 ]
 
-NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after"]
-MESSAGING_PROVIDER_FIELDS = ["type", "name", "config"]
+NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after", "team"]
+MESSAGING_PROVIDER_FIELDS = ["type", "name", "team"]
+VOICE_PROVIDER_FIELDS = ["type", "name", "team"]
+LLM_PROVIDER_FIELDS = ["team", "type", "name", "llm_models"]
