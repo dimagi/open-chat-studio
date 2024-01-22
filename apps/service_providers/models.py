@@ -4,13 +4,20 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
+from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
+
+
+class MessagingProviderObjectManager(AuditingManager):
+    pass
 
 
 class LlmProviderType(models.TextChoices):
@@ -140,7 +147,9 @@ class MessagingProviderType(models.TextChoices):
         return provider_types
 
 
+@audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class MessagingProvider(BaseTeamModel):
+    objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
