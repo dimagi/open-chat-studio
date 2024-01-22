@@ -36,3 +36,11 @@ CONSENT_FORM_FIELDS = [
 
 TEAM_FIELDS = ["name", "slug", "members"]
 MEMBERSHIP_FIELDS = ["team", "user", "role"]
+EXPERIMENT_CHANNEL_FIELDS = [
+    "name",
+    "experiment",
+    "active",
+    "extra_data",
+    "platform",
+    "messaging_provider",
+]

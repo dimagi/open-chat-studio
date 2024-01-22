@@ -7,8 +7,11 @@ from django.db.models import JSONField, Q
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext as _
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 from telebot import TeleBot, apihelper, types
 
+from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import Team
@@ -71,12 +74,13 @@ class ChannelPlatform(models.TextChoices):
                 return "page_id"
 
 
-class ExperimentChannelObjectManager(models.Manager):
+class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
         extra_data_filter = Q(extra_data__contains={key: value})
         return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
 
+@audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
 class ExperimentChannel(BaseModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
