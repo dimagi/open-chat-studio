@@ -84,11 +84,11 @@ class TopicBot:
         ]
 
         if self.chat:
-            self.conversation.memory.chat_memory.messages = self.chat.get_langchain_messages()
+            self.conversation.load_memory(self.chat.get_langchain_messages())
         elif messages_history is not None:
             # Add the history messages. This originated for the prompt builder
             # where we maintain state client side
-            self.conversation.memory.chat_memory.messages = messages_history
+            self.conversation.load_memory(messages_history)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)

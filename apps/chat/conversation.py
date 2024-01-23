@@ -61,9 +61,8 @@ class Conversation:
             )
             self.executer = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
-    @property
-    def memory(self) -> BaseMemory:
-        return self.executer.memory
+    def load_memory(self, messages):
+        self.executer.memory.chat_memory.messages = messages
 
     def predict(self, input: str) -> Tuple[str, int, int]:
         with get_openai_callback() as cb:
