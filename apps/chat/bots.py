@@ -86,15 +86,9 @@ class TopicBot:
         if self.chat:
             self.conversation.memory.chat_memory.messages = self.chat.get_langchain_messages()
         elif messages_history is not None:
-            # Add the history messages. This origintated for the promptbuilder
+            # Add the history messages. This originated for the prompt builder
             # where we maintain state client side
-            history = []
-            for message in messages_history:
-                if message["author"] == "User":
-                    history.append(HumanMessage(content=message["message"]))
-                elif message["author"] == "Assistant":
-                    history.append(AIMessage(content=message["message"]))
-            self.conversation.memory.chat_memory.messages = history
+            self.conversation.memory.chat_memory.messages = messages_history
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
