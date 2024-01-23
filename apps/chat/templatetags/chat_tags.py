@@ -9,4 +9,6 @@ register = template.Library()
 
 @register.filter
 def render_markdown(text):
+    if not text:
+        return ""
     return linebreaksbr(mark_safe(markdown.markdown(text, extensions=[FencedCodeExtension()])))
