@@ -168,7 +168,7 @@ class TopicBot:
     def _get_optimized_history(self):
         try:
             return compress_chat_history(self.chat, self.llm, self.max_token_limit)
-        except (NameError, ImportError, ValueError):
+        except (NameError, ImportError, ValueError, NotImplementedError):
             # typically this is because a library required to count tokens isn't installed
             log.exception("Unable to compress history")
             return self.chat.get_langchain_messages_until_summary()
