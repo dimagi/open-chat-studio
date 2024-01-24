@@ -12,7 +12,7 @@ from langchain.utilities.anthropic import get_num_tokens_anthropic
 from langchain_community.callbacks import get_openai_callback
 from langchain_community.chat_models import ChatAnthropic
 
-from apps.chat.agent.agent import AgentExecuter
+from apps.chat.agent.agent import build_agent
 from apps.experiments.models import ExperimentSession
 
 
@@ -38,7 +38,7 @@ class Conversation:
                 # no source material found in prompt, just use it "naked"
                 pass
         if experiment_session and experiment_session.experiment.tools_enabled:
-            self.executer = AgentExecuter(llm, memory, experiment_session, prompt_to_use)
+            self.chain = build_agent(llm, memory, experiment_session, prompt_to_use)
         else:
             prompt = ChatPromptTemplate.from_messages(
                 [
@@ -47,10 +47,10 @@ class Conversation:
                     HumanMessagePromptTemplate.from_template("{input}"),
                 ]
             )
-            self.executer = ConversationChain(memory=memory, prompt=prompt, llm=llm)
+            self.chain = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
     def load_memory(self, messages):
-        self.executer.memory.chat_memory.messages = messages
+        self.chain.memory.chat_memory.messages = messages
 
     def predict(self, input: str) -> Tuple[str, int, int]:
         if not self._is_agent and isinstance(self.executer.llm, ChatAnthropic):
@@ -70,10 +70,6 @@ class Conversation:
             return response, prompt_tokens, completion_tokens
         else:
             with get_openai_callback() as cb:
-                response = self.executer.invoke({"input": input}, return_only_outputs=True)
-            output = response[self.executer.output_key]
+                response = self.chain.invoke({"input": input}, return_only_outputs=True)
+            output = response[self.chain.output_key]
             return output, cb.prompt_tokens, cb.completion_tokens
-
-    @property
-    def _is_agent(self) -> bool:
-        return isinstance(self.executer, AgentExecuter)
