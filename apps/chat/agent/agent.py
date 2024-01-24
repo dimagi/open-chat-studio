@@ -1,10 +1,14 @@
-from langchain.agents import AgentType, initialize_agent
+from datetime import datetime
+
+import pytz
+from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.chat_models.base import BaseChatModel
-from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMemory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts.chat import MessageLike
 
-from apps.chat.agent.tools import tools
+from apps.chat.agent.tools import get_tools
 from apps.experiments.models import ExperimentSession
 
 
@@ -22,12 +26,26 @@ class AgentExecuter:
 
     """
 
-    def __init__(self, llm: BaseChatModel, memory: ConversationBufferMemory, experiment_session: ExperimentSession):
-        self._agent_executor = initialize_agent(
-            tools=tools,
-            llm=llm,
-            agent=AgentType.OPENAI_FUNCTIONS,
-            verbose=True,
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        memory: BaseMemory,
+        experiment_session: ExperimentSession,
+        prompt: MessageLike,
+    ):
+        agent_prompt = ChatPromptTemplate.from_messages(
+            [
+                prompt,
+                MessagesPlaceholder("history", optional=True),
+                ("system", str(datetime.now().astimezone(pytz.UTC))),
+                ("human", "{input}"),
+                MessagesPlaceholder("agent_scratchpad"),
+            ]
+        )
+        agent = create_openai_tools_agent(llm=llm, tools=get_tools(), prompt=agent_prompt)
+        self._agent_executor = AgentExecutor.from_agent_and_tools(
+            agent=agent,
+            tools=get_tools(),
             memory=memory,
             max_execution_time=120,
         )
@@ -40,5 +58,5 @@ class AgentExecuter:
     def memory(self) -> BaseMemory:
         return self._agent_executor.memory
 
-    def predict(self, input: str):
-        return self._agent_executor.run(input=input)
+    def invoke(self, input: dict[str], **kwargs):
+        return self._agent_executor.invoke(input, **kwargs)

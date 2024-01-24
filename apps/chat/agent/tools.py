@@ -100,4 +100,5 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
     )
 
 
-tools: List[CustomBaseTool] = (RecurringReminderTool(), OneOffReminderTool())
+def get_tools() -> List[BaseTool]:
+    return [RecurringReminderTool(), OneOffReminderTool()]

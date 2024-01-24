@@ -1,8 +1,5 @@
-from datetime import datetime
 from typing import Optional, Tuple
 
-import pytz
-from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.chains import ConversationChain
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -33,8 +30,6 @@ class Conversation:
         llm,
         experiment_session: Optional[ExperimentSession] = None,
     ):
-        UTC = pytz.timezone("UTC")
-        current_datetime = datetime.now().astimezone(UTC)
         prompt_to_use = SystemMessagePromptTemplate.from_template(prompt_str)
         if source_material:
             try:
@@ -43,16 +38,7 @@ class Conversation:
                 # no source material found in prompt, just use it "naked"
                 pass
         if experiment_session and experiment_session.experiment.tools_enabled:
-            self.executer = AgentExecuter(llm=llm, memory=memory, experiment_session=experiment_session)
-            # Insert the messages here
-            current_date_message = SystemMessagePromptTemplate.from_template("{current_date}")
-            self.executer.agent.prompt = OpenAIFunctionsAgent.create_prompt(
-                system_message=prompt_to_use,
-                extra_prompt_messages=[
-                    MessagesPlaceholder(variable_name="history"),
-                    current_date_message.format(current_date=str(current_datetime)),
-                ],
-            )
+            self.executer = AgentExecuter(llm, memory, experiment_session, prompt_to_use)
         else:
             prompt = ChatPromptTemplate.from_messages(
                 [
@@ -84,8 +70,9 @@ class Conversation:
             return response, prompt_tokens, completion_tokens
         else:
             with get_openai_callback() as cb:
-                response = self.executer.predict(input=input)
-            return response, cb.prompt_tokens, cb.completion_tokens
+                response = self.executer.invoke({"input": input}, return_only_outputs=True)
+            output = response[self.executer.output_key]
+            return output, cb.prompt_tokens, cb.completion_tokens
 
     @property
     def _is_agent(self) -> bool:
