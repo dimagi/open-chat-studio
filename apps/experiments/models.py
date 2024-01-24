@@ -347,7 +347,6 @@ class Experiment(BaseTeamModel):
             "This requires the experiment to have a seed message."
         ),
     )
-
     safety_violation_notification_emails = ArrayField(
         models.CharField(max_length=512),
         default=list,
@@ -355,6 +354,11 @@ class Experiment(BaseTeamModel):
         help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
         null=True,
         blank=True,
+    )
+    max_token_limit = models.IntegerField(
+        default=0,
+        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
+        "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
 
     class Meta:

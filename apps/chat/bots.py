@@ -46,6 +46,7 @@ class TopicBot:
         chat=None,
         messages_history=None,
         session: Optional[ExperimentSession] = None,
+        max_token_limit: int = 0,
     ):
         self.prompt = prompt
         self.safety_layers = safety_layers or []
@@ -56,6 +57,7 @@ class TopicBot:
         self.session_id = session.id if session else None
         self.input_tokens = 0
         self.output_tokens = 0
+        self.max_token_limit = max_token_limit
         self._initialize(messages_history)
 
     @classmethod
@@ -69,6 +71,7 @@ class TopicBot:
             safety_layers=experiment.safety_layers.all(),
             chat=session.chat,
             session=session,
+            max_token_limit=experiment.max_token_limit,
         )
 
     def _initialize(self, messages_history):
@@ -160,9 +163,7 @@ class TopicBot:
             )
 
     def _get_optimized_history(self):
-        max_token_limit = 8192
-        keep_history_len = 10
-        return compress_chat_history(self.chat, self.llm, max_token_limit, keep_history_len)
+        return compress_chat_history(self.chat, self.llm, self.max_token_limit)
 
 
 def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: int, keep_history_len: int = 10):
@@ -170,7 +171,7 @@ def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: i
     if necessary and save the summary to the DB.
     """
     history = chat.get_langchain_messages_until_summary()
-    if llm.get_num_tokens_from_messages(history) <= max_token_limit:
+    if max_token_limit <= 0 or not history or llm.get_num_tokens_from_messages(history) <= max_token_limit:
         return history
 
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
@@ -236,4 +237,5 @@ def get_bot_from_experiment(experiment: Experiment, chat: Chat):
         safety_layers=experiment.safety_layers.all(),
         chat=chat,
         session=session,
+        max_token_limit=experiment.max_token_limit,
     )
