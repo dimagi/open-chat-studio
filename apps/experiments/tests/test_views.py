@@ -22,6 +22,7 @@ def test_create_experiment_success(db, client):
         "consent_form": consent_form.id,
         "temperature": 0.7,
         "llm": "gpt-3.5",
+        "max_token_limit": 100,
     }
 
     client.post(reverse("experiments:new", args=[team.slug]), data=post_data)

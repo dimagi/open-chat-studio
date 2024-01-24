@@ -7,7 +7,7 @@ import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.contrib import messages
-from django.contrib.auth.decorators import permission_required, user_passes_test
+from django.contrib.auth.decorators import permission_required
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
@@ -17,7 +17,6 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -96,6 +95,7 @@ class CreateExperiment(ExperimentViewMixin, CreateView):
         "description",
         "llm_provider",
         "llm",
+        "max_token_limit",
         "temperature",
         "chatbot_prompt",
         "safety_layers",
@@ -140,6 +140,7 @@ class EditExperiment(ExperimentViewMixin, UpdateView):
         "description",
         "llm_provider",
         "llm",
+        "max_token_limit",
         "temperature",
         "chatbot_prompt",
         "safety_layers",

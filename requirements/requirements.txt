@@ -25,9 +25,7 @@ anyio==3.7.1
 asgiref==3.7.2
     # via django
 async-timeout==4.0.3
-    # via
-    #   aiohttp
-    #   redis
+    # via aiohttp
 attrs==23.1.0
     # via
     #   aiohttp
@@ -242,6 +240,7 @@ pygments==2.16.1
 pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
+    #   pyjwt
     #   twilio
 pypng==0.20220715.0
     # via qrcode
@@ -274,6 +273,8 @@ referencing==0.30.2
     # via
     #   jsonschema
     #   jsonschema-specifications
+regex==2023.12.25
+    # via tiktoken
 requests==2.31.0
     # via
     #   django-allauth
@@ -283,6 +284,7 @@ requests==2.31.0
     #   langsmith
     #   pytelegrambotapi
     #   requests-oauthlib
+    #   tiktoken
     #   twilio
 requests-oauthlib==1.3.1
     # via django-allauth
@@ -313,6 +315,8 @@ taskbadger==1.3.1
     # via -r requirements/requirements.in
 tenacity==8.2.3
     # via langchain
+tiktoken==0.5.2
+    # via -r requirements/requirements.in
 tomlkit==0.11.8
     # via taskbadger
 tqdm==4.66.1
@@ -320,7 +324,9 @@ tqdm==4.66.1
 twilio==8.10.1
     # via -r requirements/requirements.in
 typer[all]==0.9.0
-    # via taskbadger
+    # via
+    #   taskbadger
+    #   typer
 typing-extensions==4.8.0
     # via
     #   openai
