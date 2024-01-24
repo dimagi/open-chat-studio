@@ -356,7 +356,7 @@ class Experiment(BaseTeamModel):
         blank=True,
     )
     max_token_limit = models.PositiveIntegerField(
-        default=0,
+        default=8192,
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
