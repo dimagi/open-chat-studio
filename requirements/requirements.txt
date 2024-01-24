@@ -127,7 +127,7 @@ django-cryptography==1.1
     # via -r requirements/requirements.in
 django-environ==0.11.2
     # via -r requirements/requirements.in
-django-field-audit==1.2.7
+django-field-audit==1.2.8
     # via -r requirements/requirements.in
 django-hijack==3.4.2
     # via -r requirements/requirements.in
