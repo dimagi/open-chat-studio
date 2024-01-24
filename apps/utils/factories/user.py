@@ -7,9 +7,15 @@ from apps.users.models import CustomUser
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CustomUser
+        skip_postgeneration_save = True
 
     username = factory.Faker("email")
-    password = factory.PostGenerationMethodCall("set_password", "password")
+
+    @factory.post_generation
+    def set_password(self, create, extracted, **kwargs):
+        if create:
+            self.set_password(extracted or "password")
+            self.save()
 
 
 class GroupFactory(factory.django.DjangoModelFactory):
