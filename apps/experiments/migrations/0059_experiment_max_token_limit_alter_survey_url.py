@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="experiment",
             name="max_token_limit",
-            field=models.IntegerField(
+            field=models.PositiveIntegerField(
                 default=8192,
                 help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. If 0, compression will be disabled which may result in errors or high LLM costs.",
             ),
