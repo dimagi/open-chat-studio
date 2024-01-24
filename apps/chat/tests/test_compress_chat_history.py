@@ -54,6 +54,7 @@ def test_compress_chat_history_with_need_for_compression_after_truncate(chat, ll
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
     result = compress_chat_history(chat, llm, 10)
+    print(result)
     assert len(result) == 10
     assert result[0].content == "Summary"
     assert result[1].content == "Hello 6"

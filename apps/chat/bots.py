@@ -179,13 +179,17 @@ def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: i
     if necessary and save the summary to the DB.
     """
     history = chat.get_langchain_messages_until_summary()
-    if max_token_limit <= 0 or not history or llm.get_num_tokens_from_messages(history) <= max_token_limit:
+    if max_token_limit <= 0 or not history:
+        return history
+
+    current_token_count = llm.get_num_tokens_from_messages(history)
+    if current_token_count <= max_token_limit:
         return history
 
     log.debug(
         "Compressing chat history to be less than %s tokens long. Current length: %s",
         max_token_limit,
-        llm.get_num_tokens_from_messages(history),
+        current_token_count,
     )
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
