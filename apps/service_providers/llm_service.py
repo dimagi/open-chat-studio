@@ -2,8 +2,8 @@ from io import BytesIO
 from typing import ClassVar
 
 import pydantic
-from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
+from langchain_community.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
 

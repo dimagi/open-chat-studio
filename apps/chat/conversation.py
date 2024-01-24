@@ -3,7 +3,6 @@ from typing import Optional, Tuple
 
 import pytz
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
-from langchain.callbacks import get_openai_callback
 from langchain.chains import ConversationChain
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -12,6 +11,7 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import BaseMemory
+from langchain_community.callbacks import get_openai_callback
 
 from apps.chat.agent.agent import AgentExecuter
 from apps.experiments.models import ExperimentSession
