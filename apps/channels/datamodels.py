@@ -1,7 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel, Field, field_validator
 
 from apps.chat.channels import MESSAGE_TYPES
 
@@ -32,11 +31,13 @@ class WhatsappMessage(BaseModel):
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT, alias="MediaContentType0")
     media_url: Optional[str] = Field(default=None, alias="MediaUrl0")
 
-    @validator("to_number", "from_number", pre=True)
+    @field_validator("to_number", "from_number", mode="before")
+    @classmethod
     def strip_prefix(cls, value):
         return value.split("whatsapp:")[1]
 
-    @validator("content_type", pre=True)
+    @field_validator("content_type", mode="before")
+    @classmethod
     def determine_content_type(cls, value):
         if not value:
             return MESSAGE_TYPES.TEXT
@@ -63,7 +64,8 @@ class FacebookMessage(BaseModel):
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
     media_url: Optional[str] = None
 
-    @validator("content_type", pre=True)
+    @field_validator("content_type", mode="before")
+    @classmethod
     def determine_content_type(cls, value):
         if not value:
             return MESSAGE_TYPES.TEXT
