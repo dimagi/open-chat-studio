@@ -70,6 +70,17 @@ class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class AnthropicConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["anthropic_api_key"]
+
+    anthropic_api_key = forms.CharField(label=_("Anthropic API Key"))
+    anthropic_api_base = forms.URLField(
+        label="API URL",
+        help_text="Base URL path for API requests e.g. 'https://api.anthropic.com'",
+        initial="https://api.anthropic.com",
+    )
+
+
 def obfuscate_value(value):
     if value and isinstance(value, str):
         return value[:4] + "*" * (len(value) - 4)
