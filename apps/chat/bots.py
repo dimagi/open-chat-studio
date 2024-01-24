@@ -2,7 +2,8 @@ from typing import List, Optional
 
 from langchain.chat_models.base import BaseLanguageModel
 from langchain.memory import ConversationBufferMemory
-from langchain.schema import AIMessage, HumanMessage
+from langchain.memory.summary import SummarizerMixin
+from langchain.schema import SystemMessage
 from pydantic import ValidationError
 
 from apps.chat.conversation import Conversation
@@ -84,7 +85,8 @@ class TopicBot:
         ]
 
         if self.chat:
-            self.conversation.load_memory(self.chat.get_langchain_messages())
+            history = self._get_optimized_history()
+            self.conversation.load_memory(history)
         elif messages_history is not None:
             # Add the history messages. This originated for the prompt builder
             # where we maintain state client side
@@ -156,6 +158,30 @@ class TopicBot:
                 message_type=type_.value,
                 content=message,
             )
+
+    def _get_optimized_history(self):
+        max_token_limit = 8192
+        keep_history_len = 10
+        return compress_chat_history(self.chat, self.llm, max_token_limit, keep_history_len)
+
+
+def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: int, keep_history_len: int = 10):
+    """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
+    if necessary and save the summary to the DB.
+    """
+    history = chat.get_langchain_messages_until_summary()
+    if llm.get_num_tokens_from_messages(history) <= max_token_limit:
+        return history
+
+    summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
+    history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
+
+    while llm.get_num_tokens_from_messages(history) > max_token_limit:
+        pruned_memory.append(history.pop(0))
+
+    summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
+    ChatMessage.objects.filter(id=history[0].additional_kwargs["id"]).update(summary=summary)
+    return [SystemMessage(content=summary)] + history
 
 
 class SafetyBot:
