@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.app import trace
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
@@ -27,3 +28,7 @@ app.conf.beat_schedule = {
         },
     },
 }
+
+trace.LOG_SUCCESS = """\
+Task %(name)s[%(id)s] succeeded in %(runtime)ss\
+"""
