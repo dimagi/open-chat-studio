@@ -67,7 +67,7 @@ class Conversation:
         self.executer.memory.chat_memory.messages = messages
 
     def predict(self, input: str) -> Tuple[str, int, int]:
-        if not isinstance(self.executer, AgentExecuter) and isinstance(self.executer.llm, ChatAnthropic):
+        if not self._is_agent and isinstance(self.executer.llm, ChatAnthropic):
             # Langchain has no inbuilt functionality to return prompt or
             # completion tokens for Anthropic's models
             # https://python.langchain.com/docs/modules/model_io/llms/token_usage_tracking
@@ -77,7 +77,7 @@ class Conversation:
             response = self.executer.predict(input=input)
             formatted_prompt = self.executer.prompt.format_prompt(
                 input=input,
-                history=self.memory.buffer_as_messages,
+                history=self.executer.memory.buffer_as_messages,
             ).to_string()
             prompt_tokens = get_num_tokens_anthropic(formatted_prompt)
             completion_tokens = get_num_tokens_anthropic(response)
