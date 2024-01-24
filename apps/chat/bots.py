@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 
 from langchain.chat_models.base import BaseLanguageModel
@@ -10,6 +11,8 @@ from apps.chat.conversation import Conversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
+
+log = logging.getLogger("ocs.bots")
 
 
 def create_conversation(
@@ -163,7 +166,12 @@ class TopicBot:
             )
 
     def _get_optimized_history(self):
-        return compress_chat_history(self.chat, self.llm, self.max_token_limit)
+        try:
+            return compress_chat_history(self.chat, self.llm, self.max_token_limit)
+        except (NameError, ImportError, ValueError):
+            # typically this is because a library required to count tokens isn't installed
+            log.exception("Unable to compress history")
+            return self.chat.get_langchain_messages_until_summary()
 
 
 def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: int, keep_history_len: int = 10):
@@ -174,6 +182,11 @@ def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: i
     if max_token_limit <= 0 or not history or llm.get_num_tokens_from_messages(history) <= max_token_limit:
         return history
 
+    log.debug(
+        "Compressing chat history to be less than %s tokens long. Current length: %s",
+        max_token_limit,
+        llm.get_num_tokens_from_messages(history),
+    )
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
 
