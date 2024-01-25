@@ -1,6 +1,6 @@
 from langchain.agents import AgentType, initialize_agent
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
-from langchain.chat_models.base import BaseLanguageModel
+from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMemory
 
@@ -22,7 +22,7 @@ class AgentExecuter:
 
     """
 
-    def __init__(self, llm: BaseLanguageModel, memory: ConversationBufferMemory, experiment_session: ExperimentSession):
+    def __init__(self, llm: BaseChatModel, memory: ConversationBufferMemory, experiment_session: ExperimentSession):
         self._agent_executor = initialize_agent(
             tools=tools,
             llm=llm,

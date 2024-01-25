@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from langchain.chat_models.base import BaseLanguageModel
+from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.summary import SummarizerMixin
 from langchain.schema import SystemMessage
@@ -18,7 +18,7 @@ log = logging.getLogger("ocs.bots")
 def create_conversation(
     prompt_str: str,
     source_material: str,
-    llm: BaseLanguageModel,
+    llm: BaseChatModel,
     experiment_session: Optional[ExperimentSession] = None,
 ) -> Conversation:
     try:
@@ -44,7 +44,7 @@ class TopicBot:
         self,
         prompt: Prompt,
         source_material: str,
-        llm: BaseLanguageModel,
+        llm: BaseChatModel,
         safety_layers: List[SafetyLayer] = None,
         chat=None,
         messages_history=None,
@@ -174,7 +174,7 @@ class TopicBot:
             return self.chat.get_langchain_messages_until_summary()
 
 
-def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: int, keep_history_len: int = 10):
+def compress_chat_history(chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10):
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
     """
@@ -203,7 +203,7 @@ def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: i
 
 
 class SafetyBot:
-    def __init__(self, safety_layer: SafetyLayer, llm: BaseLanguageModel, source_material: Optional[str]):
+    def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: Optional[str]):
         self.safety_layer = safety_layer
         self.prompt = safety_layer.prompt
         self.llm = llm
