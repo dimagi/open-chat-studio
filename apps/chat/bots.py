@@ -174,7 +174,7 @@ class TopicBot:
             return self.chat.get_langchain_messages_until_summary()
 
 
-def compress_chat_history(chat: Chat, llm: BaseLanguageModel, max_token_limit: int, keep_history_len: int = 10):
+def compress_chat_history(chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10):
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
     """
