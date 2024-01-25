@@ -293,7 +293,7 @@ class Experiment(BaseTeamModel):
         default=False,
         help_text=(
             "If checked, this bot will be able to use prebuilt tools (set reminders etc). This uses more tokens, "
-            "so it will cost more."
+            "so it will cost more. This doesn't currently work with Anthropic models."
         ),
     )
 

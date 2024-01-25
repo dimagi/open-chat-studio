@@ -16,6 +16,7 @@ from .exceptions import ServiceProviderConfigError
 class LlmProviderType(models.TextChoices):
     openai = "openai", _("OpenAI")
     azure = "azure", _("Azure OpenAI")
+    anthropic = "anthropic", _("Anthropic")
 
     @property
     def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
@@ -24,6 +25,8 @@ class LlmProviderType(models.TextChoices):
                 return forms.OpenAIConfigForm
             case LlmProviderType.azure:
                 return forms.AzureOpenAIConfigForm
+            case LlmProviderType.anthropic:
+                return forms.AnthropicConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
@@ -33,6 +36,8 @@ class LlmProviderType(models.TextChoices):
                     return llm_service.OpenAILlmService(**config)
                 case LlmProviderType.azure:
                     return llm_service.AzureLlmService(**config)
+                case LlmProviderType.anthropic:
+                    return llm_service.AnthropicLlmService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No chat model configured")

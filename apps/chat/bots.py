@@ -227,9 +227,9 @@ class SafetyBot:
         result = self._call_predict(self.prompt.format(input_str))
         print(f"response: {result}")
         print("========== end safety bot analysis =========")
-        if result.lower().startswith("safe"):
+        if result.strip().lower().startswith("safe"):
             return True
-        elif result.lower().startswith("unsafe"):
+        elif result.strip().lower().startswith("unsafe"):
             return False
         else:
             return False
