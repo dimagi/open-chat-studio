@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 import pytz
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.chains import ConversationChain
-from langchain.chat_models.anthropic import ChatAnthropic
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -12,8 +11,9 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import BaseMemory
-from langchain_community.callbacks import get_openai_callback
 from langchain.utilities.anthropic import get_num_tokens_anthropic
+from langchain_community.callbacks import get_openai_callback
+from langchain_community.chat_models import ChatAnthropic
 
 from apps.chat.agent.agent import AgentExecuter
 from apps.experiments.models import ExperimentSession
