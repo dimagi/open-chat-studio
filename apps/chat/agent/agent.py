@@ -15,6 +15,11 @@ class AgentExecuter:
     track of the session in which the agent is being executed.
 
     To learn more about LangChain agents, see the docs: https://docs.langchain.com/docs/components/agents
+
+    # TODO: use
+    https://python.langchain.com/docs/integrations/chat/anthropic_functions
+    when we implement this for anthropic
+
     """
 
     def __init__(self, llm: BaseChatModel, memory: ConversationBufferMemory, experiment_session: ExperimentSession):

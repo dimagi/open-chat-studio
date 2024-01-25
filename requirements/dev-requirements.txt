@@ -26,7 +26,9 @@ factory-boy==3.3.0
 faker==20.0.0
     # via factory-boy
 filelock==3.13.1
-    # via virtualenv
+    # via
+    #   -c requirements/requirements.txt
+    #   virtualenv
 freezegun==1.2.2
     # via -r requirements/dev-requirements.in
 identify==2.5.31

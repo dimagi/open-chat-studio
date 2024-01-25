@@ -22,7 +22,7 @@ class ExperimentTable(tables.Table):
         orderable=True,
     )
     description = columns.Column(verbose_name="Description")
-    owner = columns.Column(accessor="owner.username", verbose_name="Created By")
+    owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     bot = columns.Column(accessor="chatbot_prompt__name", verbose_name="Bot", orderable=True)
     topic = columns.Column(accessor="source_material__topic", verbose_name="Topic", orderable=True)
     actions = columns.TemplateColumn(
@@ -61,7 +61,7 @@ class SafetyLayerTable(tables.Table):
 
 
 class SourceMaterialTable(tables.Table):
-    owner = columns.Column(accessor="owner.username", verbose_name="Created By")
+    owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
@@ -159,7 +159,7 @@ class NoActivityMessageConfigTable(tables.Table):
 
 
 class PromptTable(tables.Table):
-    owner = columns.Column(accessor="owner.get_display_name", verbose_name="Created By")
+    owner = columns.Column(accessor="owner__get_display_name", verbose_name="Created By")
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={

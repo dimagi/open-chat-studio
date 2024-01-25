@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 
 from celery.app import shared_task
+from langchain.schema import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
@@ -53,7 +54,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
         llm=llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"])),
         safety_layers=None,
         chat=None,
-        messages_history=messages_history,
+        messages_history=_convert_prompt_builder_history(messages_history),
     )
 
     # Get the response from the bot using the last message from the user and return it
@@ -85,3 +86,13 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     history_event |= {"preview": answer, "time": datetime.now().time().strftime("%H:%M")}
     PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}
+
+
+def _convert_prompt_builder_history(messages_history):
+    history = []
+    for message in messages_history:
+        if message["author"] == "User":
+            history.append(HumanMessage(content=message["message"]))
+        elif message["author"] == "Assistant":
+            history.append(AIMessage(content=message["message"]))
+    return history

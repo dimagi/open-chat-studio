@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
@@ -21,6 +22,16 @@ class Chat(BaseTeamModel):
 
     def get_langchain_messages(self) -> List[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
+
+    def get_langchain_messages_until_summary(self) -> List[BaseMessage]:
+        messages = []
+        for message in self.messages.order_by("-created_at").iterator(100):
+            messages.append(message.to_langchain_dict())
+            if message.summary:
+                messages.append(message.summary_to_langchain_dict())
+                break
+
+        return messages_from_dict(list(reversed(messages)))
 
 
 class ChatMessageType(models.TextChoices):
@@ -46,7 +57,9 @@ class ChatMessage(BaseModel):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
     content = models.TextField()
-    # todo: additional_kwargs? dict
+    summary = models.TextField(
+        null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
+    )
 
     class Meta:
         ordering = ["created_at"]
@@ -64,9 +77,18 @@ class ChatMessage(BaseModel):
         return quote(self.created_at.isoformat())
 
     def to_langchain_dict(self) -> dict:
+        return self._get_langchain_dict(self.content, self.message_type)
+
+    def summary_to_langchain_dict(self) -> dict:
+        return self._get_langchain_dict(self.summary, ChatMessageType.SYSTEM)
+
+    def _get_langchain_dict(self, content, message_type):
         return {
-            "type": self.message_type,
+            "type": message_type,
             "data": {
-                "content": self.content,
+                "content": content,
+                "additional_kwargs": {
+                    "id": self.id,
+                },
             },
         }

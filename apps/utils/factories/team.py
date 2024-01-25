@@ -7,6 +7,7 @@ from apps.utils.factories.user import UserFactory
 class TeamFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Team
+        skip_postgeneration_save = True
 
     name = factory.Faker("text", max_nb_chars=20)
     slug = factory.Sequence(lambda x: f"team-{x}")
@@ -15,6 +16,7 @@ class TeamFactory(factory.django.DjangoModelFactory):
 class MembershipFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Membership
+        skip_postgeneration_save = True
 
     user = factory.SubFactory(UserFactory)
     team = factory.SubFactory(TeamFactory)

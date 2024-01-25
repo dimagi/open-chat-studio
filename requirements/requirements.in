@@ -1,3 +1,4 @@
+anthropic
 boto3
 Django
 django-allauth
@@ -33,5 +34,6 @@ pydantic
 django_celery_beat
 azure-cognitiveservices-speech
 taskbadger
+tiktoken
 fbmessenger
 django-field-audit>=1.2.7

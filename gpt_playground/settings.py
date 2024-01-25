@@ -241,8 +241,6 @@ TIME_ZONE = "UTC"
 
 USE_I18N = True
 
-USE_L10N = True
-
 USE_TZ = True
 
 
@@ -438,9 +436,9 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
         },
-        "gpt_playground": {
+        "ocs": {
             "handlers": ["console"],
-            "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="INFO"),
+            "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
         },
     },
 }

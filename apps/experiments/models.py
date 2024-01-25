@@ -293,7 +293,7 @@ class Experiment(BaseTeamModel):
         default=False,
         help_text=(
             "If checked, this bot will be able to use prebuilt tools (set reminders etc). This uses more tokens, "
-            "so it will cost more."
+            "so it will cost more. This doesn't currently work with Anthropic models."
         ),
     )
 
@@ -347,7 +347,6 @@ class Experiment(BaseTeamModel):
             "This requires the experiment to have a seed message."
         ),
     )
-
     safety_violation_notification_emails = ArrayField(
         models.CharField(max_length=512),
         default=list,
@@ -355,6 +354,11 @@ class Experiment(BaseTeamModel):
         help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
         null=True,
         blank=True,
+    )
+    max_token_limit = models.PositiveIntegerField(
+        default=8192,
+        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
+        "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
 
     class Meta:

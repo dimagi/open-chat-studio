@@ -5,6 +5,7 @@ from apps.service_providers.forms import ObfuscatingMixin
 
 
 class TestForm(ObfuscatingMixin, forms.Form):
+    __test__ = False  # pytest ignore
     obfuscate_fields = ["field_a", "field_b"]
 
     field_a = forms.CharField()

@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 import pytz
 from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.chains import ConversationChain
+from langchain.chat_models.anthropic import ChatAnthropic
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -12,6 +13,7 @@ from langchain.prompts import (
 )
 from langchain.schema import BaseMemory
 from langchain_community.callbacks import get_openai_callback
+from langchain.utilities.anthropic import get_num_tokens_anthropic
 
 from apps.chat.agent.agent import AgentExecuter
 from apps.experiments.models import ExperimentSession
@@ -61,14 +63,29 @@ class Conversation:
             )
             self.executer = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
-    @property
-    def memory(self) -> BaseMemory:
-        return self.executer.memory
+    def load_memory(self, messages):
+        self.executer.memory.chat_memory.messages = messages
 
     def predict(self, input: str) -> Tuple[str, int, int]:
-        with get_openai_callback() as cb:
+        if not self._is_agent and isinstance(self.executer.llm, ChatAnthropic):
+            # Langchain has no inbuilt functionality to return prompt or
+            # completion tokens for Anthropic's models
+            # https://python.langchain.com/docs/modules/model_io/llms/token_usage_tracking
+            # Instead, we convert the prompt to a string, and count the tokens
+            # with Anthropic's token counter.
+            # TODO: When we enable the AgentExecuter for Anthropic models, we should revisit this
             response = self.executer.predict(input=input)
-        return response, cb.prompt_tokens, cb.completion_tokens
+            formatted_prompt = self.executer.prompt.format_prompt(
+                input=input,
+                history=self.executer.memory.buffer_as_messages,
+            ).to_string()
+            prompt_tokens = get_num_tokens_anthropic(formatted_prompt)
+            completion_tokens = get_num_tokens_anthropic(response)
+            return response, prompt_tokens, completion_tokens
+        else:
+            with get_openai_callback() as cb:
+                response = self.executer.predict(input=input)
+            return response, cb.prompt_tokens, cb.completion_tokens
 
     @property
     def _is_agent(self) -> bool:
