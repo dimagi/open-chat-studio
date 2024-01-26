@@ -5,7 +5,7 @@ from django.views import View
 
 from apps.teams.middleware import TeamsMiddleware
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.models import Team
+from apps.teams.models import Membership, Team
 from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
 from apps.users.models import CustomUser
 
@@ -30,13 +30,13 @@ class TeamMixinTest(TestCase):
 
         cls.sox_admin = CustomUser.objects.create(username="tito@redsox.com")
         cls.sox_member = CustomUser.objects.create(username="papi@redsox.com")
-        cls.sox.members.add(cls.sox_admin, through_defaults={"role": ROLE_ADMIN})
-        cls.sox.members.add(cls.sox_member, through_defaults={"role": ROLE_MEMBER})
+        Membership.objects.create(user=cls.sox_admin, role=ROLE_ADMIN, team=cls.sox)
+        Membership.objects.create(user=cls.sox_member, role=ROLE_MEMBER, team=cls.sox)
 
         cls.yanks_admin = CustomUser.objects.create(username="joe.torre@yankees.com")
         cls.yanks_member = CustomUser.objects.create(username="derek.jeter@yankees.com")
-        cls.yanks.members.add(cls.yanks_admin, through_defaults={"role": ROLE_ADMIN})
-        cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MEMBER})
+        Membership.objects.create(user=cls.yanks_admin, role=ROLE_ADMIN, team=cls.yanks)
+        Membership.objects.create(user=cls.yanks_member, role=ROLE_MEMBER, team=cls.yanks)
 
     def _get_request(self, user=None):
         request = self.factory.get("/team/")  # the url here is ignored
