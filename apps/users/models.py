@@ -1,16 +1,25 @@
 import hashlib
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
+from field_audit import audit_fields
+from field_audit.models import AuditingManager
 
+from apps.experiments.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
 
 
+class AuditedUserObjectManager(UserManager, AuditingManager):
+    pass
+
+
+@audit_fields(*CUSTOM_USER_FIELDS, audit_special_queryset_writes=True)
 class CustomUser(AbstractUser):
     """
     Add additional fields to the user model here.
     """
 
+    objects = AuditedUserObjectManager()
     avatar = models.FileField(upload_to="profile-pictures/", blank=True, storage=get_public_media_storage)
     language = models.CharField(max_length=10, blank=True, null=True)
 
