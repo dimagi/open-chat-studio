@@ -25,8 +25,6 @@ class LlmService(pydantic.BaseModel):
 
 class OpenAILlmService(LlmService):
     _type = "openai"
-    supports_transcription = True
-    supports_assistant = True
 
     openai_api_key: str
     openai_api_base: str = None
