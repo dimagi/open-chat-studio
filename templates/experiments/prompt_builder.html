@@ -67,6 +67,7 @@
                       this.llm_models = llmModelOptions.filter(option => {
                         return option.provider === this.currentState.provider;
                       });
+                      this.currentState.model = this.llm_models[0].value;
                     }
                 });
             },
