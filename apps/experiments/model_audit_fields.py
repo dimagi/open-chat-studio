@@ -33,3 +33,14 @@ CONSENT_FORM_FIELDS = [
     "confirmation_text",
     "team",
 ]
+
+EXPERIMENT_CHANNEL_FIELDS = [
+    "name",
+    "experiment",
+    "active",
+    "extra_data",
+    "platform",
+    "messaging_provider",
+]
+
+NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after", "team"]

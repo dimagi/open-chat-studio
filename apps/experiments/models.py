@@ -37,6 +37,10 @@ class ConsentFormObjectManager(AuditingManager):
     pass
 
 
+class NoActivityMessageConfigObjectManager(AuditingManager):
+    pass
+
+
 @audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
 class Prompt(BaseTeamModel):
     """
@@ -249,9 +253,11 @@ class SyntheticVoice(BaseModel):
         return f"{self.language}, {self.gender}: {prefix}{self.name}"
 
 
+@audit_fields(*model_audit_fields.NO_ACTIVITY_CONFIG_FIELDS, audit_special_queryset_writes=True)
 class NoActivityMessageConfig(BaseTeamModel):
     """Configuration for when the user doesn't respond to the bot's message"""
 
+    objects = NoActivityMessageConfigObjectManager()
     message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
     name = models.CharField(max_length=64)
     max_pings = models.IntegerField()
