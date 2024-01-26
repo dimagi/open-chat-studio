@@ -1,27 +1,25 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.generic import CreateView, UpdateView
+from django.views import View
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Survey
 from apps.experiments.tables import SurveyTable
-from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-@login_and_team_required
-def survey_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
+class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
             "active_tab": "survey",
             "title": "Survey",
             "new_object_url": reverse("experiments:survey_new", args=[team_slug]),
             "table_url": reverse("experiments:survey_table", args=[team_slug]),
-        },
-    )
+        }
 
 
 class SurveyTableView(SingleTableView):
@@ -70,8 +68,8 @@ class EditSurvey(UpdateView):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
 
 
-@login_and_team_required
-def delete_survey(request, team_slug: str, pk: int):
-    survey = get_object_or_404(Survey, id=pk, team=request.team)
-    survey.delete()
-    return HttpResponse()
+class DeleteSurvey(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        survey = get_object_or_404(Survey, id=pk, team=request.team)
+        survey.delete()
+        return HttpResponse()

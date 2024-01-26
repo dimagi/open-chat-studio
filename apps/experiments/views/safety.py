@@ -1,27 +1,25 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.generic import CreateView, UpdateView
+from django.views import View
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import SafetyLayer
 from apps.experiments.tables import SafetyLayerTable
-from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-@login_and_team_required
-def safety_layer_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
+class SafetyLayerHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
             "active_tab": "safety_layers",
             "title": "Safety Layers",
             "new_object_url": reverse("experiments:safety_new", args=[team_slug]),
             "table_url": reverse("experiments:safety_table", args=[team_slug]),
-        },
-    )
+        }
 
 
 class SafetyLayerTableView(SingleTableView):
@@ -95,8 +93,8 @@ class EditSafetyLayer(UpdateView):
         return reverse("experiments:safety_home", args=[self.request.team.slug])
 
 
-@login_and_team_required
-def delete_safety_layer(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(SafetyLayer, id=pk, team=request.team)
-    safety_layer.delete()
-    return HttpResponse()
+class DeleteSafetyLayer(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        safety_layer = get_object_or_404(SafetyLayer, id=pk, team=request.team)
+        safety_layer.delete()
+        return HttpResponse()
