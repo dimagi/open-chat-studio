@@ -9,7 +9,7 @@ from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments import model_audit_fields
+from apps.service_providers import model_audit_fields
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service

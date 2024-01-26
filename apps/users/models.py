@@ -5,7 +5,7 @@ from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.experiments.model_audit_fields import CUSTOM_USER_FIELDS
+from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
 
 

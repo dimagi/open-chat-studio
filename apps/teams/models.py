@@ -11,7 +11,7 @@ from waffle import get_setting
 from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, keyfmt
 
-from apps.experiments import model_audit_fields
+from apps.teams import model_audit_fields
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
