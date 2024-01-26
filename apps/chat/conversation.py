@@ -1,8 +1,5 @@
-from datetime import datetime
 from typing import Optional, Tuple
 
-import pytz
-from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
 from langchain.chains import ConversationChain
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -11,11 +8,11 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import BaseMemory
-from langchain.utilities.anthropic import get_num_tokens_anthropic
 from langchain_community.callbacks import get_openai_callback
 from langchain_community.chat_models import ChatAnthropic
+from langchain_core.language_models import BaseChatModel
 
-from apps.chat.agent.agent import AgentExecuter
+from apps.chat.agent.agent import build_agent
 from apps.experiments.models import ExperimentSession
 
 
@@ -30,11 +27,10 @@ class Conversation:
         prompt_str: str,
         source_material: str,
         memory: BaseMemory,
-        llm,
+        llm: BaseChatModel,
         experiment_session: Optional[ExperimentSession] = None,
     ):
-        UTC = pytz.timezone("UTC")
-        current_datetime = datetime.now().astimezone(UTC)
+        self.llm = llm
         prompt_to_use = SystemMessagePromptTemplate.from_template(prompt_str)
         if source_material:
             try:
@@ -43,16 +39,7 @@ class Conversation:
                 # no source material found in prompt, just use it "naked"
                 pass
         if experiment_session and experiment_session.experiment.tools_enabled:
-            self.executer = AgentExecuter(llm=llm, memory=memory, experiment_session=experiment_session)
-            # Insert the messages here
-            current_date_message = SystemMessagePromptTemplate.from_template("{current_date}")
-            self.executer.agent.prompt = OpenAIFunctionsAgent.create_prompt(
-                system_message=prompt_to_use,
-                extra_prompt_messages=[
-                    MessagesPlaceholder(variable_name="history"),
-                    current_date_message.format(current_date=str(current_datetime)),
-                ],
-            )
+            self.chain = build_agent(llm, memory, experiment_session, prompt_to_use)
         else:
             prompt = ChatPromptTemplate.from_messages(
                 [
@@ -61,32 +48,27 @@ class Conversation:
                     HumanMessagePromptTemplate.from_template("{input}"),
                 ]
             )
-            self.executer = ConversationChain(memory=memory, prompt=prompt, llm=llm)
+
+            # set output_key to match agent's output_key
+            self.chain = ConversationChain(memory=memory, prompt=prompt, llm=llm, output_key="output")
 
     def load_memory(self, messages):
-        self.executer.memory.chat_memory.messages = messages
+        self.chain.memory.chat_memory.messages = messages
 
     def predict(self, input: str) -> Tuple[str, int, int]:
-        if not self._is_agent and isinstance(self.executer.llm, ChatAnthropic):
+        if isinstance(self.llm, ChatAnthropic):
             # Langchain has no inbuilt functionality to return prompt or
             # completion tokens for Anthropic's models
             # https://python.langchain.com/docs/modules/model_io/llms/token_usage_tracking
             # Instead, we convert the prompt to a string, and count the tokens
             # with Anthropic's token counter.
             # TODO: When we enable the AgentExecuter for Anthropic models, we should revisit this
-            response = self.executer.predict(input=input)
-            formatted_prompt = self.executer.prompt.format_prompt(
-                input=input,
-                history=self.executer.memory.buffer_as_messages,
-            ).to_string()
-            prompt_tokens = get_num_tokens_anthropic(formatted_prompt)
-            completion_tokens = get_num_tokens_anthropic(response)
-            return response, prompt_tokens, completion_tokens
+            response = self.chain.invoke({"input": input})
+            prompt_tokens = self.llm.get_num_tokens_from_messages(response["history"][:-1])
+            completion_tokens = self.llm.get_num_tokens_from_messages(response["output"])
+            return response["output"], prompt_tokens, completion_tokens
         else:
             with get_openai_callback() as cb:
-                response = self.executer.predict(input=input)
-            return response, cb.prompt_tokens, cb.completion_tokens
-
-    @property
-    def _is_agent(self) -> bool:
-        return isinstance(self.executer, AgentExecuter)
+                response = self.chain.invoke({"input": input})
+            output = response["output"]
+            return output, cb.prompt_tokens, cb.completion_tokens
