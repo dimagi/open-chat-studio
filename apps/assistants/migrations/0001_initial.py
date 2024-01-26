@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("teams", "0005_invitation_groups"),
-        ("service_providers", "0009_alter_llmprovider_type"),
+        ("service_providers", "0008_messagingprovider"),
     ]
 
     operations = [

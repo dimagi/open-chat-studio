@@ -1,17 +1,30 @@
 from django import forms
 
 from apps.assistants.models import OpenAiAssistant
+from apps.assistants.utils import get_llm_providers_for_assistants
+
+
+def get_assistant_tool_options():
+    return [
+        ("code_interpreter", "Code Interpreter"),
+    ]
 
 
 class OpenAiAssistantForm(forms.ModelForm):
     class Meta:
         model = OpenAiAssistant
-        fields = ["name", "assistant_id", "instructions", "builtin_tools", "llm_provider", "llm_model"]
+        fields = ["name", "instructions", "builtin_tools", "llm_provider", "llm_model"]
+        labels = {
+            "builtin_tools": "Enable Built-in Tools",
+        }
+        widgets = {
+            "builtin_tools": forms.CheckboxSelectMultiple(choices=get_assistant_tool_options()),
+        }
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = request
-        self.fields["llm_provider"].queryset = request.team.llmprovider_set
+        self.fields["llm_provider"].queryset = get_llm_providers_for_assistants(request.team)
         self.fields["llm_provider"].widget.attrs = {
             "x-model.number.fill": "llmProvider",
         }

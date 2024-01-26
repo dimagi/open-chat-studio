@@ -31,7 +31,7 @@ class OpenAiAssistantTable(tables.Table):
 
     class Meta:
         model = OpenAiAssistant
-        fields = ("name",)
+        fields = ("name", "assistant_id")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No assistants found."
