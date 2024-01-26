@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -15,32 +16,34 @@ from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
 
-class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView):
+class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
+    permission_required = "analysis.view_openaiassistant"
 
     def get_context_data(self, team_slug: str, **kwargs):
-        allow_new = get_llm_providers_for_assistants(self.request.team).exists()
-        if not allow_new:
+        has_providers = get_llm_providers_for_assistants(self.request.team).exists()
+        if not has_providers:
             messages.warning(self.request, "You need to add an OpenAI LLM provider before you can create an assistant.")
         return {
             "active_tab": "assistants",
             "title": "OpenAI Assistants",
             "new_object_url": reverse("assistants:new", args=[team_slug]),
             "table_url": reverse("assistants:table", args=[team_slug]),
-            "allow_new": allow_new,
+            "allow_new": has_providers and self.request.user.has_perm("assistants.add_openaiassistant"),
         }
 
 
-class OpenAiAssistantTableView(SingleTableView):
+class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
+    permission_required = "analysis.view_openaiassistant"
 
     def get_queryset(self):
         return OpenAiAssistant.objects.filter(team=self.request.team)
 
 
-class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin):
+class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
     model = OpenAiAssistant
     template_name = "assistants/assistant_form.html"
     form_class = OpenAiAssistantForm
@@ -70,14 +73,18 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin):
 class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     title = "Create OpenAI Assistant"
     button_text = "Create"
+    permission_required = "assistants.add_openaiassistant"
 
 
 class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     title = "Edit OpenAI Assistant"
     button_text = "Update"
+    permission_required = "assistants.change_openaiassistant"
 
 
-class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View):
+class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "assistants.delete_openaiassistant"
+
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
