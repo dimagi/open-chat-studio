@@ -22,6 +22,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -97,6 +98,9 @@ class ExperimentForm(forms.ModelForm):
             "no_activity_config",
             "safety_violation_notification_emails",
         ]
+        help_texts = {
+            "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
+        }
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -105,7 +109,10 @@ class ExperimentForm(forms.ModelForm):
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
-        self.fields["assistant"].queryset = team.openaiassistant_set
+        if flag_is_active(request, "assistants"):
+            self.fields["assistant"].queryset = team.openaiassistant_set
+        else:
+            del self.fields["assistant"]
         self.fields["voice_provider"].queryset = team.voiceprovider_set
         self.fields["chatbot_prompt"].queryset = team.prompt_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
