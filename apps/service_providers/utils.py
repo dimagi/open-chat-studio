@@ -94,12 +94,8 @@ def formfield_for_dbfield(db_field: Field, provider: ServiceProvider, **kwargs):
     return db_field.formfield(**kwargs)
 
 
-def get_llm_provider_choices(team) -> list[dict]:
-    return sorted(
-        [
-            {"value": model, "text": model, "provider": provider_id}
-            for provider_id, models in team.llmprovider_set.values_list("id", "llm_models")
-            for model in models
-        ],
-        key=lambda v: v["text"],
-    )
+def get_llm_provider_choices(team) -> dict[str, list[dict[str, str]]]:
+    providers = {}
+    for provider_id, models in team.llmprovider_set.values_list("id", "llm_models"):
+        providers[provider_id] = [{"value": model, "text": model} for model in sorted(models)]
+    return providers

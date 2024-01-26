@@ -27,9 +27,7 @@
                   });
 
                   this.$watch('llmProvider', () => {
-                      this.llm_options = llmModelOptions.filter(option => {
-                        return option.provider === this.llmProvider;
-                      });
+                      this.llm_options = llmModelOptions[this.llmProvider];
                   })
               }
           }));
