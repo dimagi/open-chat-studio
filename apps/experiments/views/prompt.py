@@ -11,8 +11,9 @@ from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.views import View
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, UpdateView
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 from langchain.prompts import PromptTemplate
 
@@ -22,23 +23,22 @@ from apps.experiments.tables import PromptTable
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 PROMPT_DATA_SESSION_KEY = "prompt_data"
 
 
-@login_and_team_required
-def prompt_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
+class PromptHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
             "active_tab": "prompts",
             "title": "Prompts",
             "new_object_url": reverse("experiments:prompt_new", args=[team_slug]),
             "table_url": reverse("experiments:prompt_table", args=[team_slug]),
             "enable_search": True,
-        },
-    )
+        }
 
 
 class PromptTableView(SingleTableView):
@@ -124,11 +124,11 @@ class EditPrompt(PromptViewMixin, UpdateView):
         return reverse("experiments:prompt_home", args=[self.request.team.slug])
 
 
-@login_and_team_required
-def delete_prompt(request, team_slug: str, pk: int):
-    prompt = get_object_or_404(Prompt, id=pk, team=request.team)
-    prompt.delete()
-    return HttpResponse()
+class DeletePrompt(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        prompt = get_object_or_404(Prompt, id=pk, team=request.team)
+        prompt.delete()
+        return HttpResponse()
 
 
 @login_and_team_required

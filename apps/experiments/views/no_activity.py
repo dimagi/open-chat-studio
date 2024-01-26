@@ -2,26 +2,25 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.generic import CreateView, UpdateView
+from django.views import View
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import NoActivityMessageConfig
 from apps.experiments.tables import NoActivityMessageConfigTable
-from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-@login_and_team_required
-def no_activity_config_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
+class NoActivityMessageConfigHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
             "active_tab": "no_activity_config",
             "title": "No Activity Config",
             "new_object_url": reverse("experiments:no_activity_new", args=[team_slug]),
             "table_url": reverse("experiments:no_activity_table", args=[team_slug]),
-        },
-    )
+        }
 
 
 class NoActivityMessageConfigTableView(SingleTableView):
@@ -80,8 +79,8 @@ class EditNoActivityMessageConfig(UpdateView):
         return reverse("experiments:no_activity_home", args=[self.request.team.slug])
 
 
-@login_and_team_required
-def delete_no_activity_config(request, team_slug: str, pk: int):
-    no_activity_config = get_object_or_404(NoActivityMessageConfig, id=pk, team=request.team)
-    no_activity_config.delete()
-    return HttpResponse()
+class DeleteNoActivityMessageConfig(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        no_activity_config = get_object_or_404(NoActivityMessageConfig, id=pk, team=request.team)
+        no_activity_config.delete()
+        return HttpResponse()

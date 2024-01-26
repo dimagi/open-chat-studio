@@ -1,27 +1,25 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.generic import CreateView, UpdateView
+from django.views import View
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import ConsentForm
 from apps.experiments.tables import ConsentFormTable
-from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-@login_and_team_required
-def consent_form_home(request, team_slug: str):
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
+class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
             "active_tab": "consent_forms",
             "title": "Consent Forms",
             "new_object_url": reverse("experiments:consent_new", args=[team_slug]),
             "table_url": reverse("experiments:consent_table", args=[team_slug]),
-        },
-    )
+        }
 
 
 class ConsentFormTableView(SingleTableView):
@@ -70,10 +68,10 @@ class EditConsentForm(UpdateView):
         return reverse("experiments:consent_home", args=[self.request.team.slug])
 
 
-@login_and_team_required
-def delete_consent_form(request, team_slug: str, pk: int):
-    consent_form = get_object_or_404(ConsentForm, id=pk, team=request.team)
-    if consent_form.is_default:
-        return HttpResponse("Cannot delete default consent form.", status=400)
-    consent_form.delete()
-    return HttpResponse()
+class DeleteConsentForm(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        consent_form = get_object_or_404(ConsentForm, id=pk, team=request.team)
+        if consent_form.is_default:
+            return HttpResponse("Cannot delete default consent form.", status=400)
+        consent_form.delete()
+        return HttpResponse()

@@ -1,19 +1,10 @@
 from django.urls import path
 
+from apps.generics.urls import make_crud_urls
+
 from . import views
 
 app_name = "experiments"
-
-
-def _make_crud_urls(model_name: str, slug: str, prefix: str = None):
-    prefix = prefix or slug
-    return [
-        path(f"{prefix}/", getattr(views, f"{slug}_home"), name=f"{prefix}_home"),
-        path(f"{prefix}/new/", getattr(views, f"Create{model_name}").as_view(), name=f"{prefix}_new"),
-        path(f"{prefix}/<int:pk>/", getattr(views, f"Edit{model_name}").as_view(), name=f"{prefix}_edit"),
-        path(f"{prefix}/<int:pk>/delete/", getattr(views, f"delete_{slug}"), name=f"{prefix}_delete"),
-        path(f"{prefix}/table/", getattr(views, f"{model_name}TableView").as_view(), name=f"{prefix}_table"),
-    ]
 
 
 urlpatterns = [
@@ -117,9 +108,9 @@ urlpatterns = [
     path("e/<slug:experiment_id>/start/", views.start_experiment, name="start_experiment"),
 ]
 
-urlpatterns.extend(_make_crud_urls("SafetyLayer", "safety_layer", "safety"))
-urlpatterns.extend(_make_crud_urls("SourceMaterial", "source_material"))
-urlpatterns.extend(_make_crud_urls("Survey", "survey"))
-urlpatterns.extend(_make_crud_urls("ConsentForm", "consent_form", "consent"))
-urlpatterns.extend(_make_crud_urls("NoActivityMessageConfig", "no_activity_config", "no_activity"))
-urlpatterns.extend(_make_crud_urls("Prompt", "prompt"))
+urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
+urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
+urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
+urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))
+urlpatterns.extend(make_crud_urls(views, "NoActivityMessageConfig", "no_activity"))
+urlpatterns.extend(make_crud_urls(views, "Prompt", "prompt"))
