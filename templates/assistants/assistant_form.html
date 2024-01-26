@@ -28,7 +28,7 @@
         llm_model_options: [],
         init() {
           this.$watch('llmProvider', () => {
-            this.llm_model_options = llmModelOptions[this.llmProvider];
+            this.llm_model_options = llmModelOptions[this.llmProvider].models;
           })
         }
       }));

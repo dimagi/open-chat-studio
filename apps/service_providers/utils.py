@@ -1,6 +1,7 @@
 import dataclasses
 import functools
 from enum import Enum
+from typing import Any
 
 from django import forms
 from django.db import models
@@ -94,8 +95,11 @@ def formfield_for_dbfield(db_field: Field, provider: ServiceProvider, **kwargs):
     return db_field.formfield(**kwargs)
 
 
-def get_llm_provider_choices(team) -> dict[str, list[dict[str, str]]]:
+def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]:
     providers = {}
-    for provider_id, models in team.llmprovider_set.values_list("id", "llm_models"):
-        providers[provider_id] = [{"value": model, "text": model} for model in sorted(models)]
+    for provider in team.llmprovider_set.all():
+        providers[provider.id] = {
+            "models": [{"value": model, "text": model} for model in sorted(provider.llm_models)],
+            "supports_assistants": provider.type_enum.supports_assistants,
+        }
     return providers

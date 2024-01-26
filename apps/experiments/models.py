@@ -289,6 +289,13 @@ class Experiment(BaseTeamModel):
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
+    assistant = models.ForeignKey(
+        "assistants.OpenAiAssistant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="OpenAI Assistant",
+    )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
     chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)

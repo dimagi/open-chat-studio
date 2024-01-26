@@ -1,4 +1,14 @@
 {% extends "generic/object_form.html" %}
+{% load form_tags %}
+{% block form %}
+  {% render_form_fields form "name" "description" "llm_provider" "llm" %}
+  <div x-show="llmProvider !== null && llmProvider.supports_assistants">
+  {% render_form_fields form "assistant" %}
+  </div>
+  {% render_form_fields form "max_token_limit" "temperature" "chatbot_prompt" "safety_layers" "tools_enabled" %}
+  {% render_form_fields form "conversational_consent_enabled" "source_material" "seed_message" "pre_survey" %}
+  {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" "no_activity_config" "safety_violation_notification_emails" %} %}
+{% endblock form %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
@@ -14,11 +24,13 @@
               synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
               synthetic_voice_options: [],
 
+              llmProviderId: null,
               llmProvider: null,
               llm: '{{experiment.llm|default:'null'}}',
               llm_options: [],
 
               init() {
+
                   this.$watch('voiceProvider', () => {
                       const providerType = voiceProviderTypes[this.voiceProvider];
                       this.synthetic_voice_options = voiceOptions.filter(option => {
@@ -26,8 +38,9 @@
                       });
                   });
 
-                  this.$watch('llmProvider', () => {
-                      this.llm_options = llmModelOptions[this.llmProvider];
+                  this.$watch('llmProviderId', () => {
+                      this.llmProvider = llmModelOptions[this.llmProviderId];
+                      this.llm_options = llmModelOptions[this.llmProviderId].models;
                   })
               }
           }));
