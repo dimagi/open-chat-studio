@@ -59,6 +59,14 @@
     </a>
   </li>
   <li>
+  {% if perms.assistants.view_openaiassistant %}
+    <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="active"{% endif %}>
+      <i class="fa-solid fa-robot"></i>
+      {% translate "Assistants" %}<span class="badge badge-sm">beta</span>
+    </a>
+  {% endif %}
+  </li>
+  <li>
   {% flag "pipelines" %}
   {% if perms.analysis.view_analysis %}
     <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
