@@ -5,7 +5,7 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import FacebookMessage, WhatsappMessage
+from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, WhatsappMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.utils.taskbadger import update_taskbadger_data

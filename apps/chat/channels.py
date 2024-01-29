@@ -462,7 +462,7 @@ class WhatsappChannel(ChannelBase):
         self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
-        from_number = self.experiment_channel.extra_data["number"]
+        from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.chat_id
         self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
 

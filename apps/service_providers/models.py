@@ -116,18 +116,23 @@ class VoiceProvider(BaseTeamModel):
 
 class MessagingProviderType(models.TextChoices):
     twilio = "twilio", _("Twilio")
+    turnio = "turnio", _("Turn.io")
 
     @property
     def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
         match self:
             case MessagingProviderType.twilio:
                 return forms.TwilioMessagingConfigForm
+            case MessagingProviderType.turnio:
+                return forms.TurnIOMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_messaging_service(self, config: dict) -> messaging_service.MessagingService:
         match self:
             case MessagingProviderType.twilio:
                 return messaging_service.TwilioService(**config)
+            case MessagingProviderType.turnio:
+                return messaging_service.TurnIOService(**config)
         raise Exception(f"No messaging service configured for {self}")
 
     @staticmethod
