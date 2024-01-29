@@ -68,3 +68,16 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
     message_handler = FacebookMessengerChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
     message_handler.new_user_message(message)
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def handle_turn_message(self, experiment_id: uuid, message_data: str):
+    message = TurnWhatsappMessage.parse(message_data)
+    experiment_channel = ExperimentChannel.objects.filter(
+        experiment__id=experiment_id, platform=ChannelPlatform.WHATSAPP
+    ).first()
+    if not experiment_channel:
+        return
+    channel = WhatsappChannel(experiment_channel=experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)

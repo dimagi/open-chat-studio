@@ -28,6 +28,20 @@ def new_whatsapp_message(request):
 
 
 @csrf_exempt
+def new_turn_message(request, experiment_id: uuid):
+    message_data = json.loads(request.body.decode("utf-8"))
+    if "statuses" in message_data:
+        # Ignore status updates
+        return HttpResponse()
+
+    try:
+        tasks.handle_turn_message(experiment_id=experiment_id, message_data=message_data)
+    except Exception as e:
+        print(e)
+    return HttpResponse()
+
+
+@csrf_exempt
 def new_facebook_message(request: HttpRequest, team_slug: str):
     # https://developers.facebook.com/docs/messenger-platform/webhooks#:~:text=Validating%20Verification%20Requests
     if request.method == "GET":
