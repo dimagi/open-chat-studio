@@ -65,7 +65,7 @@ class Conversation:
             # TODO: When we enable the AgentExecuter for Anthropic models, we should revisit this
             response = self.chain.invoke({"input": input})
             prompt_tokens = self.llm.get_num_tokens_from_messages(response["history"][:-1])
-            completion_tokens = self.llm.get_num_tokens_from_messages(response["output"])
+            completion_tokens = self.llm.get_num_tokens_from_messages([response["history"][-1]])
             return response["output"], prompt_tokens, completion_tokens
         else:
             with get_openai_callback() as cb:
