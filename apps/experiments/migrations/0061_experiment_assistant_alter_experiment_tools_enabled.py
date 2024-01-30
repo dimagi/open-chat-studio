@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("assistants", "0001_initial"),
-        ("experiments", "0059_experiment_max_token_limit_alter_survey_url"),
+        ("experiments", "0060_alter_experiment_tools_enabled"),
     ]
 
     operations = [
