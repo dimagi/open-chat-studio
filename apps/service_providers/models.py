@@ -107,7 +107,7 @@ class LlmProvider(BaseTeamModel):
 
     @property
     def type_enum(self):
-        return LlmProviderTypes[self.type]
+        return LlmProviderTypes[str(self.type)]
 
     def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}

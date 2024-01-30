@@ -107,7 +107,7 @@ class AssistantStep(core.BaseStep[Any, str]):
 
     def preflight_check(self, context: core.StepContext):
         llm_service = self.pipeline_context.llm_service
-        if not llm_service.supports_assistant:
+        if not llm_service.supports_assistants:
             raise apps.analysis.exceptions.StepError(f"'{llm_service.type}' LLM does not support assistants")
 
         self.client = self.pipeline_context.llm_service.get_raw_client()

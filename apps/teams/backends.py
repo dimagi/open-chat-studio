@@ -19,6 +19,13 @@ ANALYSIS_USER_GROUP = "Analysis Users"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 
+NORMAL_USER_GROUPS = [
+    EXPERIMENT_ADMIN_GROUP,
+    ANALYSIS_ADMIN_GROUP,
+    ASSISTANT_ADMIN_GROUP,
+    CHAT_VIEWER_GROUP,
+]
+
 
 class PermissionCheckBackend(ModelBackend):
     """Check that permissions exist when in DEBUG mode"""

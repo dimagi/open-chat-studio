@@ -136,6 +136,7 @@ class ExperimentForm(forms.ModelForm):
     def save(self, commit=True):
         experiment = super().save(commit=False)
         experiment.team = self.request.team
+        experiment.owner = self.request.user
         if commit:
             experiment.save()
             self.save_m2m()

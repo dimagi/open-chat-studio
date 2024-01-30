@@ -6,9 +6,9 @@ from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
 
-def test_twilio_messaging_provider(team):
+def test_twilio_messaging_provider(team_with_users):
     _test_messaging_provider(
-        team,
+        team_with_users,
         MessagingProviderType.twilio,
         data={
             "auth_token": "test_token",

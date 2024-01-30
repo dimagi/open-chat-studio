@@ -6,9 +6,9 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 
 
-def test_aws_voice_provider(team):
+def test_aws_voice_provider(team_with_users):
     _test_voice_provider(
-        team,
+        team_with_users,
         VoiceProviderType.aws,
         data={
             "aws_access_key_id": "test_key",
@@ -40,9 +40,9 @@ def test_aws_voice_provider_error(config_key):
     _test_voice_provider_error(VoiceProviderType.aws, data=form.cleaned_data)
 
 
-def test_azure_voice_provider(team):
+def test_azure_voice_provider(team_with_users):
     _test_voice_provider(
-        team,
+        team_with_users,
         VoiceProviderType.azure,
         data={
             "azure_subscription_key": "test_key",
