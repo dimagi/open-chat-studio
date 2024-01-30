@@ -6,10 +6,12 @@ from urllib.parse import quote
 import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -20,6 +22,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -35,10 +38,12 @@ from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.users.models import CustomUser
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
     return TemplateResponse(
         request,
@@ -53,11 +58,12 @@ def experiments_home(request, team_slug: str):
     )
 
 
-class ExperimentTableView(SingleTableView):
+class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     model = Experiment
     paginate_by = 25
     table_class = ExperimentTable
     template_name = "table/single_table.html"
+    permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
         query_set = Experiment.objects.filter(team=self.request.team)
@@ -67,18 +73,108 @@ class ExperimentTableView(SingleTableView):
         return query_set
 
 
-class ExperimentViewMixin:
-    def get_form(self):
-        form = super().get_form()
-        _apply_related_model_querysets(self.request.team, form)
-        _apply_voice_provider_alpine_attrs(form)
-        return form
+class ExperimentForm(forms.ModelForm):
+    class Meta:
+        model = Experiment
+        fields = [
+            "name",
+            "description",
+            "llm_provider",
+            "llm",
+            "assistant",
+            "max_token_limit",
+            "temperature",
+            "chatbot_prompt",
+            "safety_layers",
+            "tools_enabled",
+            "conversational_consent_enabled",
+            "source_material",
+            "seed_message",
+            "pre_survey",
+            "post_survey",
+            "consent_form",
+            "voice_provider",
+            "synthetic_voice",
+            "no_activity_config",
+            "safety_violation_notification_emails",
+        ]
+        help_texts = {
+            "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
+        }
+
+    def __init__(self, request, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = request
+        team = request.team
+
+        # Limit to team's data
+        self.fields["llm_provider"].queryset = team.llmprovider_set
+        if flag_is_active(request, "assistants"):
+            self.fields["assistant"].queryset = team.openaiassistant_set
+        else:
+            del self.fields["assistant"]
+        self.fields["voice_provider"].queryset = team.voiceprovider_set
+        self.fields["chatbot_prompt"].queryset = team.prompt_set
+        self.fields["safety_layers"].queryset = team.safetylayer_set
+        self.fields["source_material"].queryset = team.sourcematerial_set
+        self.fields["pre_survey"].queryset = team.survey_set
+        self.fields["post_survey"].queryset = team.survey_set
+        self.fields["consent_form"].queryset = team.consentform_set
+        self.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
+
+        # Alpine.js bindings
+        self.fields["voice_provider"].widget.attrs = {
+            "x-model.fill": "voiceProvider",
+        }
+        self.fields["llm_provider"].widget.attrs = {
+            "x-model.number.fill": "llmProviderId",
+        }
+        # special template for dynamic select options
+        self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def save(self, commit=True):
+        experiment = super().save(commit=False)
+        experiment.team = self.request.team
+        experiment.owner = self.request.user
+        if commit:
+            experiment.save()
+            self.save_m2m()
+        return experiment
+
+
+class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
+    model = Experiment
+    template_name = "experiments/experiment_form.html"
+    form_class = ExperimentForm
+
+    @property
+    def extra_context(self):
+        return {
+            **{
+                "title": self.title,
+                "button_text": self.button_title,
+                "active_tab": "experiments",
+            },
+            **_get_voice_provider_alpine_context(self.request),
+        }
+
+    def get_success_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+
+    def get_queryset(self):
+        return Experiment.objects.filter(team=self.request.team)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request"] = self.request
+        return kwargs
 
     def form_valid(self, form):
         experiment = form.instance
         if experiment.conversational_consent_enabled and not experiment.seed_message:
             messages.error(
-                request=self.request, message=("A seed message is required when conversational " "consent is enabled!")
+                request=self.request, message="A seed message is required when conversational " "consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
 
@@ -88,92 +184,16 @@ class ExperimentViewMixin:
         return super().form_valid(form)
 
 
-class CreateExperiment(ExperimentViewMixin, CreateView):
-    model = Experiment
-    fields = [
-        "name",
-        "description",
-        "llm_provider",
-        "llm",
-        "max_token_limit",
-        "temperature",
-        "chatbot_prompt",
-        "safety_layers",
-        "tools_enabled",
-        "conversational_consent_enabled",
-        "source_material",
-        "seed_message",
-        "pre_survey",
-        "post_survey",
-        "consent_form",
-        "voice_provider",
-        "synthetic_voice",
-        "no_activity_config",
-        "safety_violation_notification_emails",
-    ]
-    template_name = "experiments/experiment_form.html"
-
-    @property
-    def extra_context(self):
-        return {
-            **{
-                "title": "Create Experiment",
-                "button_text": "Create",
-                "active_tab": "experiments",
-            },
-            **_get_voice_provider_alpine_context(self.request),
-        }
-
-    def get_success_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
-
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.owner = self.request.user
-        return super().form_valid(form)
+class CreateExperiment(BaseExperimentView, CreateView):
+    title = "Create Experiment"
+    button_title = "Create"
+    permission_required = "experiments.add_experiment"
 
 
-class EditExperiment(ExperimentViewMixin, UpdateView):
-    model = Experiment
-    fields = [
-        "name",
-        "description",
-        "llm_provider",
-        "llm",
-        "max_token_limit",
-        "temperature",
-        "chatbot_prompt",
-        "safety_layers",
-        "tools_enabled",
-        "conversational_consent_enabled",
-        "source_material",
-        "seed_message",
-        "pre_survey",
-        "post_survey",
-        "consent_form",
-        "voice_provider",
-        "synthetic_voice",
-        "no_activity_config",
-        "safety_violation_notification_emails",
-    ]
-    template_name = "experiments/experiment_form.html"
-
-    @property
-    def extra_context(self):
-        return {
-            **{
-                "title": "Update Experiment",
-                "button_text": "Update",
-                "active_tab": "experiments",
-            },
-            **_get_voice_provider_alpine_context(self.request),
-        }
-
-    def get_queryset(self):
-        return Experiment.objects.filter(team=self.request.team)
-
-    def get_success_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+class EditExperiment(BaseExperimentView, UpdateView):
+    title = "Update Experiment"
+    button_title = "Update"
+    permission_required = "experiments.change_experiment"
 
 
 def _source_material_is_missing(experiment: Experiment) -> bool:
@@ -182,30 +202,6 @@ def _source_material_is_missing(experiment: Experiment) -> bool:
     if not prompt_expects_source_material:
         return False
     return not bool(experiment.source_material)
-
-
-def _apply_related_model_querysets(team, form):
-    form.fields["llm_provider"].queryset = team.llmprovider_set
-    form.fields["voice_provider"].queryset = team.voiceprovider_set
-    form.fields["chatbot_prompt"].queryset = team.prompt_set
-    form.fields["safety_layers"].queryset = team.safetylayer_set
-    form.fields["source_material"].queryset = team.sourcematerial_set
-    form.fields["pre_survey"].queryset = team.survey_set
-    form.fields["post_survey"].queryset = team.survey_set
-    form.fields["consent_form"].queryset = team.consentform_set
-    form.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
-
-
-def _apply_voice_provider_alpine_attrs(form):
-    form.fields["voice_provider"].widget.attrs = {
-        "x-model.fill": "voiceProvider",
-    }
-    form.fields["llm_provider"].widget.attrs = {
-        "x-model.number.fill": "llmProvider",
-    }
-    # special template for dynamic select options
-    form.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-    form.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
 
 def _get_voice_provider_alpine_context(request):
@@ -221,11 +217,13 @@ def _get_voice_provider_alpine_context(request):
             ],
             key=lambda v: v["text"],
         ),
+        "llm_providers": request.team.llmprovider_set.all(),
         "llm_options": get_llm_provider_choices(request.team),
     }
 
 
 @login_and_team_required
+@permission_required("experiments.delete_experiment", raise_exception=True)
 def delete_experiment(request, team_slug: str, pk: int):
     safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
     safety_layer.delete()
@@ -233,6 +231,7 @@ def delete_experiment(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     user_sessions = ExperimentSession.objects.filter(
@@ -263,6 +262,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 @login_and_team_required
+@permission_required("experiments.add_channel", raise_exception=True)
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
@@ -302,8 +302,14 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
     )
     if request.POST.get("action") == "delete":
+        if not request.user.has_perm("experiments.delete_channel"):
+            raise PermissionDenied
+
         channel.delete()
         return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+    if not request.user.has_perm("experiments.change_channel"):
+        raise PermissionDenied
 
     form = channel.form(data=request.POST)
     if not form.is_valid():
@@ -573,6 +579,8 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
     return response
 
 
+@login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)

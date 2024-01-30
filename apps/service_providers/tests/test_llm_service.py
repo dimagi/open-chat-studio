@@ -1,9 +1,13 @@
 from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService, OpenAILlmService
+from apps.service_providers.models import LlmProviderTypes
 
 
 def test_open_ai_service():
-    service = OpenAILlmService(openai_api_key="test")
+    assert LlmProviderTypes.openai.supports_transcription
+    assert LlmProviderTypes.openai.supports_assistants
+    service = LlmProviderTypes.openai.get_llm_service({"openai_api_key": "test"})
     assert service.supports_transcription
+    assert service.supports_assistants
 
 
 def test_azure_ai_service():

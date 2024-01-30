@@ -1,5 +1,9 @@
-import factory
+from inspect import isfunction
 
+import factory
+from django.contrib.auth.models import Group
+
+from apps.teams.backends import NORMAL_USER_GROUPS, get_team_owner_groups
 from apps.teams.models import Membership, Team
 from apps.utils.factories.user import UserFactory
 
@@ -27,9 +31,16 @@ class MembershipFactory(factory.django.DjangoModelFactory):
         if not create or not extracted:
             return
 
+        if isfunction(extracted):
+            extracted = extracted()
+
         self.groups.add(*extracted)
 
 
+def get_test_user_groups():
+    return list(Group.objects.filter(name__in=NORMAL_USER_GROUPS))
+
+
 class TeamWithUsersFactory(TeamFactory):
-    admin = factory.RelatedFactory(MembershipFactory, "team", role="admin")
-    member = factory.RelatedFactory(MembershipFactory, "team", role="member")
+    admin = factory.RelatedFactory(MembershipFactory, "team", role="admin", groups=get_team_owner_groups)
+    member = factory.RelatedFactory(MembershipFactory, "team", role="member", groups=get_test_user_groups)

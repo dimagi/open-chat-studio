@@ -10,8 +10,8 @@ from openai._base_client import SyncAPIClient
 
 class LlmService(pydantic.BaseModel):
     _type: ClassVar[str]
-    supports_transcription: ClassVar[bool] = False
-    supports_assistant: ClassVar[bool] = False
+    supports_transcription: bool = False
+    supports_assistants: bool = False
 
     def get_raw_client(self) -> SyncAPIClient:
         raise NotImplementedError
@@ -25,8 +25,6 @@ class LlmService(pydantic.BaseModel):
 
 class OpenAILlmService(LlmService):
     _type = "openai"
-    supports_transcription = True
-    supports_assistant = True
 
     openai_api_key: str
     openai_api_base: str = None

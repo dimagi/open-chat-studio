@@ -13,9 +13,9 @@ INPUT_DATA = "here is some text to play with"
 
 
 @pytest.fixture
-def resource(team):
+def resource(team_with_users):
     resource = Resource.objects.create(
-        team=team,
+        team=team_with_users,
         name="test text",
         type=ResourceType.TEXT,
     )

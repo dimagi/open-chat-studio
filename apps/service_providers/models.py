@@ -1,7 +1,10 @@
+import dataclasses
+from enum import Enum
 from typing import List, Type
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
@@ -28,41 +31,65 @@ class LlmProviderObjectManagerObjectManager(AuditingManager):
     pass
 
 
-class LlmProviderType(models.TextChoices):
-    openai = "openai", _("OpenAI")
+@dataclasses.dataclass
+class LlmProviderType:
+    slug: str
+    label: str
+    supports_transcription: bool = False
+    supports_assistants: bool = False
+
+    def __str__(self):
+        return self.slug
+
+
+class LlmProviderTypes(LlmProviderType, Enum):
+    openai = "openai", _("OpenAI"), True, True
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
+
+    def __str__(self):
+        return str(self.value)
+
+    @classproperty
+    def choices(cls):
+        empty = [(None, cls.__empty__)] if hasattr(cls, "__empty__") else []
+        return empty + [(member.value.slug, member.label) for member in cls]
 
     @property
     def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
         match self:
-            case LlmProviderType.openai:
+            case LlmProviderTypes.openai:
                 return forms.OpenAIConfigForm
-            case LlmProviderType.azure:
+            case LlmProviderTypes.azure:
                 return forms.AzureOpenAIConfigForm
-            case LlmProviderType.anthropic:
+            case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
+        config = {
+            "supports_assistants": self.supports_assistants,
+            "supports_transcription": self.supports_transcription,
+            **config,
+        }
         try:
             match self:
-                case LlmProviderType.openai:
+                case LlmProviderTypes.openai:
                     return llm_service.OpenAILlmService(**config)
-                case LlmProviderType.azure:
+                case LlmProviderTypes.azure:
                     return llm_service.AzureLlmService(**config)
-                case LlmProviderType.anthropic:
+                case LlmProviderTypes.anthropic:
                     return llm_service.AnthropicLlmService(**config)
         except ValidationError as e:
-            raise ServiceProviderConfigError(self, str(e)) from e
-        raise ServiceProviderConfigError(self, "No chat model configured")
+            raise ServiceProviderConfigError(self.slug, str(e)) from e
+        raise ServiceProviderConfigError(self.slug, "No chat model configured")
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class LlmProvider(BaseTeamModel):
     objects = LlmProviderObjectManagerObjectManager()
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
-    type = models.CharField(max_length=255, choices=LlmProviderType.choices)
+    type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=255)
     llm_models = ArrayField(
         models.CharField(max_length=128),
@@ -80,7 +107,7 @@ class LlmProvider(BaseTeamModel):
 
     @property
     def type_enum(self):
-        return LlmProviderType(self.type)
+        return LlmProviderTypes[str(self.type)]
 
     def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}

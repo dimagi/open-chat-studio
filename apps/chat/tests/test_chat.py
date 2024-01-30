@@ -4,8 +4,8 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
 
 @pytest.fixture()
-def chat(team):
-    chat = Chat.objects.create(team=team)
+def chat(team_with_users):
+    chat = Chat.objects.create(team=team_with_users)
     ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
     return chat
 

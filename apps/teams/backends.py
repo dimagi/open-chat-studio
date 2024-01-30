@@ -16,7 +16,15 @@ TEAM_ADMIN_GROUP = "Team Admin"
 EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
 ANALYSIS_ADMIN_GROUP = "Analysis Admin"
 ANALYSIS_USER_GROUP = "Analysis Users"
+ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
+
+NORMAL_USER_GROUPS = [
+    EXPERIMENT_ADMIN_GROUP,
+    ANALYSIS_ADMIN_GROUP,
+    ASSISTANT_ADMIN_GROUP,
+    CHAT_VIEWER_GROUP,
+]
 
 
 class PermissionCheckBackend(ModelBackend):
@@ -42,6 +50,7 @@ class TeamBackend(ModelBackend):
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
     "analysis": ["analysis", "rungroup", "analysisrun", "resource"],
+    "assistants": ["openaiassistant"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage"],
     "experiments": [
@@ -162,6 +171,12 @@ GROUPS = [
             ModelPermSetDef("analysis", "rungroup", [VIEW, CHANGE, ADD]),
             ModelPermSetDef("analysis", "analysisrun", [VIEW, CHANGE, ADD]),
             ModelPermSetDef("analysis", "resource", [VIEW, CHANGE, ADD]),
+        ],
+    ),
+    GroupDef(
+        ASSISTANT_ADMIN_GROUP,
+        [
+            AppPermSetDef("assistants", ALL),
         ],
     ),
 ]

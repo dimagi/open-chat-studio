@@ -6,12 +6,11 @@ from apps.experiments.views.experiment import _source_material_is_missing
 from apps.utils.factories import experiment as experiment_factory
 
 
-def test_create_experiment_success(db, client):
-    source_material = experiment_factory.SourceMaterialFactory()
-    user = source_material.owner
-    team = source_material.team
-    consent_form = experiment_factory.ConsentFormFactory(team=team)
-    prompt = experiment_factory.PromptFactory(team=team)
+def test_create_experiment_success(db, client, team_with_users):
+    user = team_with_users.members.first()
+    source_material = experiment_factory.SourceMaterialFactory(team=team_with_users)
+    consent_form = experiment_factory.ConsentFormFactory(team=team_with_users)
+    prompt = experiment_factory.PromptFactory(team=team_with_users)
     client.force_login(user)
 
     post_data = {
@@ -25,7 +24,8 @@ def test_create_experiment_success(db, client):
         "max_token_limit": 100,
     }
 
-    client.post(reverse("experiments:new", args=[team.slug]), data=post_data)
+    response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
+    assert response.status_code == 302
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
 

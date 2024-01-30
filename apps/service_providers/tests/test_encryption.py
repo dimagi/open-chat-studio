@@ -3,7 +3,7 @@ from django.db import connection
 from django.test import TestCase
 
 from apps.service_providers.forms import ObfuscatingMixin
-from apps.service_providers.models import LlmProvider, LlmProviderType
+from apps.service_providers.models import LlmProvider, LlmProviderTypes
 from apps.teams.models import Team
 
 
@@ -14,7 +14,7 @@ class TestLlmProviderModel(TestCase):
 
     def test_encryption(self):
         test_data = {"str": "str", "int": 1, "float": 2.0, "bool": True, "list": [1, "a", True, 3.5]}
-        LlmProvider.objects.create(team=self.team, name="Test", type=LlmProviderType.openai, config=test_data)
+        LlmProvider.objects.create(team=self.team, name="Test", type=LlmProviderTypes.openai, config=test_data)
 
         assert LlmProvider.objects.get(name="Test").config == test_data
 

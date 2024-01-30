@@ -8,11 +8,11 @@ from apps.service_providers.models import LlmProvider
 
 
 @pytest.fixture()
-def llm_provider(team):
+def llm_provider(team_with_users):
     return LlmProvider.objects.create(
         name="test",
         type="openai",
-        team=team,
+        team=team_with_users,
         config={
             "openai_api_key": "123123123",
         },
@@ -20,9 +20,9 @@ def llm_provider(team):
 
 
 @pytest.fixture()
-def analysis(team, llm_provider):
+def analysis(team_with_users, llm_provider):
     return Analysis.objects.create(
-        team=team,
+        team=team_with_users,
         name="test",
         source="test",
         llm_provider=llm_provider,

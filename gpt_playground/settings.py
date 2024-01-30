@@ -71,7 +71,6 @@ THIRD_PARTY_APPS = [
     "field_audit",
 ]
 
-# Put your project-specific apps here
 PROJECT_APPS = [
     "apps.users.apps.UserConfig",
     "apps.api.apps.APIConfig",
@@ -84,6 +83,7 @@ PROJECT_APPS = [
     "apps.service_providers",
     "apps.analysis",
     "apps.generics",
+    "apps.assistants",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
