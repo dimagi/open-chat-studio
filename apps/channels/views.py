@@ -34,10 +34,7 @@ def new_turn_message(request, experiment_id: uuid):
         # Ignore status updates
         return HttpResponse()
 
-    try:
-        tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
-    except Exception as e:
-        print(e)
+    tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
 
 

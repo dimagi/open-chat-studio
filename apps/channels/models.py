@@ -57,7 +57,6 @@ class ChannelPlatform(models.TextChoices):
                         is_secure=True,
                     )
                     initial = kwargs.get("initial", {})
-                    initial.setdefault("verify_token", str(uuid.uuid4()))
                     initial.setdefault("webook_url", webhook_url)
                     kwargs["initial"] = initial
                     return forms.TurnIOForm(*args, **kwargs)
