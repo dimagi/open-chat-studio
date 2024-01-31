@@ -7,7 +7,7 @@ from telebot import types
 
 from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, WhatsappMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import MESSAGE_TYPES, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.utils.taskbadger import update_taskbadger_data
 
 
@@ -73,6 +73,10 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
+    if not message.content_type == MESSAGE_TYPES.TEXT:
+        # TODO: Until we know what's up with the media links not showing up, we cannot continue
+        return
+    print("Continuing: ")
     experiment_channel = ExperimentChannel.objects.filter(
         experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
     ).first()
