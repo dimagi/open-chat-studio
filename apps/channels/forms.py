@@ -43,6 +43,16 @@ class WhatsappChannelForm(forms.Form):
     number = forms.CharField(label="Number", max_length=100)
 
 
+class TurnIOForm(forms.Form):
+    number = forms.CharField(label="Number", max_length=100)
+    webook_url = forms.CharField(
+        widget=forms.TextInput(attrs={"readonly": "readonly"}),
+        label="Webhook URL",
+        disabled=True,
+        help_text="Use this as the URL when setting up the webhook in Turn.io",
+    )
+
+
 class FacebookChannelForm(forms.Form):
     page_id = forms.CharField(label="Page ID", max_length=100)
     page_access_token = forms.CharField(label="Page Access Token")

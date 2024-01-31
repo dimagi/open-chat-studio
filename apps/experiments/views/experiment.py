@@ -36,6 +36,7 @@ from apps.experiments.tasks import get_response_for_webchat_task
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.users.models import CustomUser
+from apps.web.meta import absolute_url
 
 
 @login_and_team_required
@@ -291,7 +292,11 @@ def create_channel(request, team_slug: str, experiment_id: int):
         except ChannelAlreadyUtilizedException as exception:
             messages.error(request, exception.html_message)
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
+        if platform == ChannelPlatform.WHATSAPP:
+            webhook_url = absolute_url(
+                reverse("channels:new_turn_message", kwargs={"experiment_id": experiment.public_id}), is_secure=True
+            )
+            messages.info(request, f"Use the following URL when setting up the webhook in Turn.io: {webhook_url}")
         form.save(experiment, config_data)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
