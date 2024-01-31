@@ -74,7 +74,7 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
 def handle_turn_message(self, experiment_id: uuid, message_data: str):
     message = TurnWhatsappMessage.parse(message_data)
     experiment_channel = ExperimentChannel.objects.filter(
-        experiment__id=experiment_id, platform=ChannelPlatform.WHATSAPP
+        experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
     ).first()
     if not experiment_channel:
         return

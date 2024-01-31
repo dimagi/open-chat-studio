@@ -35,7 +35,7 @@ def new_turn_message(request, experiment_id: uuid):
         return HttpResponse()
 
     try:
-        tasks.handle_turn_message(experiment_id=experiment_id, message_data=message_data)
+        tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     except Exception as e:
         print(e)
     return HttpResponse()
