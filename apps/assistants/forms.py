@@ -1,13 +1,7 @@
 from django import forms
 
 from apps.assistants.models import OpenAiAssistant
-from apps.assistants.utils import get_llm_providers_for_assistants
-
-
-def get_assistant_tool_options():
-    return [
-        ("code_interpreter", "Code Interpreter"),
-    ]
+from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
 
 
 class OpenAiAssistantForm(forms.ModelForm):
