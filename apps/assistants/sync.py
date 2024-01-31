@@ -1,3 +1,4 @@
+import openai
 from openai.types.beta import Assistant
 
 from apps.assistants.models import OpenAiAssistant
@@ -10,9 +11,9 @@ def push_assistant_to_openai(assistant: OpenAiAssistant):
     """Pushes the assistant to OpenAI. If the assistant already exists, it will be updated."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     if assistant.assistant_id:
-        client.beta.assistants.update(assistant.assistant_id, _ocs_assistant_to_openai_kwargs(assistant))
+        client.beta.assistants.update(assistant.assistant_id, **_ocs_assistant_to_openai_kwargs(assistant))
     else:
-        openai_assistant = client.beta.assistants.create(_ocs_assistant_to_openai_kwargs(assistant))
+        openai_assistant = client.beta.assistants.create(**_ocs_assistant_to_openai_kwargs(assistant))
         assistant.assistant_id = openai_assistant.id
         assistant.save()
 
@@ -34,9 +35,13 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     return assistant
 
 
-def delete_openai_assistant(assistant: OpenAiAssistant):
+def delete_openai_assistant(assistant: OpenAiAssistant) -> bool:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    client.beta.assistants.delete(assistant.assistant_id)
+    try:
+        client.beta.assistants.delete(assistant.assistant_id)
+        return True
+    except openai.NotFoundError:
+        return False
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:

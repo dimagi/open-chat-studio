@@ -6,4 +6,4 @@ register = template.Library()
 
 @register.simple_tag(takes_context=True)
 def render_action(context, action):
-    return mark_safe(action.render(context["request"], context["record"]))
+    return mark_safe(action.render(context))

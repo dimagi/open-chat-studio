@@ -19,7 +19,7 @@ class AnalysisTable(tables.Table):
             "actions": [
                 actions.Action(
                     "analysis:create_run",
-                    "fa-solid fa-play",
+                    icon_class="fa-solid fa-play",
                     required_permissions=["analysis.add_analysisrun"],
                     enabled_condition=lambda request, record: not record.needs_configuration(),
                 ),
@@ -88,7 +88,7 @@ class RunGroupTable(tables.Table):
             "actions": [
                 actions.Action(
                     "analysis:replay_run",
-                    "fa-solid fa-arrow-rotate-left",
+                    icon_class="fa-solid fa-arrow-rotate-left",
                     required_permissions=["analysis.add_rungroup"],
                 ),
                 actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),

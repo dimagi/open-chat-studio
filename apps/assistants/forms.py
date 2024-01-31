@@ -27,3 +27,15 @@ class OpenAiAssistantForm(forms.ModelForm):
     def save(self, commit=True):
         self.instance.team = self.request.team
         return super().save(commit)
+
+
+class ImportAssistantForm(forms.Form):
+    assistant_id = forms.CharField(label="Assistant ID", max_length=255)
+    llm_provider = forms.IntegerField()
+
+    def __init__(self, request, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = request
+        self.fields["llm_provider"].widget = forms.Select(
+            choices=get_llm_providers_for_assistants(self.request.team).values_list("id", "name")
+        )

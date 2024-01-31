@@ -1,4 +1,4 @@
-<button class="btn btn-sm btn-ghost" {% if disabled %}disabled="disabled"{% endif %}
+<button class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
         hx-delete="{% url url_name request.team.slug record.id %}"
         hx-target="#record-{{ record.id }}">
     <i class="fa fa-trash"></i>

@@ -1,19 +1,24 @@
+import openai
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from .forms import OpenAiAssistantForm
+from ..generics import actions
+from ..service_providers.models import LlmProvider
+from ..teams.decorators import login_and_team_required
+from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, push_assistant_to_openai
+from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -32,6 +37,15 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             "new_object_url": reverse("assistants:new", args=[team_slug]),
             "table_url": reverse("assistants:table", args=[team_slug]),
             "allow_new": has_providers and self.request.user.has_perm("assistants.add_openaiassistant"),
+            "button_style": "btn-primary",
+            "actions": [
+                actions.Action(
+                    "assistants:import",
+                    label="Import",
+                    icon_class="fa-solid fa-file-import",
+                    required_permissions=["analysis.add_openaiassistant"],
+                )
+            ],
         }
 
 
@@ -103,5 +117,40 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
+        # TODO: make this require user confirmation
         delete_openai_assistant(assistant)
         return HttpResponse()
+
+
+class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+    template_name = "generic/object_form.html"
+    permission_required = "assistants.add_openaiassistant"
+    form_class = ImportAssistantForm
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return {
+            **context,
+            "active_tab": "assistants",
+            "title": "Import OpenAI Assistant",
+            "button_text": "Import",
+        }
+
+    def get_form(self, form_class=None):
+        return self.form_class(self.request, **self.get_form_kwargs())
+
+    def get_success_url(self):
+        return reverse("assistants:home", args=[self.request.team.slug])
+
+    def form_valid(self, form):
+        llm_provider = get_object_or_404(LlmProvider, team=self.request.team, pk=form.cleaned_data["llm_provider"])
+        try:
+            import_openai_assistant(form.cleaned_data["assistant_id"], llm_provider, self.request.team)
+        except openai.NotFoundError:
+            messages.error(
+                self.request,
+                "Assistant not found. Check the ID is correct and that the"
+                " selected LLM Provider has access to the assistant.",
+            )
+            return self.form_invalid(form)
+        return super().form_valid(form)
