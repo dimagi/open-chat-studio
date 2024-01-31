@@ -1,3 +1,8 @@
+"""
+This test suite is designed to ensure that the base channel functionality is working as
+intended. It utilizes the Telegram channel subclass to serve as a testing framework.
+"""
+
 import json
 
 from django.test import TestCase
