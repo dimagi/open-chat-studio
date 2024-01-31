@@ -65,7 +65,7 @@ def get_service_provider_config_form(provider: ServiceProvider, data=None, insta
     return TypeSelectForm(
         primary=_get_main_form(provider, data=data.copy() if data else None, instance=instance),
         secondary={
-            subtype: subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
+            str(subtype): subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
             for subtype in provider.subtype
         },
         secondary_key_field=provider.provider_type_field,
