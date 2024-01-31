@@ -64,7 +64,7 @@ class FacebookChannelTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, verify_token.encode("utf-8"))
 
-    def test_facebook_get_request_failes(self):
+    def test_facebook_get_request_fails(self):
         """Tests Facebook's get request that verifies the server"""
         url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
         query_string = "?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=rubbish"
