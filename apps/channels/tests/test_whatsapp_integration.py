@@ -106,6 +106,7 @@ class TestTwilio:
     @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_twilio_uses_whatsapp_channel_implementation(self, _get_llm_response, send_whatsapp_text_message, db):
+        """Test that the twilio integration can use the WhatsappChannel implementation"""
         _get_llm_response.return_value = "Hi"
         provider = MessagingProviderFactory(
             name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
@@ -128,6 +129,7 @@ class TestTurnio:
     @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_turnio_whatsapp_channel_implementation(self, _get_llm_response, send_whatsapp_text_message, db):
+        """Test that the turnio integration can use the WhatsappChannel implementation"""
         _get_llm_response.return_value = "Hi"
         provider = MessagingProviderFactory(
             name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"}
