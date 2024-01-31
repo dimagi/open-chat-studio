@@ -52,14 +52,7 @@ class ChannelPlatform(models.TextChoices):
                 return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
                 if channel and channel.messaging_provider.type == MessagingProviderType.turnio:
-                    webhook_url = absolute_url(
-                        reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id}),
-                        is_secure=True,
-                    )
-                    initial = kwargs.get("initial", {})
-                    initial.setdefault("webook_url", webhook_url)
-                    kwargs["initial"] = initial
-                    return forms.TurnIOForm(*args, **kwargs)
+                    return forms.TurnIOForm(channel=channel, *args, **kwargs)
                 return forms.WhatsappChannelForm(*args, **kwargs)
             case self.FACEBOOK:
                 team_slug = get_current_team().slug

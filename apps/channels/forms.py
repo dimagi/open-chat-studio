@@ -1,8 +1,10 @@
 from django import forms
+from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
+from apps.web.meta import absolute_url
 
 
 class ChannelForm(forms.ModelForm):
@@ -51,6 +53,16 @@ class TurnIOForm(forms.Form):
         disabled=True,
         help_text="Use this as the URL when setting up the webhook in Turn.io",
     )
+
+    def __init__(self, channel: ExperimentChannel, *args, **kwargs):
+        webhook_url = absolute_url(
+            reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id}),
+            is_secure=True,
+        )
+        initial = kwargs.get("initial", {})
+        initial.setdefault("webook_url", webhook_url)
+        kwargs["initial"] = initial
+        return super().__init__(*args, **kwargs)
 
 
 class FacebookChannelForm(forms.Form):
