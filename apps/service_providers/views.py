@@ -1,5 +1,6 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, resolve_url
+from django.views.decorators.http import require_http_methods
 from django_tables2 import SingleTableView
 
 from ..generics.views import BaseTypeSelectFormView
@@ -24,6 +25,7 @@ class ServiceProviderTableView(SingleTableView, ServiceProviderMixin):
         return self.provider_type.table
 
 
+@require_http_methods(["DELETE"])
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
     provider = ServiceProvider[provider_type]
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
