@@ -2,7 +2,7 @@ from django.conf import settings
 from django_tables2 import columns, tables
 
 from apps.assistants.models import OpenAiAssistant
-from apps.generics import table_actions
+from apps.generics import actions
 
 
 class OpenAiAssistantTable(tables.Table):
@@ -17,11 +17,11 @@ class OpenAiAssistantTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.edit_action(
+                actions.edit_action(
                     "assistants:edit",
                     required_permissions=["assistants.change_openaiassistant"],
                 ),
-                table_actions.delete_action(
+                actions.delete_action(
                     "assistants:delete",
                     required_permissions=["assistants.delete_openaiassistant"],
                 ),

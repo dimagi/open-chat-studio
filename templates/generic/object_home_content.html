@@ -5,11 +5,16 @@
       <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
       <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
-    {% if allow_new|default:True %}
+    {% if allow_new|default:True or actions %}
     <div class="justify-self-end">
+      {% if allow_new|default:True %}
       <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
          href="{{ new_object_url }}">Add new
       </a>
+      {% endif %}
+      {% if actions %}
+        {% include "generic/crud_actions_column.html" %}
+      {% endif %}
     </div>
     {% endif %}
   </div>
