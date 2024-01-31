@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -12,6 +13,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from .forms import OpenAiAssistantForm
 from .models import OpenAiAssistant
+from .sync import delete_openai_assistant, push_assistant_to_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -75,18 +77,31 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     button_text = "Create"
     permission_required = "assistants.add_openaiassistant"
 
+    @transaction.atomic()
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        push_assistant_to_openai(self.object)
+        return response
+
 
 class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     title = "Edit OpenAI Assistant"
     button_text = "Update"
     permission_required = "assistants.change_openaiassistant"
 
+    @transaction.atomic()
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        push_assistant_to_openai(self.object)
+        return response
+
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "assistants.delete_openaiassistant"
 
+    @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
-        # TODO: delete assistant from OpenAI
+        delete_openai_assistant(assistant)
         return HttpResponse()
