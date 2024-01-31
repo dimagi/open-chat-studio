@@ -58,6 +58,7 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
     pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
+    public_id = factory.Faker("uuid4")
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
