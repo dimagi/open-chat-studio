@@ -76,7 +76,6 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     if not message.content_type == MESSAGE_TYPES.TEXT:
         # TODO: Until we know what's up with the media links not showing up, we cannot continue
         return
-    print("Continuing: ")
     experiment_channel = ExperimentChannel.objects.filter(
         experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
     ).first()
