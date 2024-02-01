@@ -107,3 +107,9 @@ class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     account_sid = forms.CharField(label=_("Account SID"))
     auth_token = forms.CharField(label=_("Auth Token"))
+
+
+class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["auth_token"]
+
+    auth_token = forms.CharField(label=_("Auth Token"))

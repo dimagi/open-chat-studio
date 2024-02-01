@@ -40,7 +40,7 @@ def test_twilio_messaging_provider_error(config_key):
 @pytest.mark.parametrize(
     "platform,expected_provider_types",
     [
-        ("whatsapp", ["twilio"]),
+        ("whatsapp", ["twilio", "turnio"]),
         ("telegram", []),
     ],
 )

@@ -40,6 +40,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.users.models import CustomUser
+from apps.web.meta import absolute_url
 
 
 @login_and_team_required
@@ -293,6 +294,10 @@ def create_channel(request, team_slug: str, experiment_id: int):
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         form.save(experiment, config_data)
+        if extra_form:
+            message = extra_form.get_success_message(channel=form.instance)
+            if message:
+                messages.info(request, message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 

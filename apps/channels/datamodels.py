@@ -53,6 +53,41 @@ class WhatsappMessage(BaseModel):
         return self.body
 
 
+class TurnWhatsappMessage(BaseModel):
+    from_number: str = Field()
+    to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
+    body: str = Field()
+    content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
+    media_url: Optional[str] = Field(default=None)
+
+    @field_validator("content_type", mode="before")
+    @classmethod
+    def determine_content_type(cls, value):
+        return MESSAGE_TYPES(value)
+
+    @property
+    def chat_id(self) -> str:
+        return self.from_number
+
+    @property
+    def message_text(self) -> str:
+        return self.body
+
+    @staticmethod
+    def parse(message_data: dict):
+        message_type = message_data["messages"][0]["type"]
+        body = ""
+        if message_type == "text":
+            body = message_data["messages"][0]["text"]["body"]
+
+        return TurnWhatsappMessage(
+            from_number=message_data["contacts"][0]["wa_id"],
+            body=body,
+            content_type=message_type,
+            media_url="",
+        )
+
+
 class FacebookMessage(BaseModel):
     """
     A wrapper class for user messages coming from Facebook

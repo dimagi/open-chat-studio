@@ -46,11 +46,16 @@ class ChannelPlatform(models.TextChoices):
 
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
+        from apps.service_providers.models import MessagingProviderType
+
+        channel = kwargs.pop("channel", None)
 
         match self:
             case self.TELEGRAM:
                 return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
+                if channel and channel.messaging_provider.type == MessagingProviderType.turnio:
+                    return forms.TurnIOForm(channel=channel, *args, **kwargs)
                 return forms.WhatsappChannelForm(*args, **kwargs)
             case self.FACEBOOK:
                 team_slug = get_current_team().slug
@@ -125,7 +130,7 @@ class ExperimentChannel(BaseModel):
         return ChannelForm(instance=self, team=self.experiment.team, *args, **kwargs)
 
     def extra_form(self, *args, **kwargs):
-        return self.platform_enum.extra_form(initial=self.extra_data, *args, **kwargs)
+        return self.platform_enum.extra_form(initial=self.extra_data, channel=self, *args, **kwargs)
 
     @staticmethod
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):

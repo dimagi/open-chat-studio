@@ -5,9 +5,9 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import FacebookMessage, WhatsappMessage
+from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, WhatsappMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import MESSAGE_TYPES, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.utils.taskbadger import update_taskbadger_data
 
 
@@ -68,3 +68,19 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
     message_handler = FacebookMessengerChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
     message_handler.new_user_message(message)
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def handle_turn_message(self, experiment_id: uuid, message_data: dict):
+    message = TurnWhatsappMessage.parse(message_data)
+    if not message.content_type == MESSAGE_TYPES.TEXT:
+        # TODO: Until we know what's up with the media links not showing up, we cannot continue
+        return
+    experiment_channel = ExperimentChannel.objects.filter(
+        experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
+    ).first()
+    if not experiment_channel:
+        return
+    channel = WhatsappChannel(experiment_channel=experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)
