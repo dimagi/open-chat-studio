@@ -292,12 +292,12 @@ def create_channel(request, team_slug: str, experiment_id: int):
         except ChannelAlreadyUtilizedException as exception:
             messages.error(request, exception.html_message)
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-        if platform == ChannelPlatform.WHATSAPP:
-            webhook_url = absolute_url(
-                reverse("channels:new_turn_message", kwargs={"experiment_id": experiment.public_id}), is_secure=True
-            )
-            messages.info(request, f"Use the following URL when setting up the webhook in Turn.io: {webhook_url}")
+
         form.save(experiment, config_data)
+        if extra_form:
+            message = extra_form.get_success_message(channel=form.instance)
+            if message:
+                messages.info(request, message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
