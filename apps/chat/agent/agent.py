@@ -21,8 +21,8 @@ def build_agent(
         [
             prompt,
             MessagesPlaceholder("history", optional=True),
-            ("system", str(datetime.now().astimezone(pytz.UTC))),
             ("human", "{input}"),
+            ("system", str(datetime.now().astimezone(pytz.UTC))),
             MessagesPlaceholder("agent_scratchpad"),
         ]
     )

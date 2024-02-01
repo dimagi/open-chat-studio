@@ -2,10 +2,15 @@ from io import BytesIO
 from typing import ClassVar
 
 import pydantic
+from langchain.agents.openai_assistant import OpenAIAssistantRunnable
 from langchain.chat_models.base import BaseChatModel
 from langchain_community.chat_models import AzureChatOpenAI, ChatAnthropic, ChatOpenAI
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.language_models import BaseLanguageModel
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
+
+from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 
 
 class LlmService(pydantic.BaseModel):
@@ -16,11 +21,17 @@ class LlmService(pydantic.BaseModel):
     def get_raw_client(self) -> SyncAPIClient:
         raise NotImplementedError
 
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        raise NotImplementedError
+
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
+
+    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(llm_model)
 
 
 class OpenAILlmService(LlmService):
@@ -32,6 +43,9 @@ class OpenAILlmService(LlmService):
 
     def get_raw_client(self) -> OpenAI:
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         return ChatOpenAI(
@@ -48,6 +62,11 @@ class OpenAILlmService(LlmService):
             file=audio,
         )
         return transcript.text
+
+    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
+        from langchain_community.callbacks import OpenAICallbackHandler
+
+        return OpenAICallbackHandler()
 
 
 class AzureLlmService(LlmService):
