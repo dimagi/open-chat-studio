@@ -19,7 +19,16 @@ from langchain_core.runnables import (
 )
 
 from apps.chat.agent.tools import get_tools
+from apps.chat.bots import compress_chat_history
 from apps.experiments.models import Experiment, ExperimentSession
+
+
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession = None) -> "ExperimentRunnable":
+    """Create an experiment runnable based on the experiment configuration."""
+    if experiment.tools_enabled and session:
+        return AgentExperimentRunnable(experiment=experiment, session=session)
+    else:
+        return SimpleExperimentRunnable(experiment=experiment, session=session)
 
 
 class ChainOutput(Serializable):
@@ -30,7 +39,7 @@ class ChainOutput(Serializable):
     completion_tokens: int
     """Number of tokens in the completion."""
 
-    type: Literal["OcsChainOutput"] = "OcsChainOutput"
+    type: Literal["OcsChainOutput"] = "ChainOutput"
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -64,7 +73,10 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        output = self.chain.invoke(input, config)
+        chain = self._build_chain()
+        self._populate_memory()
+
+        output = chain.invoke(input, config)
         return ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
@@ -77,35 +89,8 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
-    @property
-    def chain(self) -> Runnable[Dict[str, Any], str]:
-        # if self.experiment.assistant:
-        #     model = self.llm_service.get_assistant(self.experiment.assistant, as_agent=True)
-        #     model |= itemgetter("output")
-        # else:
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-
-        if self.session and self.experiment.tools_enabled:
-            tools = get_tools(self.session)
-            # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
-            # when we implement this for anthropic
-            agent = create_openai_tools_agent(llm=model, tools=tools, prompt=self.agent_prompt)
-            executor = AgentExecutor.from_agent_and_tools(
-                agent=agent,
-                tools=tools,
-                memory=self.memory,
-                max_execution_time=120,
-            )
-            return executor | itemgetter("output")
-        else:
-            return (
-                RunnablePassthrough.assign(
-                    history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
-                )
-                | self.chat_prompt
-                | model
-                | StrOutputParser()
-            )
+    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+        raise NotImplementedError
 
     @property
     def callback_handler(self):
@@ -113,7 +98,7 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         return self.llm_service.get_callback_handler(model)
 
     @property
-    def chat_prompt(self):
+    def prompt(self):
         system_prompt = SystemMessagePromptTemplate.from_template(self.experiment.chatbot_prompt.prompt)
         return ChatPromptTemplate.from_messages(
             [
@@ -123,9 +108,47 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
             ]
         )
 
+    def _populate_memory(self):
+        if not self.session:
+            return
+
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
+        self.memory.chat_memory.messages = messages
+
+
+class SimpleExperimentRunnable(ExperimentRunnable):
+    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        return (
+            RunnablePassthrough.assign(
+                history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
+            )
+            | self.prompt
+            | model
+            | StrOutputParser()
+        )
+
+
+class AgentExperimentRunnable(ExperimentRunnable):
+    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+        assert self.session and self.experiment.tools_enabled
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        tools = get_tools(self.session)
+        # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
+        # when we implement this for anthropic
+        agent = create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
+        executor = AgentExecutor.from_agent_and_tools(
+            agent=agent,
+            tools=tools,
+            memory=self.memory,
+            max_execution_time=120,
+        )
+        return executor | itemgetter("output")
+
     @property
-    def agent_prompt(self):
-        prompt = self.chat_prompt
+    def prompt(self):
+        prompt = super().prompt
         prompt.extend(
             [
                 ("system", str(datetime.now().astimezone(pytz.UTC))),

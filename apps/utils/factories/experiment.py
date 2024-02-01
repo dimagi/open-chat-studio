@@ -23,6 +23,7 @@ class PromptFactory(factory.django.DjangoModelFactory):
     name = "Some name"
     description = "This is a description"
     team = factory.SubFactory(TeamFactory)
+    prompt = factory.Faker("text")
 
 
 class ConsentFormFactory(factory.django.DjangoModelFactory):
