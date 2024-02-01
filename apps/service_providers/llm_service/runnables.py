@@ -113,6 +113,10 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
             ]
         )
 
+    def format_input(self, input: dict):
+        input["input"] = self.experiment.chatbot_prompt.format(input["input"])
+        return input
+
     def _populate_memory(self):
         if not self.session:
             return
@@ -139,6 +143,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
+            | RunnableLambda(self.format_input)
             | self.prompt
             | model
             | StrOutputParser()
@@ -152,7 +157,9 @@ class AgentExperimentRunnable(ExperimentRunnable):
         tools = get_tools(self.session)
         # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
         # when we implement this for anthropic
-        agent = create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
+        agent = RunnableLambda(self.format_input) | create_openai_tools_agent(
+            llm=model, tools=tools, prompt=self.prompt
+        )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
