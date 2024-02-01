@@ -20,6 +20,7 @@ from langchain_core.runnables import (
 
 from apps.chat.agent.tools import get_tools
 from apps.chat.bots import compress_chat_history
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -76,7 +77,11 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         chain = self._build_chain()
         self._populate_memory()
 
+        self._save_message_to_history(input["input"])
+
         output = chain.invoke(input, config)
+
+        self._save_message_to_history(output)
         return ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
@@ -115,6 +120,16 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
         self.memory.chat_memory.messages = messages
+
+    def _save_message_to_history(self, message: str, type_: ChatMessageType):
+        if not self.session:
+            return
+
+        ChatMessage.objects.create(
+            chat=self.session.chat,
+            message_type=type_.value,
+            content=message,
+        )
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
