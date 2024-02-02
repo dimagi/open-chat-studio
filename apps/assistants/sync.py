@@ -18,7 +18,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant):
         assistant.save()
 
 
-def sync_from_openid(assistant: OpenAiAssistant):
+def sync_from_openai(assistant: OpenAiAssistant):
     """Syncs the local assistant instance with the remote OpenAI assistant."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
