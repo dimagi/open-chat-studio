@@ -6,7 +6,7 @@ from apps.assistants.sync import (
     delete_openai_assistant,
     import_openai_assistant,
     push_assistant_to_openai,
-    sync_from_openid,
+    sync_from_openai,
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.openai import AssistantFactory
@@ -33,11 +33,11 @@ def test_push_assistant_to_openai_update(mock_update):
 
 @pytest.mark.django_db
 @patch("openai.resources.beta.Assistants.retrieve")
-def test_sync_from_openid(mock_retrieve):
+def test_sync_from_openai(mock_retrieve):
     remote_assistant = AssistantFactory()
     mock_retrieve.return_value = remote_assistant
     local_assistant = OpenAiAssistantFactory()
-    sync_from_openid(local_assistant)
+    sync_from_openai(local_assistant)
     local_assistant.refresh_from_db()
     assert local_assistant.name == remote_assistant.name
     assert local_assistant.instructions == remote_assistant.instructions
