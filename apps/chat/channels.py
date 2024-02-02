@@ -314,7 +314,7 @@ class ChannelBase:
         return self._get_experiment_response(message=text)
 
     def _get_experiment_response(self, message: str) -> str:
-        experiment_bot = TopicBot.from_experiment_session(self.experiment_session)
+        experiment_bot = TopicBot(self.experiment_session)
         answer = experiment_bot.process_input(message)
         self.experiment_session.no_activity_ping_count = 0
         self.experiment_session.save()

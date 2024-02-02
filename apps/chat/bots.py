@@ -45,41 +45,20 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 class TopicBot:
-    def __init__(
-        self,
-        prompt: Prompt,
-        source_material: str,
-        llm: BaseChatModel,
-        safety_layers: List[SafetyLayer],
-        chat: Chat,
-        session: ExperimentSession,
-        max_token_limit: int = 0,
-    ):
-        self.prompt = prompt
-        self.safety_layers = safety_layers or []
-        self.llm = llm
-        self.source_material = source_material
-        self.safe_mode = bool(self.safety_layers)
-        self.chat = chat
+    def __init__(self, session: ExperimentSession):
+        experiment = session.experiment
+        self.prompt = experiment.chatbot_prompt
+        self.llm = experiment.get_chat_model()
+        self.source_material = experiment.source_material.material if experiment.source_material else None
+        self.safety_layers = experiment.safety_layers.all()
+        self.chat = session.chat
         self.session = session
+        self.max_token_limit = experiment.max_token_limit
+
         self.input_tokens = 0
         self.output_tokens = 0
-        self.max_token_limit = max_token_limit
-        self._initialize()
 
-    @classmethod
-    def from_experiment_session(cls, session: ExperimentSession) -> "TopicBot":
-        """Shortcut to instantiate a TopicBot using an existing ExperimentSession"""
-        experiment = session.experiment
-        return TopicBot(
-            prompt=experiment.chatbot_prompt,
-            llm=experiment.get_chat_model(),
-            source_material=experiment.source_material.material if experiment.source_material else None,
-            safety_layers=experiment.safety_layers.all(),
-            chat=session.chat,
-            session=session,
-            max_token_limit=experiment.max_token_limit,
-        )
+        self._initialize()
 
     def _initialize(self):
         self.conversation = create_conversation(
@@ -195,12 +174,3 @@ class SafetyBot:
 
     def filter_ai_messages(self) -> bool:
         return self.safety_layer.messages_to_review == "ai"
-
-
-def get_bot_from_session(session: ExperimentSession) -> TopicBot:
-    return TopicBot.from_experiment_session(session)
-
-
-def get_bot_from_experiment(experiment: Experiment, chat: Chat):
-    session = ExperimentSession.objects.filter(experiment=experiment, chat=chat).first()
-    return TopicBot.from_experiment_session(session)
