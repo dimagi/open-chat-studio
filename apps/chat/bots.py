@@ -45,10 +45,9 @@ class TopicBot:
         prompt: Prompt,
         source_material: str,
         llm: BaseChatModel,
-        safety_layers: List[SafetyLayer] = None,
-        chat=None,
-        messages_history=None,
-        session: Optional[ExperimentSession] = None,
+        safety_layers: List[SafetyLayer],
+        chat: Chat,
+        session: ExperimentSession,
         max_token_limit: int = 0,
     ):
         self.prompt = prompt
@@ -57,11 +56,11 @@ class TopicBot:
         self.source_material = source_material
         self.safe_mode = bool(self.safety_layers)
         self.chat = chat
-        self.session_id = session.id if session else None
+        self.session = session
         self.input_tokens = 0
         self.output_tokens = 0
         self.max_token_limit = max_token_limit
-        self._initialize(messages_history)
+        self._initialize()
 
     @classmethod
     def from_experiment_session(cls, session: ExperimentSession) -> "TopicBot":
@@ -77,12 +76,9 @@ class TopicBot:
             max_token_limit=experiment.max_token_limit,
         )
 
-    def _initialize(self, messages_history):
+    def _initialize(self):
         self.conversation = create_conversation(
-            self.prompt.prompt,
-            self.source_material,
-            self.llm,
-            experiment_session=ExperimentSession.objects.filter(id=self.session_id).first(),
+            self.prompt.prompt, self.source_material, self.llm, experiment_session=self.session
         )
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
@@ -90,13 +86,8 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-        if self.chat:
-            history = self._get_optimized_history()
-            self.conversation.load_memory(history)
-        elif messages_history is not None:
-            # Add the history messages. This originated for the prompt builder
-            # where we maintain state client side
-            self.conversation.load_memory(messages_history)
+        history = self._get_optimized_history()
+        self.conversation.load_memory(history)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -127,9 +118,7 @@ class TopicBot:
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(input_str):
-                # the prompt builder doesn't have a session_id
-                if self.session_id:
-                    notify_users_of_violation(self.session_id, safety_layer_id=safety_bot.safety_layer.id)
+                notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
         # if we made it here there weren't any relevant human safety issues
@@ -157,13 +146,12 @@ class TopicBot:
         return safety_response
 
     def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        if self.chat:
-            # save messages individually to get correct timestamps
-            ChatMessage.objects.create(
-                chat=self.chat,
-                message_type=type_.value,
-                content=message,
-            )
+        # save messages individually to get correct timestamps
+        ChatMessage.objects.create(
+            chat=self.chat,
+            message_type=type_.value,
+            content=message,
+        )
 
     def _get_optimized_history(self):
         try:
