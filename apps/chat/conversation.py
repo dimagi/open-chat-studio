@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
 from langchain.chains import ConversationChain
@@ -16,7 +17,17 @@ from apps.chat.agent.agent import build_agent
 from apps.experiments.models import ExperimentSession
 
 
-class Conversation:
+class Conversation(ABC):
+    @abstractmethod
+    def predict(self, input: str) -> Tuple[str, int, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_memory(self, messages):
+        raise NotImplementedError
+
+
+class BasicConversation(Conversation):
     """
     A wrapper class that provides a single way/API to interact with the LLMs, regardless of it being a normal
     conversation or agent implementation
@@ -28,29 +39,35 @@ class Conversation:
         source_material: str,
         memory: BaseMemory,
         llm: BaseChatModel,
-        experiment_session: Optional[ExperimentSession] = None,
     ):
+        self.prompt_str = prompt_str
+        self.source_material = source_material
+        self.memory = memory
         self.llm = llm
-        prompt_to_use = SystemMessagePromptTemplate.from_template(prompt_str)
-        if source_material:
+        self._build_chain()
+
+    def _build_chain(self):
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                self.system_prompt,
+                MessagesPlaceholder(variable_name="history"),
+                HumanMessagePromptTemplate.from_template("{input}"),
+            ]
+        )
+
+        # set output_key to match agent's output_key
+        self.chain = ConversationChain(memory=self.memory, prompt=prompt, llm=self.llm, output_key="output")
+
+    @property
+    def system_prompt(self):
+        prompt_to_use = SystemMessagePromptTemplate.from_template(self.prompt_str)
+        if self.source_material:
             try:
-                prompt_to_use = prompt_to_use.format(source_material=source_material)
+                prompt_to_use = prompt_to_use.format(source_material=self.source_material)
             except KeyError:
                 # no source material found in prompt, just use it "naked"
                 pass
-        if experiment_session and experiment_session.experiment.tools_enabled:
-            self.chain = build_agent(llm, memory, experiment_session, prompt_to_use)
-        else:
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    prompt_to_use,
-                    MessagesPlaceholder(variable_name="history"),
-                    HumanMessagePromptTemplate.from_template("{input}"),
-                ]
-            )
-
-            # set output_key to match agent's output_key
-            self.chain = ConversationChain(memory=memory, prompt=prompt, llm=llm, output_key="output")
+        return prompt_to_use
 
     def load_memory(self, messages):
         self.chain.memory.chat_memory.messages = messages
@@ -72,3 +89,24 @@ class Conversation:
                 response = self.chain.invoke({"input": input})
             output = response["output"]
             return output, cb.prompt_tokens, cb.completion_tokens
+
+
+class AgentConversation(BasicConversation):
+    def __init__(
+        self,
+        prompt_str: str,
+        source_material: str,
+        memory: BaseMemory,
+        llm: BaseChatModel,
+        experiment_session: ExperimentSession,
+    ):
+        super().__init__(
+            prompt_str=prompt_str,
+            source_material=source_material,
+            memory=memory,
+            llm=llm,
+        )
+        self.session = experiment_session
+
+    def _build_chain(self):
+        self.chain = build_agent(self.llm, self.memory, self.session, self.system_prompt)

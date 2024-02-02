@@ -7,7 +7,7 @@ from langchain.memory.summary import SummarizerMixin
 from langchain.schema import SystemMessage
 from pydantic import ValidationError
 
-from apps.chat.conversation import Conversation
+from apps.chat.conversation import AgentConversation, BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
@@ -22,13 +22,21 @@ def create_conversation(
     experiment_session: Optional[ExperimentSession] = None,
 ) -> Conversation:
     try:
-        return Conversation(
-            prompt_str=prompt_str,
-            source_material=source_material,
-            memory=ConversationBufferMemory(return_messages=True),
-            llm=llm,
-            experiment_session=experiment_session,
-        )
+        if experiment_session and experiment_session.experiment.tools_enabled:
+            return AgentConversation(
+                prompt_str=prompt_str,
+                source_material=source_material,
+                memory=ConversationBufferMemory(return_messages=True),
+                llm=llm,
+                experiment_session=experiment_session,
+            )
+        else:
+            return BasicConversation(
+                prompt_str=prompt_str,
+                source_material=source_material,
+                memory=ConversationBufferMemory(return_messages=True),
+                llm=llm,
+            )
     except ValidationError as e:
         raise ChatException(str(e)) from e
 
