@@ -13,19 +13,17 @@
     {% endif %}
     <div class="w-full h-screen flex flex-row py-4">
         <!-- History sidebar -->
-        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='history', 'hidden': $store.promptBuilder.visibleSidebar !== 'history' }" class="flex" x-cloak>
+        <div class="w-1/4 flex" x-show="$store.promptBuilder.visibleSidebar === 'history'" x-cloak>
             {% include "experiments/components/prompt_builder_history_sidebar.html" %}
         </div>
 
         <!-- Source material sidebar -->
-        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='source-material', 'hidden': $store.promptBuilder.visibleSidebar !== 'source-material' }"
-            class="flex" x-cloak>
+        <div class="w-1/4 flex" x-show="$store.promptBuilder.visibleSidebar === 'source-material'" x-cloak>
             {% include "experiments/components/prompt_builder_source_material_sidebar.html" %}
         </div>
         
         <!-- Load prompt sidebar -->
-        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar == 'experiments', 'hidden': $store.promptBuilder.visibleSidebar !== 'experiments' }"
-            class="flex" x-cloak>
+        <div class="w-1/4 flex" x-show="$store.promptBuilder.visibleSidebar === 'experiments'" x-cloak>
             {% include "experiments/components/prompt_builder_experiments_list_sidebar.html" %}
         </div>
 
