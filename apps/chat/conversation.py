@@ -1,8 +1,10 @@
+import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Tuple
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.chains import ConversationChain
+from langchain.memory.summary import SummarizerMixin
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -13,9 +15,13 @@ from langchain.schema import BaseMemory
 from langchain_community.callbacks import get_openai_callback
 from langchain_community.chat_models import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.agent.agent import build_agent
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
+
+log = logging.getLogger("ocs.bots")
 
 
 class Conversation(ABC):
@@ -23,9 +29,11 @@ class Conversation(ABC):
     def predict(self, input: str) -> Tuple[str, int, int]:
         raise NotImplementedError
 
-    @abstractmethod
-    def load_memory(self, messages):
-        raise NotImplementedError
+    def load_memory_from_chat(self, chat: Chat, max_token_limit: int):
+        pass
+
+    def load_memory_from_messages(self, messages):
+        pass
 
 
 class BasicConversation(Conversation):
@@ -70,8 +78,19 @@ class BasicConversation(Conversation):
                 pass
         return prompt_to_use
 
-    def load_memory(self, messages):
-        self.chain.memory.chat_memory.messages = messages
+    def load_memory_from_messages(self, messages: list[BaseMessage]):
+        self.memory.chat_memory.messages = messages
+
+    def load_memory_from_chat(self, chat, max_token_limit):
+        self.load_memory_from_messages(self._get_optimized_history(chat, max_token_limit))
+
+    def _get_optimized_history(self, chat, max_token_limit) -> list[BaseMessage]:
+        try:
+            return compress_chat_history(chat, self.llm, max_token_limit)
+        except (NameError, ImportError, ValueError, NotImplementedError):
+            # typically this is because a library required to count tokens isn't installed
+            log.exception("Unable to compress history")
+            return chat.get_langchain_messages_until_summary()
 
     def predict(self, input: str) -> Tuple[str, int, int]:
         if isinstance(self.llm, ChatAnthropic):
@@ -119,9 +138,6 @@ class AssistantConversation(Conversation):
         self.experiment = experiment_session.experiment
         self.chat = self.session.chat
 
-    def load_memory(self, messages):
-        pass
-
     def predict(self, input: str) -> Tuple[str, int, int]:
         assistant_runnable = self.experiment.assistant.get_assistant()
 
@@ -136,3 +152,33 @@ class AssistantConversation(Conversation):
         if not thread_id:
             self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
         return response.return_values["output"], 0, 0
+
+
+def compress_chat_history(
+    chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10
+) -> list[BaseMessage]:
+    """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
+    if necessary and save the summary to the DB.
+    """
+    history = chat.get_langchain_messages_until_summary()
+    if max_token_limit <= 0 or not history:
+        return history
+
+    current_token_count = llm.get_num_tokens_from_messages(history)
+    if current_token_count <= max_token_limit:
+        return history
+
+    log.debug(
+        "Compressing chat history to be less than %s tokens long. Current length: %s",
+        max_token_limit,
+        current_token_count,
+    )
+    summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
+    history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
+
+    while llm.get_num_tokens_from_messages(history) > max_token_limit:
+        pruned_memory.append(history.pop(0))
+
+    summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
+    ChatMessage.objects.filter(id=history[0].additional_kwargs["id"]).update(summary=summary)
+    return [SystemMessage(content=summary)] + history

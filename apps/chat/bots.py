@@ -1,18 +1,13 @@
-import logging
 from typing import List, Optional
 
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
-from langchain.memory.summary import SummarizerMixin
-from langchain.schema import SystemMessage
 from pydantic import ValidationError
 
 from apps.chat.conversation import AgentConversation, AssistantConversation, BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
-
-log = logging.getLogger("ocs.bots")
 
 
 def create_conversation(
@@ -96,8 +91,7 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-        history = self._get_optimized_history()
-        self.conversation.load_memory(history)
+        self.conversation.load_memory_from_chat(self.chat, self.max_token_limit)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -162,42 +156,6 @@ class TopicBot:
             message_type=type_.value,
             content=message,
         )
-
-    def _get_optimized_history(self):
-        try:
-            return compress_chat_history(self.chat, self.llm, self.max_token_limit)
-        except (NameError, ImportError, ValueError, NotImplementedError):
-            # typically this is because a library required to count tokens isn't installed
-            log.exception("Unable to compress history")
-            return self.chat.get_langchain_messages_until_summary()
-
-
-def compress_chat_history(chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10):
-    """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
-    if necessary and save the summary to the DB.
-    """
-    history = chat.get_langchain_messages_until_summary()
-    if max_token_limit <= 0 or not history:
-        return history
-
-    current_token_count = llm.get_num_tokens_from_messages(history)
-    if current_token_count <= max_token_limit:
-        return history
-
-    log.debug(
-        "Compressing chat history to be less than %s tokens long. Current length: %s",
-        max_token_limit,
-        current_token_count,
-    )
-    summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
-    history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
-
-    while llm.get_num_tokens_from_messages(history) > max_token_limit:
-        pruned_memory.append(history.pop(0))
-
-    summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
-    ChatMessage.objects.filter(id=history[0].additional_kwargs["id"]).update(summary=summary)
-    return [SystemMessage(content=summary)] + history
 
 
 class SafetyBot:
