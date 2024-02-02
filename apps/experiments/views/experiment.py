@@ -85,7 +85,8 @@ class ExperimentForm(forms.ModelForm):
             "assistant",
             "max_token_limit",
             "temperature",
-            "chatbot_prompt",
+            "prompt_text",
+            "input_formatter",
             "safety_layers",
             "tools_enabled",
             "conversational_consent_enabled",
@@ -115,7 +116,6 @@ class ExperimentForm(forms.ModelForm):
         else:
             del self.fields["assistant"]
         self.fields["voice_provider"].queryset = team.voiceprovider_set
-        self.fields["chatbot_prompt"].queryset = team.prompt_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
         self.fields["pre_survey"].queryset = team.survey_set
@@ -198,7 +198,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
 
 def _source_material_is_missing(experiment: Experiment) -> bool:
-    prompt = experiment.chatbot_prompt.prompt
+    prompt = experiment.prompt_text
     prompt_expects_source_material = "{source_material}" in prompt
     if not prompt_expects_source_material:
         return False
