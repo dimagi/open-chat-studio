@@ -106,7 +106,9 @@ class SourceMaterial(BaseTeamModel):
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
     objects = SafetyLayerObjectManager()
-    prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+    prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, null=True)
+    prompt_text = models.TextField()
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
         default=ChatMessageType.HUMAN,
@@ -125,7 +127,7 @@ class SafetyLayer(BaseTeamModel):
     )
 
     def __str__(self):
-        return str(self.prompt)
+        return self.name
 
 
 class Survey(BaseTeamModel):
@@ -297,7 +299,16 @@ class Experiment(BaseTeamModel):
         verbose_name="OpenAI Assistant",
     )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
-    chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
+
+    # deprecated in favor of `prompt` and `input_formatter`
+    chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments", null=True)
+    prompt_text = models.TextField()
+    input_formatter = models.TextField(
+        blank=True,
+        default="",
+        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
+        "E.g. 'Safe or unsafe? {input}'",
+    )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
