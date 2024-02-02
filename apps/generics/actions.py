@@ -1,11 +1,13 @@
 import dataclasses
 
+from django.template import Context
 from django.template.loader import get_template
 
 
 @dataclasses.dataclass
 class Action:
     url_name: str
+    label: str = None
     icon_class: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
@@ -20,19 +22,22 @@ class Action:
 
     template: str = "generic/action.html"
 
-    def render(self, request, record):
+    def render(self, context: Context):
+        request = context["request"]
+        record = context.get("record")
+
         if not self.should_display(request, record):
             return ""
 
         template = get_template(self.template)
-        return template.render(self.get_context(request, record))
+        with context.push(self.get_context(request, record)):
+            return template.render(context.update(context.flatten()))
 
     def get_context(self, request, record):
         ctxt = {
-            "request": request,
-            "record": record,
             "url_name": self.url_name,
             "icon_class": self.icon_class,
+            "label": self.label or "",
             "disabled": not self.is_enabled(request, record),
         }
         if self.extra_context:

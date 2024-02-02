@@ -2,7 +2,7 @@ from django.conf import settings
 from django_tables2 import columns, tables
 
 from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
-from apps.generics import table_actions
+from apps.generics import actions
 
 
 class AnalysisTable(tables.Table):
@@ -17,17 +17,17 @@ class AnalysisTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                table_actions.Action(
+                actions.Action(
                     "analysis:create_run",
-                    "fa-solid fa-play",
+                    icon_class="fa-solid fa-play",
                     required_permissions=["analysis.add_analysisrun"],
                     enabled_condition=lambda request, record: not record.needs_configuration(),
                 ),
-                table_actions.edit_action(
+                actions.edit_action(
                     "analysis:edit",
                     required_permissions=["analysis.change_analysis"],
                 ),
-                table_actions.delete_action(
+                actions.delete_action(
                     "analysis:delete",
                     required_permissions=["analysis.delete_analysis"],
                 ),
@@ -86,12 +86,12 @@ class RunGroupTable(tables.Table):
         attrs={"th": {"class": "text-center"}, "td": {"class": "text-center"}},
         extra_context={
             "actions": [
-                table_actions.Action(
+                actions.Action(
                     "analysis:replay_run",
-                    "fa-solid fa-arrow-rotate-left",
+                    icon_class="fa-solid fa-arrow-rotate-left",
                     required_permissions=["analysis.add_rungroup"],
                 ),
-                table_actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
+                actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
             ]
         },
     )

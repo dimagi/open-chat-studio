@@ -43,3 +43,7 @@ class OpenAiAssistant(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("assistants:edit", args=[self.team.slug, self.id])
+
+    @property
+    def formatted_tools(self):
+        return [{"type": tool} for tool in self.builtin_tools]

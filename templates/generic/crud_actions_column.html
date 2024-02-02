@@ -1,7 +1,7 @@
-{% load table_actions %}
+{% load actions %}
 {# This template is used by Tables classes to render edit and delete actions #}
-<div class="btn-group">
+{% if as_group|default_if_none:True %}<div class="join">{% endif %}
 {% for action in actions %}
   {% render_action action %}
 {% endfor %}
-</div>
+{% if as_group|default:True %}</div>{% endif %}
