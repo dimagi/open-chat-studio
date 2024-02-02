@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
+from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.chains import ConversationChain
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -110,3 +111,28 @@ class AgentConversation(BasicConversation):
 
     def _build_chain(self):
         self.chain = build_agent(self.llm, self.memory, self.session, self.system_prompt)
+
+
+class AssistantConversation(Conversation):
+    def __init__(self, experiment_session: ExperimentSession):
+        self.session = experiment_session
+        self.experiment = experiment_session.experiment
+        self.chat = self.session.chat
+
+    def load_memory(self, messages):
+        pass
+
+    def predict(self, input: str) -> Tuple[str, int, int]:
+        assistant_runnable = self.experiment.assistant.get_assistant()
+
+        input_dict = {"content": input}
+
+        # Note: if this is not a new chat then the history won't be persisted to the thread
+        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
+        if thread_id:
+            input_dict["thread_id"] = thread_id
+
+        response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict)
+        if not thread_id:
+            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+        return response.return_values["output"], 0, 0

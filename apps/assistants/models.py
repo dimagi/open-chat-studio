@@ -47,3 +47,6 @@ class OpenAiAssistant(BaseTeamModel):
     @property
     def formatted_tools(self):
         return [{"type": tool} for tool in self.builtin_tools]
+
+    def get_assistant(self):
+        return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)

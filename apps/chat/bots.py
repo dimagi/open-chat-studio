@@ -7,7 +7,7 @@ from langchain.memory.summary import SummarizerMixin
 from langchain.schema import SystemMessage
 from pydantic import ValidationError
 
-from apps.chat.conversation import AgentConversation, BasicConversation, Conversation
+from apps.chat.conversation import AgentConversation, AssistantConversation, BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
@@ -22,6 +22,8 @@ def create_conversation(
     experiment_session: Optional[ExperimentSession] = None,
 ) -> Conversation:
     try:
+        if experiment_session and experiment_session.experiment.assistant:
+            return AssistantConversation(experiment_session)
         if experiment_session and experiment_session.experiment.tools_enabled:
             return AgentConversation(
                 prompt_str=prompt_str,
