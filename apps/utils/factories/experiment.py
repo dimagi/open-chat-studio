@@ -15,16 +15,6 @@ class SurveyFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
 
 
-class PromptFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = models.Prompt
-
-    owner = factory.SubFactory(UserFactory)
-    name = "Some name"
-    description = "This is a description"
-    team = factory.SubFactory(TeamFactory)
-
-
 class ConsentFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ConsentForm
