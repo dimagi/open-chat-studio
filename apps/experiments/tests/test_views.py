@@ -10,13 +10,12 @@ def test_create_experiment_success(db, client, team_with_users):
     user = team_with_users.members.first()
     source_material = experiment_factory.SourceMaterialFactory(team=team_with_users)
     consent_form = experiment_factory.ConsentFormFactory(team=team_with_users)
-    prompt = experiment_factory.PromptFactory(team=team_with_users)
     client.force_login(user)
 
     post_data = {
         "name": "some name",
         "description": "Some description",
-        "chatbot_prompt": prompt.id,
+        "prompt_text": "You are a helpful assistant",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
         "temperature": 0.7,

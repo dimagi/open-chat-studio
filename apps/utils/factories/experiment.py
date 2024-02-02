@@ -54,7 +54,7 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     owner = factory.SubFactory(UserFactory)
     name = factory.Faker("name")
     llm = factory.Faker("random_element", elements=["gpt-3.5-turbo", "gpt-4"])
-    chatbot_prompt = factory.SubFactory(PromptFactory, team=factory.SelfAttribute("..team"))
+    prompt_text = "You are a helpful assistant"
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
     pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
