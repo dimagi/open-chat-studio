@@ -52,10 +52,24 @@ def test_simple_experiment_runnable(experiment, fake_llm):
 
 
 @pytest.mark.django_db
+def test_simple_experiment_runnable_format_input(experiment, fake_llm):
+    runnable = SimpleExperimentRunnable(experiment=experiment)
+    experiment.chatbot_prompt.input_formatter = "foo {input} bar"
+    result = runnable.invoke({"input": "hi"})
+    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert len(fake_llm.calls) == 1
+    assert _messages_to_dict(fake_llm.calls[0]) == [
+        {"system": experiment.chatbot_prompt.prompt},
+        {"human": "foo hi bar"},
+    ]
+
+
+@pytest.mark.django_db
 def test_simple_experiment_runnable_with_history(session, chat, fake_llm):
     experiment = session.experiment
     experiment.max_token_limit = 0  # disable compression
     session.chat = chat
+    assert chat.messages.count() == 1
     runnable = SimpleExperimentRunnable(experiment=experiment, session=session)
     result = runnable.invoke({"input": "hi"})
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -65,6 +79,7 @@ def test_simple_experiment_runnable_with_history(session, chat, fake_llm):
         {"human": "Hello"},
         {"human": "hi"},
     ]
+    assert chat.messages.count() == 3
 
 
 def _messages_to_dict(messages: Sequence[BaseMessage]) -> list[dict]:

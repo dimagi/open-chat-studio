@@ -77,11 +77,11 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         chain = self._build_chain()
         self._populate_memory()
 
-        self._save_message_to_history(input["input"])
+        self._save_message_to_history(input["input"], ChatMessageType.HUMAN)
 
         output = chain.invoke(input, config)
 
-        self._save_message_to_history(output)
+        self._save_message_to_history(output, ChatMessageType.AI)
         return ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
