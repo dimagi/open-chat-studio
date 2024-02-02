@@ -321,6 +321,7 @@ class ChannelBase:
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
+        """Use this to update the chat history when not using the normal bot flow"""
         ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
