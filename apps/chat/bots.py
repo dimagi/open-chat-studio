@@ -247,12 +247,4 @@ def get_bot_from_session(session: ExperimentSession) -> TopicBot:
 
 def get_bot_from_experiment(experiment: Experiment, chat: Chat):
     session = ExperimentSession.objects.filter(experiment=experiment, chat=chat).first()
-    return TopicBot(
-        prompt=experiment.chatbot_prompt,
-        source_material=experiment.source_material.material if experiment.source_material else None,
-        llm=experiment.get_chat_model(),
-        safety_layers=experiment.safety_layers.all(),
-        chat=chat,
-        session=session,
-        max_token_limit=experiment.max_token_limit,
-    )
+    return TopicBot.from_experiment_session(session)
