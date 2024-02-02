@@ -18,7 +18,7 @@ from django_tables2 import SingleTableView
 from langchain.prompts import PromptTemplate
 
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Prompt, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import Experiment, Prompt, PromptBuilderHistory, SourceMaterial
 from apps.experiments.tables import PromptTable
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.service_providers.utils import get_llm_provider_choices
@@ -132,15 +132,14 @@ class DeletePrompt(LoginAndTeamRequiredMixin, View):
 
 
 @login_and_team_required
-def prompt_builder_load_prompts(request, team_slug: str):
-    prompts = Prompt.objects.filter(team=request.team)
-    prompts_list = list(prompts.values())
+def prompt_builder_load_experiments(request, team_slug: str):
+    experiments = list(Experiment.objects.filter(team=request.team).values("id", "name", "prompt_text"))
 
     return TemplateResponse(
         request,
-        "experiments/prompts_list.html",
+        "experiments/experiment_list.html",
         {
-            "prompts": prompts_list,
+            "experiments": experiments,
         },
     )
 

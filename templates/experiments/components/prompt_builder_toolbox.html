@@ -85,9 +85,9 @@
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
                 <li>
                     <button 
-                    hx-get="{% url 'experiments:prompt_builder_load_prompts' team.slug %}"
-                        hx-trigger="click" hx-target="#load-prompts" hx-swap="innerHTML"
-                        @click.stop="$store.promptBuilder.toggleSidebar('prompts')">
+                    hx-get="{% url 'experiments:prompt_builder_load_experiments' team.slug %}"
+                        hx-trigger="click" hx-target="#experiment-list" hx-swap="innerHTML"
+                        @click.stop="$store.promptBuilder.toggleSidebar('experiments')">
                         <i class="fa fa-folder-open-o px-2"></i></button>
                 </li>
                 <li>

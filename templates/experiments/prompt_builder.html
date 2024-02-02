@@ -24,9 +24,9 @@
         </div>
         
         <!-- Load prompt sidebar -->
-        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar=='prompts', 'hidden': $store.promptBuilder.visibleSidebar !== 'prompts' }"
+        <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar == 'experiments', 'hidden': $store.promptBuilder.visibleSidebar !== 'experiments' }"
             class="flex" x-cloak>
-            {% include "experiments/components/prompt_builder_prompts_list_sidebar.html" %}
+            {% include "experiments/components/prompt_builder_experiments_list_sidebar.html" %}
         </div>
 
         <div x-bind:class="{'w-1/4': $store.promptBuilder.visibleSidebar, 'w-1/3': !$store.promptBuilder.visibleSidebar }" class="px-4 h-full flex flex-col">
