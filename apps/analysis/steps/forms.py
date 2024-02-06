@@ -236,7 +236,10 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
     form_name = "CommCare App Loader Configuration"
     template_name = "analysis/forms/basic.html"
     app_list = forms.CharField(
-        widget=forms.Textarea, label="Application List", help_text="Enter one app per line: domain, app_id, name"
+        widget=forms.Textarea,
+        label="Application List",
+        help_text="Enter one app per line: domain, app_id, name",
+        required=False,
     )
 
     def reformat_initial(self, initial):
@@ -247,10 +250,7 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
 
     def clean_app_list(self):
         app_list = self.cleaned_data["app_list"]
-        if not app_list:
-            raise forms.ValidationError("At least one app must be provided.")
-
-        csv_reader = csv.reader(app_list.splitlines())
+        csv_reader = csv.reader([line for line in app_list.splitlines() if line.strip()])
         return [{"domain": row[0].strip(), "app_id": row[1].strip(), "name": row[2].strip()} for row in csv_reader]
 
     def get_params(self):
@@ -261,23 +261,33 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
 
 class CommCareAppLoaderParamsForm(ParamsForm):
     form_name = "CommCare App Loader Parameters"
-    template_name = "analysis/forms/basic.html"
-    app_id = forms.ChoiceField(label="Application")
+    template_name = "analysis/forms/commcare_loader_params.html"
+    select_app_id = forms.ChoiceField(label="Application", required=False)
+    domain = forms.CharField(required=False, label="CommCare Project Space")
+    app_id = forms.CharField(required=False, label="CommCare Application ID")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         initial = kwargs.get("initial")
         if initial and initial.get("app_list"):
-            self.fields["app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+            self.fields["select_app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
 
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
 
-        app_id = self.cleaned_data["app_id"]
-        app_list = self.initial.get("app_list")
-        app = next((app for app in app_list if app["app_id"] == app_id), None)
+        select_app_id = self.cleaned_data.get("select_app_id")
+        app_id = self.cleaned_data.get("app_id")
+        domain = self.cleaned_data.get("domain")
+        if not select_app_id and not app_id and not domain:
+            raise forms.ValidationError("Either an application or a domain and app_id must be provided.")
+
+        if select_app_id:
+            app_list = self.initial.get("app_list")
+            app = next((app for app in app_list if app["app_id"] == select_app_id), None)
+            app_id = app["app_id"]
+            domain = app["domain"]
 
         try:
-            return CommCareAppLoaderParams(cc_domain=app["domain"], cc_app_id=app["app_id"])
+            return CommCareAppLoaderParams(cc_domain=domain, cc_app_id=app_id)
         except ValueError as e:
             raise forms.ValidationError(repr(e))
