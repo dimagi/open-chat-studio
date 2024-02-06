@@ -8,6 +8,7 @@ from django.utils.encoding import smart_bytes
 
 from apps.analysis.core import Params, ParamsForm
 from apps.analysis.models import Resource, ResourceType
+from apps.service_providers.models import AuthProvider
 
 
 class ResourceLoaderParamsForm(ParamsForm):
@@ -236,12 +237,17 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
     form_name = "CommCare App Loader Configuration"
     template_name = "analysis/forms/basic.html"
     cc_url = forms.URLField(label="CommCare Base URL", required=True, initial="https://www.commcarehq.org")
+    auth_provider = forms.ModelChoiceField(label="Authentication", queryset=None, required=False)
     app_list = forms.CharField(
         widget=forms.Textarea,
         label="Application List",
         help_text="Enter one app per line: domain, app_id, name",
         required=False,
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["auth_provider"].queryset = _get_auth_provider_queryset(self.request)
 
     def reformat_initial(self, initial):
         if "app_list" in initial:
@@ -257,7 +263,11 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
 
-        return CommCareAppLoaderParams(**self.cleaned_data)
+        return CommCareAppLoaderParams(
+            cc_url=self.cleaned_data["cc_url"],
+            app_list=self.cleaned_data["app_list"],
+            auth_provider_id=self.cleaned_data["auth_provider"].id,
+        )
 
 
 class CommCareAppLoaderParamsForm(ParamsForm):
@@ -289,6 +299,15 @@ class CommCareAppLoaderParamsForm(ParamsForm):
             domain = app["domain"]
 
         try:
-            return CommCareAppLoaderParams(cc_domain=domain, cc_app_id=app_id, cc_url=self.initial["cc_url"])
+            return CommCareAppLoaderParams(
+                cc_domain=domain,
+                cc_app_id=app_id,
+                cc_url=self.initial["cc_url"],
+                auth_provider_id=self.initial["auth_provider_id"],
+            )
         except ValueError as e:
             raise forms.ValidationError(repr(e))
+
+
+def _get_auth_provider_queryset(request):
+    return AuthProvider.objects.filter(team=request.team)
