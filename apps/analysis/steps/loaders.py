@@ -99,6 +99,7 @@ class CommCareAppMeta(BaseModel):
 
 class CommCareAppLoaderParams(Params):
     app_list: list[CommCareAppMeta] = None
+    cc_url: required(str) = None
     cc_domain: required(str) = None
     cc_app_id: required(str) = None
 

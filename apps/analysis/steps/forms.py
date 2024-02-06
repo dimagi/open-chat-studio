@@ -235,6 +235,7 @@ class WhatsappParserParamsForm(ParamsForm):
 class CommCareAppLoaderStaticConfigForm(ParamsForm):
     form_name = "CommCare App Loader Configuration"
     template_name = "analysis/forms/basic.html"
+    cc_url = forms.URLField(label="CommCare Base URL", required=True, initial="https://www.commcarehq.org")
     app_list = forms.CharField(
         widget=forms.Textarea,
         label="Application List",
@@ -256,7 +257,7 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
 
-        return CommCareAppLoaderParams(app_list=self.cleaned_data["app_list"])
+        return CommCareAppLoaderParams(**self.cleaned_data)
 
 
 class CommCareAppLoaderParamsForm(ParamsForm):
@@ -288,6 +289,6 @@ class CommCareAppLoaderParamsForm(ParamsForm):
             domain = app["domain"]
 
         try:
-            return CommCareAppLoaderParams(cc_domain=domain, cc_app_id=app_id)
+            return CommCareAppLoaderParams(cc_domain=domain, cc_app_id=app_id, cc_url=self.initial["cc_url"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
