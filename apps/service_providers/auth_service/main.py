@@ -6,9 +6,9 @@ from apps.service_providers.auth_service.schemes import CommCareAuth
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self):
-        return httpx.Client(**self.get_http_client_kwargs())
+        return httpx.Client(**self._get_http_client_kwargs())
 
-    def get_http_client_kwargs(self) -> dict:
+    def _get_http_client_kwargs(self) -> dict:
         return {}
 
 
@@ -16,5 +16,5 @@ class CommCareAuthService(AuthService):
     username: str
     api_key: str
 
-    def get_http_client_kwargs(self) -> dict:
+    def _get_http_client_kwargs(self) -> dict:
         return {"auth": CommCareAuth(self.username, self.api_key)}

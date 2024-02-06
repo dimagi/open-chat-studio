@@ -1,7 +1,11 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import mock.mock
+
+from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.steps.forms import CommCareAppLoaderParamsForm, CommCareAppLoaderStaticConfigForm
-from apps.analysis.steps.loaders import CommCareAppLoader
+from apps.analysis.steps.loaders import CommCareAppLoader, CommCareAppLoaderParams
+from apps.service_providers.auth_service import AuthService, CommCareAuthService
 from apps.service_providers.models import AuthProvider
 
 
@@ -27,7 +31,7 @@ def test_commcare_static_form(_):
         "cc_url": "https://www.commcarehq.org",
         "auth_provider": AuthProvider(id=1),
     }
-    assert form.get_params() == CommCareAppLoader.param_schema(
+    assert form.get_params() == CommCareAppLoaderParams(
         app_list=expected, cc_url="https://www.commcarehq.org", auth_provider_id=1
     )
 
@@ -39,7 +43,7 @@ def test_commcare_static_form_no_apps(_):
     )
     with patch.object(form.fields["auth_provider"], "clean", return_value=AuthProvider(id=1)):
         assert form.is_valid()
-    assert form.get_params() == CommCareAppLoader.param_schema(
+    assert form.get_params() == CommCareAppLoaderParams(
         app_list=[], cc_url="https://staging.commcarehq.org", auth_provider_id=1
     )
 
@@ -56,7 +60,7 @@ def test_commcare_dynamic_form_select():
         initial={"app_list": app_list, "cc_url": "https://www.commcarehq.org", "auth_provider_id": 1},
     )
     assert form.is_valid()
-    assert form.get_params() == CommCareAppLoader.param_schema(
+    assert form.get_params() == CommCareAppLoaderParams(
         cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
     )
 
@@ -68,6 +72,24 @@ def test_commcare_dynamic_form_manual_input():
         initial={"cc_url": "https://www.commcarehq.org", "auth_provider_id": 1},
     )
     assert form.is_valid()
-    assert form.get_params() == CommCareAppLoader.param_schema(
+    assert form.get_params() == CommCareAppLoaderParams(
         cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
     )
+
+
+@patch("apps.analysis.steps.loaders._get_auth_service")
+def test_commcare_app_loader(get_auth_service, httpx_mock):
+    get_auth_service.return_value = CommCareAuthService(username="user", api_key="key")
+
+    params = CommCareAppLoaderParams(
+        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+    )
+    loader = CommCareAppLoader(params=params)
+    loader.initialize(PipelineContext())
+
+    httpx_mock.add_response(
+        url="https://www.commcarehq.org/a/domain2/api/v0.5/application/id2/?format=json",
+        json={"app": "data"},
+    )
+
+    assert loader(StepContext.initial()).data == '{"app": "data"}'

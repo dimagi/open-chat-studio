@@ -1,11 +1,15 @@
 import json
 from functools import cached_property
 
+import httpx
 import pandas as pd
 from pydantic import BaseModel
 
 from apps.analysis.core import BaseStep, Params, PipeOut, StepContext, required
+from apps.analysis.exceptions import StepError
 from apps.analysis.models import Resource, ResourceType
+from apps.service_providers.auth_service import AuthService
+from apps.service_providers.models import AuthProvider
 
 
 class BaseLoader(BaseStep[None, PipeOut]):
@@ -114,6 +118,25 @@ class CommCareAppLoaderParams(Params):
 
         return CommCareAppLoaderStaticConfigForm
 
+    @property
+    def api_url(self):
+        return f"{self.cc_url}/a/{self.cc_domain}/api/v0.5/application/{self.cc_app_id}/"
+
+    @property
+    def api_params(self):
+        return {"format": "json"}
+
+    def get_auth_service(self) -> AuthService:
+        return _get_auth_service(self.auth_provider_id)
+
+
+def _get_auth_service(auth_provider_id: int) -> AuthService:
+    try:
+        provider = AuthProvider.objects.get(id=auth_provider_id)
+    except AuthProvider.DoesNotExist:
+        raise StepError("Unable to load the configured authentication provider")
+    return provider.get_auth_service()
+
 
 class CommCareAppLoader(BaseLoader[str]):
     """Load data from a CommCare app API."""
@@ -121,6 +144,14 @@ class CommCareAppLoader(BaseLoader[str]):
     param_schema = CommCareAppLoaderParams
     output_type = str
 
-    def load(self, params: ResourceLoaderParams) -> StepContext[str]:
-        self.log.info(params)
-        return StepContext("data", name="commcare_data")
+    def load(self, params: CommCareAppLoaderParams) -> StepContext[str]:
+        self.log.info(f"Loading app from CommCare: {params.cc_domain}:{params.cc_app_id}")
+        with params.get_auth_service().get_http_client() as client:
+            try:
+                response = client.get(params.api_url, params=params.api_params)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise StepError("Unable to load data from CommCare API", exc)
+            app_data = response.json()
+
+        return StepContext(json.dumps(app_data))

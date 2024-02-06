@@ -254,6 +254,14 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
             initial["app_list"] = "\n".join(
                 f"{app['domain']}, {app['app_id']}, {app['name']}" for app in initial["app_list"]
             )
+        initial["auth_provider"] = initial.get("auth_provider_id", None)
+        return initial
+
+    def clean_cc_url(self):
+        url = self.cleaned_data["cc_url"]
+        if url.endswith("/"):
+            url = url[:-1]
+        return url
 
     def clean_app_list(self):
         app_list = self.cleaned_data["app_list"]
@@ -282,9 +290,12 @@ class CommCareAppLoaderParamsForm(ParamsForm):
         initial = kwargs.get("initial")
         if initial and initial.get("app_list"):
             self.fields["select_app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+        print(self.fields["select_app_id"].choices)
 
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
+
+        print(self.cleaned_data)
 
         select_app_id = self.cleaned_data.get("select_app_id")
         app_id = self.cleaned_data.get("app_id")
