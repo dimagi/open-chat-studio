@@ -89,7 +89,7 @@ def run_analysis(run_group_id: int):
     elif group.is_complete:
         return
 
-    with RunStatusContext(group):
+    with RunStatusContext(group, bubble_errors=False):
         source_result = run_serial_pipeline(group, group.analysis.source, get_source_pipeline, StepContext.initial())
 
         group.refresh_from_db(fields=["status"])

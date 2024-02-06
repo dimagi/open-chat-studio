@@ -290,12 +290,9 @@ class CommCareAppLoaderParamsForm(ParamsForm):
         initial = kwargs.get("initial")
         if initial and initial.get("app_list"):
             self.fields["select_app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
-        print(self.fields["select_app_id"].choices)
 
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
-
-        print(self.cleaned_data)
 
         select_app_id = self.cleaned_data.get("select_app_id")
         app_id = self.cleaned_data.get("app_id")
