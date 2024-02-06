@@ -66,7 +66,7 @@ CONTENT_TYPES = {
         "survey",
         "syntheticvoice",
     ],
-    "service_providers": ["llmprovider", "voiceprovider", "messagingprovider"],
+    "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
 }
 
