@@ -2,6 +2,7 @@ import json
 from functools import cached_property
 
 import pandas as pd
+from pydantic import BaseModel
 
 from apps.analysis.core import BaseStep, Params, PipeOut, StepContext, required
 from apps.analysis.models import Resource, ResourceType
@@ -88,3 +89,36 @@ class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
             return pd.read_excel
         else:
             raise ValueError(f"Unsupported resource type: {type_}")
+
+
+class CommCareAppMeta(BaseModel):
+    domain: str
+    app_id: str
+    name: str
+
+
+class CommCareAppLoaderParams(Params):
+    app_list: list[CommCareAppMeta] = None
+    cc_domain: required(str) = None
+    cc_app_id: required(str) = None
+
+    def get_dynamic_config_form_class(self):
+        from .forms import CommCareAppLoaderParamsForm
+
+        return CommCareAppLoaderParamsForm
+
+    def get_static_config_form_class(self):
+        from .forms import CommCareAppLoaderStaticConfigForm
+
+        return CommCareAppLoaderStaticConfigForm
+
+
+class CommCareAppLoader(BaseLoader[str]):
+    """Load data from a CommCare app API."""
+
+    param_schema = CommCareAppLoaderParams
+    output_type = str
+
+    def load(self, params: ResourceLoaderParams) -> StepContext[str]:
+        self.log.info(params)
+        return StepContext("data", name="commcare_data")

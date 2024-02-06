@@ -1,3 +1,4 @@
+import csv
 from datetime import datetime
 
 from django import forms
@@ -227,5 +228,56 @@ class WhatsappParserParamsForm(ParamsForm):
                 remove_system_messages=self.cleaned_data["remove_system_messages"],
                 remove_media_omitted_messages=self.cleaned_data["remove_media_omitted_messages"],
             )
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+class CommCareAppLoaderStaticConfigForm(ParamsForm):
+    form_name = "CommCare App Loader Configuration"
+    template_name = "analysis/forms/basic.html"
+    app_list = forms.CharField(
+        widget=forms.Textarea, label="Application List", help_text="Enter one app per line: domain, app_id, name"
+    )
+
+    def reformat_initial(self, initial):
+        if "app_list" in initial:
+            initial["app_list"] = "\n".join(
+                f"{app['domain']}, {app['app_id']}, {app['name']}" for app in initial["app_list"]
+            )
+
+    def clean_app_list(self):
+        app_list = self.cleaned_data["app_list"]
+        if not app_list:
+            raise forms.ValidationError("At least one app must be provided.")
+
+        csv_reader = csv.reader(app_list.splitlines())
+        return [{"domain": row[0].strip(), "app_id": row[1].strip(), "name": row[2].strip()} for row in csv_reader]
+
+    def get_params(self):
+        from .loaders import CommCareAppLoaderParams
+
+        return CommCareAppLoaderParams(app_list=self.cleaned_data["app_list"])
+
+
+class CommCareAppLoaderParamsForm(ParamsForm):
+    form_name = "CommCare App Loader Parameters"
+    template_name = "analysis/forms/basic.html"
+    app_id = forms.ChoiceField(label="Application")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        initial = kwargs.get("initial")
+        if initial and initial.get("app_list"):
+            self.fields["app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+
+    def get_params(self):
+        from .loaders import CommCareAppLoaderParams
+
+        app_id = self.cleaned_data["app_id"]
+        app_list = self.initial.get("app_list")
+        app = next((app for app in app_list if app["app_id"] == app_id), None)
+
+        try:
+            return CommCareAppLoaderParams(cc_domain=app["domain"], cc_app_id=app["app_id"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
