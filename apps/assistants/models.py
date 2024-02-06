@@ -41,9 +41,15 @@ class OpenAiAssistant(BaseTeamModel):
 
     objects = OpenAiAssistantManager()
 
+    def __str__(self):
+        return self.name
+
     def get_absolute_url(self):
         return reverse("assistants:edit", args=[self.team.slug, self.id])
 
     @property
     def formatted_tools(self):
         return [{"type": tool} for tool in self.builtin_tools]
+
+    def get_assistant(self):
+        return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
