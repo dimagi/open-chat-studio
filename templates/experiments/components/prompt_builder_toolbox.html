@@ -5,14 +5,13 @@
         <a class="tab" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
             properties</a>
     </div>
-    <div class="flex-none flex justify-between px-10 py-5 bg-base-200 items-center h-40">
-        <div class="flex w-2/3 justify-between items-center" x-show="tab === 'first'">
-            <div class="w-1/2 pr-10">
-
+    <div class="flex-none flex justify-between px-10 py-5 bg-base-200 h-40">
+        <div class="flex w-2/3 justify-between" x-show="tab === 'first'">
+            <div class="w-1/2 pr-10 justify-between">
                 <!-- Source Material Dropdown -->
                 <label for="source-material-selector" class="block font-semibold mb-2">Source
                     Material</label>
-                <div class="flex flex-row">
+                <div class="flex flex-row mb-2">
                     <span class="flex-1" x-data
                         x-text="$store.promptBuilder.currentState.sourceMaterialName.length > 10 ? $store.promptBuilder.currentState.sourceMaterialName.slice(0, 10) + '...' : $store.promptBuilder.currentState.sourceMaterialName"></span>
                         <button hx-get="{% url 'experiments:prompt_builder_load_source_material' team.slug %}"
@@ -21,13 +20,9 @@
                             <i class="fa fa-folder-open-o px-4 py-2 rounded-lg bg-base-100 hover:bg-base-300"
                             ></i>
                         </button>
-
-                    <!-- </label> -->
                 </div>
-            </div>
-            <div class="w-1/2">
 
-                <!-- Token counter -->
+              <!-- Token counter -->
                 <div class="flex justify-between">
                     <span class="font-semibold">Input Tokens</span>
                     <span x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.input_tokens : acc, 0)"></span>
@@ -36,26 +31,28 @@
                     <span class="font-semibold">Output Tokens</span>
                     <span x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
                 </div>
-
             </div>
-        </div>
-        <div class="flex w-2/3 justify-between items-center" x-show="tab === 'second'" x-cloak>
-            <div class="w-1/2 pr-10">
-                <!-- Model Dropdown -->
-                <label for="model-selector" class="block font-semibold mb-2">Model</label>
-                <select id="provider-selector" class="w-full select select-bordered"
-                    x-model.number="$store.promptBuilder.currentState.provider">
-                    {% for provider in llm_providers %}
-                    <option value="{{ provider.id }}">{{ provider }}</option>
-                    {% endfor %}
-                </select>
-                <select id="model-selector" class="w-full select select-bordered"
+            <div class="w-1/2">
+
+                <div>
+                  <label for="model-selector" class="block font-semibold mb-2">Model</label>
+                  <select id="provider-selector" class="w-full select select-sm select-bordered"
+                      x-model.number="$store.promptBuilder.currentState.provider">
+                      {% for provider in llm_providers %}
+                      <option value="{{ provider.id }}">{{ provider }}</option>
+                      {% endfor %}
+                  </select>
+                  <select id="model-selector" class="w-full select select-sm select-bordered"
                     x-model="$store.promptBuilder.currentState.model">
                     <template x-for="(option, index) in $store.promptBuilder.llm_models" :key="index">
                       <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.model"></option>
                     </template>
                 </select>
+                </div>
+
             </div>
+        </div>
+        <div class="flex w-2/3 justify-between" x-show="tab === 'second'" x-cloak>
             <div class="w-1/2 pr-10">
                 <div class="flex justify-between group items-center mb-1">
                     <label for="temperature-slider" class="text-base-400 font-semibold">Temperature</label>
@@ -65,7 +62,7 @@
                 </div>
                 <input id="temperature-slider" type="range" min="0" max="2" step="0.01"
                     x-model.number="$store.promptBuilder.currentState.temperature"
-                    class="range w-full h-2 rounded-full bg-blue-500">
+                    class="range range-sm w-full h-2 rounded-full bg-blue-500">
             </div>
         </div>
 
