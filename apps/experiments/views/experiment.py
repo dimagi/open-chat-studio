@@ -263,7 +263,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 @login_and_team_required
-@permission_required("experiments.add_channel", raise_exception=True)
+@permission_required("channels.add_channel", raise_exception=True)
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
@@ -307,13 +307,13 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
     )
     if request.POST.get("action") == "delete":
-        if not request.user.has_perm("experiments.delete_channel"):
+        if not request.user.has_perm("channels.delete_channel"):
             raise PermissionDenied
 
         channel.delete()
         return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
-    if not request.user.has_perm("experiments.change_channel"):
+    if not request.user.has_perm("channels.change_channel"):
         raise PermissionDenied
 
     form = channel.form(data=request.POST)
