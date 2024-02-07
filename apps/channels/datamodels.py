@@ -58,7 +58,7 @@ class TurnWhatsappMessage(BaseModel):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     body: str = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
-    media_url: Optional[str] = Field(default=None)
+    media_id: Optional[str] = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -75,16 +75,17 @@ class TurnWhatsappMessage(BaseModel):
 
     @staticmethod
     def parse(message_data: dict):
-        message_type = message_data["messages"][0]["type"]
+        message = message_data["messages"][0]
+        message_type = message["type"]
         body = ""
         if message_type == "text":
-            body = message_data["messages"][0]["text"]["body"]
+            body = message["text"]["body"]
 
         return TurnWhatsappMessage(
             from_number=message_data["contacts"][0]["wa_id"],
             body=body,
             content_type=message_type,
-            media_url="",
+            media_id=message[message_type].get("id"),
         )
 
 
