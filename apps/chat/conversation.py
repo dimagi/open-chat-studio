@@ -111,49 +111,6 @@ class BasicConversation(Conversation):
             return output, cb.prompt_tokens, cb.completion_tokens
 
 
-class AgentConversation(BasicConversation):
-    def __init__(
-        self,
-        prompt_str: str,
-        source_material: str,
-        memory: BaseMemory,
-        llm: BaseChatModel,
-        experiment_session: ExperimentSession,
-    ):
-        super().__init__(
-            prompt_str=prompt_str,
-            source_material=source_material,
-            memory=memory,
-            llm=llm,
-        )
-        self.session = experiment_session
-
-    def _build_chain(self):
-        self.chain = build_agent(self.llm, self.memory, self.session, self.system_prompt)
-
-
-class AssistantConversation(Conversation):
-    def __init__(self, experiment_session: ExperimentSession):
-        self.session = experiment_session
-        self.experiment = experiment_session.experiment
-        self.chat = self.session.chat
-
-    def predict(self, input: str) -> Tuple[str, int, int]:
-        assistant_runnable = self.experiment.assistant.get_assistant()
-
-        input_dict = {"content": input}
-
-        # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
-        if thread_id:
-            input_dict["thread_id"] = thread_id
-
-        response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict)
-        if not thread_id:
-            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
-        return response.return_values["output"], 0, 0
-
-
 def compress_chat_history(
     chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10
 ) -> list[BaseMessage]:
