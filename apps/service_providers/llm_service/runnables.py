@@ -19,7 +19,7 @@ from langchain_core.runnables import (
 )
 
 from apps.chat.agent.tools import get_tools
-from apps.chat.bots import compress_chat_history
+from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
@@ -55,7 +55,7 @@ class ChainOutput(Serializable):
 
 class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
     experiment: Experiment
-    session: ExperimentSession = None
+    session: ExperimentSession
     memory: BaseMemory = ConversationBufferMemory(return_messages=True)
 
     class Config:
@@ -118,17 +118,12 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         return input
 
     def _populate_memory(self):
-        if not self.session:
-            return
-
+        # TODO: convert to use BaseChatMessageHistory object
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
         self.memory.chat_memory.messages = messages
 
     def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        if not self.session:
-            return
-
         ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
@@ -152,7 +147,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
 
 class AgentExperimentRunnable(ExperimentRunnable):
     def _build_chain(self) -> Runnable[Dict[str, Any], str]:
-        assert self.session and self.experiment.tools_enabled
+        assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
         # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
