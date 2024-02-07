@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
@@ -6,8 +6,9 @@ from pydantic import ValidationError
 
 from apps.chat.conversation import AgentConversation, AssistantConversation, BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession, SafetyLayer
+from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
 def create_conversation(
@@ -61,22 +62,18 @@ class TopicBot:
         self._initialize()
 
     def _initialize(self):
-        self.conversation = create_conversation(
-            self.prompt.prompt, self.source_material, self.llm, experiment_session=self.session
-        )
+        self.chain = create_experiment_runnable(self.session.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-        self.conversation.load_memory_from_chat(self.chat, self.max_token_limit)
-
     def _call_predict(self, input_str):
-        response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
-        self.input_tokens = self.input_tokens + prompt_tokens
-        self.output_tokens = self.output_tokens + completion_tokens
-        return response
+        result = self.chain.invoke(input_str)
+        self.input_tokens = self.input_tokens + result.prompt_tokens
+        self.output_tokens = self.output_tokens + result.completion_tokens
+        return result.output
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
