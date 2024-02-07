@@ -73,8 +73,8 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
-    if not message.content_type == MESSAGE_TYPES.TEXT:
-        # TODO: Until we know what's up with the media links not showing up, we cannot continue
+    if not MESSAGE_TYPES.is_member(message.content_type):
+        # Ignore unsupported message types. TODO: Do the same for the other channels
         return
     experiment_channel = ExperimentChannel.objects.filter(
         experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
