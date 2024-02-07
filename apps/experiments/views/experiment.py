@@ -75,6 +75,10 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+
     class Meta:
         model = Experiment
         fields = [
