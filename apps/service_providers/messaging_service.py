@@ -45,7 +45,7 @@ class TwilioService(MessagingService):
     def get_message_audio(self, url: str) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
         ogg_audio = BytesIO(requests.get(url, auth=auth).content)
-        return audio.convert_ogg_to_wav(ogg_audio)
+        return audio.convert_audio_to_wav(ogg_audio)
 
 
 class TurnIOService(MessagingService):
