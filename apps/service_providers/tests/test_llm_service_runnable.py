@@ -23,13 +23,6 @@ def fake_llm():
 
 
 @pytest.fixture()
-def experiment(fake_llm):
-    experiment = ExperimentFactory()
-    experiment.llm_provider.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    return experiment
-
-
-@pytest.fixture()
 def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.llm_provider.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
@@ -44,22 +37,24 @@ def chat(team_with_users):
 
 
 @pytest.mark.django_db
-def test_simple_experiment_runnable(experiment, fake_llm):
-    runnable = SimpleExperimentRunnable(experiment=experiment)
-    result = runnable.invoke({"input": "hi"})
+def test_simple_experiment_runnable(session, fake_llm):
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    result = runnable.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
-    assert fake_llm.calls == [[SystemMessage(content=experiment.chatbot_prompt.prompt), HumanMessage(content="hi")]]
+    assert fake_llm.calls == [
+        [SystemMessage(content=session.experiment.chatbot_prompt.prompt), HumanMessage(content="hi")]
+    ]
 
 
 @pytest.mark.django_db
-def test_simple_experiment_runnable_format_input(experiment, fake_llm):
-    runnable = SimpleExperimentRunnable(experiment=experiment)
-    experiment.chatbot_prompt.input_formatter = "foo {input} bar"
-    result = runnable.invoke({"input": "hi"})
+def test_simple_experiment_runnable_format_input(session, fake_llm):
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    session.experiment.chatbot_prompt.input_formatter = "foo {input} bar"
+    result = runnable.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.calls) == 1
     assert _messages_to_dict(fake_llm.calls[0]) == [
-        {"system": experiment.chatbot_prompt.prompt},
+        {"system": session.experiment.chatbot_prompt.prompt},
         {"human": "foo hi bar"},
     ]
 
@@ -71,7 +66,7 @@ def test_simple_experiment_runnable_with_history(session, chat, fake_llm):
     session.chat = chat
     assert chat.messages.count() == 1
     runnable = SimpleExperimentRunnable(experiment=experiment, session=session)
-    result = runnable.invoke({"input": "hi"})
+    result = runnable.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.calls) == 1
     assert _messages_to_dict(fake_llm.calls[0]) == [

@@ -65,10 +65,7 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: dict, config: Optional[RunnableConfig] = None) -> ChainOutput:
-        input = input.copy()
-        input["source_material"] = self.source_material
-
+    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
         callback = self.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
@@ -77,7 +74,7 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         chain = self._build_chain()
         self._populate_memory()
 
-        self._save_message_to_history(input["input"], ChatMessageType.HUMAN)
+        self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = chain.invoke(input, config)
 
@@ -135,7 +132,9 @@ class SimpleExperimentRunnable(ExperimentRunnable):
     def _build_chain(self) -> Runnable[Dict[str, Any], str]:
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         return (
-            RunnablePassthrough.assign(
+            {"input": RunnablePassthrough()}
+            | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
             | RunnableLambda(self.format_input)
