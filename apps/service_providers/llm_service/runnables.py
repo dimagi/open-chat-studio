@@ -1,9 +1,11 @@
+from abc import ABC
 from datetime import datetime
 from operator import itemgetter
 from typing import Any, Dict, List, Literal, Optional
 
 import pytz
 from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
@@ -53,9 +55,31 @@ class ChainOutput(Serializable):
         return ["ocs", "schema", "chain_output"]
 
 
-class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
+class BaseExperimentRunnable(RunnableSerializable[Dict, ChainOutput], ABC):
     experiment: Experiment
     session: ExperimentSession
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @property
+    def llm_service(self):
+        return self.experiment.llm_provider.get_llm_service()
+
+    @property
+    def callback_handler(self):
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        return self.llm_service.get_callback_handler(model)
+
+    def _save_message_to_history(self, message: str, type_: ChatMessageType):
+        ChatMessage.objects.create(
+            chat=self.session.chat,
+            message_type=type_.value,
+            content=message,
+        )
+
+
+class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True)
 
     class Config:
@@ -84,20 +108,11 @@ class ExperimentRunnable(RunnableSerializable[Dict, ChainOutput]):
         )
 
     @property
-    def llm_service(self):
-        return self.experiment.llm_provider.get_llm_service()
-
-    @property
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def _build_chain(self) -> Runnable[Dict[str, Any], str]:
         raise NotImplementedError
-
-    @property
-    def callback_handler(self):
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        return self.llm_service.get_callback_handler(model)
 
     @property
     def prompt(self):
@@ -174,3 +189,38 @@ class AgentExperimentRunnable(ExperimentRunnable):
             ]
         )
         return prompt
+
+
+class AssistantExperimentRunnable(BaseExperimentRunnable):
+    class Config:
+        arbitrary_types_allowed = True
+
+    @property
+    def chat(self):
+        return self.session.chat
+
+    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
+        callback = self.callback_handler
+        config = ensure_config(config)
+        config["callbacks"] = config["callbacks"] or []
+        config["callbacks"].append(callback)
+
+        assistant_runnable = self.experiment.assistant.get_assistant()
+
+        input_dict = {"content": input}
+
+        self._save_message_to_history(input, ChatMessageType.HUMAN)
+
+        # Note: if this is not a new chat then the history won't be persisted to the thread
+        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
+        if thread_id:
+            input_dict["thread_id"] = thread_id
+
+        response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
+        if not thread_id:
+            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+
+        output = response.return_values["output"]
+        self._save_message_to_history(output, ChatMessageType.AI)
+
+        return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
