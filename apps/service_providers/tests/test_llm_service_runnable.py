@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.experiments.models import SourceMaterial
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.runnables import ChainOutput, SimpleExperimentRunnable
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -44,6 +45,27 @@ def test_simple_experiment_runnable(session, fake_llm):
     assert fake_llm.calls == [
         [SystemMessage(content=session.experiment.chatbot_prompt.prompt), HumanMessage(content="hi")]
     ]
+
+
+@pytest.mark.django_db
+def test_simple_experiment_runnable_with_source_material(session, fake_llm):
+    session.experiment.source_material = SourceMaterial(material="this is the source material")
+    session.experiment.chatbot_prompt.prompt = "System prompt with {source_material}"
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    result = runnable.invoke("hi")
+    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert fake_llm.calls == [
+        [SystemMessage(content="System prompt with this is the source material"), HumanMessage(content="hi")]
+    ]
+
+
+@pytest.mark.django_db
+def test_simple_experiment_runnable_with_source_material_missing(session, fake_llm):
+    session.experiment.chatbot_prompt.prompt = "System prompt with {source_material}"
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    result = runnable.invoke("hi")
+    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert fake_llm.calls == [[SystemMessage(content="System prompt with "), HumanMessage(content="hi")]]
 
 
 @pytest.mark.django_db
