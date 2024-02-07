@@ -487,7 +487,7 @@ class WhatsappChannel(ChannelBase):
         self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
 
     def get_message_audio(self) -> BytesIO:
-        return self.messaging_service.get_message_audio(url=self.message.media_url)
+        return self.messaging_service.get_message_audio(message=self.message)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
