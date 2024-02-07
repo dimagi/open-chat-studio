@@ -26,7 +26,7 @@
                                 <textarea type="text"
                                     :placeholder="message.author === 'User' ? 'Enter a user message here' : 'Enter an assistant message here'"
                                     rows="1" style="line-height:1.25em; height:40px;"
-                                    class="disabled:bg-gray-100 bg-neutral-100 focus:bg-base-100 border-transparent focus:border-sky-500 resize-none rounded-md textarea-ghost w-full placeholder-gray-300 hover:cursor-pointer focus:cursor-text"
+                                    class="textarea disabled:bg-gray-100 bg-neutral-100 focus:bg-base-100 border-transparent focus:border-sky-500 resize-none rounded-md textarea-ghost w-full placeholder-gray-300 hover:cursor-pointer focus:cursor-text"
                                     x-model="message.message" x-init="$nextTick(() => resize($el))"
                                     x-bind:disabled="$store.promptBuilder.disjointState()"
                                     @input="resize($el)"></textarea>
