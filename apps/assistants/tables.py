@@ -24,6 +24,7 @@ class OpenAiAssistantTable(tables.Table):
                 actions.delete_action(
                     "assistants:delete",
                     required_permissions=["assistants.delete_openaiassistant"],
+                    confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
                 ),
             ]
         },

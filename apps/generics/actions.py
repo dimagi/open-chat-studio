@@ -20,6 +20,10 @@ class Action:
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be enabled. If none is provided, the action is always enabled."""
 
+    confirm_message: str = None
+    """A message to display in a confirmation dialog when the action is clicked.
+    If none is provided, no confirmation dialog is shown."""
+
     template: str = "generic/action.html"
 
     def render(self, context: Context):
@@ -66,11 +70,17 @@ def edit_action(url_name: str, required_permissions: list = None, display_condit
     )
 
 
-def delete_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
+def delete_action(
+    url_name: str,
+    required_permissions: list = None,
+    display_condition: callable = None,
+    confirm_message: str = None,
+):
     return Action(
         url_name,
         icon_class="fa-solid fa-trash",
         required_permissions=required_permissions,
         display_condition=display_condition,
         template="generic/action_delete.html",
+        confirm_message=confirm_message,
     )

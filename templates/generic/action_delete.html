@@ -1,5 +1,16 @@
 <button class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
         hx-delete="{% url url_name request.team.slug record.id %}"
-        hx-target="#record-{{ record.id }}">
+        hx-target="#record-{{ record.id }}"
+
+        {% if confirm_message %}
+        id="delete-action-{{ record.id }}"
+        hx-trigger="confirmed"
+        onClick="Swal.fire({title: 'Confirm', text:'{{ confirm_message|escapejs }}' }).then(function(result) {
+          if(result.isConfirmed){
+              htmx.trigger('#delete-action-{{ record.id }}', 'confirmed');
+          }
+        })"
+        {% endif %}
+>
     <i class="fa fa-trash"></i>
 </button>
