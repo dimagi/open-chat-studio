@@ -14,9 +14,10 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..generics import actions
 from ..service_providers.models import LlmProvider
+from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai
+from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai, sync_from_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -127,6 +128,15 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
         return HttpResponse()
+
+
+class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "assistants.change_openaiassistant"
+
+    def post(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        sync_from_openai(assistant)
+        return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
 class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):

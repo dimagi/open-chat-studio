@@ -9,6 +9,7 @@ from django.template.loader import get_template
 class Action:
     url_name: str
     label: str = None
+    title: str = None
     icon_class: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
@@ -39,6 +40,7 @@ class Action:
             "url_name": self.url_name,
             "icon_class": self.icon_class,
             "label": self.label or "",
+            "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
         }
         if self.extra_context:
