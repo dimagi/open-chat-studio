@@ -1,8 +1,8 @@
 <div x-data="{ tab: 'first' }" x-on:submit-conversation.window="$refs.submitButton.click()">
-    <div class="tabs">
-        <a class="tab tab-bordered tab-active" :class="{ 'tab-active': tab === 'first' }" @click="tab = 'first'">Prompt
+    <div class="tabs tabs-bordered" role="tablist">
+        <a class="tab tab-active" :class="{ 'tab-active': tab === 'first' }" @click="tab = 'first'">Prompt
             details</a>
-        <a class="tab tab-bordered" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
+        <a class="tab" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
             properties</a>
     </div>
     <div class="flex-none flex justify-between px-10 py-5 bg-base-200 items-center">
@@ -21,7 +21,7 @@
                             <i class="fa fa-folder-open-o px-4 py-2 rounded-lg bg-base-100 hover:bg-base-300"
                             ></i>
                         </button>
-                        
+
                     <!-- </label> -->
                 </div>
             </div>
@@ -36,7 +36,7 @@
                     <span class="font-semibold">Output Tokens</span>
                     <span x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
                 </div>
-                
+
             </div>
         </div>
         <div class="flex w-2/3 justify-between items-center" x-show="tab === 'second'" x-cloak>
@@ -84,7 +84,7 @@
             </div>
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
                 <li>
-                    <button 
+                    <button
                     hx-get="{% url 'experiments:prompt_builder_load_prompts' team.slug %}"
                         hx-trigger="click" hx-target="#load-prompts" hx-swap="innerHTML"
                         @click.stop="$store.promptBuilder.toggleSidebar('prompts')">
@@ -168,7 +168,7 @@
         });
 
         // Now that we have new text, there will be a new history item, so let's re-fetch
-        // We could probably save some bits and bytes (esp for long history) by doing this 
+        // We could probably save some bits and bytes (esp for long history) by doing this
         // ourselves on the front end, but there's a small risk of getting out of sync with
         // the backend. So, until it's a problem, we shall re-fetch
         fetchAndReplaceHistory();
@@ -205,7 +205,7 @@
             }
         }).then((data) => {
             const taskUrl = "{% url 'experiments:get_prompt_builder_message_response' team.slug %}" + '?task_id=' + data.task_id;
-            // This will get caught and handled in prompt_buidler_message_list. I guess this is 
+            // This will get caught and handled in prompt_buidler_message_list. I guess this is
             // better/safer than assuming we know the name of a global JS function defined over there.
             window.dispatchEvent(new CustomEvent('add-new-message', { detail: data.task_id, 'bubbles': true }));
 
