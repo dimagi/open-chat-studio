@@ -24,7 +24,7 @@ class OpenAiAssistantTable(tables.Table):
                 actions.delete_action(
                     "assistants:delete_local",
                     required_permissions=["assistants.delete_openaiassistant"],
-                    confirm_message="This will only delete the assistant from the local database.",
+                    confirm_message="This will only delete the assistant from the local system.",
                 ),
                 actions.AjaxAction(
                     "assistants:delete",
