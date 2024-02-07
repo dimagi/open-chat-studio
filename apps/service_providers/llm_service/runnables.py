@@ -151,8 +151,10 @@ class AgentExperimentRunnable(ExperimentRunnable):
         tools = get_tools(self.session)
         # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
         # when we implement this for anthropic
-        agent = RunnableLambda(self.format_input) | create_openai_tools_agent(
-            llm=model, tools=tools, prompt=self.prompt
+        agent = (
+            RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnableLambda(self.format_input)
+            | create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
         )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
