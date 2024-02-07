@@ -11,7 +11,7 @@
     <ul>
         <template x-for="(message, index) in $store.promptBuilder.currentState.messages" :key="message.id">
             <li class="border-b border-base-500" x-data="messageActions()">
-                <div class="group/row p-5 flex flex-row w-full hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:cursor-pointer message-container"
+                <div class="group/row px-5 pt-5 pb-2 flex flex-row w-full hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:cursor-pointer message-container"
                     @click="messageContainerClick($event)">
                     <div class="flex-none w-32 font-bold author" @click.stop="changeAuthor(message, $event)"><span
                             class="group-hover/row:bg-neutral-300 dark:group-hover/row:bg-neutral-600 rounded-sm p-3" x-text="message.author"></span></div>
