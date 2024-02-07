@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
@@ -6,8 +6,8 @@ from pydantic import ValidationError
 
 from apps.chat.conversation import AgentConversation, AssistantConversation, BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Prompt, SafetyLayer
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession, SafetyLayer
 
 
 def create_conversation(
@@ -47,7 +47,8 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 class TopicBot:
     def __init__(self, session: ExperimentSession):
         experiment = session.experiment
-        self.prompt = experiment.chatbot_prompt
+        self.prompt = experiment.prompt_text
+        self.input_formatter = experiment.input_formatter
         self.llm = experiment.get_chat_model()
         self.source_material = experiment.source_material.material if experiment.source_material else None
         self.safety_layers = experiment.safety_layers.all()
@@ -62,7 +63,7 @@ class TopicBot:
 
     def _initialize(self):
         self.conversation = create_conversation(
-            self.prompt.prompt, self.source_material, self.llm, experiment_session=self.session
+            self.prompt, self.source_material, self.llm, experiment_session=self.session
         )
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
@@ -105,8 +106,9 @@ class TopicBot:
                 return self._get_safe_response(safety_bot.safety_layer)
 
         # if we made it here there weren't any relevant human safety issues
-        formatted_input = self.prompt.format(input_str)
-        response = self._call_predict(formatted_input)
+        if self.input_formatter:
+            input_str = self.input_formatter.format(input_str)
+        response = self._call_predict(input_str)
 
         # ai safety layers
         for safety_bot in self.safety_bots:
@@ -140,7 +142,7 @@ class TopicBot:
 class SafetyBot:
     def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: Optional[str]):
         self.safety_layer = safety_layer
-        self.prompt = safety_layer.prompt
+        self.prompt = safety_layer.prompt_text
         self.llm = llm
         self.source_material = source_material
         self.input_tokens = 0
@@ -148,7 +150,7 @@ class SafetyBot:
         self._initialize()
 
     def _initialize(self):
-        self.conversation = create_conversation(self.prompt.prompt, self.source_material, self.llm)
+        self.conversation = create_conversation(self.prompt, self.source_material, self.llm)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -159,7 +161,7 @@ class SafetyBot:
     def is_safe(self, input_str: str) -> bool:
         print("========== safety bot analysis =========")
         print(f"input: {input_str}")
-        result = self._call_predict(self.prompt.format(input_str))
+        result = self._call_predict(input_str)
         print(f"response: {result}")
         print("========== end safety bot analysis =========")
         if result.strip().lower().startswith("safe"):

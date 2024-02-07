@@ -8,14 +8,7 @@ from mock import Mock, patch
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
-from apps.experiments.models import (
-    ConsentForm,
-    Experiment,
-    ExperimentSession,
-    NoActivityMessageConfig,
-    Prompt,
-    SessionStatus,
-)
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team

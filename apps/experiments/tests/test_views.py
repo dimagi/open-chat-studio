@@ -42,7 +42,7 @@ def test_experiment_does_not_require_source_material(db, create_source_material,
     material = None
     if create_source_material:
         material = experiment_factory.SourceMaterialFactory()
-    experiment = experiment_factory.ExperimentFactory(chatbot_prompt__prompt=promp_str, source_material=material)
+    experiment = experiment_factory.ExperimentFactory(prompt_text=promp_str, source_material=material)
     assert _source_material_is_missing(experiment) is False
 
 
@@ -53,5 +53,5 @@ def test_experiment_does_not_require_source_material(db, create_source_material,
     ],
 )
 def test_source_material_is_missing(db, source_material, promp_str):
-    experiment = experiment_factory.ExperimentFactory(chatbot_prompt__prompt=promp_str, source_material=source_material)
+    experiment = experiment_factory.ExperimentFactory(prompt_text=promp_str, source_material=source_material)
     assert _source_material_is_missing(experiment) is True
