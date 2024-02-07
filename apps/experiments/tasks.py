@@ -6,9 +6,9 @@ from langchain.schema import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
-from apps.chat.bots import TopicBot
+from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.models import ExperimentSession, Prompt, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
@@ -24,7 +24,7 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
 
 
 @shared_task
-def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> str:
+def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> dict[str, str | int]:
     llm_service = LlmProvider.objects.get(id=data_dict["provider"]).get_llm_service()
     messages_history = data_dict["messages"]
 
@@ -42,24 +42,17 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
     # Fetch source material
     source_material = SourceMaterial.objects.filter(id=data_dict["sourceMaterialID"]).first()
-    sourece_material_material = source_material.material if source_material else ""
+    source_material_material = source_material.material if source_material else ""
 
-    # Create a new TopicBot instance
-    dummy_prompt = Prompt()
-    dummy_prompt.prompt = data_dict["prompt"]
-    dummy_prompt.input_formatter = data_dict["inputFormatter"]
-    bot = TopicBot(
-        prompt=dummy_prompt,
-        source_material=sourece_material_material,
-        llm=llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"])),
-        safety_layers=None,
-        chat=None,
-        messages_history=_convert_prompt_builder_history(messages_history),
-    )
+    llm = llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"]))
+    conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
+    conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
+    input_formatter = data_dict["inputFormatter"]
+    if input_formatter:
+        last_user_message = input_formatter.format(input=last_user_message)
 
     # Get the response from the bot using the last message from the user and return it
-    answer = bot.process_input(last_user_message)
-    input_tokens, output_tokens = bot.fetch_and_clear_token_count()
+    answer, input_tokens, output_tokens = conversation.predict(last_user_message)
 
     # Push the user message back into the message list now that the bot response has arrived
     if last_user_object:

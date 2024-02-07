@@ -7,7 +7,7 @@
   </div>
   {% render_form_fields form "max_token_limit" "temperature" "prompt_text" "input_formatter" "safety_layers" "tools_enabled" %}
   {% render_form_fields form "conversational_consent_enabled" "source_material" "seed_message" "pre_survey" %}
-  {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" "no_activity_config" "safety_violation_notification_emails" %} %}
+  {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" "no_activity_config" "safety_violation_notification_emails" %}
 {% endblock form %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}

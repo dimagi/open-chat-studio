@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import List
 from urllib.parse import quote
 
@@ -16,9 +17,21 @@ class Chat(BaseTeamModel):
     A chat instance.
     """
 
+    class MetadataKeys(StrEnum):
+        OPENAI_THREAD_ID = "openai_thread_id"
+
     # tbd what goes in here
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100, default="Unnamed Chat")
+    metadata = models.JSONField(default=dict)
+
+    def get_metadata(self, key: MetadataKeys):
+        return self.metadata.get(key, None)
+
+    def set_metadata(self, key: MetadataKeys, value, commit=True):
+        self.metadata[key] = value
+        if commit:
+            self.save()
 
     def get_langchain_messages(self) -> List[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
