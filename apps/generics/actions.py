@@ -1,4 +1,5 @@
 import dataclasses
+import uuid
 
 from django.template import Context
 from django.template.loader import get_template
@@ -19,10 +20,6 @@ class Action:
     enabled_condition: callable = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be enabled. If none is provided, the action is always enabled."""
-
-    confirm_message: str = None
-    """A message to display in a confirmation dialog when the action is clicked.
-    If none is provided, no confirmation dialog is shown."""
 
     template: str = "generic/action.html"
 
@@ -61,6 +58,25 @@ class Action:
         return True
 
 
+@dataclasses.dataclass
+class AjaxAction(Action):
+    template: str = "generic/action_ajax.html"
+
+    hx_method: str = "post"
+    """The HTTP method to use when making the request. One of 'get', 'post', 'put', 'patch', or 'delete'."""
+
+    confirm_message: str = None
+    """A message to display in a confirmation dialog when the action is clicked.
+    If none is provided, no confirmation dialog is shown."""
+
+    def get_context(self, request, record):
+        ctxt = super().get_context(request, record)
+        ctxt.update(
+            {"hx_method": self.hx_method, "confirm_message": self.confirm_message, "action_id": uuid.uuid4().hex}
+        )
+        return ctxt
+
+
 def edit_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
     return Action(
         url_name,
@@ -76,11 +92,11 @@ def delete_action(
     display_condition: callable = None,
     confirm_message: str = None,
 ):
-    return Action(
+    return AjaxAction(
         url_name,
         icon_class="fa-solid fa-trash",
         required_permissions=required_permissions,
         display_condition=display_condition,
-        template="generic/action_delete.html",
         confirm_message=confirm_message,
+        hx_method="delete",
     )

@@ -22,9 +22,17 @@ class OpenAiAssistantTable(tables.Table):
                     required_permissions=["assistants.change_openaiassistant"],
                 ),
                 actions.delete_action(
+                    "assistants:delete_local",
+                    required_permissions=["assistants.delete_openaiassistant"],
+                    confirm_message="This will only delete the assistant from the local database.",
+                ),
+                actions.AjaxAction(
                     "assistants:delete",
+                    label="Delete",
+                    icon_class="fa-solid fa-trash-arrow-up",
                     required_permissions=["assistants.delete_openaiassistant"],
                     confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
+                    hx_method="delete",
                 ),
             ]
         },
