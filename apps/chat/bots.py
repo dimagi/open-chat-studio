@@ -69,8 +69,15 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-    def _call_predict(self, input_str):
-        result = self.chain.invoke(input_str)
+    def _call_predict(self, input_str, save_input_to_history=True):
+        result = self.chain.invoke(
+            input_str,
+            config={
+                "configurable": {
+                    "save_input_to_history": save_input_to_history,
+                }
+            },
+        )
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
@@ -88,22 +95,13 @@ class TopicBot:
         return input_tokens, output_tokens
 
     def process_input(self, user_input: str, save_input_to_history=True):
-        if save_input_to_history:
-            self._save_message_to_history(user_input, ChatMessageType.HUMAN)
-        response = self._get_response(user_input)
-        self._save_message_to_history(response, ChatMessageType.AI)
-        return response
-
-    def _get_response(self, input_str: str):
         # human safety layers
         for safety_bot in self.safety_bots:
-            if safety_bot.filter_human_messages() and not safety_bot.is_safe(input_str):
+            if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
                 notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
-        # if we made it here there weren't any relevant human safety issues
-        formatted_input = self.prompt.format(input_str)
-        response = self._call_predict(formatted_input)
+        response = self._call_predict(user_input, save_input_to_history)
 
         # ai safety layers
         for safety_bot in self.safety_bots:
@@ -113,25 +111,16 @@ class TopicBot:
         return response
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
-        no_answer = "Sorry, I can't answer that. Please try something else."
         if safety_layer.prompt_to_bot:
             print("========== safety bot response =========")
             print(f"passing input: {safety_layer.prompt_to_bot}")
-            safety_response = self._call_predict(safety_layer.prompt_to_bot)
-            print(f"got back: {safety_response}")
+            safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
+            print(f"got back: {safety_response.output}")
             print("========== end safety bot response =========")
-
+            return safety_response.output
         else:
-            safety_response = safety_layer.default_response_to_user or no_answer
-        return safety_response
-
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        # save messages individually to get correct timestamps
-        ChatMessage.objects.create(
-            chat=self.chat,
-            message_type=type_.value,
-            content=message,
-        )
+            no_answer = "Sorry, I can't answer that. Please try something else."
+            return safety_layer.default_response_to_user or no_answer
 
 
 class SafetyBot:

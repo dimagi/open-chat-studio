@@ -98,7 +98,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
         chain = self._build_chain()
         self._populate_memory()
 
-        self._save_message_to_history(input, ChatMessageType.HUMAN)
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = chain.invoke(input, config)
 

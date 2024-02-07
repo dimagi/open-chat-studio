@@ -17,7 +17,6 @@ def test_violation_triggers_email(notify_users_of_violation_mock, create_convers
 
     bot = TopicBot(experiment_session)
     bot.conversation = Mock()
-    bot._save_message_to_history = Mock()
     bot._call_predict = Mock()
     bot.process_input("It's my way or the highway!")
     notify_users_of_violation_mock.assert_called()

@@ -82,6 +82,19 @@ def test_simple_experiment_runnable_format_input(session, fake_llm):
 
 
 @pytest.mark.django_db
+def test_simple_experiment_runnable_save_input_to_history(session, chat, fake_llm):
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    session.chat = chat
+    assert chat.messages.count() == 1
+
+    result = runnable.invoke("hi", config={"configurable": {"save_input_to_history": False}})
+
+    assert result.output == "this is a test message"
+    assert len(fake_llm.calls) == 1
+    assert chat.messages.count() == 2
+
+
+@pytest.mark.django_db
 def test_simple_experiment_runnable_with_history(session, chat, fake_llm):
     experiment = session.experiment
     experiment.max_token_limit = 0  # disable compression
