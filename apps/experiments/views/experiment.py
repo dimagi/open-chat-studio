@@ -75,9 +75,9 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
-    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
-    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
-    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
     class Meta:
         model = Experiment
