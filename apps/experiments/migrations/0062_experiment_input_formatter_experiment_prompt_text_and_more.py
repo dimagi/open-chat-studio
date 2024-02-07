@@ -38,8 +38,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="experiment",
             name="prompt_text",
-            field=models.TextField(default=""),
-            preserve_default=False,
+            field=models.TextField(default="", blank=True),
         ),
         migrations.AddField(
             model_name="safetylayer",

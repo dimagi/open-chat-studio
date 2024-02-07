@@ -119,6 +119,7 @@ class ExperimentForm(forms.ModelForm):
             self.fields["assistant"].queryset = team.openaiassistant_set
         else:
             del self.fields["assistant"]
+            self.fields["prompt_text"].required = True
         self.fields["voice_provider"].queryset = team.voiceprovider_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
@@ -137,6 +138,13 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data["prompt_text"] and not cleaned_data["assistant"]:
+            raise forms.ValidationError("Prompt text is required unless you select an OpenAI Assistant")
+
+        return cleaned_data
 
     def save(self, commit=True):
         experiment = super().save(commit=False)

@@ -2,6 +2,7 @@
 {% load waffle_tags %}
 {% load form_tags %}
 {% block form %}
+  {{ form.non_field_errors }}
   {% render_form_fields form "name" "description" "llm_provider" "llm" %}
   {% flag "assistants" %}
   {% render_form_fields form "assistant" %}

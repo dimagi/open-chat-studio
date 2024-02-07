@@ -302,7 +302,7 @@ class Experiment(BaseTeamModel):
 
     # deprecated in favor of `prompt` and `input_formatter`
     chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments", null=True)
-    prompt_text = models.TextField()
+    prompt_text = models.TextField(blank=True, default="")
     input_formatter = models.TextField(
         blank=True,
         default="",
