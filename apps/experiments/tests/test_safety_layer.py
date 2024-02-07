@@ -1,8 +1,7 @@
-import pytest
 from mock import Mock, patch
 
-from apps.chat.bots import get_bot_from_session
-from apps.experiments.models import ExperimentSession, Prompt, SafetyLayer
+from apps.chat.bots import TopicBot
+from apps.experiments.models import SafetyLayer
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -16,7 +15,7 @@ def test_violation_triggers_email(notify_users_of_violation_mock, create_convers
     layer = SafetyLayer.objects.create(prompt=experiment.chatbot_prompt, team=experiment.team)
     experiment.safety_layers.add(layer)
 
-    bot = get_bot_from_session(experiment_session)
+    bot = TopicBot(experiment_session)
     bot.conversation = Mock()
     bot._save_message_to_history = Mock()
     bot._call_predict = Mock()

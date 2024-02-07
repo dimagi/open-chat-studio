@@ -1,5 +1,4 @@
 import logging
-import re
 import uuid
 from abc import abstractmethod
 from datetime import datetime, timedelta
@@ -18,9 +17,9 @@ from telebot.util import smart_split
 
 from apps.channels import audio
 from apps.channels.models import ExperimentChannel
-from apps.chat.bots import get_bot_from_experiment, get_bot_from_session
+from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 
 USER_CONSENT_TEXT = "1"
@@ -315,15 +314,19 @@ class ChannelBase:
         return self._get_experiment_response(message=text)
 
     def _get_experiment_response(self, message: str) -> str:
-        experiment_bot = get_bot_from_session(self.experiment_session)
+        experiment_bot = TopicBot(self.experiment_session)
         answer = experiment_bot.process_input(message)
         self.experiment_session.no_activity_ping_count = 0
         self.experiment_session.save()
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
-        topic_bot = get_bot_from_experiment(self.experiment, self.experiment_session.chat)
-        topic_bot._save_message_to_history(message, message_type)
+        """Use this to update the chat history when not using the normal bot flow"""
+        ChatMessage.objects.create(
+            chat=self.experiment_session.chat,
+            message_type=message_type,
+            content=message,
+        )
 
     def _ensure_sessions_exists(self):
         """

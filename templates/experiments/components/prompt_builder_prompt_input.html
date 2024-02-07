@@ -9,7 +9,7 @@
             x-on:input="$store.promptBuilder.currentState.prompt = $event.target.value"></textarea>
     </div>
 
-    <div class="flex flex-col flex-grow max-h-64 min-h-0 bg-base-100 border rounded-md p-4">
+    <div class="flex flex-grow flex-col max-h-40 min-h-0 bg-base-100 border rounded-md p-4">
         <label for="input-formatter" class="font-semibold uppercase mb-2">Input Formatting</label>
         <textarea id="input-formatter"
         x-bind:disabled="$store.promptBuilder.disjointState()"

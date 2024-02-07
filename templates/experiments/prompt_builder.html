@@ -36,7 +36,7 @@
 
         <!-- Message List column -->
         <div x-bind:class="{'w-1/2': $store.promptBuilder.visibleSidebar, 'w-2/3': !$store.promptBuilder.visibleSidebar }"
-            class="w-2/3 px-2 flex flex-col justify-between" x-data>
+            class="w-2/3 px-2 flex flex-col justify-between h-full" x-data>
             {% include "experiments/components/prompt_builder_message_list.html" %}
             {% include "experiments/components/prompt_builder_toolbox.html" %}
         </div>

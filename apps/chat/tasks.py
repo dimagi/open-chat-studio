@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.chat.bots import get_bot_from_experiment
+from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chat.task_utils import isolate_task, redis_task_lock
@@ -131,7 +131,7 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
     """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
     message. The response from the bot will be saved to the chat history.
     """
-    topic_bot = get_bot_from_experiment(experiment_session.experiment, experiment_session.chat)
+    topic_bot = TopicBot(experiment_session)
     return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
 
 
