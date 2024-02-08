@@ -36,6 +36,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -201,6 +202,13 @@ class CreateExperiment(BaseExperimentView, CreateView):
     title = "Create Experiment"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
+        if long_data:
+            initial.update(long_data)
+        return initial
 
 
 class EditExperiment(BaseExperimentView, UpdateView):
