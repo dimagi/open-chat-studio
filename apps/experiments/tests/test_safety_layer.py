@@ -12,7 +12,7 @@ def test_violation_triggers_email(notify_users_of_violation_mock, create_convers
     is_safe_mock.return_value = False
     experiment_session = ExperimentSessionFactory(experiment__safety_violation_notification_emails=["user@officer.com"])
     experiment = experiment_session.experiment
-    layer = SafetyLayer.objects.create(prompt=experiment.chatbot_prompt, team=experiment.team)
+    layer = SafetyLayer.objects.create(prompt_text="Is this message safe?", team=experiment.team)
     experiment.safety_layers.add(layer)
 
     bot = TopicBot(experiment_session)

@@ -8,14 +8,7 @@ from mock import Mock, patch
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
-from apps.experiments.models import (
-    ConsentForm,
-    Experiment,
-    ExperimentSession,
-    NoActivityMessageConfig,
-    Prompt,
-    SessionStatus,
-)
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
@@ -28,13 +21,6 @@ class TasksTest(TestCase):
         self.telegram_chat_id = 1234567891
         self.team = Team.objects.create(name="test-team")
         self.user = CustomUser.objects.create_user(username="testuser")
-        self.prompt = Prompt.objects.create(
-            team=self.team,
-            owner=self.user,
-            name="test-prompt",
-            description="test",
-            prompt="You are a helpful assistant",
-        )
         self.no_activity_config = NoActivityMessageConfig.objects.create(
             team=self.team, message_for_bot="Some message", name="Some name", max_pings=3, ping_after=1
         )
@@ -43,7 +29,7 @@ class TasksTest(TestCase):
             owner=self.user,
             name="TestExperiment",
             description="test",
-            chatbot_prompt=self.prompt,
+            prompt_text="You are a helpful assistant",
             no_activity_config=self.no_activity_config,
             consent_form=ConsentForm.get_default(self.team),
             llm_provider=LlmProvider.objects.create(
@@ -82,7 +68,7 @@ class TasksTest(TestCase):
             owner=self.user,
             name="TestExperiment2",
             description="test2",
-            chatbot_prompt=self.prompt,
+            prompt_text="You are a helpful assistant",
             no_activity_config=None,
             consent_form=ConsentForm.get_default(self.team),
         )

@@ -1,0 +1,21 @@
+<button class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
+        id="action-{{ action_id }}"
+        title="{{ title }}"
+        hx-{{ hx_method|lower }}="{% url url_name request.team.slug record.id %}"
+        hx-target="#record-{{ record.id }}"
+        hx-swap="outerHTML"
+
+        {% if confirm_message %}
+        hx-trigger="confirmed"
+        onClick="Swal.fire({
+            title: 'Confirm',
+            text: '{{ confirm_message|escapejs }}',
+        }).then(function(result) {
+          if(result.isConfirmed){
+              htmx.trigger('#action-{{ action_id }}', 'confirmed');
+          }
+        })"
+        {% endif %}
+>
+    <i class="{{ icon_class }}"></i>
+</button>

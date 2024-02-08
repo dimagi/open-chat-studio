@@ -17,6 +17,7 @@ django-storages[s3]
 celery-progress
 celery
 celery[redis]
+httpx
 openai
 pandas
 sentry-sdk

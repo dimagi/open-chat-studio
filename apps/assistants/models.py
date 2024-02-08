@@ -25,7 +25,7 @@ class OpenAiAssistant(BaseTeamModel):
     assistant_id = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     instructions = models.TextField()
-    builtin_tools = ArrayField(models.CharField(max_length=128), default=list)
+    builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
         on_delete=models.SET_NULL,

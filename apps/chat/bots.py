@@ -35,7 +35,8 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 class TopicBot:
     def __init__(self, session: ExperimentSession):
         experiment = session.experiment
-        self.prompt = experiment.chatbot_prompt
+        self.prompt = experiment.prompt_text
+        self.input_formatter = experiment.input_formatter
         self.llm = experiment.get_chat_model()
         self.source_material = experiment.source_material.material if experiment.source_material else None
         self.safety_layers = experiment.safety_layers.all()
@@ -113,7 +114,7 @@ class TopicBot:
 class SafetyBot:
     def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: Optional[str]):
         self.safety_layer = safety_layer
-        self.prompt = safety_layer.prompt
+        self.prompt = safety_layer.prompt_text
         self.llm = llm
         self.source_material = source_material
         self.input_tokens = 0
@@ -121,7 +122,7 @@ class SafetyBot:
         self._initialize()
 
     def _initialize(self):
-        self.conversation = create_conversation(self.prompt.prompt, self.source_material, self.llm)
+        self.conversation = create_conversation(self.prompt, self.source_material, self.llm)
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
@@ -132,7 +133,7 @@ class SafetyBot:
     def is_safe(self, input_str: str) -> bool:
         print("========== safety bot analysis =========")
         print(f"input: {input_str}")
-        result = self._call_predict(self.prompt.format(input_str))
+        result = self._call_predict(input_str)
         print(f"response: {result}")
         print("========== end safety bot analysis =========")
         if result.strip().lower().startswith("safe"):

@@ -175,9 +175,11 @@ def delete_analysis(request, team_slug: str, pk: int):
 def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
     param_forms = get_dynamic_forms_for_analysis(analysis)
+    initial = analysis.config or {}
     if request.method == "POST":
         forms = {
-            step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
+            step_name: form(request, data=request.POST, files=request.FILES, initial=initial.get(step_name, {}))
+            for step_name, form in param_forms.items()
         }
         if all(form.is_valid() for form in forms.values()):
             step_params = {
@@ -195,7 +197,6 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
             group.save()
             return redirect("analysis:group_details", team_slug=team_slug, pk=group.id)
     else:
-        initial = analysis.config or {}
         if run_id:
             run = get_object_or_404(RunGroup, id=run_id, team=request.team)
             initial = merge_raw_params(initial, run.params)

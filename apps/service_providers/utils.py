@@ -12,6 +12,8 @@ from apps.generics.type_select_form import TypeSelectForm
 
 from . import const
 from .models import (
+    AuthProvider,
+    AuthProviderType,
     LlmProvider,
     LlmProviderTypes,
     MessagingProvider,
@@ -42,6 +44,7 @@ class ServiceProvider(ServiceProviderType, Enum):
     llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type", "llm_models"]
     voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
+    auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:

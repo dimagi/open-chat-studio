@@ -1,3 +1,4 @@
+import csv
 from datetime import datetime
 
 from django import forms
@@ -7,6 +8,7 @@ from django.utils.encoding import smart_bytes
 
 from apps.analysis.core import Params, ParamsForm
 from apps.analysis.models import Resource, ResourceType
+from apps.service_providers.models import AuthProvider
 
 
 class ResourceLoaderParamsForm(ParamsForm):
@@ -229,3 +231,91 @@ class WhatsappParserParamsForm(ParamsForm):
             )
         except ValueError as e:
             raise forms.ValidationError(repr(e))
+
+
+class CommCareAppLoaderStaticConfigForm(ParamsForm):
+    form_name = "CommCare App Loader Configuration"
+    template_name = "analysis/forms/basic.html"
+    cc_url = forms.URLField(label="CommCare Base URL", required=True, initial="https://www.commcarehq.org")
+    auth_provider = forms.ModelChoiceField(label="Authentication", queryset=None, required=False)
+    app_list = forms.CharField(
+        widget=forms.Textarea,
+        label="Application List",
+        help_text="Enter one app per line: domain, app_id, name",
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["auth_provider"].queryset = _get_auth_provider_queryset(self.request)
+
+    def reformat_initial(self, initial):
+        if "app_list" in initial:
+            initial["app_list"] = "\n".join(
+                f"{app['domain']}, {app['app_id']}, {app['name']}" for app in initial["app_list"]
+            )
+        initial["auth_provider"] = initial.get("auth_provider_id", None)
+        return initial
+
+    def clean_cc_url(self):
+        url = self.cleaned_data["cc_url"]
+        if url.endswith("/"):
+            url = url[:-1]
+        return url
+
+    def clean_app_list(self):
+        app_list = self.cleaned_data["app_list"]
+        csv_reader = csv.reader([line for line in app_list.splitlines() if line.strip()])
+        return [{"domain": row[0].strip(), "app_id": row[1].strip(), "name": row[2].strip()} for row in csv_reader]
+
+    def get_params(self):
+        from .loaders import CommCareAppLoaderParams
+
+        return CommCareAppLoaderParams(
+            cc_url=self.cleaned_data["cc_url"],
+            app_list=self.cleaned_data["app_list"],
+            auth_provider_id=self.cleaned_data["auth_provider"].id,
+        )
+
+
+class CommCareAppLoaderParamsForm(ParamsForm):
+    form_name = "CommCare App Loader Parameters"
+    template_name = "analysis/forms/commcare_loader_params.html"
+    select_app_id = forms.ChoiceField(label="Application", required=False)
+    domain = forms.CharField(required=False, label="CommCare Project Space")
+    app_id = forms.CharField(required=False, label="CommCare Application ID")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        initial = kwargs.get("initial")
+        if initial and initial.get("app_list"):
+            self.fields["select_app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+
+    def get_params(self):
+        from .loaders import CommCareAppLoaderParams
+
+        select_app_id = self.cleaned_data.get("select_app_id")
+        app_id = self.cleaned_data.get("app_id")
+        domain = self.cleaned_data.get("domain")
+        if not select_app_id and not app_id and not domain:
+            raise forms.ValidationError("Either an application or a domain and app_id must be provided.")
+
+        if select_app_id:
+            app_list = self.initial.get("app_list")
+            app = next((app for app in app_list if app["app_id"] == select_app_id), None)
+            app_id = app["app_id"]
+            domain = app["domain"]
+
+        try:
+            return CommCareAppLoaderParams(
+                cc_domain=domain,
+                cc_app_id=app_id,
+                cc_url=self.initial["cc_url"],
+                auth_provider_id=self.initial["auth_provider_id"],
+            )
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))
+
+
+def _get_auth_provider_queryset(request):
+    return AuthProvider.objects.filter(team=request.team)
