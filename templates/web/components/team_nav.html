@@ -9,13 +9,6 @@
     </a>
     <ul>
       <li>
-        <a href="{% url 'experiments:prompt_home' request.team.slug %}"
-           {% if active_tab == 'prompts' %}class="active"{% endif %}>
-          <i class="fa-solid fa-terminal fa-fw"></i>
-          {% translate "Prompts" %}
-        </a>
-      </li>
-      <li>
         <a href="{% url 'experiments:safety_home' request.team.slug %}"
            {% if active_tab == 'safety_layers' %}class="active"{% endif %}>
           <i class="fa fa-shield fa-fw"></i>

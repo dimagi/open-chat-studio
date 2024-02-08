@@ -1,11 +1,13 @@
 {% extends "generic/object_form.html" %}
+{% load waffle_tags %}
 {% load form_tags %}
 {% block form %}
+  {{ form.non_field_errors }}
   {% render_form_fields form "name" "description" "llm_provider" "llm" %}
-  <div x-show="llmProvider !== null && llmProvider.supports_assistants">
+  {% flag "assistants" %}
   {% render_form_fields form "assistant" %}
-  </div>
-  {% render_form_fields form "max_token_limit" "temperature" "chatbot_prompt" "safety_layers" "tools_enabled" %}
+  {% endflag %}
+  {% render_form_fields form "prompt_text" "input_formatter" "max_token_limit" "temperature" "safety_layers" "tools_enabled" %}
   {% render_form_fields form "conversational_consent_enabled" "source_material" "seed_message" "pre_survey" %}
   {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" "no_activity_config" "safety_violation_notification_emails" %}
 {% endblock form %}
