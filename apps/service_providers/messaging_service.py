@@ -7,7 +7,7 @@ from turn import TurnClient
 from twilio.rest import Client
 
 from apps.channels import audio
-from apps.channels.datamodels import TurnWhatsappMessage, WhatsappMessage
+from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 
 
@@ -43,7 +43,7 @@ class TwilioService(MessagingService):
     def send_whatsapp_voice_message(self, media_url: str, from_number: str, to_number):
         self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[media_url])
 
-    def get_message_audio(self, message: WhatsappMessage) -> BytesIO:
+    def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
         ogg_audio = BytesIO(requests.get(message.media_url, auth=auth).content)
         return audio.convert_audio_to_wav(ogg_audio)

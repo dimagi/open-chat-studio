@@ -20,7 +20,7 @@ class WebMessage(BaseModel):
         return self.message_text
 
 
-class WhatsappMessage(BaseModel):
+class TwilioMessage(BaseModel):
     """
     A wrapper class for user messages coming from the whatsapp
     """

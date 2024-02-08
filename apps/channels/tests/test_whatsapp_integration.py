@@ -3,7 +3,7 @@ import json
 from django.test import TestCase
 from mock import patch
 
-from apps.channels.datamodels import TurnWhatsappMessage, WhatsappMessage
+from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message
 from apps.chat.channels import MESSAGE_TYPES
@@ -91,14 +91,14 @@ class TurnIOMessages:
 class TestTwilio:
     def test_parse_text_message(self):
         incoming_message = TwilioMessages.text_message()
-        whatsapp_message = WhatsappMessage.model_validate(json.loads(incoming_message))
+        whatsapp_message = TwilioMessage.model_validate(json.loads(incoming_message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
         assert whatsapp_message.media_url == None
 
     def test_parse_media_message(self):
         incoming_message = TwilioMessages.audio_message()
-        whatsapp_message = WhatsappMessage.model_validate(json.loads(incoming_message))
+        whatsapp_message = TwilioMessage.model_validate(json.loads(incoming_message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
         assert whatsapp_message.media_url == "http://example.com/media"

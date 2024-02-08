@@ -5,7 +5,7 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, WhatsappMessage
+from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import MESSAGE_TYPES, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.utils.taskbadger import update_taskbadger_data
@@ -30,8 +30,8 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def handle_whatsapp_message(self, message_data: str):
-    message = WhatsappMessage.model_validate(json.loads(message_data))
+def handle_twilio_message(self, message_data: str):
+    message = TwilioMessage.model_validate(json.loads(message_data))
     experiment_channel = ExperimentChannel.objects.filter(extra_data__contains={"number": message.to_number}).first()
     if not experiment_channel:
         return
