@@ -5,7 +5,7 @@ from mock import patch
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
-from apps.channels.tasks import handle_turn_message
+from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -23,6 +23,23 @@ def turnio_whatsapp_channel(turn_io_provider):
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
+        extra_data={"number": "+14155238886"},
+    )
+
+
+@pytest.fixture
+def twilio_provider():
+    return MessagingProviderFactory(
+        name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
+    )
+
+
+@pytest.fixture
+def twilio_whatsapp_channel(twilio_provider):
+    ExperimentChannelFactory(
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=twilio_provider,
+        experiment__team=twilio_provider.team,
         extra_data={"number": "+14155238886"},
     )
 
@@ -152,33 +169,36 @@ class TurnIOMessages:
 
 
 class TestTwilio:
-    def test_parse_text_message(self):
-        incoming_message = TwilioMessages.text_message()
-        whatsapp_message = TwilioMessage.model_validate(json.loads(incoming_message))
+    @pytest.mark.parametrize(
+        "message, message_type", [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "voice")]
+    )
+    def test_parse_messages(self, message, message_type):
+        whatsapp_message = TwilioMessage.model_validate(json.loads(message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
-        assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
-        assert whatsapp_message.media_url == None
+        if message_type == "text":
+            assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
+            assert whatsapp_message.media_url == None
+        else:
+            assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
+            assert whatsapp_message.media_url == "http://example.com/media"
 
-    def test_parse_media_message(self):
-        incoming_message = TwilioMessages.audio_message()
-        whatsapp_message = TwilioMessage.model_validate(json.loads(incoming_message))
-        assert whatsapp_message.chat_id == whatsapp_message.from_number
-        assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
-        assert whatsapp_message.media_url == "http://example.com/media"
-
+    @pytest.mark.parametrize("incoming_message", [TwilioMessages.text_message(), TwilioMessages.audio_message()])
+    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
-    def test_twilio_uses_whatsapp_channel_implementation(self, _get_llm_response, send_whatsapp_text_message, db):
+    def test_twilio_uses_whatsapp_channel_implementation(
+        self,
+        get_llm_response_mock,
+        send_whatsapp_text_message,
+        get_voice_transcript_mock,
+        db,
+        incoming_message,
+        twilio_whatsapp_channel,
+    ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
-        _get_llm_response.return_value = "Hi"
-        provider = MessagingProviderFactory(
-            name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
-        )
-        channel = ExperimentChannelFactory(
-            platform=ChannelPlatform.WHATSAPP, messaging_provider=provider, experiment__team=provider.team
-        )
-        incoming_message = TurnIOMessages.text_message()
-        handle_turn_message(experiment_id=channel.experiment.public_id, message_data=incoming_message)
+        get_llm_response_mock.return_value = "Hi"
+        get_voice_transcript_mock.return_value = "Hi"
+        handle_twilio_message(message_data=incoming_message)
         send_whatsapp_text_message.assert_called()
 
 
