@@ -1,10 +1,9 @@
 import openai
 from django.contrib import messages
-from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
@@ -15,10 +14,10 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..generics import actions
 from ..service_providers.models import LlmProvider
-from ..teams.decorators import login_and_team_required
+from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai
+from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai, sync_from_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -117,9 +116,27 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
-        # TODO: make this require user confirmation
         delete_openai_assistant(assistant)
         return HttpResponse()
+
+
+class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "assistants.delete_openaiassistant"
+
+    @transaction.atomic()
+    def delete(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        assistant.delete()
+        return HttpResponse()
+
+
+class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "assistants.change_openaiassistant"
+
+    def post(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        sync_from_openai(assistant)
+        return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
 class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):

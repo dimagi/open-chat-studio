@@ -21,9 +21,24 @@ class OpenAiAssistantTable(tables.Table):
                     "assistants:edit",
                     required_permissions=["assistants.change_openaiassistant"],
                 ),
+                actions.AjaxAction(
+                    "assistants:sync",
+                    title="Update from OpenAI",
+                    icon_class="fa-solid fa-rotate",
+                    required_permissions=["assistants.change_openaiassistant"],
+                ),
                 actions.delete_action(
-                    "assistants:delete",
+                    "assistants:delete_local",
                     required_permissions=["assistants.delete_openaiassistant"],
+                    confirm_message="This will only delete the assistant from the local system.",
+                ),
+                actions.AjaxAction(
+                    "assistants:delete",
+                    title="Delete from OpenAI",
+                    icon_class="fa-solid fa-trash-arrow-up",
+                    required_permissions=["assistants.delete_openaiassistant"],
+                    confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
+                    hx_method="delete",
                 ),
             ]
         },
