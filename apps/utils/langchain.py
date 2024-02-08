@@ -1,9 +1,10 @@
 from contextlib import contextmanager
-from typing import Any, List, Optional
+from typing import Any, Iterator, List
+from unittest import mock
 
-from langchain.chat_models import FakeListChatModel
-from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_community.chat_models import FakeListChatModel
 from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatGenerationChunk
 
 from apps.service_providers.llm_service import LlmService
 
@@ -15,15 +16,13 @@ class FakeLlm(FakeListChatModel):
     token_i: int = 0
     calls: List = []
 
-    def _call(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any,
-    ) -> str:
-        self.calls.append(messages)
-        return super()._call(messages, stop, run_manager, **kwargs)
+    def _call(self, messages: List[BaseMessage], *args, **kwargs) -> str:
+        self.calls.append(mock.call(messages, *args, **kwargs))
+        return super()._call(messages, *args, **kwargs)
+
+    def _stream(self, messages: List[BaseMessage], *args, **kwargs) -> Iterator[ChatGenerationChunk]:
+        self.calls.append(mock.call(messages, *args, **kwargs))
+        return super()._stream(messages, *args, **kwargs)
 
     def get_num_tokens_from_messages(self, messages: list) -> int:
         token_counts = self.token_counts[self.token_i]
@@ -35,6 +34,12 @@ class FakeLlm(FakeListChatModel):
 
     def get_num_tokens(self, text: str) -> int:
         return self.get_num_tokens_from_messages([])
+
+    def get_calls(self):
+        return self.calls
+
+    def get_call_messages(self):
+        return [call[1][0] for call in self.calls]
 
 
 class FakeLlmService(LlmService):

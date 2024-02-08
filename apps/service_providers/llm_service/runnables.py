@@ -179,18 +179,18 @@ class AgentExperimentRunnable(ExperimentRunnable):
             memory=self.memory,
             max_execution_time=120,
         )
-        return executor | itemgetter("output")
+        return {"input": RunnablePassthrough()} | executor | itemgetter("output")
 
     @property
     def prompt(self):
         prompt = super().prompt
-        prompt.extend(
-            [
+        return ChatPromptTemplate.from_messages(
+            prompt.messages
+            + [
                 ("system", str(datetime.now().astimezone(pytz.UTC))),
                 MessagesPlaceholder("agent_scratchpad"),
             ]
         )
-        return prompt
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):
