@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Tuple
 
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.chains import ConversationChain
 from langchain.memory.summary import SummarizerMixin
 from langchain.prompts import (
@@ -17,9 +16,7 @@ from langchain_community.chat_models import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage
 
-from apps.chat.agent.agent import build_agent
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
 
 log = logging.getLogger("ocs.bots")
 
