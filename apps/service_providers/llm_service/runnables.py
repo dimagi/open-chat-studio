@@ -128,7 +128,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     def format_input(self, input: dict):
         if self.experiment.input_formatter:
-            input["input"] = self.experiment.input_formatter.format(input["input"])
+            input["input"] = self.experiment.input_formatter.format(input=input["input"])
         return input
 
     def _populate_memory(self):
