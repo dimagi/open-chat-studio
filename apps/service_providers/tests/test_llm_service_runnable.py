@@ -1,21 +1,13 @@
-from typing import Any, Sequence
+from typing import Sequence
 
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import SourceMaterial
-from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.runnables import ChainOutput, SimpleExperimentRunnable
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-from apps.utils.langchain import FakeLlm
-
-
-class FakeLlmService(LlmService):
-    llm: Any
-
-    def get_chat_model(self, llm_model: str, temperature: float):
-        return self.llm
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.langchain import FakeLlm, FakeLlmService
 
 
 @pytest.fixture()

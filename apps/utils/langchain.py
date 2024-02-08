@@ -1,8 +1,11 @@
+from contextlib import contextmanager
 from typing import Any, List, Optional
 
 from langchain.chat_models import FakeListChatModel
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import BaseMessage
+
+from apps.service_providers.llm_service import LlmService
 
 
 class FakeLlm(FakeListChatModel):
@@ -32,3 +35,22 @@ class FakeLlm(FakeListChatModel):
 
     def get_num_tokens(self, text: str) -> int:
         return self.get_num_tokens_from_messages([])
+
+
+class FakeLlmService(LlmService):
+    llm: Any
+
+    def get_chat_model(self, llm_model: str, temperature: float):
+        return self.llm
+
+
+@contextmanager
+def mock_experiment_llm(experiment, responses: list[str], token_counts: list[int] = None):
+    original = experiment.llm_provider.get_llm_service
+    experiment.llm_provider.get_llm_service = lambda: FakeLlmService(
+        llm=FakeLlm(responses=responses, token_counts=token_counts or [0])
+    )
+    try:
+        yield
+    finally:
+        experiment.llm_provider.get_llm_service = original
