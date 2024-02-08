@@ -247,4 +247,4 @@ def get_prompt_builder_history(request, team_slug: str):
 def prompt_builder_start_save_process(request, team_slug: str):
     prompt_data = json.loads(request.body)
     request.session[PROMPT_DATA_SESSION_KEY] = prompt_data
-    return JsonResponse({"redirect_url": reverse("experiments:prompt_new", args=[team_slug])})
+    return JsonResponse({"redirect_url": reverse("experiments:new", args=[team_slug])})
