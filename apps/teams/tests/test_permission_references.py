@@ -11,6 +11,7 @@ PERM_NAME_REGEX = r"[a-z_A-Z]*\.{}_.*?"
 
 
 def test_permission_references():
+    """Check that all permissions referenced in the codebase are valid."""
     permission_references = get_all_permission_references()
     assert permission_references, "No permission references found"
     assert "fake_app.view_model" in permission_references, "Expected to find 'fake_app' in permission references"
@@ -71,6 +72,7 @@ def _get_permissions_from_lines(perm_type: str, lines: list[str]) -> set[str]:
 
 
 def _get_lines_with_permission(perm_type: str) -> list[str]:
+    """Look in all python files and find lines with permission references."""
     name_rx = PERM_NAME_GREEDY_REGEX.format(perm_type)
     output = subprocess.check_output(
         f"find apps/  -name '*.py' -exec grep  '\"{name_rx}\"' {{}} \\;",
