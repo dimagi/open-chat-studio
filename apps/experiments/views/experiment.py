@@ -208,9 +208,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
         if long_data:
             initial.update(long_data)
-        import pprint
-
-        pprint.pprint(initial)
         return initial
 
 
