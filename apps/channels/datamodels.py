@@ -2,6 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.chat.channels import MESSAGE_TYPES
 
 
@@ -63,6 +64,8 @@ class TurnWhatsappMessage(BaseModel):
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
+        if not MESSAGE_TYPES.is_member(value):
+            raise UnsupportedMessageTypeException()
         return MESSAGE_TYPES(value)
 
     @property
