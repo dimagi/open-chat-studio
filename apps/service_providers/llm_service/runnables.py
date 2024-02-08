@@ -117,7 +117,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        system_prompt = SystemMessagePromptTemplate.from_template(self.experiment.chatbot_prompt.prompt)
+        system_prompt = SystemMessagePromptTemplate.from_template(self.experiment.prompt_text)
         return ChatPromptTemplate.from_messages(
             [
                 system_prompt,
@@ -127,7 +127,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
         )
 
     def format_input(self, input: dict):
-        input["input"] = self.experiment.chatbot_prompt.format(input["input"])
+        if self.experiment.input_formatter:
+            input["input"] = self.experiment.input_formatter.format(input["input"])
         return input
 
     def _populate_memory(self):
