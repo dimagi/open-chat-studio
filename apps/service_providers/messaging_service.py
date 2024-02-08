@@ -14,6 +14,7 @@ from apps.channels.models import ChannelPlatform
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
+    voice_replies_supported: ClassVar[bool] = False
 
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         raise NotImplementedError
@@ -29,6 +30,7 @@ class MessagingService(pydantic.BaseModel):
 class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = True
 
     account_sid: str
     auth_token: str

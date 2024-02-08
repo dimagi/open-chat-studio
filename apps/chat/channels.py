@@ -465,7 +465,6 @@ class TelegramChannel(ChannelBase):
 
 class WhatsappChannel(ChannelBase):
     def initialize(self):
-        self.voice_replies_supported = bool(settings.AWS_ACCESS_KEY_ID)
         self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
@@ -475,6 +474,11 @@ class WhatsappChannel(ChannelBase):
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
+
+    @property
+    def voice_replies_supported(self) -> bool:
+        # TODO: Update turn-python library to support this
+        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
 
     @property
     def message_content_type(self):
