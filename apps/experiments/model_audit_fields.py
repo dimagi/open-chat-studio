@@ -1,5 +1,3 @@
-PROMPT_FIELDS = ["owner", "name", "description", "prompt", "input_formatter", "team"]
-
 EXPERIMENT_FIELDS = [
     "owner",
     "name",

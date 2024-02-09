@@ -4,131 +4,19 @@ from datetime import timedelta
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
-from django.contrib import messages
-from django.contrib.postgres.search import SearchVector
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.http import JsonResponse
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.views import View
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, TemplateView, UpdateView
-from django_tables2 import SingleTableView
-from langchain.prompts import PromptTemplate
 
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, Prompt, PromptBuilderHistory, SourceMaterial
-from apps.experiments.tables import PromptTable
+from apps.experiments.models import Experiment, PromptBuilderHistory, SourceMaterial
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
-from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 PROMPT_DATA_SESSION_KEY = "prompt_data"
-
-
-class PromptHome(LoginAndTeamRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
-
-    def get_context_data(self, team_slug: str, **kwargs):
-        return {
-            "active_tab": "prompts",
-            "title": "Prompts",
-            "new_object_url": reverse("experiments:prompt_new", args=[team_slug]),
-            "table_url": reverse("experiments:prompt_table", args=[team_slug]),
-            "enable_search": True,
-        }
-
-
-class PromptTableView(SingleTableView):
-    model = Prompt
-    paginate_by = 25
-    table_class = PromptTable
-    template_name = "table/single_table.html"
-
-    def get_queryset(self):
-        query_set = Prompt.objects.filter(team=self.request.team)
-        search = self.request.GET.get("search")
-        if search:
-            query_set = query_set.annotate(document=SearchVector("name", "description", "prompt")).filter(
-                document=search
-            )
-        return query_set
-
-
-class PromptViewMixin:
-    ALLOWED_PROMPT_VARIABLES = ["source_material"]
-
-    def form_valid(self, form):
-        input_variables = set(PromptTemplate.from_template(form.data["prompt"]).input_variables)
-        disallowed_variables = input_variables - set(self.ALLOWED_PROMPT_VARIABLES)
-        if disallowed_variables:
-            error_message = f"""Unexpected variables found in the prompt: {disallowed_variables}. Use the input formatter to
-                format the user input"""
-            messages.error(request=self.request, message=error_message)
-            return render(self.request, self.template_name, self.get_context_data())
-        return super().form_valid(form)
-
-
-class CreatePrompt(PromptViewMixin, CreateView):
-    model = Prompt
-    fields = [
-        "name",
-        "description",
-        "prompt",
-        "input_formatter",
-    ]
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Create Prompt",
-        "button_text": "Create",
-        "active_tab": "prompts",
-    }
-
-    def get_success_url(self):
-        return reverse("experiments:prompt_home", args=[self.request.team.slug])
-
-    def get_initial(self):
-        initial = super().get_initial()
-        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
-        if long_data:
-            initial.update(long_data)
-        return initial
-
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.owner = self.request.user
-        return super().form_valid(form)
-
-
-class EditPrompt(PromptViewMixin, UpdateView):
-    model = Prompt
-    fields = [
-        "name",
-        "description",
-        "prompt",
-        "input_formatter",
-    ]
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Update Prompt",
-        "button_text": "Update",
-        "active_tab": "prompts",
-    }
-
-    def get_queryset(self):
-        return Prompt.objects.filter(team=self.request.team)
-
-    def get_success_url(self):
-        return reverse("experiments:prompt_home", args=[self.request.team.slug])
-
-
-class DeletePrompt(LoginAndTeamRequiredMixin, View):
-    def delete(self, request, team_slug: str, pk: int):
-        prompt = get_object_or_404(Prompt, id=pk, team=request.team)
-        prompt.delete()
-        return HttpResponse()
 
 
 @login_and_team_required
@@ -160,16 +48,12 @@ def prompt_builder_load_source_material(request, team_slug: str):
 
 @login_and_team_required
 def experiments_prompt_builder(request, team_slug: str):
-    prompts = Prompt.objects.filter(team=request.team).order_by("-created_at").all()
-    prompts_list = list(prompts.values())
-
     llm_providers = list(request.team.llmprovider_set.all())
     default_llm_provider = llm_providers[0] if llm_providers else None
     return TemplateResponse(
         request,
         "experiments/prompt_builder.html",
         {
-            "prompts": prompts_list,
             "llm_options": get_llm_provider_choices(request.team),
             "llm_providers": llm_providers,
             "default_llm_provider": default_llm_provider,
