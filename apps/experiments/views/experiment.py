@@ -569,12 +569,14 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             ).exists():
                 messages.info(request, "{} already has a pending invitation.".format(participant))
             else:
+                channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                 session = ExperimentSession.objects.create(
                     team=request.team,
                     experiment=experiment,
                     llm=experiment.llm,
                     status="setup",
                     participant=participant,
+                    experiment_channel=channel,
                 )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
