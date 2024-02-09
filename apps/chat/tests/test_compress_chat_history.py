@@ -1,7 +1,7 @@
 import pytest
 from langchain.chat_models import FakeListChatModel
 
-from apps.chat.bots import compress_chat_history
+from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
 

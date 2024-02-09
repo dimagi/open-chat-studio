@@ -1,7 +1,9 @@
 {% extends "generic/object_form.html" %}
+{% load waffle_tags %}
 {% load form_tags %}
 {% load waffle_tags %}
 {% block form %}
+  {{ form.non_field_errors }}
   {% render_form_fields form "name" "description" %}
   {% flag "assistants" %}
     <h3 class="font-semibold text-xl mt-4">Language Model Configuration</h3>
@@ -10,7 +12,7 @@
   <div role="tablist" class="tabs tabs-bordered mt-4">
     <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly" {% if not object.assistant_id %}checked{% endif %}/>
     <div role="tabpanel" class="tab-content pt-4">
-      {% render_form_fields form "llm_provider" "llm" "temperature" "chatbot_prompt" "tools_enabled" "source_material" %}
+      {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "input_formatter" "tools_enabled" "source_material" %}
     </div>
 
     <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant" {% if object.assistant_id %}checked{% endif %} />
@@ -48,7 +50,7 @@
 
               llmProviderId: null,
               llmProvider: null,
-              llm: '{{experiment.llm|default:'null'}}',
+              llm: '{{experiment.llm|default:form.llm.initial|default:'null'}}',
               llm_options: [],
 
               init() {

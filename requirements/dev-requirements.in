@@ -11,3 +11,4 @@ watchfiles
 pytest
 pytest-django
 factory-boy
+pytest-httpx

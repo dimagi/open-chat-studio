@@ -36,6 +36,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -75,6 +76,10 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+
     class Meta:
         model = Experiment
         fields = [
@@ -85,7 +90,8 @@ class ExperimentForm(forms.ModelForm):
             "assistant",
             "max_token_limit",
             "temperature",
-            "chatbot_prompt",
+            "prompt_text",
+            "input_formatter",
             "safety_layers",
             "tools_enabled",
             "conversational_consent_enabled",
@@ -114,8 +120,8 @@ class ExperimentForm(forms.ModelForm):
             self.fields["assistant"].queryset = team.openaiassistant_set
         else:
             del self.fields["assistant"]
+            self.fields["prompt_text"].required = True
         self.fields["voice_provider"].queryset = team.voiceprovider_set
-        self.fields["chatbot_prompt"].queryset = team.prompt_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
         self.fields["pre_survey"].queryset = team.survey_set
@@ -133,6 +139,13 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data["prompt_text"] and not cleaned_data["assistant"]:
+            raise forms.ValidationError("Prompt text is required unless you select an OpenAI Assistant")
+
+        return cleaned_data
 
     def save(self, commit=True):
         experiment = super().save(commit=False)
@@ -190,6 +203,13 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
+        if long_data:
+            initial.update(long_data)
+        return initial
+
 
 class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
@@ -198,7 +218,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
 
 def _source_material_is_missing(experiment: Experiment) -> bool:
-    prompt = experiment.chatbot_prompt.prompt
+    prompt = experiment.prompt_text
     prompt_expects_source_material = "{source_material}" in prompt
     if not prompt_expects_source_material:
         return False
@@ -263,7 +283,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 @login_and_team_required
-@permission_required("experiments.add_channel", raise_exception=True)
+@permission_required("channels.add_experimentchannel", raise_exception=True)
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
@@ -307,13 +327,13 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
     )
     if request.POST.get("action") == "delete":
-        if not request.user.has_perm("experiments.delete_channel"):
+        if not request.user.has_perm("channels.delete_experimentchannel"):
             raise PermissionDenied
 
         channel.delete()
         return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
-    if not request.user.has_perm("experiments.change_channel"):
+    if not request.user.has_perm("channels.change_experimentchannel"):
         raise PermissionDenied
 
     form = channel.form(data=request.POST)
@@ -549,12 +569,14 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             ).exists():
                 messages.info(request, "{} already has a pending invitation.".format(participant))
             else:
+                channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                 session = ExperimentSession.objects.create(
                     team=request.team,
                     experiment=experiment,
                     llm=experiment.llm,
                     status="setup",
                     participant=participant,
+                    experiment_channel=channel,
                 )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)

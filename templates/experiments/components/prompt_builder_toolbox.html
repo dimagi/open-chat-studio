@@ -1,18 +1,17 @@
 <div x-data="{ tab: 'first' }" x-on:submit-conversation.window="$refs.submitButton.click()">
-    <div class="tabs">
-        <a class="tab tab-bordered tab-active" :class="{ 'tab-active': tab === 'first' }" @click="tab = 'first'">Prompt
+    <div class="tabs tabs-bordered" role="tablist">
+        <a class="tab tab-active" :class="{ 'tab-active': tab === 'first' }" @click="tab = 'first'">Prompt
             details</a>
-        <a class="tab tab-bordered" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
+        <a class="tab" :class="{ 'tab-active': tab === 'second' }" @click="tab = 'second'">Model
             properties</a>
     </div>
-    <div class="flex-none flex justify-between px-10 py-5 bg-base-200 items-center">
-        <div class="flex w-2/3 justify-between items-center" x-show="tab === 'first'">
-            <div class="w-1/2 pr-10">
-
+    <div class="flex-none flex justify-between px-10 py-5 bg-base-200 h-40">
+        <div class="flex w-2/3 justify-between" x-show="tab === 'first'">
+            <div class="w-1/2 pr-10 justify-between">
                 <!-- Source Material Dropdown -->
                 <label for="source-material-selector" class="block font-semibold mb-2">Source
                     Material</label>
-                <div class="flex flex-row">
+                <div class="flex flex-row mb-2">
                     <span class="flex-1" x-data
                         x-text="$store.promptBuilder.currentState.sourceMaterialName.length > 10 ? $store.promptBuilder.currentState.sourceMaterialName.slice(0, 10) + '...' : $store.promptBuilder.currentState.sourceMaterialName"></span>
                         <button hx-get="{% url 'experiments:prompt_builder_load_source_material' team.slug %}"
@@ -21,41 +20,50 @@
                             <i class="fa fa-folder-open-o px-4 py-2 rounded-lg bg-base-100 hover:bg-base-300"
                             ></i>
                         </button>
-                        
-                    <!-- </label> -->
+                </div>
+                <!-- token display -->
+                <div class="flex flex-row">
+                  <span class="flex-1 mr-2 my-auto font-semibold">Tokens</span>
+                  <ul class="flex flex-grow bg-base-100 rounded-lg mt-2 py-2 px-6 justify-between border">
+                    <li>
+                      <div>
+                        <i class="fa-solid fa-arrow-up-from-bracket" title="Output Token Count"></i>
+                        <span class="badge badge-sm" title="Output Token Count"
+                              x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div>
+                      <span class="badge badge-sm" title="Input Token Count"
+                            x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.input_tokens : acc, 0)"></span>
+                        <i class="fa-solid fa-arrow-right-to-bracket fa-rotate-90" title="Input Token Count"></i>
+                      </div>
+                    </li>
+                  </ul>
                 </div>
             </div>
+
             <div class="w-1/2">
 
-                <!-- Token counter -->
-                <div class="flex justify-between">
-                    <span class="font-semibold">Input Tokens</span>
-                    <span x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.input_tokens : acc, 0)"></span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="font-semibold">Output Tokens</span>
-                    <span x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
-                </div>
-                
-            </div>
-        </div>
-        <div class="flex w-2/3 justify-between items-center" x-show="tab === 'second'" x-cloak>
-            <div class="w-1/2 pr-10">
-                <!-- Model Dropdown -->
-                <label for="model-selector" class="block font-semibold mb-2">Model</label>
-                <select id="provider-selector" class="w-full select select-bordered"
-                    x-model.number="$store.promptBuilder.currentState.provider">
-                    {% for provider in llm_providers %}
-                    <option value="{{ provider.id }}">{{ provider }}</option>
-                    {% endfor %}
-                </select>
-                <select id="model-selector" class="w-full select select-bordered"
+                <div>
+                  <label for="model-selector" class="block font-semibold mb-2">Model</label>
+                  <select id="provider-selector" class="w-full select select-sm select-bordered"
+                      x-model.number="$store.promptBuilder.currentState.provider">
+                      {% for provider in llm_providers %}
+                      <option value="{{ provider.id }}">{{ provider }}</option>
+                      {% endfor %}
+                  </select>
+                  <select id="model-selector" class="w-full select select-sm select-bordered"
                     x-model="$store.promptBuilder.currentState.model">
                     <template x-for="(option, index) in $store.promptBuilder.llm_models" :key="index">
                       <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.model"></option>
                     </template>
                 </select>
+                </div>
+
             </div>
+        </div>
+        <div class="flex w-2/3 justify-between" x-show="tab === 'second'" x-cloak>
             <div class="w-1/2 pr-10">
                 <div class="flex justify-between group items-center mb-1">
                     <label for="temperature-slider" class="text-base-400 font-semibold">Temperature</label>
@@ -65,7 +73,7 @@
                 </div>
                 <input id="temperature-slider" type="range" min="0" max="2" step="0.01"
                     x-model.number="$store.promptBuilder.currentState.temperature"
-                    class="range w-full h-2 rounded-full bg-blue-500">
+                    class="range range-sm w-full h-2 rounded-full bg-blue-500">
             </div>
         </div>
 
@@ -84,10 +92,10 @@
             </div>
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
                 <li>
-                    <button 
-                    hx-get="{% url 'experiments:prompt_builder_load_prompts' team.slug %}"
-                        hx-trigger="click" hx-target="#load-prompts" hx-swap="innerHTML"
-                        @click.stop="$store.promptBuilder.toggleSidebar('prompts')">
+                    <button
+                    hx-get="{% url 'experiments:prompt_builder_load_experiments' team.slug %}"
+                        hx-trigger="click" hx-target="#experiment-list" hx-swap="innerHTML"
+                        @click.stop="$store.promptBuilder.toggleSidebar('experiments')">
                         <i class="fa fa-folder-open-o px-2"></i></button>
                 </li>
                 <li>
@@ -109,8 +117,13 @@
                 'X-CSRFToken': App.Cookies.get('csrftoken')
             },
             body: JSON.stringify({
-                'prompt': Alpine.store('promptBuilder').currentState.prompt,
-                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter
+                // data to forwarded to the 'create experiment' view
+                'prompt_text': Alpine.store('promptBuilder').currentState.prompt,
+                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter,
+                'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
+                'llm_provider': Alpine.store('promptBuilder').currentState.provider,
+                'llm': Alpine.store('promptBuilder').currentState.model,
+                'temperature': Alpine.store('promptBuilder').currentState.temperature,
             })
         })
             .then(response => {
@@ -168,7 +181,7 @@
         });
 
         // Now that we have new text, there will be a new history item, so let's re-fetch
-        // We could probably save some bits and bytes (esp for long history) by doing this 
+        // We could probably save some bits and bytes (esp for long history) by doing this
         // ourselves on the front end, but there's a small risk of getting out of sync with
         // the backend. So, until it's a problem, we shall re-fetch
         fetchAndReplaceHistory();
@@ -205,7 +218,7 @@
             }
         }).then((data) => {
             const taskUrl = "{% url 'experiments:get_prompt_builder_message_response' team.slug %}" + '?task_id=' + data.task_id;
-            // This will get caught and handled in prompt_buidler_message_list. I guess this is 
+            // This will get caught and handled in prompt_buidler_message_list. I guess this is
             // better/safer than assuming we know the name of a global JS function defined over there.
             window.dispatchEvent(new CustomEvent('add-new-message', { detail: data.task_id, 'bubbles': true }));
 

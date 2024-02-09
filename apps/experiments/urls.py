@@ -31,7 +31,7 @@ urlpatterns = [
         views.prompt_builder_start_save_process,
         name="prompt_builder_start_save_process",
     ),
-    path("prompt_builder/load_prompts", views.prompt_builder_load_prompts, name="prompt_builder_load_prompts"),
+    path("prompt_builder/load_prompts", views.prompt_builder_load_experiments, name="prompt_builder_load_experiments"),
     path(
         "prompt_builder/load_source_material",
         views.prompt_builder_load_source_material,
@@ -113,4 +113,3 @@ urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
 urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))
 urlpatterns.extend(make_crud_urls(views, "NoActivityMessageConfig", "no_activity"))
-urlpatterns.extend(make_crud_urls(views, "Prompt", "prompt"))

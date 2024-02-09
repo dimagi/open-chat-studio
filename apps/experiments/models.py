@@ -41,37 +41,6 @@ class NoActivityMessageConfigObjectManager(AuditingManager):
     pass
 
 
-@audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
-class Prompt(BaseTeamModel):
-    """
-    A prompt - typically the starting point for ChatGPT.
-    """
-
-    objects = PromptObjectManager()
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
-    description = models.TextField(blank=True, default="", verbose_name="A longer description of what the prompt does.")
-    prompt = models.TextField()
-    input_formatter = models.TextField(
-        blank=True,
-        default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
-    )
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-    def format(self, input_str):
-        if self.input_formatter:
-            return self.input_formatter.format(input=input_str)
-        else:
-            return input_str
-
-
 class PromptBuilderHistory(BaseTeamModel):
     """
     History entries for the prompt builder
@@ -106,7 +75,8 @@ class SourceMaterial(BaseTeamModel):
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
     objects = SafetyLayerObjectManager()
-    prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+    prompt_text = models.TextField()
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
         default=ChatMessageType.HUMAN,
@@ -125,7 +95,7 @@ class SafetyLayer(BaseTeamModel):
     )
 
     def __str__(self):
-        return str(self.prompt)
+        return self.name
 
 
 class Survey(BaseTeamModel):
@@ -297,7 +267,14 @@ class Experiment(BaseTeamModel):
         verbose_name="OpenAI Assistant",
     )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
-    chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments")
+
+    prompt_text = models.TextField(blank=True, default="")
+    input_formatter = models.TextField(
+        blank=True,
+        default="",
+        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
+        "E.g. 'Safe or unsafe? {input}'",
+    )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."

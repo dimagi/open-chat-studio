@@ -59,14 +59,13 @@ CONTENT_TYPES = {
         "experimentsession",
         "noactivitymessageconfig",
         "participant",
-        "prompt",
         "promptbuilderhistory",
         "safetylayer",
         "sourcematerial",
         "survey",
         "syntheticvoice",
     ],
-    "service_providers": ["llmprovider", "voiceprovider", "messagingprovider"],
+    "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
 }
 

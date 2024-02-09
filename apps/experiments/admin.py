@@ -2,16 +2,6 @@ from django import forms
 from django.contrib import admin
 
 from apps.experiments import models
-from apps.experiments.models import ConsentForm
-
-
-@admin.register(models.Prompt)
-class PromptAdmin(admin.ModelAdmin):
-    list_display = ("name", "team", "owner", "prompt")
-    list_filter = (
-        "team",
-        "owner",
-    )
 
 
 @admin.register(models.PromptBuilderHistory)
@@ -41,7 +31,7 @@ class SafetyLayerInline(admin.TabularInline):
 class SafetyLayerAdmin(admin.ModelAdmin):
     list_display = (
         "team",
-        "prompt",
+        "name",
         "messages_to_review",
     )
     list_filter = ("team",)
@@ -74,7 +64,7 @@ class ExperimentAdminForm(forms.ModelForm):
 
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
-    list_display = ("name", "team", "owner", "chatbot_prompt", "source_material", "llm", "llm_provider")
+    list_display = ("name", "team", "owner", "source_material", "llm", "llm_provider")
     list_filter = ("team", "owner", "source_material")
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]

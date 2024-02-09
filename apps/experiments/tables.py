@@ -5,7 +5,6 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     NoActivityMessageConfig,
-    Prompt,
     SafetyLayer,
     SourceMaterial,
     Survey,
@@ -23,7 +22,6 @@ class ExperimentTable(tables.Table):
     )
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
-    bot = columns.Column(accessor="chatbot_prompt__name", verbose_name="Bot", orderable=True)
     topic = columns.Column(accessor="source_material__topic", verbose_name="Topic", orderable=True)
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
@@ -51,7 +49,7 @@ class SafetyLayerTable(tables.Table):
     class Meta:
         model = SafetyLayer
         fields = (
-            "prompt",
+            "name",
             "messages_to_review",
             "actions",
         )
@@ -156,39 +154,3 @@ class NoActivityMessageConfigTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No configs found."
-
-
-class PromptTable(tables.Table):
-    owner = columns.Column(accessor="owner__get_display_name", verbose_name="Created By")
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:prompt_edit"),
-                actions.delete_action(url_name="experiments:prompt_delete"),
-            ]
-        },
-    )
-
-    def render_description(self, value):
-        if len(value) > 100:
-            return f"{value[:100]}..."
-        return value
-
-    def render_prompt(self, value):
-        if len(value) > 100:
-            return f"{value[:100]}..."
-        return value
-
-    class Meta:
-        model = Prompt
-        fields = (
-            "name",
-            "description",
-            "owner",
-            "prompt",
-            "input_formatter",
-        )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No prompts found."

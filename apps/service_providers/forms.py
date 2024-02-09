@@ -113,3 +113,10 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["auth_token"]
 
     auth_token = forms.CharField(label=_("Auth Token"))
+
+
+class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["api_key"]
+
+    username = forms.CharField(label=_("Username"))
+    api_key = forms.CharField(label=_("API Key"))
