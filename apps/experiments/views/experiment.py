@@ -145,7 +145,6 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        print(cleaned_data)
         assistant = cleaned_data.get("assistant")
         errors = {}
         if not assistant:
