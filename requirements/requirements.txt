@@ -213,6 +213,9 @@ langchain-core==0.1.17
     # via
     #   langchain
     #   langchain-community
+    #   langchain-openai
+langchain-openai==0.0.5
+    # via -r requirements/requirements.in
 langsmith==0.0.83
     # via
     #   langchain
@@ -236,11 +239,14 @@ numpy==1.26.2
     # via
     #   langchain
     #   langchain-community
+    #   langchain-openai
     #   pandas
 oauthlib==3.2.2
     # via requests-oauthlib
-openai==1.2.4
-    # via -r requirements/requirements.in
+openai==1.12.0
+    # via
+    #   -r requirements/requirements.in
+    #   langchain-openai
 packaging==23.2
     # via
     #   djangorestframework-api-key
@@ -346,6 +352,7 @@ sniffio==1.3.0
     #   anyio
     #   httpcore
     #   httpx
+    #   openai
 sqlalchemy==2.0.23
     # via
     #   langchain
@@ -360,7 +367,9 @@ tenacity==8.2.3
     #   langchain-community
     #   langchain-core
 tiktoken==0.5.2
-    # via -r requirements/requirements.in
+    # via
+    #   -r requirements/requirements.in
+    #   langchain-openai
 tokenizers==0.15.0
     # via anthropic
 tomlkit==0.11.8
