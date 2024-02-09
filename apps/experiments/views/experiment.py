@@ -22,6 +22,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
@@ -145,6 +146,7 @@ class ExperimentForm(forms.ModelForm):
         if not cleaned_data["prompt_text"] and not cleaned_data["assistant"]:
             raise forms.ValidationError("Prompt text is required unless you select an OpenAI Assistant")
 
+        _validate_prompt_variables(cleaned_data)
         return cleaned_data
 
     def save(self, commit=True):
@@ -155,6 +157,24 @@ class ExperimentForm(forms.ModelForm):
             experiment.save()
             self.save_m2m()
         return experiment
+
+
+def _validate_prompt_variables(form_data):
+    required_variables = set(PromptTemplate.from_template(form_data["prompt_text"]).input_variables)
+    available_variables = set()
+    if form_data["source_material"]:
+        available_variables.add("source_material")
+    missing_vars = required_variables - available_variables
+    known_vars = {"source_material"}
+    if missing_vars:
+        errors = []
+        unknown_vars = missing_vars - known_vars
+        if unknown_vars:
+            errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
+            missing_vars -= unknown_vars
+        if missing_vars:
+            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+        raise forms.ValidationError({"prompt_text": errors})
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -191,10 +211,6 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 request=self.request, message="A seed message is required when conversational " "consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
-
-        if _source_material_is_missing(experiment):
-            messages.error(request=self.request, message="The prompt expects source material, but none were specified")
-            return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
 
 
@@ -215,14 +231,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
     button_title = "Update"
     permission_required = "experiments.change_experiment"
-
-
-def _source_material_is_missing(experiment: Experiment) -> bool:
-    prompt = experiment.prompt_text
-    prompt_expects_source_material = "{source_material}" in prompt
-    if not prompt_expects_source_material:
-        return False
-    return not bool(experiment.source_material)
 
 
 def _get_voice_provider_alpine_context(request):
