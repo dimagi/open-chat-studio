@@ -254,11 +254,7 @@ class Experiment(BaseTeamModel):
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
-    llm = models.CharField(
-        max_length=20,
-        help_text="The LLM model to use.",
-        verbose_name="LLM Model",
-    )
+    llm = models.CharField(max_length=20, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.SET_NULL,
