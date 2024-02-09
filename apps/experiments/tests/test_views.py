@@ -1,8 +1,11 @@
+from contextlib import nullcontext as does_not_raise
+
 import pytest
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 
 from apps.experiments.models import Experiment
-from apps.experiments.views.experiment import _source_material_is_missing
+from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.utils.factories import experiment as experiment_factory
 
 
@@ -30,28 +33,21 @@ def test_create_experiment_success(db, client, team_with_users):
 
 
 @pytest.mark.parametrize(
-    "create_source_material,promp_str",
+    "source_material,prompt_str,expectation",
     [
-        (True, "You're an assistant"),
-        (True, "Answer questions from this source: {source_material}"),
-        (False, "You're an assistant"),
+        (None, "You're an assistant", does_not_raise()),
+        ("something", "You're an assistant", does_not_raise()),
+        ("something", "Answer questions from this source: {source_material}", does_not_raise()),
+        (None, "Answer questions from this source: {source_material}", pytest.raises(ValidationError)),
+        (None, "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
+        ("something", "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
     ],
 )
-def test_experiment_does_not_require_source_material(db, create_source_material, promp_str):
-    """Tests the `_source_material_is_missing` method"""
-    material = None
-    if create_source_material:
-        material = experiment_factory.SourceMaterialFactory()
-    experiment = experiment_factory.ExperimentFactory(prompt_text=promp_str, source_material=material)
-    assert _source_material_is_missing(experiment) is False
-
-
-@pytest.mark.parametrize(
-    "source_material,promp_str",
-    [
-        (None, "Answer questions from this source: {source_material}"),
-    ],
-)
-def test_source_material_is_missing(db, source_material, promp_str):
-    experiment = experiment_factory.ExperimentFactory(prompt_text=promp_str, source_material=source_material)
-    assert _source_material_is_missing(experiment) is True
+def test_prompt_variable_validation(source_material, prompt_str, expectation):
+    with expectation:
+        _validate_prompt_variables(
+            {
+                "source_material": source_material,
+                "prompt_text": prompt_str,
+            }
+        )
