@@ -59,7 +59,6 @@ CONTENT_TYPES = {
         "experimentsession",
         "noactivitymessageconfig",
         "participant",
-        "prompt",
         "promptbuilderhistory",
         "safetylayer",
         "sourcematerial",
