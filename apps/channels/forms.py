@@ -51,6 +51,7 @@ class WhatsappChannelForm(ExtraFormBase):
         widget=forms.TextInput(attrs={"readonly": "readonly"}),
         label="Webhook URL",
         disabled=True,
+        required=False,
         help_text="Use this as the URL when setting up the webhook",
     )
 
