@@ -1,3 +1,16 @@
+<script>
+  (() => {
+    htmx.on("messages", (event) => {
+      event.detail.value.forEach((message) => {
+        Toast.fire({
+          icon: message.tags,
+          title: message.tags[0].toUpperCase() + message.tags.slice(1),
+          text: message.message
+        });
+      });
+    })
+  })();
+</script>
 {% if messages %}
   <div class="toast toast-start">
     {% for message in messages %}
