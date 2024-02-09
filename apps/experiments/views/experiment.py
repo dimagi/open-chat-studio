@@ -145,14 +145,15 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        assistant = cleaned_data["assistant"]
+        print(cleaned_data)
+        assistant = cleaned_data.get("assistant")
         errors = {}
         if not assistant:
-            if not cleaned_data["prompt_text"]:
+            if not cleaned_data.get("prompt_text"):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
-            if not cleaned_data["llm_provider"]:
+            if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
-            if not cleaned_data["llm"]:
+            if not cleaned_data.get("llm"):
                 errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
 
         if errors:
@@ -172,9 +173,9 @@ class ExperimentForm(forms.ModelForm):
 
 
 def _validate_prompt_variables(form_data):
-    required_variables = set(PromptTemplate.from_template(form_data["prompt_text"]).input_variables)
+    required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
     available_variables = set()
-    if form_data["source_material"]:
+    if form_data.get("source_material"):
         available_variables.add("source_material")
     missing_vars = required_variables - available_variables
     known_vars = {"source_material"}
