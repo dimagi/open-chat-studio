@@ -54,9 +54,7 @@ class ChannelPlatform(models.TextChoices):
             case self.TELEGRAM:
                 return forms.TelegramChannelForm(*args, **kwargs)
             case self.WHATSAPP:
-                if channel and channel.messaging_provider.type == MessagingProviderType.turnio:
-                    return forms.TurnIOForm(channel=channel, *args, **kwargs)
-                return forms.WhatsappChannelForm(*args, **kwargs)
+                return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
             case self.FACEBOOK:
                 team_slug = get_current_team().slug
                 webhook_url = absolute_url(
@@ -149,6 +147,24 @@ class ExperimentChannel(BaseModel):
             raise ChannelAlreadyUtilizedException(
                 format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
             )
+
+    @property
+    def webhook_url(self) -> str:
+        """The wehook URL that should be used in external services"""
+        from apps.service_providers.models import MessagingProviderType
+
+        if not self.messaging_provider:
+            return
+        uri = ""
+        provider_type = self.messaging_provider.type
+        if provider_type == MessagingProviderType.twilio:
+            uri = reverse("channels:new_whatsapp_message")
+        elif provider_type == MessagingProviderType.turnio:
+            uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
+        return absolute_url(
+            uri,
+            is_secure=True,
+        )
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
