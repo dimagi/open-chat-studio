@@ -107,7 +107,7 @@ class TopicBot:
 
         # if we made it here there weren't any relevant human safety issues
         if self.input_formatter:
-            input_str = self.input_formatter.format(input_str)
+            input_str = self.input_formatter.format(input=input_str)
         response = self._call_predict(input_str)
 
         # ai safety layers
