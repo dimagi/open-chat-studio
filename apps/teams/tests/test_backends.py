@@ -34,7 +34,7 @@ def group2(experiment_permissions):
 
 
 @pytest.fixture(autouse=True)
-def use_team_backend(settings):
+def _use_team_backend(settings):
     settings.AUTHENTICATION_BACKENDS = ["apps.teams.backends.TeamBackend"]
 
 
