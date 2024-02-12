@@ -442,7 +442,7 @@ class TelegramChannel(ChannelBase):
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
-        return audio.convert_audio_to_wav(ogg_audio)
+        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
@@ -504,39 +504,10 @@ class WhatsappChannel(ChannelBase):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION,
-            config=Config(signature_version="s3v4"),
-        )
-        file_path = f"{self.chat_id}/{uuid.uuid4()}.mp3"
-        audio_bytes = voice_audio.getvalue()
-        s3_client.upload_fileobj(
-            BytesIO(audio_bytes),
-            settings.WHATSAPP_S3_AUDIO_BUCKET,
-            file_path,
-            ExtraArgs={
-                "Expires": datetime.utcnow() + timedelta(minutes=7),
-                "Metadata": {
-                    "DurationSeconds": str(duration),
-                },
-                "ContentType": "audio/mpeg",
-            },
-        )
-        public_url = s3_client.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": settings.WHATSAPP_S3_AUDIO_BUCKET,
-                "Key": file_path,
-            },
-            ExpiresIn=360,
-        )
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.messaging_service.send_whatsapp_voice_message(
-            media_url=public_url, from_number=from_number, to_number=to_number
+            voice_audio=voice_audio, duration=duration, from_number=from_number, to_number=to_number
         )
 
 
@@ -570,7 +541,7 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     def get_message_audio(self) -> BytesIO:
         raw_data = requests.get(self.message.media_url).content
         mp4_audio = BytesIO(raw_data)
-        return audio.convert_audio_to_wav(mp4_audio, source_format="mp4")
+        return audio.convert_audio(mp4_audio, target_format="wav", source_format="mp4")
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')

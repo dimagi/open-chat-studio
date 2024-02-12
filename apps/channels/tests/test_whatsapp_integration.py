@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 
 import pytest
 from mock import patch
@@ -182,7 +183,11 @@ class TestTwilio:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
             assert whatsapp_message.media_url == "http://example.com/media"
 
-    @pytest.mark.parametrize("incoming_message", [TwilioMessages.text_message(), TwilioMessages.audio_message()])
+    @pytest.mark.parametrize(
+        "incoming_message, message_type",
+        [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "audio")],
+    )
+    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
@@ -191,15 +196,26 @@ class TestTwilio:
         get_llm_response_mock,
         send_whatsapp_text_message,
         get_voice_transcript_mock,
+        synthesize_voice_mock,
         db,
         incoming_message,
+        message_type,
         twilio_whatsapp_channel,
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
-        get_llm_response_mock.return_value = "Hi"
-        get_voice_transcript_mock.return_value = "Hi"
-        handle_twilio_message(message_data=incoming_message)
-        send_whatsapp_text_message.assert_called()
+        synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
+        with patch("apps.service_providers.messaging_service.TwilioService.s3_client") as s3_client_mock, patch(
+            "apps.service_providers.messaging_service.TwilioService.client"
+        ) as client_mock:
+            get_llm_response_mock.return_value = "Hi"
+            get_voice_transcript_mock.return_value = "Hi"
+
+            handle_twilio_message(message_data=incoming_message)
+
+            if message_type == "text":
+                send_whatsapp_text_message.assert_called()
+            elif message_type == "audio":
+                client_mock.messages.create.assert_called()
 
 
 class TestTurnio:
