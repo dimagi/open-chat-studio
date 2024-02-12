@@ -380,7 +380,7 @@ tqdm==4.66.1
     # via
     #   huggingface-hub
     #   openai
-turn-python==0.1.0
+turn-python==0.2.0
     # via -r requirements/requirements.in
 twilio==8.10.1
     # via -r requirements/requirements.in
