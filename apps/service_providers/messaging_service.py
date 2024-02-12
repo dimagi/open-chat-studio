@@ -100,7 +100,11 @@ class TurnIOService(MessagingService):
         self.client.messages.send_text(to_number, message)
 
     def send_whatsapp_voice_message(self, voice_audio: BytesIO, duration: int, from_number: str, to_number: str):
-        pass
+        from apps.channels.audio import convert_audio
+
+        voice_audio = convert_audio(voice_audio, target_format="ogg", source_format="mp3")
+        media_id = self.client.media.upload_media(voice_audio.read(), content_type="audio/ogg")
+        self.client.messages.send_audio(whatsapp_id=to_number, media_id=media_id)
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
