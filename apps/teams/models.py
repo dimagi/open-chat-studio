@@ -94,10 +94,11 @@ class Membership(BaseModel, PermissionsMixin):
     A user's team membership
     """
 
-    objects = MembershipObjectManager()
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES)
+
+    objects = MembershipObjectManager()
 
     def __str__(self):
         return f"{self.user}: {self.team}"
