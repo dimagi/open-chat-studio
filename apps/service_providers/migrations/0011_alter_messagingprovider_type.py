@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0009_alter_llmprovider_type"),
+        ("service_providers", "0010_alter_messagingprovider_type_authprovider"),
     ]
 
     operations = [
