@@ -17,17 +17,17 @@ class TestObfuscatingForm(SimpleTestCase):
     def test_blank_form(self):
         form = TestForm()
         field_values = [f[0].value() for f in form.get_context()["fields"]]
-        self.assertEqual(field_values, [None, None, None])
+        assert field_values == [None, None, None]
 
     def test_blank_form_save(self):
         form = TestForm(data={"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8})
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data, {"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8})
+        assert form.is_valid()
+        assert form.cleaned_data == {"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8}
 
     def test_initial(self):
         form = TestForm(initial={"field_a": "a" * 8, "field_b": "", "field_c": "c" * 8})
         field_values = [f[0].value() for f in form.get_context()["fields"]]
-        self.assertEqual(field_values, ["aaaa****", "", "cccccccc"])
+        assert field_values == ["aaaa****", "", "cccccccc"]
 
     def test_update_no_change(self):
         self._test_update("a" * 8, "b" * 8)
@@ -40,5 +40,5 @@ class TestObfuscatingForm(SimpleTestCase):
             data={"field_a": field_a_new, "field_b": field_b_new, "field_c": "c" * 8},
             initial={"field_a": "a" * 8, "field_b": "b" * 8, "field_c": "c" * 8},
         )
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data, {"field_a": field_a_new, "field_b": field_b_new, "field_c": "c" * 8})
+        assert form.is_valid()
+        assert form.cleaned_data == {"field_a": field_a_new, "field_b": field_b_new, "field_c": "c" * 8}

@@ -54,15 +54,15 @@ class FacebookChannelTest(TestCase):
         verify_token = self.facebook_details["verify_token"]
         query_string = f"?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token={verify_token}"
         response = self.client.get(f"{url}{query_string}")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, verify_token.encode("utf-8"))
+        assert response.status_code == 200
+        assert response.content == verify_token.encode("utf-8")
 
     def test_facebook_get_request_fails(self):
         """Tests Facebook's get request that verifies the server"""
         url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
         query_string = "?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=rubbish"
         response = self.client.get(f"{url}{query_string}")
-        self.assertEqual(response.status_code, 403)
+        assert response.status_code == 403
 
     @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
     def test_incoming_text_message(self, new_user_message):
@@ -71,11 +71,11 @@ class FacebookChannelTest(TestCase):
         handle_facebook_message(team_slug=self.team.slug, message_data=message)
         called_args, called_kwargs = new_user_message.call_args
         facebook_message = called_args[0]
-        self.assertEqual(facebook_message.page_id, self.page_id)
-        self.assertEqual(facebook_message.message_text, "Hi there")
-        self.assertEqual(facebook_message.content_type, MESSAGE_TYPES.TEXT)
-        self.assertEqual(facebook_message.user_id, "6785984231")
-        self.assertEqual(facebook_message.media_url, None)
+        assert facebook_message.page_id == self.page_id
+        assert facebook_message.message_text == "Hi there"
+        assert facebook_message.content_type == MESSAGE_TYPES.TEXT
+        assert facebook_message.user_id == "6785984231"
+        assert facebook_message.media_url is None
 
     @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
     def test_incoming_voice_message(self, new_user_message):
@@ -85,11 +85,11 @@ class FacebookChannelTest(TestCase):
         handle_facebook_message(team_slug=self.team.slug, message_data=message)
         called_args, called_kwargs = new_user_message.call_args
         facebook_message = called_args[0]
-        self.assertEqual(facebook_message.page_id, self.page_id)
-        self.assertEqual(facebook_message.message_text, "")
-        self.assertEqual(facebook_message.content_type, MESSAGE_TYPES.VOICE)
-        self.assertEqual(facebook_message.user_id, "6785984231")
-        self.assertEqual(facebook_message.media_url, media_url)
+        assert facebook_message.page_id == self.page_id
+        assert facebook_message.message_text == ""
+        assert facebook_message.content_type == MESSAGE_TYPES.VOICE
+        assert facebook_message.user_id == "6785984231"
+        assert facebook_message.media_url == media_url
 
 
 def _facebook_text_message(page_id: str, message: str):

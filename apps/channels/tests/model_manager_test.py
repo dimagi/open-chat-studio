@@ -44,4 +44,4 @@ class TestExperimentChannelObjectManager(TestCase):
             channels = ExperimentChannel.objects.filter_extras(
                 key=key, value=value, platform=platform, team_slug=team_slug
             )
-            self.assertEqual(len(channels), expected_result_length)
+            assert len(channels) == expected_result_length

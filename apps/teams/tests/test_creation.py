@@ -17,11 +17,11 @@ class TeamCreationTest(TestCase):
             email=email,
         )
         team = create_default_team_for_user(user)
-        self.assertEqual("Alice", team.name)
-        self.assertEqual("alice", team.slug)
-        self.assertTrue(is_admin(user, team))
+        assert "Alice" == team.name
+        assert "alice" == team.slug
+        assert is_admin(user, team)
         membership = team.membership_set.filter(user=user).first()
-        self.assertEqual([SUPER_ADMIN_GROUP], [group.name for group in membership.groups.all()])
+        assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
 
 
 def test_create_team_view(db, client):

@@ -58,13 +58,13 @@ class TeamMixinTest(TestCase):
 
     def assertSuccessfulRequest(self, view_cls, user, team_slug):
         response = self._call_view(view_cls, user, team_slug)
-        self.assertEqual(200, response.status_code)
-        self.assertEqual(f"Go {team_slug}", response.content.decode("utf-8"))
+        assert 200 == response.status_code
+        assert f"Go {team_slug}" == response.content.decode("utf-8")
 
     def assertRedirectToLogin(self, view_cls, user, team_slug):
         response = self._call_view(view_cls, user, team_slug)
-        self.assertEqual(302, response.status_code)
-        self.assertTrue("/login/" in response.url)
+        assert 302 == response.status_code
+        assert "/login/" in response.url
 
     def assertNotFound(self, view_cls, user, team_slug):
         with pytest.raises(Http404):

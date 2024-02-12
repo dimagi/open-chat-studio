@@ -60,8 +60,8 @@ class TelegramMessageHandlerTest(TestCase):
         experiment_session = ExperimentSession.objects.filter(
             experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).first()
-        self.assertIsNotNone(experiment_session)
-        self.assertIsNotNone(experiment_session.experiment_channel)
+        assert experiment_session is not None
+        assert experiment_session.experiment_channel is not None
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.channels.TelegramChannel._get_llm_response")
@@ -82,7 +82,7 @@ class TelegramMessageHandlerTest(TestCase):
         message = _telegram_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
         experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
-        self.assertIsNotNone(experiment_session.experiment_channel)
+        assert experiment_session.experiment_channel is not None
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.channels.TelegramChannel._get_llm_response")
@@ -98,7 +98,7 @@ class TelegramMessageHandlerTest(TestCase):
         experiment_sessions_count = ExperimentSession.objects.filter(
             experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).count()
-        self.assertEqual(experiment_sessions_count, 1)
+        assert experiment_sessions_count == 1
 
         # Second message
         # First we mock the _create_new_experiment_session so we can verify that it was not called
@@ -112,7 +112,7 @@ class TelegramMessageHandlerTest(TestCase):
         experiment_sessions_count = ExperimentSession.objects.filter(
             experiment=self.experiment, external_chat_id=self.telegram_chat_id
         ).count()
-        self.assertEqual(experiment_sessions_count, 1)
+        assert experiment_sessions_count == 1
 
         message_handler._create_new_experiment_session.assert_not_called()
 
@@ -132,10 +132,10 @@ class TelegramMessageHandlerTest(TestCase):
 
         # Assertions
         experiment_sessions_count = ExperimentSession.objects.count()
-        self.assertEqual(experiment_sessions_count, 2)
+        assert experiment_sessions_count == 2
 
-        self.assertTrue(ExperimentSession.objects.filter(external_chat_id=00000).exists())
-        self.assertTrue(ExperimentSession.objects.filter(external_chat_id=11111).exists())
+        assert ExperimentSession.objects.filter(external_chat_id=0).exists()
+        assert ExperimentSession.objects.filter(external_chat_id=11111).exists()
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
@@ -153,9 +153,9 @@ class TelegramMessageHandlerTest(TestCase):
         reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
         message_handler.new_user_message(reset_message)
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
-        self.assertEqual(len(sessions), 2)
-        self.assertIsNotNone(sessions[0].ended_at)
-        self.assertIsNone(sessions[1].ended_at)
+        assert len(sessions) == 2
+        assert sessions[0].ended_at is not None
+        assert sessions[1].ended_at is None
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
@@ -174,9 +174,9 @@ class TelegramMessageHandlerTest(TestCase):
         message_handler.new_user_message(message2)
 
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
-        self.assertEqual(len(sessions), 1)
+        assert len(sessions) == 1
         # The reset command should not be saved in the history
-        self.assertEqual(sessions[0].chat.get_langchain_messages(), [])
+        assert sessions[0].chat.get_langchain_messages() == []
 
     def _get_telegram_channel(self, experiment_channel: ExperimentChannel) -> TelegramChannel:
         message_handler = TelegramChannel(experiment_channel=experiment_channel)
