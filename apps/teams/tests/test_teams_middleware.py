@@ -83,8 +83,8 @@ class TeamsAuthTest(TestCase):
         if user:
             assert membership.user == user
         else:
-            # use assertEqual to force setup of the lazy object
-            assert membership is None
+            # use equality check to force setup of the lazy object
+            assert membership == None  # noqa E711
 
 
 def _create_user(username):
