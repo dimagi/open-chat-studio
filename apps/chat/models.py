@@ -68,7 +68,7 @@ class ChatMessage(BaseModel):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
     content = models.TextField()
-    summary = models.TextField(
+    summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
 

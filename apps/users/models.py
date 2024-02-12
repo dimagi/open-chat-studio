@@ -21,7 +21,7 @@ class CustomUser(AbstractUser):
 
     objects = AuditedUserObjectManager()
     avatar = models.FileField(upload_to="profile-pictures/", blank=True, storage=get_public_media_storage)
-    language = models.CharField(max_length=10, blank=True, null=True)
+    language = models.CharField(max_length=10, blank=True, null=True)  # noqa DJ001
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"

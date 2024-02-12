@@ -62,7 +62,7 @@ class SourceMaterial(BaseTeamModel):
     objects = SourceMaterialObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     topic = models.CharField(max_length=50)
-    description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")
+    description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()
 
     class Meta:
@@ -250,7 +250,7 @@ class Experiment(BaseTeamModel):
     objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
-    description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
+    description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )

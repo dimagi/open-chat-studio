@@ -42,7 +42,7 @@ class Resource(BaseTeamModel):
     file = models.FileField()
     metadata = models.JSONField(default=dict, blank=True)
     content_size = models.PositiveIntegerField(null=True, blank=True)
-    content_type = models.CharField(null=True, blank=True)
+    content_type = models.CharField(null=True, blank=True)  # noqa DJ001
 
     def save(self, *args, **kwargs):
         if self.file:
@@ -95,7 +95,7 @@ class BaseRun(BaseModel):
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=128, choices=RunStatus.choices, default=RunStatus.PENDING)
     error = models.TextField(blank=True)
-    task_id = models.CharField(max_length=255, null=True, blank=True)
+    task_id = models.CharField(max_length=255, null=True, blank=True)  # noqa DJ001
 
     class Meta:
         abstract = True
@@ -152,7 +152,7 @@ class RunGroup(BaseRun):
     analysis = models.ForeignKey(Analysis, on_delete=models.CASCADE)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     params = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    notes = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)  # noqa DJ001
     starred = models.BooleanField(default=False)
     approved = models.BooleanField(null=True, blank=True)
 
