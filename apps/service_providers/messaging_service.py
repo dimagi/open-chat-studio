@@ -88,11 +88,12 @@ class TwilioService(MessagingService):
 class TurnIOService(MessagingService):
     _type: ClassVar[str] = "turnio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = True
 
     auth_token: str
 
     @property
-    def client(self) -> Client:
+    def client(self) -> TurnClient:
         return TurnClient(token=self.auth_token)
 
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
