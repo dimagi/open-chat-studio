@@ -117,6 +117,7 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
         delete_openai_assistant(assistant)
+        messages.success(request, "Assistant Deleted")
         return HttpResponse()
 
 
@@ -127,6 +128,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
+        messages.success(request, "Assistant Deleted")
         return HttpResponse()
 
 

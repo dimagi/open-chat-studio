@@ -106,6 +106,7 @@ MIDDLEWARE = [
     "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
+    "apps.web.htmx_middleware.HtmxMessageMiddleware",
 ]
 
 

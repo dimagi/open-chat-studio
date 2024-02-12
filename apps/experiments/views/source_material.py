@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -80,4 +81,5 @@ class DeleteSourceMaterial(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         source_material = get_object_or_404(SourceMaterial, id=pk, team=request.team)
         source_material.delete()
+        messages.success(request, "Source Material deleted")
         return HttpResponse()

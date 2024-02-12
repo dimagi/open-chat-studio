@@ -2,36 +2,24 @@ from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from pydantic import ValidationError
 
-from apps.chat.conversation import AgentConversation, AssistantConversation, BasicConversation, Conversation
+from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SafetyLayer
+from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
 def create_conversation(
     prompt_str: str,
     source_material: str,
     llm: BaseChatModel,
-    experiment_session: ExperimentSession | None = None,
 ) -> Conversation:
     try:
-        if experiment_session and experiment_session.experiment.assistant:
-            return AssistantConversation(experiment_session)
-        if experiment_session and experiment_session.experiment.tools_enabled:
-            return AgentConversation(
-                prompt_str=prompt_str,
-                source_material=source_material,
-                memory=ConversationBufferMemory(return_messages=True),
-                llm=llm,
-                experiment_session=experiment_session,
-            )
-        else:
-            return BasicConversation(
-                prompt_str=prompt_str,
-                source_material=source_material,
-                memory=ConversationBufferMemory(return_messages=True),
-                llm=llm,
-            )
+        return BasicConversation(
+            prompt_str=prompt_str,
+            source_material=source_material,
+            memory=ConversationBufferMemory(return_messages=True),
+            llm=llm,
+        )
     except ValidationError as e:
         raise ChatException(str(e)) from e
 
@@ -60,22 +48,25 @@ class TopicBot:
         self._initialize()
 
     def _initialize(self):
-        self.conversation = create_conversation(
-            self.prompt, self.source_material, self.llm, experiment_session=self.session
-        )
+        self.chain = create_experiment_runnable(self.session.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-        self.conversation.load_memory_from_chat(self.chat, self.max_token_limit)
-
-    def _call_predict(self, input_str):
-        response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
-        self.input_tokens = self.input_tokens + prompt_tokens
-        self.output_tokens = self.output_tokens + completion_tokens
-        return response
+    def _call_predict(self, input_str, save_input_to_history=True):
+        result = self.chain.invoke(
+            input_str,
+            config={
+                "configurable": {
+                    "save_input_to_history": save_input_to_history,
+                }
+            },
+        )
+        self.input_tokens = self.input_tokens + result.prompt_tokens
+        self.output_tokens = self.output_tokens + result.completion_tokens
+        return result.output
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
@@ -90,23 +81,13 @@ class TopicBot:
         return input_tokens, output_tokens
 
     def process_input(self, user_input: str, save_input_to_history=True):
-        if save_input_to_history:
-            self._save_message_to_history(user_input, ChatMessageType.HUMAN)
-        response = self._get_response(user_input)
-        self._save_message_to_history(response, ChatMessageType.AI)
-        return response
-
-    def _get_response(self, input_str: str):
         # human safety layers
         for safety_bot in self.safety_bots:
-            if safety_bot.filter_human_messages() and not safety_bot.is_safe(input_str):
+            if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
                 notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
-        # if we made it here there weren't any relevant human safety issues
-        if self.input_formatter:
-            input_str = self.input_formatter.format(input=input_str)
-        response = self._call_predict(input_str)
+        response = self._call_predict(user_input, save_input_to_history)
 
         # ai safety layers
         for safety_bot in self.safety_bots:
@@ -116,25 +97,16 @@ class TopicBot:
         return response
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
-        no_answer = "Sorry, I can't answer that. Please try something else."
         if safety_layer.prompt_to_bot:
             print("========== safety bot response =========")
             print(f"passing input: {safety_layer.prompt_to_bot}")
-            safety_response = self._call_predict(safety_layer.prompt_to_bot)
-            print(f"got back: {safety_response}")
+            safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
+            print(f"got back: {safety_response.output}")
             print("========== end safety bot response =========")
-
+            return safety_response.output
         else:
-            safety_response = safety_layer.default_response_to_user or no_answer
-        return safety_response
-
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        # save messages individually to get correct timestamps
-        ChatMessage.objects.create(
-            chat=self.chat,
-            message_type=type_.value,
-            content=message,
-        )
+            no_answer = "Sorry, I can't answer that. Please try something else."
+            return safety_layer.default_response_to_user or no_answer
 
 
 class SafetyBot:
