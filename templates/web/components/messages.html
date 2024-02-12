@@ -1,8 +1,28 @@
+<script>
+  (() => {
+    htmx.on("messages", (event) => {
+      event.detail.value.forEach((message) => {
+        Toast.fire({
+          icon: message.tags,
+          title: message.tags[0].toUpperCase() + message.tags.slice(1),
+          text: message.message
+        });
+      });
+    })
+  })();
+</script>
 {% if messages %}
-  {% for message in messages %}
-    <div class="notification flex w-full justify-between alert {% if message.tags %}alert-{{ message.level_tag }}{% endif %} shadow-md !rounded-none {{ message.extra_tags }} mb-1" >
-      <div>{{ message }}</div>
-      <button class="delete"><i class="fa fa-times"></i></button>
-    </div>
-  {% endfor %}
+  <div class="toast toast-start">
+    {% for message in messages %}
+      <script>
+        (() => {
+          Toast.fire({
+            icon: '{{ message.tags }}',
+            title: '{{ message.tags|capfirst }}',
+            text: '{{ message }}'
+          });
+        })();
+      </script>
+    {% endfor %}
+  </div>
 {% endif %}

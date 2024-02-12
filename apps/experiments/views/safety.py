@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -84,4 +85,5 @@ class DeleteSafetyLayer(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         safety_layer = get_object_or_404(SafetyLayer, id=pk, team=request.team)
         safety_layer.delete()
+        messages.success(request, "Safety Layer")
         return HttpResponse()

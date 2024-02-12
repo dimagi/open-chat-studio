@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
@@ -83,4 +84,5 @@ class DeleteNoActivityMessageConfig(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         no_activity_config = get_object_or_404(NoActivityMessageConfig, id=pk, team=request.team)
         no_activity_config.delete()
+        messages.success(request, "No Activity Config Deleted")
         return HttpResponse()
