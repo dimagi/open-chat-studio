@@ -1,4 +1,4 @@
-from apps.analysis.steps.loaders import ResourceTextLoader
+from apps.analysis.steps.loaders import CommCareAppLoader, ResourceTextLoader
 from apps.analysis.steps.parsers import WhatsappParser
 
 from .core import ParamsForm, Pipeline
@@ -7,6 +7,7 @@ from .steps.processors import AssistantStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
 TEXT_DATA_PIPE = "text_data"
+COMMCARE_APP_PIPE = "commcare_app"
 FILTERED_WHATSAPP_DATA_PIPE = "filtered_whatsapp_data"
 SPLIT_WHATSAPP_DATA_PIPE = "split_whatsapp_data"
 
@@ -35,6 +36,13 @@ SOURCE_PIPELINES = {
         ],
         "Text Data",
         "Load text data from a file",
+    ),
+    COMMCARE_APP_PIPE: PiplineDefinition(
+        [
+            CommCareAppLoader,
+        ],
+        "CommCare Application",
+        "Load data from a CommCare application API.",
     ),
     FILTERED_WHATSAPP_DATA_PIPE: PiplineDefinition(
         [

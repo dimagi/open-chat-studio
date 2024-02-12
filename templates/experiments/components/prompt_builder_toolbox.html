@@ -93,9 +93,9 @@
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
                 <li>
                     <button
-                    hx-get="{% url 'experiments:prompt_builder_load_prompts' team.slug %}"
-                        hx-trigger="click" hx-target="#load-prompts" hx-swap="innerHTML"
-                        @click.stop="$store.promptBuilder.toggleSidebar('prompts')">
+                    hx-get="{% url 'experiments:prompt_builder_load_experiments' team.slug %}"
+                        hx-trigger="click" hx-target="#experiment-list" hx-swap="innerHTML"
+                        @click.stop="$store.promptBuilder.toggleSidebar('experiments')">
                         <i class="fa fa-folder-open-o px-2"></i></button>
                 </li>
                 <li>
@@ -117,8 +117,13 @@
                 'X-CSRFToken': App.Cookies.get('csrftoken')
             },
             body: JSON.stringify({
-                'prompt': Alpine.store('promptBuilder').currentState.prompt,
-                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter
+                // data to forwarded to the 'create experiment' view
+                'prompt_text': Alpine.store('promptBuilder').currentState.prompt,
+                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter,
+                'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
+                'llm_provider': Alpine.store('promptBuilder').currentState.provider,
+                'llm': Alpine.store('promptBuilder').currentState.model,
+                'temperature': Alpine.store('promptBuilder').currentState.temperature,
             })
         })
             .then(response => {

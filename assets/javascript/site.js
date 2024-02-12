@@ -3,4 +3,5 @@
 import 'htmx.org';
 import './htmx';
 import './alpine';
+import './sweetalert2';
 import './tiktoken';

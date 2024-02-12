@@ -7,7 +7,7 @@ from mock import patch
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_facebook_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.experiments.models import ConsentForm, Experiment, Prompt
+from apps.experiments.models import ConsentForm, Experiment
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -20,19 +20,12 @@ class FacebookChannelTest(TestCase):
         self.page_access_token = "678910"
         self.team = Team.objects.create(name="test-team", slug="test-team")
         self.user = CustomUser.objects.create_user(username="testuser")
-        self.prompt = Prompt.objects.create(
-            team=self.team,
-            owner=self.user,
-            name="test-prompt",
-            description="test",
-            prompt="You are a helpful assistant",
-        )
         self.experiment = Experiment.objects.create(
             team=self.team,
             owner=self.user,
             name="TestExperiment",
             description="test",
-            chatbot_prompt=self.prompt,
+            prompt_text="You are a helpful assistant",
             consent_form=ConsentForm.get_default(self.team),
             llm_provider=LlmProvider.objects.create(
                 name="test",

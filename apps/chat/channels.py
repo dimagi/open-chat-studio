@@ -81,8 +81,8 @@ class ChannelBase:
         if not experiment_channel and not experiment_session:
             raise MessageHandlerException("ChannelBase expects either")
 
-        self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
+        self.experiment_channel = experiment_channel if experiment_channel else experiment_session.experiment_channel
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
 
