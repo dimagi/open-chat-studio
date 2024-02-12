@@ -442,7 +442,7 @@ class TelegramChannel(ChannelBase):
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
-        return audio.convert_audio_to_wav(ogg_audio)
+        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
@@ -541,7 +541,7 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     def get_message_audio(self) -> BytesIO:
         raw_data = requests.get(self.message.media_url).content
         mp4_audio = BytesIO(raw_data)
-        return audio.convert_audio_to_wav(mp4_audio, source_format="mp4")
+        return audio.convert_audio(mp4_audio, target_format="wav", source_format="mp4")
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')

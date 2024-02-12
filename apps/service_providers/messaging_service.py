@@ -82,7 +82,7 @@ class TwilioService(MessagingService):
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
         ogg_audio = BytesIO(requests.get(message.media_url, auth=auth).content)
-        return audio.convert_audio_to_wav(ogg_audio)
+        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
 
 class TurnIOService(MessagingService):
@@ -109,4 +109,4 @@ class TurnIOService(MessagingService):
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
         ogg_audio = BytesIO(response.content)
-        return audio.convert_audio_to_wav(ogg_audio)
+        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
