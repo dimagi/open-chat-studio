@@ -91,7 +91,7 @@ class BasicTypeSerializer(Serializer):
         )
 
     def get_summary(self, data: Any) -> str:
-        if type(data) == str:
+        if isinstance(data, str):
             return data
         return json.dumps(data, indent=2, cls=DjangoJSONEncoder)
 
