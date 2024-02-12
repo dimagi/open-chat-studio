@@ -105,7 +105,7 @@ def _facebook_text_message(page_id: str, message: str):
                         "recipient": {"id": page_id},
                         "timestamp": 1699259349974,
                         "message": {
-                            "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDHASDSLCbwvO5IBJmx5wFIAvBhWtttttttttt2dOteWfSYYI59BlctQ",
+                            "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDH",
                             "text": message,
                         },
                     }
@@ -131,7 +131,7 @@ def _facebook_audio_message(page_id: str, attachment_url: str):
                         },
                         "timestamp": 1699259349974,
                         "message": {
-                            "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDHASDSLCbwvO5IBJmx5wFIAvBhWtttttttttt2dOteWfSYYI59BlctQ",
+                            "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDHASD",
                             "attachments": [{"type": "audio", "payload": {"url": attachment_url}}],
                         },
                     }

@@ -115,11 +115,12 @@ class Survey(BaseTeamModel):
         null=False,
         default=(
             "Before starting the experiment, we ask that you complete a short survey. Please click on the "
-            "survey link, fill it out, and, when you have finished, respond with '1' to let us know that you've completed"
-            " it. Survey link: {survey_link}"
+            "survey link, fill it out, and, when you have finished, respond with '1' to let us know that"
+            "you've completed it. Survey link: {survey_link}"
         ),
         help_text=(
-            "Use this text to ask the user to complete the survey. The {survey_link} will contain the link to the survey"
+            "Use this text to ask the user to complete the survey. The {survey_link} will contain the "
+            "link to the survey"
         ),
     )
 

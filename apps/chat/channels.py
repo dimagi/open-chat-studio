@@ -39,16 +39,20 @@ class ChannelBase:
 
     Args:
         experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
-        experiment_session: An optional ExperimentSession object representing the experiment session associated with the handler.
+        experiment_session: An optional ExperimentSession object representing the experiment session associated
+            with the handler.
 
         Either one of these arguments must to be provided
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Properties:
-        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier of the chat.
-        message_content_type: An abstract property that must be implemented in subclasses to return the type of message content (e.g., text, voice).
-        message_text: An abstract property that must be implemented in subclasses to return the text content of the message.
+        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier
+            of the chat.
+        message_content_type: An abstract property that must be implemented in subclasses to return the type
+            of message content (e.g., text, voice).
+        message_text: An abstract property that must be implemented in subclasses to return the text
+            content of the message.
 
     Abstract methods:
         initialize: (Optional) Performs any necessary initialization
