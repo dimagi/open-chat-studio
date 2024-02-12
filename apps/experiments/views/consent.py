@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -74,4 +75,5 @@ class DeleteConsentForm(LoginAndTeamRequiredMixin, View):
         if consent_form.is_default:
             return HttpResponse("Cannot delete default consent form.", status=400)
         consent_form.delete()
+        messages.success(request, "Consent Form Deleted")
         return HttpResponse()

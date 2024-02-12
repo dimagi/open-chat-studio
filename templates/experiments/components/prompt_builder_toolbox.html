@@ -117,8 +117,13 @@
                 'X-CSRFToken': App.Cookies.get('csrftoken')
             },
             body: JSON.stringify({
-                'prompt': Alpine.store('promptBuilder').currentState.prompt,
-                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter
+                // data to forwarded to the 'create experiment' view
+                'prompt_text': Alpine.store('promptBuilder').currentState.prompt,
+                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter,
+                'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
+                'llm_provider': Alpine.store('promptBuilder').currentState.provider,
+                'llm': Alpine.store('promptBuilder').currentState.model,
+                'temperature': Alpine.store('promptBuilder').currentState.temperature,
             })
         })
             .then(response => {

@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -72,4 +73,5 @@ class DeleteSurvey(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         survey = get_object_or_404(Survey, id=pk, team=request.team)
         survey.delete()
+        messages.success(request, "Survey Deleted")
         return HttpResponse()

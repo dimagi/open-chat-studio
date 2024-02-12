@@ -22,6 +22,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
@@ -36,6 +37,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -120,6 +122,8 @@ class ExperimentForm(forms.ModelForm):
         else:
             del self.fields["assistant"]
             self.fields["prompt_text"].required = True
+            self.fields["llm_provider"].required = True
+            self.fields["llm"].required = True
         self.fields["voice_provider"].queryset = team.voiceprovider_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
@@ -141,9 +145,20 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if not cleaned_data["prompt_text"] and not cleaned_data["assistant"]:
-            raise forms.ValidationError("Prompt text is required unless you select an OpenAI Assistant")
+        assistant = cleaned_data.get("assistant")
+        errors = {}
+        if not assistant:
+            if not cleaned_data.get("prompt_text"):
+                errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
+            if not cleaned_data.get("llm_provider"):
+                errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
+            if not cleaned_data.get("llm"):
+                errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
 
+        if errors:
+            raise forms.ValidationError(errors)
+
+        _validate_prompt_variables(cleaned_data)
         return cleaned_data
 
     def save(self, commit=True):
@@ -154,6 +169,24 @@ class ExperimentForm(forms.ModelForm):
             experiment.save()
             self.save_m2m()
         return experiment
+
+
+def _validate_prompt_variables(form_data):
+    required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
+    available_variables = set()
+    if form_data.get("source_material"):
+        available_variables.add("source_material")
+    missing_vars = required_variables - available_variables
+    known_vars = {"source_material"}
+    if missing_vars:
+        errors = []
+        unknown_vars = missing_vars - known_vars
+        if unknown_vars:
+            errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
+            missing_vars -= unknown_vars
+        if missing_vars:
+            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+        raise forms.ValidationError({"prompt_text": errors})
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -190,10 +223,6 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 request=self.request, message="A seed message is required when conversational " "consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
-
-        if _source_material_is_missing(experiment):
-            messages.error(request=self.request, message="The prompt expects source material, but none were specified")
-            return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
 
 
@@ -202,19 +231,18 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
+        if long_data:
+            initial.update(long_data)
+        return initial
+
 
 class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
     button_title = "Update"
     permission_required = "experiments.change_experiment"
-
-
-def _source_material_is_missing(experiment: Experiment) -> bool:
-    prompt = experiment.prompt_text
-    prompt_expects_source_material = "{source_material}" in prompt
-    if not prompt_expects_source_material:
-        return False
-    return not bool(experiment.source_material)
 
 
 def _get_voice_provider_alpine_context(request):
@@ -240,6 +268,7 @@ def _get_voice_provider_alpine_context(request):
 def delete_experiment(request, team_slug: str, pk: int):
     safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
     safety_layer.delete()
+    messages.success(request, "Experiment Deleted")
     return redirect("experiments:experiments_home", team_slug)
 
 
@@ -275,7 +304,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
 
 
 @login_and_team_required
-@permission_required("channels.add_channel", raise_exception=True)
+@permission_required("channels.add_experimentchannel", raise_exception=True)
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
@@ -319,13 +348,13 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
     )
     if request.POST.get("action") == "delete":
-        if not request.user.has_perm("channels.delete_channel"):
+        if not request.user.has_perm("channels.delete_experimentchannel"):
             raise PermissionDenied
 
         channel.delete()
         return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
-    if not request.user.has_perm("channels.change_channel"):
+    if not request.user.has_perm("channels.change_experimentchannel"):
         raise PermissionDenied
 
     form = channel.form(data=request.POST)
@@ -561,12 +590,14 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             ).exists():
                 messages.info(request, "{} already has a pending invitation.".format(participant))
             else:
+                channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                 session = ExperimentSession.objects.create(
                     team=request.team,
                     experiment=experiment,
                     llm=experiment.llm,
                     status="setup",
                     participant=participant,
+                    experiment_channel=channel,
                 )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)

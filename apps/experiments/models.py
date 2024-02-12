@@ -41,37 +41,6 @@ class NoActivityMessageConfigObjectManager(AuditingManager):
     pass
 
 
-@audit_fields(*model_audit_fields.PROMPT_FIELDS, audit_special_queryset_writes=True)
-class Prompt(BaseTeamModel):
-    """
-    A prompt - typically the starting point for ChatGPT.
-    """
-
-    objects = PromptObjectManager()
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
-    description = models.TextField(blank=True, default="", verbose_name="A longer description of what the prompt does.")
-    prompt = models.TextField()
-    input_formatter = models.TextField(
-        blank=True,
-        default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
-    )
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-    def format(self, input_str):
-        if self.input_formatter:
-            return self.input_formatter.format(input=input_str)
-        else:
-            return input_str
-
-
 class PromptBuilderHistory(BaseTeamModel):
     """
     History entries for the prompt builder
@@ -107,7 +76,6 @@ class SourceMaterial(BaseTeamModel):
 class SafetyLayer(BaseTeamModel):
     objects = SafetyLayerObjectManager()
     name = models.CharField(max_length=50)
-    prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, null=True)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
@@ -286,11 +254,7 @@ class Experiment(BaseTeamModel):
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
-    llm = models.CharField(
-        max_length=20,
-        help_text="The LLM model to use.",
-        verbose_name="LLM Model",
-    )
+    llm = models.CharField(max_length=20, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.SET_NULL,
@@ -300,8 +264,6 @@ class Experiment(BaseTeamModel):
     )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
-    # deprecated in favor of `prompt` and `input_formatter`
-    chatbot_prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE, related_name="experiments", null=True)
     prompt_text = models.TextField(blank=True, default="")
     input_formatter = models.TextField(
         blank=True,

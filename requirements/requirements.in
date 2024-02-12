@@ -23,6 +23,7 @@ pandas
 sentry-sdk
 whitenoise[brotli]
 langchain
+langchain-openai
 Markdown
 # unstructured  # langchain loaders
 # chromadb  # langchain queries

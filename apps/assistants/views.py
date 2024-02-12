@@ -24,7 +24,7 @@ from .utils import get_llm_providers_for_assistants
 
 class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
-    permission_required = "analysis.view_openaiassistant"
+    permission_required = "assistants.view_openaiassistant"
 
     def get_context_data(self, team_slug: str, **kwargs):
         has_providers = get_llm_providers_for_assistants(self.request.team).exists()
@@ -42,7 +42,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
                     "assistants:import",
                     label="Import",
                     icon_class="fa-solid fa-file-import",
-                    required_permissions=["analysis.add_openaiassistant"],
+                    required_permissions=["assistants.add_openaiassistant"],
                 )
             ],
         }
@@ -52,7 +52,7 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
-    permission_required = "analysis.view_openaiassistant"
+    permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
         return OpenAiAssistant.objects.filter(team=self.request.team)
@@ -117,6 +117,7 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
         delete_openai_assistant(assistant)
+        messages.success(request, "Assistant Deleted")
         return HttpResponse()
 
 
@@ -127,6 +128,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         assistant.delete()
+        messages.success(request, "Assistant Deleted")
         return HttpResponse()
 
 

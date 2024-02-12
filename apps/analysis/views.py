@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import FileResponse, Http404, HttpResponse
@@ -164,6 +165,7 @@ class EditAnalysisPipeline(UpdateView, PermissionRequiredMixin):
 def delete_analysis(request, team_slug: str, pk: int):
     prompt = get_object_or_404(Analysis, id=pk, team=request.team)
     prompt.delete()
+    messages.success(request, "Pipeline Deleted")
     if request.headers.get("HX-Request"):
         return HttpResponse()
     else:
@@ -295,6 +297,7 @@ def download_resource(request, team_slug: str, pk: int):
 def delete_run_group(request, team_slug: str, pk: int):
     group = get_object_or_404(RunGroup, id=pk, team=request.team)
     group.delete()
+    messages.success(request, "Run Deleted")
     if request.headers.get("HX-Request"):
         return HttpResponse()
     else:
