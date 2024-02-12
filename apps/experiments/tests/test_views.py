@@ -40,7 +40,7 @@ def test_create_experiment_success(db, client, team_with_users):
 
 @override_flag("assistants", active=True)
 @pytest.mark.parametrize(
-    "with_assistant,with_prompt,with_llm_provider,with_llm_model,errors",
+    ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
     [
         (True, False, False, False, {}),
         (False, True, True, True, {}),
@@ -75,7 +75,7 @@ def test_experiment_form_with_assistants(
 
 
 @pytest.mark.parametrize(
-    "source_material,prompt_str,expectation",
+    ("source_material", "prompt_str", "expectation"),
     [
         (None, "You're an assistant", does_not_raise()),
         ("something", "You're an assistant", does_not_raise()),

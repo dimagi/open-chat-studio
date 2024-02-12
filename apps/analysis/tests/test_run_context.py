@@ -49,7 +49,7 @@ def mock_analysis_run(mock_run_group):
 
 
 @pytest.mark.parametrize(
-    "params, expected",
+    ("params", "expected"),
     [
         ({}, {"llm_model": "test"}),
         ({"llm_model": "test2"}, {"llm_model": "test"}),

@@ -32,7 +32,7 @@ def get_params(resource):
 
 
 @pytest.mark.parametrize(
-    "resource_type,raw_data,expected",
+    ("resource_type", "raw_data", "expected"),
     [
         (ResourceType.CSV, "a,b,c\n1,2,3\n4,5,6", "a,b,c\n1,2,3\n4,5,6\n"),
         (

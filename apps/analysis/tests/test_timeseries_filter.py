@@ -23,7 +23,7 @@ def _make_params(
 
 
 @pytest.mark.parametrize(
-    "params,start,end",
+    ("params", "start", "end"),
     [
         pytest.param(
             _make_params(DurationUnit.minutes, 2, "this"),
@@ -159,7 +159,7 @@ def test_timeseries_filter_params(params, start, end):
 
 
 @pytest.mark.parametrize(
-    "unit, value, expected",
+    ("unit", "value", "expected"),
     [
         (DurationUnit.minutes, 7, "2022-04-01T15:36--2022-04-01T15:43"),
         (DurationUnit.hours, 7, "2022-04-01T15--2022-04-01T22"),
@@ -230,7 +230,7 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
 
 
 @pytest.mark.parametrize(
-    "anchor_type, anchor_mode, expected",
+    ("anchor_type", "anchor_mode", "expected"),
     [
         ("this", "absolute", [1, 2]),
         ("this", "relative_start", [0, 1]),

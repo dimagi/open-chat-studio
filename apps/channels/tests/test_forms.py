@@ -9,7 +9,7 @@ from apps.utils.factories.service_provider_factories import MessagingProviderFac
 
 
 @pytest.mark.parametrize(
-    "platform,expected_widget_cls",
+    ("platform", "expected_widget_cls"),
     [
         ("whatsapp", Select),
         ("telegram", HiddenInput),

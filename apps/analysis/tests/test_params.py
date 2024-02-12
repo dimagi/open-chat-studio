@@ -12,7 +12,7 @@ class ExampleParams(Params):
 
 
 @pytest.mark.parametrize(
-    "args, raises",
+    ("args", "raises"),
     [
         ({"simple": 1, "complex": "test", "annotated": 1}, False),
         ({"simple": 1, "complex": {"A": 1}, "annotated": 1}, False),
@@ -30,7 +30,7 @@ def test_params(args, raises):
 
 
 @pytest.mark.parametrize(
-    "initial, params, expected",
+    ("initial", "params", "expected"),
     [
         (ExampleParams(), [{"simple": 1}], ExampleParams(simple=1)),
         (ExampleParams(), [{"simple": 1}, {"simple": 2}], ExampleParams(simple=2)),

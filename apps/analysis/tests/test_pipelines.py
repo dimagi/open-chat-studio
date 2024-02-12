@@ -7,7 +7,7 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
 
 
 @pytest.mark.parametrize(
-    "pipeline, pipeline_context, context, output",
+    ("pipeline", "pipeline_context", "context", "output"),
     [
         (
             Pipeline([Multiply(params=FactorSay(factor=3)), Divide(params=FactorSay(factor=2))]),
@@ -42,7 +42,7 @@ def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
 
 
 @pytest.mark.parametrize(
-    "params, context, expected",
+    ("params", "context", "expected"),
     [
         (None, {"factor": 2}, Divide.param_schema(factor=2)),
         (Divide.param_schema(say="hi"), {"factor": 2}, Divide.param_schema(factor=2, say="hi")),
@@ -57,7 +57,7 @@ def test_params(params, context, expected):
 
 
 @pytest.mark.parametrize(
-    "chain, valid",
+    ("chain", "valid"),
     [
         ([Divide, Multiply], True),
         ([Multiply, Divide], True),
