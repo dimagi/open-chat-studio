@@ -35,8 +35,7 @@ def process_invitation(invitation: Invitation, user: CustomUser):
 def get_invitation_id_from_request(request):
     return (
         # URL takes precedence over session/cookie
-        request.GET.get("invitation_id")
-        or request.session.get("invitation_id")
+        request.GET.get("invitation_id") or request.session.get("invitation_id")
     )
 
 
