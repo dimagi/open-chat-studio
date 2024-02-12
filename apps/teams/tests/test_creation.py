@@ -28,7 +28,7 @@ def test_create_team_view(db, client):
     """Test to make sure that user is assigned as group owner when they create a team"""
     user = UserFactory()
     client.force_login(user)
-    response = client.post(reverse("teams:create_team"), {"name": "Team name", "slug": "team"})
+    client.post(reverse("teams:create_team"), {"name": "Team name", "slug": "team"})
 
     membership = Membership.objects.filter(team__slug="team").first()
     perission_group = membership.groups.first()

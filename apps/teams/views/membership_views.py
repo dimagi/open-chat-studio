@@ -11,7 +11,6 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.exceptions import TeamPermissionError
 from apps.teams.forms import MembershipForm
 from apps.teams.models import Membership
-from apps.teams.roles import ROLE_ADMIN
 from apps.web.forms import set_form_fields_disabled
 
 

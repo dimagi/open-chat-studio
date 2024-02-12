@@ -39,9 +39,9 @@ class PromptParams(core.Params):
         if self.prompt_template:
             input_variables = set(self.prompt_template.input_variables)
             if "data" not in input_variables:
-                raise ValueError(f"Invalid prompt template. Prompts must have a 'data' variable.")
+                raise ValueError("Invalid prompt template. Prompts must have a 'data' variable.")
             elif len(input_variables) > 1:
-                raise ValueError(f"Invalid prompt template. Prompts must only have a 'data' variable.")
+                raise ValueError("Invalid prompt template. Prompts must only have a 'data' variable.")
         return self
 
 
@@ -161,7 +161,7 @@ class AssistantStep(core.BaseStep[Any, str]):
                 context.resource.metadata["openai_file_id"] = openai_file.id
                 context.resource.save()
         if not openai_file:
-            self.log.info(f"Uploading data to assistant")
+            self.log.info("Uploading data to assistant")
             with temporary_data_file(context.get_data()) as file:
                 openai_file = self.client.files.create(file=file, purpose="assistants")
         return openai_file

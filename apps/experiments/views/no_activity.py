@@ -1,6 +1,5 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView

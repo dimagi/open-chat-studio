@@ -1,5 +1,3 @@
-from typing import Optional
-
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from pydantic import ValidationError
@@ -14,7 +12,7 @@ def create_conversation(
     prompt_str: str,
     source_material: str,
     llm: BaseChatModel,
-    experiment_session: Optional[ExperimentSession] = None,
+    experiment_session: ExperimentSession | None = None,
 ) -> Conversation:
     try:
         if experiment_session and experiment_session.experiment.assistant:
@@ -140,7 +138,7 @@ class TopicBot:
 
 
 class SafetyBot:
-    def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: Optional[str]):
+    def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: str | None):
         self.safety_layer = safety_layer
         self.prompt = safety_layer.prompt_text
         self.llm = llm

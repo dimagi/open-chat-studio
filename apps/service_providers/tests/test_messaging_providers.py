@@ -1,4 +1,3 @@
-import mock
 import pytest
 from pydantic import ValidationError
 

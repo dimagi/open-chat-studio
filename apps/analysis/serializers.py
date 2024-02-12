@@ -6,7 +6,6 @@ from typing import IO, Any
 import pandas as pd
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
-from django.utils import timezone
 
 from apps.analysis.models import Resource, ResourceMetadata, ResourceType
 

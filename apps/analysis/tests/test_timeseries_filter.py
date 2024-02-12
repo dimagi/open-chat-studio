@@ -174,14 +174,14 @@ def test_timeseries_filter_params_period_name(unit, value, expected):
     assert params.period_name() == expected
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_data():
     dates = pd.date_range(start="2021-01-01", end="2021-01-31")
     data = pd.DataFrame(index=dates, data={"value": range(len(dates))})
     return data
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_filter():
     step = TimeseriesFilter()
     step.initialize(PipelineContext(log=Logger(StdoutLogStream())))

@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List
 from uuid import UUID
 
 import pytz
@@ -34,7 +33,7 @@ def periodic_tasks(self):
 
 
 @shared_task
-def send_bot_message_to_users(message: str, chat_ids: List[str], is_bot_instruction: bool, experiment_public_id: UUID):
+def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruction: bool, experiment_public_id: UUID):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
     If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
@@ -82,7 +81,7 @@ def _no_activity_pings():
 
     UTC = pytz.timezone("UTC")
     now = datetime.now().astimezone(UTC)
-    experiment_sessions_to_ping: List[ExperimentSession] = []
+    experiment_sessions_to_ping: list[ExperimentSession] = []
 
     subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
     # Why not exclude the SETUP status? "Normal" UI chats have a SETUP status
@@ -112,11 +111,9 @@ def _no_activity_pings():
         if experiment_session.is_stale():
             # The experiment channel's experiment might have changed
             logger.warning(
-                (
-                    f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
-                    "whereas the current experiment session points to experiment"
-                    f"'{experiment_session.experiment.name}'"
-                )
+                f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
+                "whereas the current experiment session points to experiment"
+                f"'{experiment_session.experiment.name}'"
             )
             return
         ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)

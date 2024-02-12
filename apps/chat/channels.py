@@ -4,7 +4,6 @@ from abc import abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from io import BytesIO
-from typing import Optional
 
 import boto3
 import requests
@@ -71,8 +70,8 @@ class ChannelBase:
 
     def __init__(
         self,
-        experiment_channel: Optional[ExperimentChannel] = None,
-        experiment_session: Optional[ExperimentSession] = None,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
     ):
         if not experiment_channel and not experiment_session:
             raise MessageHandlerException("ChannelBase expects either")

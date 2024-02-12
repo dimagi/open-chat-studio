@@ -1,8 +1,8 @@
 import json
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
-from mock import patch
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_facebook_message

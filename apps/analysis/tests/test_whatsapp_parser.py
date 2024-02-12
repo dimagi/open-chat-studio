@@ -9,14 +9,14 @@ from apps.analysis.exceptions import StepError
 from apps.analysis.steps.parsers import WhatsappParser, WhatsappParserParams
 
 
-@pytest.fixture
+@pytest.fixture()
 def whatsapp_parser():
     step = WhatsappParser()
     step.initialize(PipelineContext())
     return step
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_whatsapp_log():
     return dedent(
         """
@@ -30,7 +30,7 @@ def valid_whatsapp_log():
     ).strip()
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_whatsapp_log_unicode_rtl():
     return Path(__file__).parent.joinpath("data/unicode_rtl_whatsapp_data.txt").read_text()
 

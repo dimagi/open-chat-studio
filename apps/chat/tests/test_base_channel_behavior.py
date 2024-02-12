@@ -4,9 +4,9 @@ intended. It utilizes the Telegram channel subclass to serve as a testing framew
 """
 
 import json
+from unittest.mock import Mock, patch
 
 from django.test import TestCase
-from mock import Mock, patch
 from telebot import types
 
 from apps.channels.models import ExperimentChannel

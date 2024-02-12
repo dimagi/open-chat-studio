@@ -2,7 +2,6 @@ from allauth.account.forms import SignupForm
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 

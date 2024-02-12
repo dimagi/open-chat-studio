@@ -1,5 +1,3 @@
-from typing import Optional
-
 from django.http import HttpRequest
 from rest_framework_api_key.permissions import KeyParser
 
@@ -7,7 +5,7 @@ from apps.api.models import UserAPIKey
 from apps.users.models import CustomUser
 
 
-def get_user_from_request(request: HttpRequest) -> Optional[CustomUser]:
+def get_user_from_request(request: HttpRequest) -> CustomUser | None:
     if request is None:
         return None
     if request.user.is_anonymous:

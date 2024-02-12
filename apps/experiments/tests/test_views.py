@@ -1,6 +1,6 @@
 from contextlib import nullcontext as does_not_raise
+from unittest import mock
 
-import mock
 import pytest
 from django.core.exceptions import ValidationError
 from django.urls import reverse

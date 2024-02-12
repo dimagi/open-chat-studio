@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
 
-import pytz
 from django.test import TestCase
 from freezegun import freeze_time
-from mock import Mock, patch
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType

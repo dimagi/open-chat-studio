@@ -1,11 +1,9 @@
-from unittest.mock import MagicMock, patch
-
-import mock.mock
+from unittest.mock import patch
 
 from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.steps.forms import CommCareAppLoaderParamsForm, CommCareAppLoaderStaticConfigForm
 from apps.analysis.steps.loaders import CommCareAppLoader, CommCareAppLoaderParams
-from apps.service_providers.auth_service import AuthService, CommCareAuthService
+from apps.service_providers.auth_service import CommCareAuthService
 from apps.service_providers.models import AuthProvider
 
 

@@ -1,9 +1,4 @@
-import mock
-import pytest
-from pydantic import ValidationError
-
-from apps.channels.models import ChannelPlatform
-from apps.service_providers.models import AuthProviderType, MessagingProvider, MessagingProviderType
+from apps.service_providers.models import AuthProviderType
 
 
 def test_commcare_auth_provider(team_with_users):

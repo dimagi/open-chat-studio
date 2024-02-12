@@ -2,7 +2,6 @@ import pytest
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from apps.teams import roles
 from apps.teams.backends import (
     CHAT_VIEWER_GROUP,
     EXPERIMENT_ADMIN_GROUP,

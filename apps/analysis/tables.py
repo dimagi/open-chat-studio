@@ -1,7 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
+from apps.analysis.models import Analysis, RunGroup, RunStatus
 from apps.generics import actions
 
 

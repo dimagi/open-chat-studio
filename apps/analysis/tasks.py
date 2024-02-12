@@ -1,9 +1,8 @@
 import logging
 from contextlib import contextmanager
 
-from celery import chord
+from celery import chord, shared_task
 from celery import group as celery_group
-from celery import shared_task
 from django.utils import timezone
 
 from apps.analysis.core import PipelineContext, StepContext

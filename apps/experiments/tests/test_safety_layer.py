@@ -1,4 +1,4 @@
-from mock import Mock, patch
+from unittest.mock import Mock, patch
 
 from apps.chat.bots import TopicBot
 from apps.experiments.models import SafetyLayer

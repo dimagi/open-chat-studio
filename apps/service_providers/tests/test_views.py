@@ -23,7 +23,7 @@ def factory_for_model(model):
 
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_table_view(provider, team_with_users, client):
     factory = factory_for_model(provider.model)
     factory.create_batch(5, team=team_with_users)
@@ -37,7 +37,7 @@ def test_table_view(provider, team_with_users, client):
 
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_create_view(provider, team_with_users, client):
     """Test that the create view renders without error."""
     response = client.get(
@@ -47,7 +47,7 @@ def test_create_view(provider, team_with_users, client):
 
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_update_view(provider, team_with_users, client):
     """Test that the update view renders without error."""
     factory = factory_for_model(provider.model)
@@ -62,7 +62,7 @@ def test_update_view(provider, team_with_users, client):
 
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_delete_view(provider, team_with_users, client):
     factory = factory_for_model(provider.model)
     provider_instance = factory(team=team_with_users)

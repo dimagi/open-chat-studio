@@ -46,7 +46,6 @@ class ChannelPlatform(models.TextChoices):
 
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
-        from apps.service_providers.models import MessagingProviderType
 
         channel = kwargs.pop("channel", None)
 

@@ -8,12 +8,12 @@ from apps.analysis.models import ResourceType
 from apps.analysis.serializers import DataFramesSerializerV2, ResourceMetadata
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_dataframe():
     return DataFrame(index=date_range(start="1/1/2021", end="1/5/2021"), data={"value": range(5)})
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_metadata():
     return ResourceMetadata(
         type="dataframe.v1",

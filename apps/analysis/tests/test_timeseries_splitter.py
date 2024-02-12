@@ -7,14 +7,14 @@ from apps.analysis.exceptions import StepError
 from apps.analysis.steps.splitters import TimeGroup, TimeseriesSplitter, TimeseriesSplitterParams
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_splitter():
     step = TimeseriesSplitter()
     step.initialize(PipelineContext())
     return step
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_data():
     dates = date_range(start="1/1/2021", end="2/15/2021")
     data = DataFrame(index=dates, data={"value": range(len(dates))})

@@ -12,9 +12,8 @@ from django.utils.translation import gettext as _
 class RelativeDateFieldListFilter(admin.DateFieldListFilter):
     def __init__(self, field, request, params, model, model_admin, field_path):
         super().__init__(field, request, params, model, model_admin, field_path)
-        nulls = []
         if field.null:
-            self.links, nulls = self.links[:-2], self.links[-2:]
+            self.links, _nulls = self.links[:-2], self.links[-2:]
 
         now = timezone.now()
         # When time zone support is enabled, convert "now" to the user's time
@@ -63,7 +62,7 @@ def export_as_csv(modeladmin, request, queryset):
     field_names = [field for field in modeladmin.list_display]
 
     response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = "attachment; filename={}.csv".format(meta)
+    response["Content-Disposition"] = f"attachment; filename={meta}.csv"
     writer = csv.writer(response)
 
     writer.writerow(field_names)

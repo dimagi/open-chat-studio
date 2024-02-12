@@ -1,6 +1,5 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.chains import ConversationChain
@@ -26,7 +25,7 @@ log = logging.getLogger("ocs.bots")
 
 class Conversation(ABC):
     @abstractmethod
-    def predict(self, input: str) -> Tuple[str, int, int]:
+    def predict(self, input: str) -> tuple[str, int, int]:
         raise NotImplementedError
 
     def load_memory_from_chat(self, chat: Chat, max_token_limit: int):
@@ -92,7 +91,7 @@ class BasicConversation(Conversation):
             log.exception("Unable to compress history")
             return chat.get_langchain_messages_until_summary()
 
-    def predict(self, input: str) -> Tuple[str, int, int]:
+    def predict(self, input: str) -> tuple[str, int, int]:
         if isinstance(self.llm, ChatAnthropic):
             # Langchain has no inbuilt functionality to return prompt or
             # completion tokens for Anthropic's models
@@ -138,7 +137,7 @@ class AssistantConversation(Conversation):
         self.experiment = experiment_session.experiment
         self.chat = self.session.chat
 
-    def predict(self, input: str) -> Tuple[str, int, int]:
+    def predict(self, input: str) -> tuple[str, int, int]:
         assistant_runnable = self.experiment.assistant.get_assistant()
 
         input_dict = {"content": input}

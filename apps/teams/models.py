@@ -78,7 +78,7 @@ class PermissionsMixin(models.Model):
                 .values_list("content_type__app_label", "codename")
                 .order_by()
             )
-            setattr(self, perm_cache_name, {"%s.%s" % (ct, name) for ct, name in perms})
+            setattr(self, perm_cache_name, {f"{ct}.{name}" for ct, name in perms})
         return getattr(self, perm_cache_name)
 
     def has_perm(self, perm):
@@ -158,7 +158,7 @@ class Flag(AbstractUserFlag):
     )
 
     def get_flush_keys(self, flush_keys=None):
-        flush_keys = super(Flag, self).get_flush_keys(flush_keys)
+        flush_keys = super().get_flush_keys(flush_keys)
         teams_cache_key = get_setting(Flag.FLAG_TEAMS_CACHE_KEY, Flag.FLAG_TEAMS_CACHE_KEY_DEFAULT)
         flush_keys.append(keyfmt(teams_cache_key, self.name))
         return flush_keys

@@ -9,7 +9,7 @@ from apps.analysis.models import Resource
 from apps.analysis.steps.loaders import ResourceDataframeLoader, ResourceLoaderParams, ResourceType
 
 
-@pytest.fixture
+@pytest.fixture()
 def resource_dataframe_loader():
     step = ResourceDataframeLoader()
     step.initialize(PipelineContext())

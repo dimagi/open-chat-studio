@@ -1,7 +1,5 @@
 import json
-
-from django.test import TestCase
-from mock import patch
+from unittest.mock import patch
 
 from apps.channels.datamodels import TurnWhatsappMessage, WhatsappMessage
 from apps.channels.models import ChannelPlatform
@@ -94,7 +92,7 @@ class TestTwilio:
         whatsapp_message = WhatsappMessage.model_validate(json.loads(incoming_message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
-        assert whatsapp_message.media_url == None
+        assert whatsapp_message.media_url is None
 
     def test_parse_media_message(self):
         incoming_message = TwilioMessages.audio_message()

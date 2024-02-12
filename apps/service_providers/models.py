@@ -1,6 +1,5 @@
 import dataclasses
 from enum import Enum
-from typing import List, Type
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -56,7 +55,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return empty + [(member.value.slug, member.label) for member in cls]
 
     @property
-    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
         match self:
             case LlmProviderTypes.openai:
                 return forms.OpenAIConfigForm
@@ -119,7 +118,7 @@ class VoiceProviderType(models.TextChoices):
     azure = "azure", _("Azure Text to Speech")
 
     @property
-    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
         match self:
             case VoiceProviderType.aws:
                 return forms.AWSVoiceConfigForm
@@ -165,7 +164,7 @@ class MessagingProviderType(models.TextChoices):
     turnio = "turnio", _("Turn.io")
 
     @property
-    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
         match self:
             case MessagingProviderType.twilio:
                 return forms.TwilioMessagingConfigForm
@@ -182,7 +181,7 @@ class MessagingProviderType(models.TextChoices):
         raise Exception(f"No messaging service configured for {self}")
 
     @staticmethod
-    def platform_supported_provider_types(platform: ChannelPlatform) -> List["MessagingProviderType"]:
+    def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
@@ -216,7 +215,7 @@ class AuthProviderType(models.TextChoices):
     commcare = "commcare", _("CommCare")
 
     @property
-    def form_cls(self) -> Type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
         match self:
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm

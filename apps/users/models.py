@@ -36,7 +36,7 @@ class CustomUser(AbstractUser):
         if self.avatar:
             return self.avatar.url
         else:
-            return "https://www.gravatar.com/avatar/{}?s=128&d=identicon".format(self.gravatar_id)
+            return f"https://www.gravatar.com/avatar/{self.gravatar_id}?s=128&d=identicon"
 
     @property
     def gravatar_id(self) -> str:
