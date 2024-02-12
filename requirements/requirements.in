@@ -37,4 +37,4 @@ taskbadger
 tiktoken
 fbmessenger
 django-field-audit>=1.2.7
-turn-python
+turn-python>=0.1.0

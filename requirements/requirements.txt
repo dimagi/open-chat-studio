@@ -273,6 +273,7 @@ pygments==2.16.1
 pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
+    #   pyjwt
     #   twilio
 pypng==0.20220715.0
     # via qrcode
@@ -369,12 +370,14 @@ tqdm==4.66.1
     # via
     #   huggingface-hub
     #   openai
-turn-python==0.0.1
+turn-python==0.1.0
     # via -r requirements/requirements.in
 twilio==8.10.1
     # via -r requirements/requirements.in
 typer[all]==0.9.0
-    # via taskbadger
+    # via
+    #   taskbadger
+    #   typer
 typing-extensions==4.8.0
     # via
     #   anthropic
