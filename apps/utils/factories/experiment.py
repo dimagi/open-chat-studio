@@ -1,7 +1,7 @@
 import factory
 
 from apps.experiments import models
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -36,6 +36,18 @@ class SourceMaterialFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
 
 
+class SyntheticVoiceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.SyntheticVoice
+
+    name = factory.Faker("name")
+    neural = True
+    language = "English"
+    language_code = "en"
+    gender = "male"
+    service = "AWS"
+
+
 class ExperimentFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.Experiment
@@ -49,6 +61,8 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
     pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
     public_id = factory.Faker("uuid4")
+    synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)
+    voice_provider = factory.SubFactory(VoiceProviderFactory)
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
