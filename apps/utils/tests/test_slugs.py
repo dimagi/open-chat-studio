@@ -1,3 +1,4 @@
+import pytest
 from django.test import SimpleTestCase
 
 from ..slug import get_next_slug
@@ -14,5 +15,5 @@ class NextSlugTest(SimpleTestCase):
         self.assertEqual("sl-100", get_next_slug("slug", 100, max_length=6))
 
     def test_next_slug_fail(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             get_next_slug("slug", 11111, max_length=6)

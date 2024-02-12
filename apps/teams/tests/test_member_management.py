@@ -1,3 +1,4 @@
+import pytest
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -127,7 +128,7 @@ class TeamMemberManagementViewTest(TestCase):
             c = Client()
             c.force_login(membership.user)
             # trying to change fails hard
-            with self.assertRaises(TeamPermissionError):
+            with pytest.raises(TeamPermissionError):
                 self._change_role(c, membership, self.admin_groups)
 
             # confirm unchanged
