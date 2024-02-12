@@ -55,5 +55,5 @@ def test_resource_dataframe_loader(resource_type, raw_data, expected, resource_d
 def test_resource_dataframe_loader_raises_error_with_invalid_resource_type(resource_dataframe_loader):
     resource = make_resource("invalid", "")
     params = get_params(resource)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unsupported resource type"):
         resource_dataframe_loader.load(params)

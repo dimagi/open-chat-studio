@@ -15,5 +15,5 @@ class NextSlugTest(SimpleTestCase):
         self.assertEqual("sl-100", get_next_slug("slug", 100, max_length=6))
 
     def test_next_slug_fail(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Suffix 11111 is too long to create a unique slug!"):
             get_next_slug("slug", 11111, max_length=6)

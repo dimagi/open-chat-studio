@@ -81,7 +81,7 @@ def test_run_context(mock_analysis_run):
 
 
 def test_run_context_error(mock_analysis_run):
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="test exception"):
         with run_context(mock_analysis_run):
             raise Exception("test exception")
 

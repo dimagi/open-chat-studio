@@ -23,7 +23,7 @@ class ExampleParams(Params):
 )
 def test_params(args, raises):
     if raises:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Missing required parameter"):
             ExampleParams(**args).check()
     else:
         ExampleParams(**args).check()
