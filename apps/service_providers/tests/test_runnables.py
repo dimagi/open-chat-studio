@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Sequence
+from collections.abc import Sequence
 
 import freezegun
 import pytest
@@ -60,7 +60,7 @@ def runnable(request, session):
     return runnables[request.param]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable(runnable, session, fake_llm):
     chain = runnable.build(experiment=session.experiment, session=session)
@@ -81,7 +81,7 @@ def test_runnable(runnable, session, fake_llm):
         assert "tools" not in fake_llm.get_calls()[0].kwargs
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_runnable_with_source_material(runnable, session, fake_llm):
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with {source_material}"
@@ -91,7 +91,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm):
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content="System prompt with this is the source material")
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(experiment=session.experiment, session=session)
@@ -100,7 +100,7 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content="System prompt with ")
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_runnable_runnable_format_input(runnable, session, fake_llm):
     chain = runnable.build(experiment=session.experiment, session=session)
     session.experiment.input_formatter = "foo {input} bar"
@@ -110,7 +110,7 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm):
     assert _messages_to_dict(fake_llm.get_call_messages()[0])[1] == {"human": "foo hi bar"}
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_runnable_save_input_to_history(runnable, session, chat, fake_llm):
     chain = runnable.build(experiment=session.experiment, session=session)
     session.chat = chat
@@ -123,7 +123,7 @@ def test_runnable_save_input_to_history(runnable, session, chat, fake_llm):
     assert chat.messages.count() == 2
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_history(runnable, session, chat, fake_llm):
     experiment = session.experiment

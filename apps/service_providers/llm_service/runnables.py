@@ -1,7 +1,7 @@
 from abc import ABC
 from datetime import datetime
 from operator import itemgetter
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 import pytz
 from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -50,12 +50,12 @@ class ChainOutput(Serializable):
         return True
 
     @classmethod
-    def get_lc_namespace(cls) -> List[str]:
+    def get_lc_namespace(cls) -> list[str]:
         """Get the namespace of the langchain object."""
         return ["ocs", "schema", "chain_output"]
 
 
-class BaseExperimentRunnable(RunnableSerializable[Dict, ChainOutput], ABC):
+class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
     experiment: Experiment
     session: ExperimentSession
 
@@ -89,7 +89,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
         callback = self.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
@@ -112,7 +112,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         raise NotImplementedError
 
     @property
@@ -146,7 +146,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         return (
             {"input": RunnablePassthrough()}
@@ -162,7 +162,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
 
 
 class AgentExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
@@ -201,7 +201,7 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
     def chat(self):
         return self.session.chat
 
-    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
         callback = self.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []

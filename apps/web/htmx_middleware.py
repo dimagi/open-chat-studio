@@ -1,7 +1,6 @@
 import json
 
 from django.contrib.messages import get_messages
-from django.utils.deprecation import MiddlewareMixin
 
 
 class HtmxMessageMiddleware:

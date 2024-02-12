@@ -1,5 +1,6 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator, List
+from typing import Any
 from unittest import mock
 
 from langchain_community.chat_models import FakeListChatModel
@@ -14,13 +15,13 @@ class FakeLlm(FakeListChatModel):
 
     token_counts: list
     token_i: int = 0
-    calls: List = []
+    calls: list = []
 
-    def _call(self, messages: List[BaseMessage], *args, **kwargs) -> str:
+    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str:
         self.calls.append(mock.call(messages, *args, **kwargs))
         return super()._call(messages, *args, **kwargs)
 
-    def _stream(self, messages: List[BaseMessage], *args, **kwargs) -> Iterator[ChatGenerationChunk]:
+    def _stream(self, messages: list[BaseMessage], *args, **kwargs) -> Iterator[ChatGenerationChunk]:
         self.calls.append(mock.call(messages, *args, **kwargs))
         return super()._stream(messages, *args, **kwargs)
 
