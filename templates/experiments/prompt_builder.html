@@ -61,7 +61,9 @@
                     } else {
                         Alpine.store('promptBuilder').promptTokenCount = '';
                     }
-                    if (this.currentState && this.currentState.provider !== undefined) {
+                });
+                Alpine.effect(() => {
+                   if (this.currentState && this.currentState.provider !== undefined) {
                       this.llm_models = llmModelOptions[this.currentState.provider].models
                       this.currentState.model = this.llm_models[0].value;
                     }
