@@ -17,6 +17,7 @@ from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.langchain import mock_experiment_llm
 
 
 class TelegramMessageHandlerTest(TestCase):
@@ -138,16 +139,13 @@ class TelegramMessageHandlerTest(TestCase):
         self.assertTrue(ExperimentSession.objects.filter(external_chat_id=11111).exists())
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-    @patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
-    @patch("apps.chat.bots.create_conversation")
-    def test_reset_command_creates_new_experiment_session(
-        self, create_conversation, _call_predict, _send_text_to_user_mock
-    ):
+    def test_reset_command_creates_new_experiment_session(self, _send_text_to_user_mock):
         """The reset command should create a new session when the user conversed with the bot"""
         telegram_chat_id = 00000
         message_handler = self._get_telegram_channel(self.experiment_channel)
         normal_message = _telegram_message(chat_id=telegram_chat_id)
-        message_handler.new_user_message(normal_message)
+        with mock_experiment_llm(self.experiment, responses=["OK"]):
+            message_handler.new_user_message(normal_message)
 
         message_handler = self._get_telegram_channel(self.experiment_channel)
         reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)

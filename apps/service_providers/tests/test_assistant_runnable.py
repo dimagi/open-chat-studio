@@ -5,8 +5,8 @@ from openai.types.beta.threads import MessageContentText, Run, ThreadMessage
 from openai.types.beta.threads.message_content_text import Text
 from typing_extensions import Literal
 
-from apps.chat.conversation import AssistantConversation
 from apps.chat.models import Chat
+from apps.service_providers.llm_service.runnables import AssistantExperimentRunnable
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -42,9 +42,9 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = AssistantConversation(session)
-    output, _, _ = assistant.predict("test")
-    assert output == "ai response"
+    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    result = assistant.invoke("test")
+    assert result.output == "ai response"
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
@@ -65,12 +65,12 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = AssistantConversation(session)
-    output, _, _ = assistant.predict("test")
+    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    result = assistant.invoke("test")
 
     assert create_message.call_args.args == (thread_id,)
     assert create_run.call_args.args == (thread_id,)
-    assert output == "ai response"
+    assert result.output == "ai response"
 
 
 def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):

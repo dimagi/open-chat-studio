@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Tuple
 
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.chains import ConversationChain
 from langchain.memory.summary import SummarizerMixin
 from langchain.prompts import (
@@ -17,9 +16,7 @@ from langchain_community.chat_models import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage
 
-from apps.chat.agent.agent import build_agent
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
 
 log = logging.getLogger("ocs.bots")
 
@@ -109,49 +106,6 @@ class BasicConversation(Conversation):
                 response = self.chain.invoke({"input": input})
             output = response["output"]
             return output, cb.prompt_tokens, cb.completion_tokens
-
-
-class AgentConversation(BasicConversation):
-    def __init__(
-        self,
-        prompt_str: str,
-        source_material: str,
-        memory: BaseMemory,
-        llm: BaseChatModel,
-        experiment_session: ExperimentSession,
-    ):
-        super().__init__(
-            prompt_str=prompt_str,
-            source_material=source_material,
-            memory=memory,
-            llm=llm,
-        )
-        self.session = experiment_session
-
-    def _build_chain(self):
-        self.chain = build_agent(self.llm, self.memory, self.session, self.system_prompt)
-
-
-class AssistantConversation(Conversation):
-    def __init__(self, experiment_session: ExperimentSession):
-        self.session = experiment_session
-        self.experiment = experiment_session.experiment
-        self.chat = self.session.chat
-
-    def predict(self, input: str) -> Tuple[str, int, int]:
-        assistant_runnable = self.experiment.assistant.get_assistant()
-
-        input_dict = {"content": input}
-
-        # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
-        if thread_id:
-            input_dict["thread_id"] = thread_id
-
-        response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict)
-        if not thread_id:
-            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
-        return response.return_values["output"], 0, 0
 
 
 def compress_chat_history(

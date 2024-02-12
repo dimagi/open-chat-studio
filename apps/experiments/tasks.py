@@ -84,6 +84,8 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 def _convert_prompt_builder_history(messages_history):
     history = []
     for message in messages_history:
+        if "message" not in message:
+            continue
         if message["author"] == "User":
             history.append(HumanMessage(content=message["message"]))
         elif message["author"] == "Assistant":
