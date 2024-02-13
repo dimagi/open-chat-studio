@@ -215,7 +215,7 @@ class TestTwilio:
             if message_type == "text":
                 send_whatsapp_text_message.assert_called()
             elif message_type == "audio":
-                client_mock.messages.create.assert_called()
+                s3_client_mock.generate_presigned_url.assert_called()
 
 
 class TestTurnio:
