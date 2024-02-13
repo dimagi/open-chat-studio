@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import ClassVar, Union
+from typing import ClassVar
 
 import boto3
 import pydantic
@@ -27,7 +27,7 @@ class MessagingService(pydantic.BaseModel):
     def send_whatsapp_voice_message(self, media_url: str, from_number: str, to_number):
         raise NotImplementedError
 
-    def get_message_audio(self, message: Union[TwilioMessage, TurnWhatsappMessage]):
+    def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 

@@ -1,13 +1,9 @@
 import logging
-import uuid
 from abc import abstractmethod
-from datetime import datetime, timedelta
 from enum import Enum
 from io import BytesIO
 
-import boto3
 import requests
-from botocore.client import Config
 from django.conf import settings
 from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions

@@ -8,7 +8,7 @@ from telebot import types
 from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import MESSAGE_TYPES, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
