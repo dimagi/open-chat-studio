@@ -1,8 +1,8 @@
 import json
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
-from mock import patch
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
@@ -13,12 +13,12 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
-@pytest.fixture
+@pytest.fixture()
 def turn_io_provider():
     return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
 
 
-@pytest.fixture
+@pytest.fixture()
 def turnio_whatsapp_channel(turn_io_provider):
     return ExperimentChannelFactory(
         platform=ChannelPlatform.WHATSAPP,
@@ -28,15 +28,15 @@ def turnio_whatsapp_channel(turn_io_provider):
     )
 
 
-@pytest.fixture
-def twilio_provider():
+@pytest.fixture()
+def twilio_provider(db):
     return MessagingProviderFactory(
         name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
-@pytest.fixture
-def twilio_whatsapp_channel(twilio_provider):
+@pytest.fixture()
+def _twilio_whatsapp_channel(twilio_provider):
     ExperimentChannelFactory(
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=twilio_provider,
@@ -171,20 +171,22 @@ class TurnIOMessages:
 
 class TestTwilio:
     @pytest.mark.parametrize(
-        "message, message_type", [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "voice")]
+        ("message", "message_type"),
+        [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.model_validate(json.loads(message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
-            assert whatsapp_message.media_url == None
+            assert whatsapp_message.media_url is None
         else:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
             assert whatsapp_message.media_url == "http://example.com/media"
 
+    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
-        "incoming_message, message_type",
+        ("incoming_message", "message_type"),
         [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "audio")],
     )
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
@@ -197,16 +199,14 @@ class TestTwilio:
         send_whatsapp_text_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
-        db,
         incoming_message,
         message_type,
-        twilio_whatsapp_channel,
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
-        with patch("apps.service_providers.messaging_service.TwilioService.s3_client") as s3_client_mock, patch(
+        with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
-        ) as client_mock:
+        ):
             get_llm_response_mock.return_value = "Hi"
             get_voice_transcript_mock.return_value = "Hi"
 
@@ -220,7 +220,8 @@ class TestTwilio:
 
 class TestTurnio:
     @pytest.mark.parametrize(
-        "message, message_type", [(TurnIOMessages.text_message(), "text"), (TurnIOMessages.audio_message(), "voice")]
+        ("message", "message_type"),
+        [(TurnIOMessages.text_message(), "text"), (TurnIOMessages.audio_message(), "voice")],
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)

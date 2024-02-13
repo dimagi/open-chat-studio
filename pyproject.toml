@@ -1,19 +1,33 @@
-[tool.isort]
-py_version = 311
-filter_files = true
-profile = 'black'
-line_length = 120
-
-[tool.black]
-line-length = 120
-target-version = ['py311']
-exclude = '''
-(
-  | migrations
-)
-'''
-
 [tool.pytest.ini_options]
 addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
+
+[tool.ruff]
+exclude = [
+    ".direnv",
+    ".git",
+    ".ruff_cache",
+    "node_modules",
+    'migrations'
+]
+
+line-length = 120
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "DJ", "PT"]
+ignore = ["PT019"]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"settings_production.py" = ["F405"]

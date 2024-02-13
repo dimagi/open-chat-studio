@@ -1,7 +1,7 @@
 import tempfile
 from contextlib import closing
 from io import BytesIO
-from typing import ClassVar, Tuple
+from typing import ClassVar
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
@@ -16,7 +16,7 @@ class SpeechService(pydantic.BaseModel):
     _type: ClassVar[str]
     supports_transcription: ClassVar[bool] = False
 
-    def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> tuple[BytesIO, float]:
         assert synthetic_voice.service == self._type
         try:
             return self._synthesize_voice(text, synthetic_voice)
@@ -26,7 +26,7 @@ class SpeechService(pydantic.BaseModel):
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
-    def _synthesize_voice(self, text, synthetic_voice) -> Tuple[BytesIO, float]:
+    def _synthesize_voice(self, text, synthetic_voice) -> tuple[BytesIO, float]:
         raise NotImplementedError
 
 
@@ -36,7 +36,7 @@ class AWSSpeechService(SpeechService):
     aws_secret_access_key: str
     aws_region: str
 
-    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> tuple[BytesIO, float]:
         """
         Calls AWS Polly to convert the text to speech using the synthetic_voice
         """
@@ -57,7 +57,7 @@ class AWSSpeechService(SpeechService):
         audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
         duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
 
-        with closing(audio_stream) as stream:
+        with closing(audio_stream):
             return BytesIO(audio_data), duration_seconds
 
 
@@ -67,7 +67,7 @@ class AzureSpeechService(SpeechService):
     azure_subscription_key: str
     azure_region: str
 
-    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> Tuple[BytesIO, float]:
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> tuple[BytesIO, float]:
         """
         Calls Azure's cognitive speech services to convert the text to speech using the synthetic_voice
         """
@@ -99,10 +99,10 @@ class AzureSpeechService(SpeechService):
                 return BytesIO(file_content), duration_seconds
             elif result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
-                msg = "Azure speech synthesis failed: {}".format(cancellation_details.reason.name)
+                msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
                 if cancellation_details.reason == speechsdk.CancellationReason.Error:
                     if cancellation_details.error_details:
-                        msg += ". Error details: {}".format(cancellation_details.error_details)
+                        msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -124,8 +124,8 @@ class AzureSpeechService(SpeechService):
             raise AudioSynthesizeException(f"No speech could be recognized {reason}")
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
-            msg = "Azure speech transcription failed: {}".format(cancellation_details.reason.name)
+            msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 if cancellation_details.error_details:
-                    msg += ". Error details: {}".format(cancellation_details.error_details)
+                    msg += f". Error details: {cancellation_details.error_details}"
             raise AudioSynthesizeException(msg)

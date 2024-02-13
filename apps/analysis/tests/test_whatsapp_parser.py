@@ -9,14 +9,14 @@ from apps.analysis.exceptions import StepError
 from apps.analysis.steps.parsers import WhatsappParser, WhatsappParserParams
 
 
-@pytest.fixture
+@pytest.fixture()
 def whatsapp_parser():
     step = WhatsappParser()
     step.initialize(PipelineContext())
     return step
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_whatsapp_log():
     return dedent(
         """
@@ -30,7 +30,7 @@ def valid_whatsapp_log():
     ).strip()
 
 
-@pytest.fixture
+@pytest.fixture()
 def valid_whatsapp_log_unicode_rtl():
     return Path(__file__).parent.joinpath("data/unicode_rtl_whatsapp_data.txt").read_text()
 
@@ -69,7 +69,8 @@ def test_whatsapp_parser_parses_valid_log_unicode_rtl(whatsapp_parser, valid_wha
         df,
         "2023-07-13 15:54",
         "123456",
-        "اولا.لسلام عليكم  : كل من كان هذه المجموعة.  بعد السلام: اشكركم\n\n  جميعا خاصة المعلمون المدرسون فى المجموعة. اتمنى  لكم النجاح.\n‏",
+        "اولا.لسلام عليكم  : كل من كان هذه المجموعة.  بعد السلام: اشكركم"
+        "\n\n  جميعا خاصة المعلمون المدرسون فى المجموعة. اتمنى  لكم النجاح.\n‏",
     )
     _check_message(df, "2023-07-13 16:23", "123123", "وعليكم السلام مرحبا يااخي💙🌸")
     _check_message(df, "2023-07-13 20:28", "Coach", "Halkan baad ka daawan kartaan casharka oo muuqaal ah.")

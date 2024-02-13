@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseLanguageModel
@@ -20,7 +20,7 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
     def __repr__(self) -> str:
         return f"Prompt Tokens: {self.prompt_tokens}\n" f"Completion Tokens: {self.completion_tokens}\n"
 
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> Any:
+    def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs) -> Any:
         with self._lock:
             self.prompt_tokens += sum([self.model.get_num_tokens(prompt) for prompt in prompts])
 

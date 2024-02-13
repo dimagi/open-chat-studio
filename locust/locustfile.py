@@ -23,7 +23,7 @@ def _(parser):
 def _load_transcripts(path, min_messages):
     # For a better way to do this in future
     # see https://github.com/locustio/locust/blob/master/examples/custom_messages.py
-    with open(path, "r") as f:
+    with open(path) as f:
         reader = csv.DictReader(f)
         messages = list(reader)
 

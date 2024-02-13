@@ -5,7 +5,6 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.teams.models import BaseTeamModel
-from apps.utils.models import BaseModel
 
 
 class OpenAiAssistantManager(AuditingManager):

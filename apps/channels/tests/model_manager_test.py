@@ -1,9 +1,7 @@
-import pytest
 from django.test import TestCase
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import ConsentForm, Experiment
-from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
@@ -44,4 +42,4 @@ class TestExperimentChannelObjectManager(TestCase):
             channels = ExperimentChannel.objects.filter_extras(
                 key=key, value=value, platform=platform, team_slug=team_slug
             )
-            self.assertEqual(len(channels), expected_result_length)
+            assert len(channels) == expected_result_length

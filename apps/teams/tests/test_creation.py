@@ -17,18 +17,18 @@ class TeamCreationTest(TestCase):
             email=email,
         )
         team = create_default_team_for_user(user)
-        self.assertEqual("Alice", team.name)
-        self.assertEqual("alice", team.slug)
-        self.assertTrue(is_admin(user, team))
+        assert "Alice" == team.name
+        assert "alice" == team.slug
+        assert is_admin(user, team)
         membership = team.membership_set.filter(user=user).first()
-        self.assertEqual([SUPER_ADMIN_GROUP], [group.name for group in membership.groups.all()])
+        assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
 
 
 def test_create_team_view(db, client):
     """Test to make sure that user is assigned as group owner when they create a team"""
     user = UserFactory()
     client.force_login(user)
-    response = client.post(reverse("teams:create_team"), {"name": "Team name", "slug": "team"})
+    client.post(reverse("teams:create_team"), {"name": "Team name", "slug": "team"})
 
     membership = Membership.objects.filter(team__slug="team").first()
     perission_group = membership.groups.first()

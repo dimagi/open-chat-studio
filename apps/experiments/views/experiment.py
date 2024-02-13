@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import Optional
 from urllib.parse import quote
 
 import pytz
@@ -42,7 +41,6 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.users.models import CustomUser
-from apps.web.meta import absolute_url
 
 
 @login_and_team_required
@@ -387,9 +385,9 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 def _start_experiment_session(
     experiment: Experiment,
     experiment_channel: ExperimentChannel,
-    user: Optional[CustomUser] = None,
-    participant: Optional[Participant] = None,
-    external_chat_id: Optional[str] = None,
+    user: CustomUser | None = None,
+    participant: Participant | None = None,
+    external_chat_id: str | None = None,
 ) -> ExperimentSession:
     session = ExperimentSession.objects.create(
         team=experiment.team,
@@ -588,7 +586,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 participant=participant,
                 status__in=["setup", "pending"],
             ).exists():
-                messages.info(request, "{} already has a pending invitation.".format(participant))
+                messages.info(request, f"{participant} already has a pending invitation.")
             else:
                 channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                 session = ExperimentSession.objects.create(

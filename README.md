@@ -155,3 +155,19 @@ To test the webhooks, you can use a tool like [ngrok](https://ngrok.com/docs/get
 
 #### Auditing
 We use the [django-field-audit](https://github.com/dimagi/django-field-audit) library for auditing. Please see the [table of audited methods](https://github.com/dimagi/django-field-audit#audited-db-write-operations) and familiarize yourself on how to audit "special" functions like `QuerySet.bulk_create()`.
+
+#### Linting
+
+We use [ruff](https://docs.astral.sh/ruff/) for linting and formatting. You can run it directly or with the `inv ruff`
+command:
+
+```
+Usage: inv[oke] [--core-opts] ruff [--options] [other tasks here ...]
+
+Docstring:
+  Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes.
+
+Options:
+  -n, --no-fix
+  -u, --unsafe-fixes
+```

@@ -1,15 +1,14 @@
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, TelegramChannelForm
+from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
-from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
 @pytest.mark.parametrize(
-    "platform,expected_widget_cls",
+    ("platform", "expected_widget_cls"),
     [
         ("whatsapp", Select),
         ("telegram", HiddenInput),

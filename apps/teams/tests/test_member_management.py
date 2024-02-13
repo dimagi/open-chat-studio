@@ -1,7 +1,7 @@
+import pytest
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from apps.teams import roles
 from apps.teams.backends import (
     CHAT_VIEWER_GROUP,
     EXPERIMENT_ADMIN_GROUP,
@@ -58,21 +58,21 @@ class TeamMemberManagementViewTest(TestCase):
         c.force_login(self.admin)
         for membership in [self.admin_membership, self.admin_membership2, self.normal_membership]:
             response = c.get(self._get_membership_url(membership))
-            self.assertEqual(200, response.status_code)
-            self.assertTrue(membership.user.get_display_name() in response.content.decode("utf-8"))
+            assert 200 == response.status_code
+            assert membership.user.get_display_name() in response.content.decode("utf-8")
 
     def test_admins_can_change_others_roles(self):
         c = Client()
         c.force_login(self.admin)
         # change member to admin
         response = self._change_role(c, self.normal_membership, self.admin_groups)
-        self.assertEqual(200, response.status_code)
+        assert 200 == response.status_code
         # confirm updated
         self._check_groups(self.normal_membership, self.admin_group_ids)
 
         # change back
         response = self._change_role(c, self.normal_membership, self.member_groups)
-        self.assertEqual(200, response.status_code)
+        assert 200 == response.status_code
         # confirm updated
         self._check_groups(self.normal_membership, self.member_group_ids)
 
@@ -81,28 +81,28 @@ class TeamMemberManagementViewTest(TestCase):
         c.force_login(self.admin)
         self._remove_member(c, self.normal_membership)
         # confirm member removed
-        self.assertFalse(Membership.objects.filter(pk=self.normal_membership.pk).exists())
+        assert not Membership.objects.filter(pk=self.normal_membership.pk).exists()
 
     def test_admins_can_remove_admins(self):
         c = Client()
         c.force_login(self.admin)
         self._remove_member(c, self.admin_membership2)
         # confirm member removed
-        self.assertFalse(Membership.objects.filter(pk=self.admin_membership2.pk).exists())
+        assert not Membership.objects.filter(pk=self.admin_membership2.pk).exists()
 
     def test_members_can_view_own_membership(self):
         c = Client()
         c.force_login(self.member)
         response = c.get(self._get_membership_url(self.normal_membership))
-        self.assertEqual(200, response.status_code)
-        self.assertTrue(self.member.get_display_name() in response.content.decode("utf-8"))
+        assert 200 == response.status_code
+        assert self.member.get_display_name() in response.content.decode("utf-8")
 
     def test_members_can_leave_team(self):
         c = Client()
         c.force_login(self.member)
         self._remove_member(c, self.normal_membership)
         # confirm member removed
-        self.assertFalse(Membership.objects.filter(pk=self.normal_membership.pk).exists())
+        assert not Membership.objects.filter(pk=self.normal_membership.pk).exists()
 
     # edge case / permission tests
     def test_members_cant_view_other_members(self):
@@ -111,13 +111,13 @@ class TeamMemberManagementViewTest(TestCase):
         for other_membership in [self.admin_membership, self.normal_membership2]:
             response = c.get(self._get_membership_url(self.admin_membership))
             # should either be a 404 or a redirect
-            self.assertNotEqual(200, response.status_code)
+            assert 200 != response.status_code
 
     def test_members_cant_change_others_roles(self):
         c = Client()
         c.force_login(self.member)
         response = self._change_role(c, self.normal_membership2, self.admin_groups)
-        self.assertNotEqual(200, response.status_code)
+        assert 200 != response.status_code
         # confirm not changed
         self._check_groups(self.normal_membership2, set())
 
@@ -127,12 +127,12 @@ class TeamMemberManagementViewTest(TestCase):
             c = Client()
             c.force_login(membership.user)
             # trying to change fails hard
-            with self.assertRaises(TeamPermissionError):
+            with pytest.raises(TeamPermissionError):
                 self._change_role(c, membership, self.admin_groups)
 
             # confirm unchanged
             membership.refresh_from_db()
-            self.assertEqual(original_role, membership.role)
+            assert original_role == membership.role
 
     def test_only_admin_cant_leave(self):
         c = Client()
@@ -143,10 +143,10 @@ class TeamMemberManagementViewTest(TestCase):
 
         # confirm it doesn't work
         response = self._remove_member(c, self.admin_membership)
-        self.assertNotEqual(200, response.status_code)
-        self.assertTrue(Membership.objects.filter(pk=self.admin_membership.pk).exists())
+        assert 200 != response.status_code
+        assert Membership.objects.filter(pk=self.admin_membership.pk).exists()
 
     def _check_groups(self, membership, expected_group_ids):
         # do full reload from the DB to clearn M2M cache
         membership = Membership.objects.get(id=membership.id)
-        self.assertEqual(expected_group_ids, set(membership.groups.values_list("id", flat=True)))
+        assert expected_group_ids == set(membership.groups.values_list("id", flat=True))

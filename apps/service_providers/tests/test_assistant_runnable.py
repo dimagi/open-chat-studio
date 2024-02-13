@@ -1,9 +1,9 @@
+from typing import Literal
 from unittest.mock import patch
 
 import pytest
 from openai.types.beta.threads import MessageContentText, Run, ThreadMessage
 from openai.types.beta.threads.message_content_text import Text
-from typing_extensions import Literal
 
 from apps.chat.models import Chat
 from apps.service_providers.llm_service.runnables import AssistantExperimentRunnable
@@ -29,7 +29,7 @@ def session(chat):
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_messages, session):
     chat = session.chat
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
@@ -52,7 +52,7 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.threads.runs.Runs.create")
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_message, list_messages, session):
     thread_id = "test_thread_id"
     chat = session.chat

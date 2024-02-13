@@ -13,7 +13,7 @@ from apps.utils.factories.openai import AssistantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 def test_push_assistant_to_openai_create(mock_create):
     local_assistant = OpenAiAssistantFactory()
@@ -23,7 +23,7 @@ def test_push_assistant_to_openai_create(mock_create):
     assert local_assistant.assistant_id == "test_id"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.update")
 def test_push_assistant_to_openai_update(mock_update):
     local_assistant = OpenAiAssistantFactory(assistant_id="test_id")
@@ -31,7 +31,7 @@ def test_push_assistant_to_openai_update(mock_update):
     assert mock_update.called
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.retrieve")
 def test_sync_from_openai(mock_retrieve):
     remote_assistant = AssistantFactory()
@@ -45,7 +45,7 @@ def test_sync_from_openai(mock_retrieve):
     assert local_assistant.builtin_tools == ["code_interpreter", "retrieval"]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.retrieve")
 def test_import_openai_assistant(mock_retrieve):
     remote_assistant = AssistantFactory()
@@ -61,7 +61,7 @@ def test_import_openai_assistant(mock_retrieve):
     assert imported_assistant.builtin_tools == ["code_interpreter", "retrieval"]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.delete")
 def test_delete_openai_assistant(mock_delete):
     local_assistant = OpenAiAssistantFactory()

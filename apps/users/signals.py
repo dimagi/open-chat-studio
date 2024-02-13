@@ -29,6 +29,6 @@ def update_user_email(sender, request, email_address, **kwargs):
 def _notify_admins_of_signup(user):
     mail_admins(
         f"Yowsers, someone signed up for {settings.PROJECT_METADATA['NAME']}!",
-        "Email: {}".format(user.email),
+        f"Email: {user.email}",
         fail_silently=True,
     )

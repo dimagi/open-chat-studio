@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
 
-import pytz
 from django.test import TestCase
 from freezegun import freeze_time
-from mock import Mock, patch
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -56,10 +55,10 @@ class TasksTest(TestCase):
             response = _bot_prompt_for_user(self.experiment_session, "Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0].message_type, "ai")
-        self.assertEqual(response, expected_ping_message)
-        self.assertEqual(messages[0].content, expected_ping_message)
+        assert len(messages) == 1
+        assert messages[0].message_type == "ai"
+        assert response == expected_ping_message
+        assert messages[0].content == expected_ping_message
 
     @patch("apps.chat.tasks._bot_prompt_for_user", return_value="Please answer")
     @patch("apps.chat.tasks._try_send_message")
@@ -103,7 +102,7 @@ class TasksTest(TestCase):
         # frozen_time = "2023-08-21 12:00:00"  # Set the desired frozen time
         with freeze_time(datetime.utcnow() + timedelta(minutes=5)):
             _no_activity_pings()
-        self.assertEqual(_try_send_message.call_count, 2)
+        assert _try_send_message.call_count == 2
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         experiment_session = _start_experiment_session(

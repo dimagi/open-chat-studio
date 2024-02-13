@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel, Field, field_validator
 
 from apps.channels.exceptions import UnsupportedMessageTypeException
@@ -30,7 +28,7 @@ class TwilioMessage(BaseModel):
     to_number: str = Field(alias="To")
     body: str = Field(alias="Body")
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT, alias="MediaContentType0")
-    media_url: Optional[str] = Field(default=None, alias="MediaUrl0")
+    media_url: str | None = Field(default=None, alias="MediaUrl0")
 
     @field_validator("to_number", "from_number", mode="before")
     @classmethod
@@ -59,7 +57,7 @@ class TurnWhatsappMessage(BaseModel):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     body: str = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
-    media_id: Optional[str] = Field(default=None)
+    media_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -99,9 +97,9 @@ class FacebookMessage(BaseModel):
 
     page_id: str = Field()
     user_id: str = Field()
-    message_text: Optional[str] = Field()
+    message_text: str | None = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
-    media_url: Optional[str] = None
+    media_url: str | None = None
 
     @field_validator("content_type", mode="before")
     @classmethod

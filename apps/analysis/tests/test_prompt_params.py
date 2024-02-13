@@ -9,10 +9,10 @@ def test_prompt_params_returns_correct_template():
 
 
 def test_prompt_params_raises_error_with_missing_data_variable():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid prompt template"):
         PromptParams(prompt="Hello, {name}!")
 
 
 def test_prompt_params_raises_error_with_extra_variables():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid prompt template"):
         PromptParams(prompt="Hello, {data} and {name}!")

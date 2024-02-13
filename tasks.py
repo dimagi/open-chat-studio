@@ -109,3 +109,12 @@ def runserver(c: Context, public=False):
 @task
 def celery(c: Context):
     c.run('watchfiles --filter python "celery -A gpt_playground worker -l INFO -B"', echo=True, pty=True)
+
+
+@task
+def ruff(c: Context, no_fix=False, unsafe_fixes=False):
+    """Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes."""
+    fix_flag = "" if no_fix else "--fix"
+    unsafe_fixes_flag = "--unsafe-fixes" if unsafe_fixes else ""
+    c.run(f"ruff check {fix_flag} {unsafe_fixes_flag}", echo=True, pty=True)
+    c.run("ruff format", echo=True, pty=True)

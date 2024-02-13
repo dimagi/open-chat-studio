@@ -49,7 +49,7 @@ def mock_analysis_run(mock_run_group):
 
 
 @pytest.mark.parametrize(
-    "params, expected",
+    ("params", "expected"),
     [
         ({}, {"llm_model": "test"}),
         ({"llm_model": "test2"}, {"llm_model": "test"}),
@@ -81,7 +81,7 @@ def test_run_context(mock_analysis_run):
 
 
 def test_run_context_error(mock_analysis_run):
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="test exception"):
         with run_context(mock_analysis_run):
             raise Exception("test exception")
 

@@ -46,7 +46,6 @@ class ChannelPlatform(models.TextChoices):
 
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
-        from apps.service_providers.models import MessagingProviderType
 
         channel = kwargs.pop("channel", None)
 
@@ -133,8 +132,9 @@ class ExperimentChannel(BaseModel):
     @staticmethod
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
         """
-        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified by its `identifier`
-        and `platform`. Raises `ChannelAlreadyUtilizedException` error when another experiment uses it.
+        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified
+        by its `identifier` and `platform`. Raises `ChannelAlreadyUtilizedException` error when another
+        experiment uses it.
         """
 
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}

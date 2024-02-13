@@ -1,14 +1,9 @@
 import logging
-import uuid
 from abc import abstractmethod
-from datetime import datetime, timedelta
 from enum import Enum
 from io import BytesIO
-from typing import Optional
 
-import boto3
 import requests
-from botocore.client import Config
 from django.conf import settings
 from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions
@@ -44,16 +39,20 @@ class ChannelBase:
 
     Args:
         experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
-        experiment_session: An optional ExperimentSession object representing the experiment session associated with the handler.
+        experiment_session: An optional ExperimentSession object representing the experiment session associated
+            with the handler.
 
         Either one of these arguments must to be provided
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Properties:
-        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier of the chat.
-        message_content_type: An abstract property that must be implemented in subclasses to return the type of message content (e.g., text, voice).
-        message_text: An abstract property that must be implemented in subclasses to return the text content of the message.
+        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier
+            of the chat.
+        message_content_type: An abstract property that must be implemented in subclasses to return the type
+            of message content (e.g., text, voice).
+        message_text: An abstract property that must be implemented in subclasses to return the text
+            content of the message.
 
     Abstract methods:
         initialize: (Optional) Performs any necessary initialization
@@ -75,8 +74,8 @@ class ChannelBase:
 
     def __init__(
         self,
-        experiment_channel: Optional[ExperimentChannel] = None,
-        experiment_session: Optional[ExperimentSession] = None,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
     ):
         if not experiment_channel and not experiment_session:
             raise MessageHandlerException("ChannelBase expects either")

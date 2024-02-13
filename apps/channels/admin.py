@@ -1,5 +1,3 @@
-from typing import Dict
-
 from django.contrib import admin
 from django.http.request import HttpRequest
 
@@ -32,5 +30,5 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         if obj.experiment:
             return obj.experiment.team.name
 
-    def get_changeform_initial_data(self, request: HttpRequest) -> Dict[str, str]:
+    def get_changeform_initial_data(self, request: HttpRequest) -> dict[str, str]:
         return {"extra_data": {"bot_token": "your token here"}}

@@ -1,7 +1,7 @@
 import factory
 
 from apps.analysis.models import Analysis, RunGroup
-from apps.analysis.pipelines import LLM_PIPE, TEXT_DATA_PIPE
+from apps.analysis.pipelines import TEXT_DATA_PIPE
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
 

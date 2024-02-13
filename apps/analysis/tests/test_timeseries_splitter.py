@@ -7,14 +7,14 @@ from apps.analysis.exceptions import StepError
 from apps.analysis.steps.splitters import TimeGroup, TimeseriesSplitter, TimeseriesSplitterParams
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_splitter():
     step = TimeseriesSplitter()
     step.initialize(PipelineContext())
     return step
 
 
-@pytest.fixture
+@pytest.fixture()
 def timeseries_data():
     dates = date_range(start="1/1/2021", end="2/15/2021")
     data = DataFrame(index=dates, data={"value": range(len(dates))})
@@ -22,7 +22,7 @@ def timeseries_data():
 
 
 @pytest.mark.parametrize(
-    "time_group, expected_groups, group_lengths",
+    ("time_group", "expected_groups", "group_lengths"),
     [
         (TimeGroup.daily, 46, [1] * 46),
         (TimeGroup.weekly, 8, [3, 7, 7, 7, 7, 7, 7, 1]),
@@ -39,7 +39,7 @@ def test_timeseries_splitter_splits_data_into_correct_groups(
 
 
 @pytest.mark.parametrize(
-    "origin, expected_groups",
+    ("origin", "expected_groups"),
     [
         ("start", [["2021-01-01T11:30", "2021-01-01T12:15"], ["2021-01-01T12:30"]]),
         ("end", [["2021-01-01T11:30"], ["2021-01-01T12:15", "2021-01-01T12:30"]]),
@@ -67,7 +67,7 @@ def test_timeseries_splitter_raises_error_with_non_datetime_index(timeseries_spl
 
 
 @pytest.mark.parametrize(
-    "ignore_empty, group_count",
+    ("ignore_empty", "group_count"),
     [
         (False, 4),
         (True, 3),
@@ -86,7 +86,7 @@ def test_timeseries_splitter_ignores_empty_groups(ignore_empty, group_count, tim
 
 
 @pytest.mark.parametrize(
-    "time_group, expected",
+    ("time_group", "expected"),
     [
         (TimeGroup.secondly, "2022-03-07T15:22:05"),
         (TimeGroup.minutely, "2022-03-07T15:22"),
