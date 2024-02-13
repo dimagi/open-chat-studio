@@ -51,11 +51,11 @@ class FakeLlmService(LlmService):
 
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[str], token_counts: list[int] = None):
-    original = experiment.llm_provider.get_llm_service
-    experiment.llm_provider.get_llm_service = lambda: FakeLlmService(
+    original = experiment.get_llm_service
+    experiment.get_llm_service = lambda: FakeLlmService(
         llm=FakeLlm(responses=responses, token_counts=token_counts or [0])
     )
     try:
         yield
     finally:
-        experiment.llm_provider.get_llm_service = original
+        experiment.get_llm_service = original
