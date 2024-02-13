@@ -29,7 +29,7 @@ def turnio_whatsapp_channel(turn_io_provider):
 
 
 @pytest.fixture()
-def twilio_provider():
+def twilio_provider(db):
     return MessagingProviderFactory(
         name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
@@ -184,11 +184,11 @@ class TestTwilio:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
             assert whatsapp_message.media_url == "http://example.com/media"
 
+    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
         [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "audio")],
     )
-    @pytest.mark.usefixtures(_twilio_whatsapp_channel)
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
@@ -199,7 +199,6 @@ class TestTwilio:
         send_whatsapp_text_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
-        db,
         incoming_message,
         message_type,
     ):
