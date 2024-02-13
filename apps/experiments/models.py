@@ -358,8 +358,14 @@ class Experiment(BaseTeamModel):
         return self.name
 
     def get_chat_model(self):
-        service = self.llm_provider.get_llm_service()
+        service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)
+
+    def get_llm_service(self):
+        if self.llm_provider:
+            return self.llm_provider.get_llm_service()
+        elif self.assistant:
+            return self.assistant.llm_provider.get_llm_service()
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])

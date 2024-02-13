@@ -64,7 +64,7 @@ class BaseExperimentRunnable(RunnableSerializable[Dict, ChainOutput], ABC):
 
     @property
     def llm_service(self):
-        return self.experiment.llm_provider.get_llm_service()
+        return self.experiment.get_llm_service()
 
     @property
     def callback_handler(self):
