@@ -2,6 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.chat.channels import MESSAGE_TYPES
 
 
@@ -20,7 +21,7 @@ class WebMessage(BaseModel):
         return self.message_text
 
 
-class WhatsappMessage(BaseModel):
+class TwilioMessage(BaseModel):
     """
     A wrapper class for user messages coming from the whatsapp
     """
@@ -58,11 +59,13 @@ class TurnWhatsappMessage(BaseModel):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     body: str = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
-    media_url: Optional[str] = Field(default=None)
+    media_id: Optional[str] = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
+        if not MESSAGE_TYPES.is_member(value):
+            raise UnsupportedMessageTypeException()
         return MESSAGE_TYPES(value)
 
     @property
@@ -75,16 +78,17 @@ class TurnWhatsappMessage(BaseModel):
 
     @staticmethod
     def parse(message_data: dict):
-        message_type = message_data["messages"][0]["type"]
+        message = message_data["messages"][0]
+        message_type = message["type"]
         body = ""
         if message_type == "text":
-            body = message_data["messages"][0]["text"]["body"]
+            body = message["text"]["body"]
 
         return TurnWhatsappMessage(
             from_number=message_data["contacts"][0]["wa_id"],
             body=body,
             content_type=message_type,
-            media_url="",
+            media_id=message[message_type].get("id"),
         )
 
 

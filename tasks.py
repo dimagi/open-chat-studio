@@ -87,12 +87,12 @@ def ngrok_url(c: Context):
         try:
             response = requests.get("http://localhost:4040/api/tunnels")
             if response.status_code == 200:
+                public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
                 break
         except Exception:
             time.sleep(1)
             print("Trying to a public address from ngrok")
 
-    public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
     print(f"Public address found: {public_url}")
     return public_url
 

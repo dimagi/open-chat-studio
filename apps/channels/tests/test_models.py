@@ -40,6 +40,6 @@ def test_channel_webhook_url(db):
 
     # Let's check out each one's webhook url
     assert no_provider_channel.webhook_url is None
-    assert reverse("channels:new_whatsapp_message") in twilio_channel.webhook_url
+    assert reverse("channels:new_twilio_message") in twilio_channel.webhook_url
     turnio_uri = reverse("channels:new_turn_message", kwargs={"experiment_id": turnio_channel.experiment.public_id})
     assert turnio_uri in turnio_channel.webhook_url
