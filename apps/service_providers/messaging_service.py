@@ -105,6 +105,7 @@ class TurnIOService(MessagingService):
     def send_whatsapp_voice_message(self, voice_audio: BytesIO, duration: int, from_number: str, to_number: str):
         from apps.channels.audio import convert_audio
 
+        # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio = convert_audio(voice_audio, target_format="ogg", source_format="mp3", codec="libopus")
         media_id = self.client.media.upload_media(voice_audio.read(), content_type="audio/ogg")
         self.client.messages.send_audio(whatsapp_id=to_number, media_id=media_id)
