@@ -25,7 +25,7 @@ def fake_llm():
 @pytest.fixture()
 def session(fake_llm):
     session = ExperimentSessionFactory()
-    session.experiment.llm_provider.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
+    session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
     session.experiment.tools_enabled = True
     return session
 

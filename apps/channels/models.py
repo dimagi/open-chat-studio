@@ -158,7 +158,7 @@ class ExperimentChannel(BaseModel):
         uri = ""
         provider_type = self.messaging_provider.type
         if provider_type == MessagingProviderType.twilio:
-            uri = reverse("channels:new_whatsapp_message")
+            uri = reverse("channels:new_twilio_message")
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
         return absolute_url(

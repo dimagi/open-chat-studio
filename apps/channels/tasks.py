@@ -5,9 +5,11 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, WhatsappMessage
+from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import MESSAGE_TYPES, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
 
@@ -30,9 +32,11 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def handle_whatsapp_message(self, message_data: str):
-    message = WhatsappMessage.model_validate(json.loads(message_data))
-    experiment_channel = ExperimentChannel.objects.filter(extra_data__contains={"number": message.to_number}).first()
+def handle_twilio_message(self, message_data: str):
+    message = TwilioMessage.model_validate(json.loads(message_data))
+    experiment_channel = ExperimentChannel.objects.filter(
+        extra_data__contains={"number": message.to_number}, messaging_provider__type=MessagingProviderType.twilio
+    ).first()
     if not experiment_channel:
         return
     message_handler = WhatsappChannel(experiment_channel=experiment_channel)
@@ -72,12 +76,14 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
-    message = TurnWhatsappMessage.parse(message_data)
-    if not message.content_type == MESSAGE_TYPES.TEXT:
-        # TODO: Until we know what's up with the media links not showing up, we cannot continue
+    try:
+        message = TurnWhatsappMessage.parse(message_data)
+    except UnsupportedMessageTypeException:
         return
     experiment_channel = ExperimentChannel.objects.filter(
-        experiment__public_id=experiment_id, platform=ChannelPlatform.WHATSAPP
+        experiment__public_id=experiment_id,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider__type=MessagingProviderType.turnio,
     ).first()
     if not experiment_channel:
         return

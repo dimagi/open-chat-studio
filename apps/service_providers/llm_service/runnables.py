@@ -26,12 +26,17 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession) -> "ExperimentRunnable":
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession) -> "BaseExperimentRunnable":
     """Create an experiment runnable based on the experiment configuration."""
+    if experiment.assistant:
+        return AssistantExperimentRunnable(experiment=experiment, session=session)
+
+    assert experiment.llm, "Experiment must have an LLM model"
+    assert experiment.llm_provider, "Experiment must have an LLM provider"
     if experiment.tools_enabled:
         return AgentExperimentRunnable(experiment=experiment, session=session)
-    else:
-        return SimpleExperimentRunnable(experiment=experiment, session=session)
+
+    return SimpleExperimentRunnable(experiment=experiment, session=session)
 
 
 class ChainOutput(Serializable):
@@ -64,7 +69,7 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 
     @property
     def llm_service(self):
-        return self.experiment.llm_provider.get_llm_service()
+        return self.experiment.get_llm_service()
 
     @property
     def callback_handler(self):
