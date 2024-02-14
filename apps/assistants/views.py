@@ -151,8 +151,8 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.delete()
         delete_openai_assistant(assistant)
+        assistant.delete()
         messages.success(request, "Assistant Deleted")
         return HttpResponse()
 
@@ -216,4 +216,5 @@ class AddFileToAssistant(BaseAddFileHtmxView):
         assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         assistant.files.add(file)
+        push_assistant_to_openai(assistant)
         return file
