@@ -2,7 +2,8 @@ import openai
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.http import HttpResponse
+from django.forms import modelformset_factory
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
@@ -12,12 +13,13 @@ from django_tables2 import SingleTableView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+from ..files.models import File
 from ..generics import actions
 from ..service_providers.models import LlmProvider
 from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai, sync_from_openai
+from .sync import delete_openai_assistant, import_openai_assistant, sync_from_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -71,7 +73,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             "title": self.title,
             "button_text": self.button_text,
             "active_tab": "assistants",
-            "form_attrs": {"x-data": "assistant"},
+            "form_attrs": {"x-data": "assistant", "enctype": "multipart/form-data"},
             "llm_options": get_llm_provider_choices(self.request.team),
         }
 
@@ -90,11 +92,44 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     button_text = "Create"
     permission_required = "assistants.add_openaiassistant"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if "file_formset" not in context:
+            context["file_formset"] = self._get_file_formset()
+        return context
+
+    def _get_file_formset(self):
+        kwargs = {}
+        if self.request.method in ("POST", "PUT"):
+            kwargs.update(
+                {
+                    "data": self.request.POST,
+                    "files": self.request.FILES,
+                }
+            )
+        FileFormSet = modelformset_factory(File, fields=("file",), can_delete=True, can_delete_extra=True)
+        return FileFormSet(queryset=File.objects.none(), **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self.object = None
+        form = self.get_form()
+        formset = self._get_file_formset()
+        if form.is_valid() and formset.is_valid():
+            return self.form_valid(form, formset)
+        else:
+            return self.render_to_response(self.get_context_data(form=form, file_formset=formset))
+
     @transaction.atomic()
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        push_assistant_to_openai(self.object)
-        return response
+    def form_valid(self, form, file_formset):
+        self.object = form.save()
+        files = file_formset.save(commit=False)
+        for file in files:
+            file.name = file.file.name
+            file.team = self.request.team
+            file.save()
+        self.object.files.set(files)
+        # push_assistant_to_openai(self.object)
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
@@ -103,10 +138,23 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     permission_required = "assistants.change_openaiassistant"
 
     @transaction.atomic()
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        push_assistant_to_openai(self.object)
+    def form_valid(self, form, file_formset):
+        self.object = form.save()
+        files = file_formset.save(commit=False)
+        for file in files:
+            file.team = self.request.team
+            file.save()
+        self.object.files.set(files)
+        response = super().form_valid(form, file_formset)
+        # push_assistant_to_openai(self.object)
         return response
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        return super().post(request, *args, **kwargs)
+
+    def get_file_formset_queryset(self):
+        return self.object.files.all()
 
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
