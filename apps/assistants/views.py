@@ -14,12 +14,13 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..files.models import File
+from ..files.views import BaseAddFileHtmxView
 from ..generics import actions
 from ..service_providers.models import LlmProvider
 from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, import_openai_assistant, sync_from_openai
+from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai, sync_from_openai
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -107,7 +108,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
                     "files": self.request.FILES,
                 }
             )
-        FileFormSet = modelformset_factory(File, fields=("file",), can_delete=True, can_delete_extra=True)
+        FileFormSet = modelformset_factory(File, fields=("file",), can_delete=True, can_delete_extra=True, extra=0)
         return FileFormSet(queryset=File.objects.none(), **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -128,7 +129,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
             file.team = self.request.team
             file.save()
         self.object.files.set(files)
-        # push_assistant_to_openai(self.object)
+        push_assistant_to_openai(self.object)
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -139,22 +140,9 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
 
     @transaction.atomic()
     def form_valid(self, form, file_formset):
-        self.object = form.save()
-        files = file_formset.save(commit=False)
-        for file in files:
-            file.team = self.request.team
-            file.save()
-        self.object.files.set(files)
-        response = super().form_valid(form, file_formset)
-        # push_assistant_to_openai(self.object)
+        response = super().form_valid(form)
+        push_assistant_to_openai(self.object)
         return response
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        return super().post(request, *args, **kwargs)
-
-    def get_file_formset_queryset(self):
-        return self.object.files.all()
 
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -221,3 +209,11 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
             )
             return self.form_invalid(form)
         return super().form_valid(form)
+
+
+class AddFileToAssistant(BaseAddFileHtmxView):
+    def form_valid(self, form):
+        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
+        file = super().form_valid(form)
+        assistant.files.add(file)
+        return file
