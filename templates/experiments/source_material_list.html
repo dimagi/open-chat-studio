@@ -1,10 +1,10 @@
 <ul id="source-material-list" class="menu bg-base-100 w-full overflow-y-auto p-2 flex-nowrap" style="max-height: calc(100vh - 10em);
-flex-wrap: nowrap;">
+                                                                                                     flex-wrap: nowrap;">
     {% for source_material in source_materials %}
-    <li>
-        <a
-        @click.stop="setSourceMaterial({{source_material.id}})">{{ source_material.topic }}</a>
-    </li>
+        <li>
+            <a
+                @click.stop="setSourceMaterial({{source_material.id}})">{{ source_material.topic }}</a>
+        </li>
     {% endfor %}
 </ul>
 

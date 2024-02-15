@@ -5,16 +5,16 @@
     <ul>
       <li><a href="{% url 'assistants:home' request.team.slug %}">Assistants</a></li>
       {% if object.id %}
-      <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
+        <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
       {% else %}
-      <li class="pg-breadcrumb-active" aria-current="page">Create</li>
+        <li class="pg-breadcrumb-active" aria-current="page">Create</li>
       {% endif %}
     </ul>
   </div>
 {% endblock %}
 {% block pre_form %}
   {% if object.id %}
-  <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
+    <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}
 {% endblock pre_form %}
 {% block page_js %}

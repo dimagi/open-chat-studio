@@ -1,9 +1,9 @@
 <ul id="prompt-list" class="menu bg-base-100 w-full overflow-y-auto p-2 flex-nowrap" style="max-height: calc(100vh - 10em);
-flex-wrap: nowrap;">
+                                                                                            flex-wrap: nowrap;">
     {% for experiment in experiments %}
-    <li>
-        <a @click.stop="setPrompt({{experiment.id}})">{{ experiment.name }}</a>
-    </li>
+        <li>
+            <a @click.stop="setPrompt({{experiment.id}})">{{ experiment.name }}</a>
+        </li>
     {% endfor %}
 </ul>
 

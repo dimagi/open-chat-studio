@@ -14,12 +14,12 @@
     </a>
   </li>
   {% if user.has_usable_password %}
-  <li>
-    <a href="{% url 'account_change_password' %}" {% if 'accounts/password/change' in request.path %}class="active"{% endif %}>
-      <i class="fa fa-unlock-alt h-4 w-4"></i>
-      {% translate "Change Password" %}
-    </a>
-  </li>
+    <li>
+      <a href="{% url 'account_change_password' %}" {% if 'accounts/password/change' in request.path %}class="active"{% endif %}>
+        <i class="fa fa-unlock-alt h-4 w-4"></i>
+        {% translate "Change Password" %}
+      </a>
+    </li>
   {% endif %}
   <li>
     <a href="{% url 'account_logout' %}" {% if 'accounts/logout' in request.path %}class="active"{% endif %}>
@@ -40,15 +40,15 @@
   </li>
 </ul>
 {% if user.is_superuser %}
-<li class="menu-title">
-  <span>{% translate "Admin" %}</span>
-</li>
-<ul class="menu-list">
-  <li>
-    <a href="{% url 'support:hijack_user' %}" {% if active_tab == 'support' %}class="active"{% endif %}>
-      <i class="fa fa-user-secret h-4 w-4"></i>
-      {% translate "Impersonate a User" %}
-    </a>
+  <li class="menu-title">
+    <span>{% translate "Admin" %}</span>
   </li>
-</ul>
+  <ul class="menu-list">
+    <li>
+      <a href="{% url 'support:hijack_user' %}" {% if active_tab == 'support' %}class="active"{% endif %}>
+        <i class="fa fa-user-secret h-4 w-4"></i>
+        {% translate "Impersonate a User" %}
+      </a>
+    </li>
+  </ul>
 {% endif %}

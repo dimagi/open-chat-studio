@@ -6,15 +6,15 @@
         hx-swap="outerHTML"
 
         {% if confirm_message %}
-        hx-trigger="confirmed"
-        onClick="Swal.fire({
-            title: 'Confirm',
-            text: '{{ confirm_message|escapejs }}',
-        }).then(function(result) {
-          if(result.isConfirmed){
-              htmx.trigger('#action-{{ action_id }}', 'confirmed');
-          }
-        })"
+            hx-trigger="confirmed"
+            onClick="Swal.fire({
+                     title: 'Confirm',
+                     text: '{{ confirm_message|escapejs }}',
+                     }).then(function(result) {
+                     if(result.isConfirmed){
+                     htmx.trigger('#action-{{ action_id }}', 'confirmed');
+                     }
+                     })"
         {% endif %}
 >
     <i class="{{ icon_class }}"></i>

@@ -1,30 +1,30 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
 {% block body %}
-<div class="app-card max-w-5xl mx-auto">
-  <h1 class="pg-title">Experiment Review</h1>
-  <div class="prose !max-w-none">
-    <p>Thanks for completing the experiment!</p>
-    {% if experiment.post_survey %}
-    <p>
-      As a final step, please click on <a href="{{ experiment_session.get_post_survey_link }}" target="_blank">this survey link</a>, fill it out, and when you have finished,
-      return to this screen to continue.
-    </p>
-    {% else %}
-      <p>
-        Please click the button below to end the experiment and submit your chat details.
-      </p>
-    {% endif %}
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">Experiment Review</h1>
+    <div class="prose !max-w-none">
+      <p>Thanks for completing the experiment!</p>
+      {% if experiment.post_survey %}
+        <p>
+          As a final step, please click on <a href="{{ experiment_session.get_post_survey_link }}" target="_blank">this survey link</a>, fill it out, and when you have finished,
+          return to this screen to continue.
+        </p>
+      {% else %}
+        <p>
+          Please click the button below to end the experiment and submit your chat details.
+        </p>
+      {% endif %}
+    </div>
+    <form method="post" class="my-2 max-w-md">
+      {% csrf_token %}
+      {% if form %}
+        {% render_form_fields form %}
+      {% endif %}
+      <input class="pg-button-primary mt-2" type="submit" value="Complete Experiment" />
+    </form>
   </div>
-  <form method="post" class="my-2 max-w-md">
-    {% csrf_token %}
-    {% if form %}
-      {% render_form_fields form %}
-    {% endif %}
-    <input class="pg-button-primary mt-2" type="submit" value="Complete Experiment" />
-  </form>
-</div>
-<div class="app-card max-w-5xl mx-auto">
+  <div class="app-card max-w-5xl mx-auto">
     <div class="sm:flex sm:items-center">
       <div class="sm:flex-auto">
         <h1 class="text-base font-semibold leading-6 text-gray-900">Experiment Chat</h1>
@@ -32,5 +32,5 @@
       </div>
     </div>
     {% include "experiments/components/experiment_chat.html" %}
-</div>
+  </div>
 {% endblock %}

@@ -6,18 +6,18 @@
       <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
     {% if allow_new|default:True or actions %}
-    <div class="justify-self-end">
-      <div class="join">
-      {% if allow_new|default:True %}
-      <a class="btn btn-sm join-item {{ button_style|default:"btn-primary" }}"
-         href="{{ new_object_url }}">Add new
-      </a>
-      {% endif %}
-      {% if actions %}
-        {% include "generic/crud_actions_column.html" with as_group=False %}
-      {% endif %}
+      <div class="justify-self-end">
+        <div class="join">
+          {% if allow_new|default:True %}
+            <a class="btn btn-sm join-item {{ button_style|default:"btn-primary" }}"
+               href="{{ new_object_url }}">Add new
+            </a>
+          {% endif %}
+          {% if actions %}
+            {% include "generic/crud_actions_column.html" with as_group=False %}
+          {% endif %}
+        </div>
       </div>
-    </div>
     {% endif %}
   </div>
   {% if enable_search %}
