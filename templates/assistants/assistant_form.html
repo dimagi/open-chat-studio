@@ -65,7 +65,7 @@
           hx-target="#fileList"
     >
       <input type="file" name="file" id="fileInput" class="hidden">
-      <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-indicator-inline"></span>
+      <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
     </form>
       <ul id="fileList">
         {% for file in object.files.all %}
