@@ -3,13 +3,10 @@ This test suite is designed to ensure that the base channel functionality is wor
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
 
-import json
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
-from telebot import types
 
-from apps.channels.datamodels import TelegramMessage
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
@@ -19,6 +16,8 @@ from apps.users.models import CustomUser
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.langchain import mock_experiment_llm
+
+from .message_examples import telegram_messages
 
 
 class TelegramMessageHandlerTest(TestCase):
@@ -57,7 +56,7 @@ class TelegramMessageHandlerTest(TestCase):
         """
         message_handler = self._get_telegram_channel(self.experiment_channel)
 
-        message = _telegram_message(chat_id=self.telegram_chat_id)
+        message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
         experiment_session = ExperimentSession.objects.filter(
@@ -72,7 +71,7 @@ class TelegramMessageHandlerTest(TestCase):
         # Let's send two messages. The first one to create the sessions for us and the second one for testing
         # Message 1
         message_handler = self._get_telegram_channel(self.experiment_channel)
-        message = _telegram_message(chat_id=self.telegram_chat_id)
+        message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
         # Let's remove the `experiment_channel` from experiment_session
@@ -82,7 +81,7 @@ class TelegramMessageHandlerTest(TestCase):
 
         # Message 2
         message_handler = self._get_telegram_channel(self.experiment_channel)
-        message = _telegram_message(chat_id=self.telegram_chat_id)
+        message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
         experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
         assert experiment_session.experiment_channel is not None
@@ -94,7 +93,7 @@ class TelegramMessageHandlerTest(TestCase):
         # First message
         message_handler = self._get_telegram_channel(self.experiment_channel)
 
-        message = _telegram_message(chat_id=self.telegram_chat_id)
+        message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
         # Let's find the session it created
@@ -108,7 +107,7 @@ class TelegramMessageHandlerTest(TestCase):
         message_handler._create_new_experiment_session = Mock()
 
         # Now let's simulate the incoming message
-        message = _telegram_message(chat_id=self.telegram_chat_id)
+        message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
         # Assertions
@@ -125,12 +124,12 @@ class TelegramMessageHandlerTest(TestCase):
         # First user's message
         message_handler_1 = self._get_telegram_channel(self.experiment_channel)
 
-        message = _telegram_message(chat_id=00000)
+        message = telegram_messages.text_message(chat_id=00000)
         message_handler_1.new_user_message(message)
 
         # First user's message
         message_handler_2 = self._get_telegram_channel(self.experiment_channel)
-        message = _telegram_message(chat_id=11111)
+        message = telegram_messages.text_message(chat_id=11111)
         message_handler_2.new_user_message(message)
 
         # Assertions
@@ -145,12 +144,14 @@ class TelegramMessageHandlerTest(TestCase):
         """The reset command should create a new session when the user conversed with the bot"""
         telegram_chat_id = 00000
         message_handler = self._get_telegram_channel(self.experiment_channel)
-        normal_message = _telegram_message(chat_id=telegram_chat_id)
+        normal_message = telegram_messages.text_message(chat_id=telegram_chat_id)
         with mock_experiment_llm(self.experiment, responses=["OK"]):
             message_handler.new_user_message(normal_message)
 
         message_handler = self._get_telegram_channel(self.experiment_channel)
-        reset_message = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        reset_message = telegram_messages.text_message(
+            chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
+        )
         message_handler.new_user_message(reset_message)
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
         assert len(sessions) == 2
@@ -167,10 +168,14 @@ class TelegramMessageHandlerTest(TestCase):
         telegram_chat_id = 00000
         message_handler = self._get_telegram_channel(self.experiment_channel)
 
-        message1 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        message1 = telegram_messages.text_message(
+            chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
+        )
         message_handler.new_user_message(message1)
 
-        message2 = _telegram_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
+        message2 = telegram_messages.text_message(
+            chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
+        )
         message_handler.new_user_message(message2)
 
         sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
@@ -198,7 +203,7 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     assert pre_survey
 
     def _user_message(message: str):
-        message = _telegram_message(chat_id=telegram_chat_id, message_text=message)
+        message = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=message)
         channel.new_user_message(message)
 
     experiment = channel.experiment
@@ -235,32 +240,3 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
-
-
-def _telegram_message(chat_id: int, message_text: str = "Hi there") -> types.Message:
-    message_data = {
-        "update_id": 432101234,
-        "message": {
-            "message_id": 576,
-            "from": {
-                "id": chat_id,
-                "is_bot": False,
-                "first_name": "Chris",
-                "last_name": "Smit",
-                "username": "smittiec",
-                "language_code": "en",
-            },
-            "chat": {
-                "id": chat_id,
-                "first_name": "Chris",
-                "last_name": "Smit",
-                "username": "smittiec",
-                "type": "private",
-            },
-            "date": 1690376696,
-            "text": message_text,
-        },
-    }
-    json_data = json.dumps(message_data)
-    update = types.Update.de_json(json_data)
-    return TelegramMessage.parse(update)
