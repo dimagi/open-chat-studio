@@ -40,11 +40,6 @@ def push_assistant_to_openai(assistant: OpenAiAssistant):
     """Pushes the assistant to OpenAI. If the assistant already exists, it will be updated."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     if assistant.assistant_id:
-        # TODO: error handling
-        # openai.BadRequestError: Error code: 400 - {'error': {
-        # 'message': "The requested model 'gpt-4' cannot be used with the 'retrieval' tool.
-        # Consider using 'gpt-4-turbo-preview', 'gpt-3.5-turbo-1106', or a later model.",
-        # 'type': 'invalid_request_error', 'param': 'model', 'code': 'unsupported_model'}}
         client.beta.assistants.update(assistant.assistant_id, **_ocs_assistant_to_openai_kwargs(assistant))
     else:
         openai_assistant = client.beta.assistants.create(**_ocs_assistant_to_openai_kwargs(assistant))
