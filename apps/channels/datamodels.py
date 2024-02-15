@@ -153,3 +153,24 @@ class FacebookMessage(BaseModel):
     @property
     def chat_id(self) -> str:
         return self.user_id
+
+    @staticmethod
+    def parse(message_data: dict) -> "FacebookMessage":
+        page_id = message_data["recipient"]["id"]
+        attachments = message_data["message"].get("attachments", [])
+        content_type = None
+        media_url = None
+
+        if len(attachments) > 0:
+            attachment = attachments[0]
+            media_url = attachment["payload"]["url"]
+            content_type = attachment["type"]
+
+        return FacebookMessage(
+            user_id=message_data["sender"]["id"],
+            page_id=page_id,
+            message_text=message_data["message"].get("text", ""),
+            media_url=media_url,
+            content_type=content_type,
+            content_type_unparsed=content_type,
+        )
