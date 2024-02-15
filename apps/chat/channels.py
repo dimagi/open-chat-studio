@@ -407,6 +407,11 @@ class ChannelBase:
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
+        ChatMessage.objects.create(
+            chat=self.experiment_session.chat,
+            message_type=ChatMessageType.SYSTEM,
+            content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
+        )
         prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
