@@ -61,6 +61,5 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
     def form_valid(self, form):
         file = form.save(commit=False)
         file.team = self.request.team
-        file.name = file.file.name
         file.save()
         return file

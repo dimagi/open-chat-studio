@@ -7,7 +7,6 @@ class BaseFileFormSet(BaseModelFormSet):
     def save(self, request):
         files = super().save(commit=False)
         for file in files:
-            file.name = file.file.name
             file.team = request.team
             file.save()
         return files
