@@ -48,9 +48,12 @@ def test_push_assistant_to_openai_update(mock_update):
         push_assistant_to_openai(local_assistant)
     assert mock_update.called
     assert mock_file_create.call_count == 2
-    files[1].refresh_from_db()
-    assert files[1].external_id == openai_files[0].id
-    assert files[1].external_source == "openai"
+
+    file_ids = {file.id for file in openai_files}
+    for file in files[1:]:
+        file.refresh_from_db()
+        assert file.external_id in file_ids
+        assert file.external_source == "openai"
 
 
 @pytest.mark.django_db()
@@ -106,8 +109,9 @@ def test_import_openai_assistant(mock_retrieve_content, mock_file_retrieve, mock
 
 @pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.delete")
+@patch("openai.resources.beta.assistants.Files.delete")
 @patch("openai.resources.Files.delete")
-def test_delete_openai_assistant(mock_file_delete, mock_delete):
+def test_delete_openai_assistant(mock_file_delete, mock_assistant_file_delete, mock_delete):
     files = FileFactory.create_batch(2, external_id="test_id", external_source="openai")
     local_assistant = OpenAiAssistantFactory()
     local_assistant.files.set(files)
@@ -115,3 +119,4 @@ def test_delete_openai_assistant(mock_file_delete, mock_delete):
     delete_openai_assistant(local_assistant)
     mock_delete.assert_called_with(local_assistant.assistant_id)
     assert mock_file_delete.call_count == 2
+    assert mock_assistant_file_delete.call_count == 2
