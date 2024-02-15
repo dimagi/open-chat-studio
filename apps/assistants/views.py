@@ -6,6 +6,7 @@ from django.forms import modelformset_factory
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -20,7 +21,13 @@ from ..service_providers.models import LlmProvider
 from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
-from .sync import delete_openai_assistant, import_openai_assistant, push_assistant_to_openai, sync_from_openai
+from .sync import (
+    OpenAiSyncError,
+    delete_openai_assistant,
+    import_openai_assistant,
+    push_assistant_to_openai,
+    sync_from_openai,
+)
 from .tables import OpenAiAssistantTable
 from .utils import get_llm_providers_for_assistants
 
@@ -132,7 +139,8 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         try:
             push_assistant_to_openai(self.object)
         except openai.APIError as e:
-            messages.error(self.request, "Error syncing assistant to OpenAI: " + e.message)
+            messages.error(self.request, "Error syncing assistant to OpenAI: " + mark_safe(e.message))
+            return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -142,12 +150,14 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     permission_required = "assistants.change_openaiassistant"
 
     @transaction.atomic()
-    def form_valid(self, form, file_formset):
+    def form_valid(self, form):
         response = super().form_valid(form)
         try:
             push_assistant_to_openai(self.object)
-        except openai.APIError as e:
-            messages.error(self.request, "Error syncing changes to OpenAI: " + e.message)
+        except OpenAiSyncError as e:
+            messages.error(self.request, "Error syncing changes to OpenAI")
+            form.add_error(None, str(e))
+            return self.form_invalid(form)
         return response
 
 

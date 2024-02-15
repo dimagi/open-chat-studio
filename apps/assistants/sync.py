@@ -1,5 +1,6 @@
 import mimetypes
 import pathlib
+from functools import wraps
 from io import BytesIO
 
 import openai
@@ -12,6 +13,29 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 
 
+class OpenAiSyncError(Exception):
+    pass
+
+
+def wrap_openai_errors(fn):
+    @wraps(fn)
+    def _inner(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except openai.APIError as e:
+            message = e.message
+            if isinstance(e.body, dict):
+                try:
+                    message = e.body["message"]
+                except KeyError | AttributeError:
+                    pass
+
+            raise OpenAiSyncError(message) from e
+
+    return _inner
+
+
+@wrap_openai_errors
 def push_assistant_to_openai(assistant: OpenAiAssistant):
     """Pushes the assistant to OpenAI. If the assistant already exists, it will be updated."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
@@ -28,12 +52,13 @@ def push_assistant_to_openai(assistant: OpenAiAssistant):
         assistant.save()
 
 
+@wrap_openai_errors
 def push_file_to_openai(assistant: OpenAiAssistant, file: File):
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
     openai_file = client.files.create(
-        file=bytesio,
+        file=(file.name, bytesio),
         purpose="assistants",
     )
     file.external_id = openai_file.id
@@ -41,6 +66,7 @@ def push_file_to_openai(assistant: OpenAiAssistant, file: File):
     file.save()
 
 
+@wrap_openai_errors
 def delete_file_from_openai(assistant: OpenAiAssistant, file: File):
     if not file.external_id or file.external_source != "openai":
         return
@@ -55,6 +81,7 @@ def delete_file_from_openai(assistant: OpenAiAssistant, file: File):
     file.save()
 
 
+@wrap_openai_errors
 def fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_file = client.files.retrieve(file_id)
@@ -79,6 +106,7 @@ def fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     return file
 
 
+@wrap_openai_errors
 def sync_from_openai(assistant: OpenAiAssistant):
     """Syncs the local assistant instance with the remote OpenAI assistant."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
@@ -89,6 +117,7 @@ def sync_from_openai(assistant: OpenAiAssistant):
     sync_files_from_openai(openai_assistant, assistant)
 
 
+@wrap_openai_errors
 def sync_files_from_openai(openai_assistant: Assistant, assistant: OpenAiAssistant):
     existing_files = {file.external_id: file for file in assistant.files.all() if file.external_id}
     if openai_assistant.file_ids:
@@ -100,6 +129,7 @@ def sync_files_from_openai(openai_assistant: Assistant, assistant: OpenAiAssista
     File.objects.filter(id__in=[file.id for file in existing_files.values()]).delete()
 
 
+@wrap_openai_errors
 def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: Team) -> OpenAiAssistant:
     client = llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant_id)
@@ -109,6 +139,7 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     return assistant
 
 
+@wrap_openai_errors
 def delete_openai_assistant(assistant: OpenAiAssistant):
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     try:
