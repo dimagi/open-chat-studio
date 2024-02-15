@@ -64,6 +64,7 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
         message_text=message["message"].get("text", ""),
         media_url=media_url,
         content_type=content_type,
+        content_type_unparsed=content_type,
     )
     experiment_channel = ExperimentChannel.objects.filter_extras(
         platform=ChannelPlatform.FACEBOOK, team_slug=team_slug, key="page_id", value=message.page_id

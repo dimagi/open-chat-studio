@@ -23,6 +23,7 @@ class TelegramMessage(BaseModel):
     body: str | None = Field()
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field()
+    content_type_unparsed: str | None = Field(default=None)
     message_id: int = Field()
 
     @field_validator("content_type", mode="before")
@@ -39,6 +40,7 @@ class TelegramMessage(BaseModel):
             content_type=update_obj.message.content_type,
             media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
             message_id=update_obj.message.message_id,
+            content_type_unparsed=update_obj.message.content_type,
         )
 
 
@@ -95,6 +97,7 @@ class TurnWhatsappMessage(BaseModel):
     body: str = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field(default=None)
+    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -123,6 +126,7 @@ class TurnWhatsappMessage(BaseModel):
             body=body,
             content_type=message_type,
             media_id=message[message_type].get("id"),
+            content_type_unparsed=message_type,
         )
 
 
@@ -136,6 +140,7 @@ class FacebookMessage(BaseModel):
     message_text: str | None = Field()
     content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = None
+    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
