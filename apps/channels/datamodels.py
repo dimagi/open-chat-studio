@@ -47,11 +47,12 @@ class TwilioMessage(BaseModel):
     A wrapper class for user messages coming from the whatsapp
     """
 
-    from_number: str = Field(alias="From")  # `from` is a reserved keyword
-    to_number: str = Field(alias="To")
-    body: str = Field(alias="Body")
-    content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT, alias="MediaContentType0")
-    media_url: str | None = Field(default=None, alias="MediaUrl0")
+    from_number: str = Field()  # `from` is a reserved keyword
+    to_number: str = Field()
+    body: str = Field()
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    media_url: str | None = Field(default=None)
+    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("to_number", "from_number", mode="before")
     @classmethod
@@ -74,6 +75,18 @@ class TwilioMessage(BaseModel):
     @property
     def message_text(self) -> str:
         return self.body
+
+    @staticmethod
+    def parse(message_data: dict) -> "TwilioMessage":
+        content_type = message_data.get("MediaContentType0")
+        return TwilioMessage(
+            from_number=message_data["From"],
+            to_number=message_data["To"],
+            body=message_data["Body"],
+            content_type=content_type,
+            media_url=message_data.get("MediaUrl0"),
+            content_type_unparsed=content_type,
+        )
 
 
 class TurnWhatsappMessage(BaseModel):

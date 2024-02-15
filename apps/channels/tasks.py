@@ -34,7 +34,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_twilio_message(self, message_data: str):
-    message = TwilioMessage.model_validate(json.loads(message_data))
+    message = TwilioMessage.parse(json.loads(message_data))
     experiment_channel = ExperimentChannel.objects.filter(
         extra_data__contains={"number": message.to_number}, messaging_provider__type=MessagingProviderType.twilio
     ).first()

@@ -183,7 +183,7 @@ class TestTwilio:
         [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
-        whatsapp_message = TwilioMessage.model_validate(json.loads(message))
+        whatsapp_message = TwilioMessage.parse(json.loads(message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
