@@ -37,8 +37,7 @@ class ChannelForm(forms.ModelForm):
 
 class ExtraFormBase(forms.Form):
     def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+        pass
 
 
 class TelegramChannelForm(ExtraFormBase):
@@ -66,6 +65,10 @@ class WhatsappChannelForm(ExtraFormBase):
         if not channel:
             # We only show the webhook URL field when there is something to show
             self.fields["webook_url"].widget = forms.HiddenInput()
+
+    def get_success_message(self, channel: ExperimentChannel):
+        """The message to be displayed when the channel is successfully linked"""
+        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
 
 
 class FacebookChannelForm(ExtraFormBase):
