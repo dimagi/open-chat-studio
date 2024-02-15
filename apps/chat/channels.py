@@ -20,7 +20,7 @@ from apps.experiments.models import ExperimentSession, SessionStatus
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
-Tell the user (in the language being spoken) that {content_type} messages are not supported.
+Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supperted_types} messages types. Respond only with the message for the user
 """
 
@@ -403,15 +403,13 @@ class ChannelBase:
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
-        return self.message_content_type in self.supported_message_types
+        return self.message_content_type is not None and self.message_content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
         """Use this method to generate a suitable response for the user. The `prompt_instruction`
         dictates what to include
         """
-        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(
-            content_type=self.message_content_type, supperted_types=self.supported_message_types
-        )
+        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
@@ -420,6 +418,7 @@ class WebChannel(ChannelBase):
     """Message Handler for the UI"""
 
     voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -451,7 +450,6 @@ class TelegramChannel(ChannelBase):
     def message_content_type(self):
         if MESSAGE_TYPES.is_member(self.message.content_type):
             return MESSAGE_TYPES(self.message.content_type)
-        return self.message.content_type
 
     @property
     def message_text(self):
@@ -506,6 +504,10 @@ class WhatsappChannel(ChannelBase):
         return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
 
     @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
+
+    @property
     def message_content_type(self):
         return self.message.content_type
 
@@ -538,6 +540,7 @@ class WhatsappChannel(ChannelBase):
 
 class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
 
     def initialize(self):
         page_access_token = self.experiment_channel.extra_data["page_access_token"]

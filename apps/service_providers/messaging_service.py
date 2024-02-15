@@ -14,12 +14,14 @@ from twilio.rest import Client
 from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
+from apps.chat.channels import MESSAGE_TYPES
 
 
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
     voice_replies_supported: ClassVar[bool] = False
+    supported_message_types: ClassVar[list] = []
 
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         raise NotImplementedError
@@ -36,6 +38,7 @@ class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     account_sid: str
     auth_token: str
@@ -92,6 +95,7 @@ class TurnIOService(MessagingService):
     _type: ClassVar[str] = "turnio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     auth_token: str
 
