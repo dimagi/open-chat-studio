@@ -2,7 +2,6 @@ import openai
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.forms import modelformset_factory
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -14,7 +13,7 @@ from django_tables2 import SingleTableView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from ..files.models import File
+from ..files.forms import get_file_formset
 from ..files.views import BaseAddFileHtmxView
 from ..generics import actions
 from ..service_providers.models import LlmProvider
@@ -107,41 +106,31 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         return context
 
     def _get_file_formset(self):
-        kwargs = {}
-        if self.request.method in ("POST", "PUT"):
-            kwargs.update(
-                {
-                    "data": self.request.POST,
-                    "files": self.request.FILES,
-                }
-            )
-        FileFormSet = modelformset_factory(File, fields=("file",), can_delete=True, can_delete_extra=True, extra=0)
-        return FileFormSet(queryset=File.objects.none(), **kwargs)
+        return get_file_formset(self.request)
 
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
-        formset = self._get_file_formset()
-        if form.is_valid() and formset.is_valid():
-            return self.form_valid(form, formset)
+        file_formset = self._get_file_formset()
+        if form.is_valid() and file_formset.is_valid():
+            return self.form_valid(form, file_formset)
         else:
-            return self.render_to_response(self.get_context_data(form=form, file_formset=formset))
+            return self.form_invalid(form, file_formset)
 
     @transaction.atomic()
     def form_valid(self, form, file_formset):
         self.object = form.save()
-        files = file_formset.save(commit=False)
-        for file in files:
-            file.name = file.file.name
-            file.team = self.request.team
-            file.save()
+        files = file_formset.save(self.request)
         self.object.files.set(files)
         try:
             push_assistant_to_openai(self.object)
         except openai.APIError as e:
             messages.error(self.request, "Error syncing assistant to OpenAI: " + mark_safe(e.message))
-            return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+            return self.form_invalid(form, file_formset)
         return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form, file_formset):
+        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
 
 
 class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):

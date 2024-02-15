@@ -26,7 +26,7 @@
 {% block post_form %}
   {% if object.id %}
     <hr class="my-4">
-    {% url "assistants:add_file" request.team.slug object.id as uploadUrl %}
+    {% url "assistants:add_file" request.team.slug object.id as upload_url %}
     {% include "files/partials/file_list.html" with files=object.files.all %}
   {% endif %}
 {% endblock post_form %}
