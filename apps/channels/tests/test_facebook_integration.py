@@ -91,6 +91,12 @@ class FacebookChannelTest(TestCase):
         assert facebook_message.user_id == "6785984231"
         assert facebook_message.media_url == media_url
 
+    @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
+    def test_unsupported_message_type_raises_exception(self, new_user_message):
+        message = _facebook_image_message(self.page_id, attachment_url="https://example.com/my-audio")
+        handle_facebook_message(team_slug=self.team.slug, message_data=message)
+        new_user_message.assert_not_called()
+
 
 def _facebook_text_message(page_id: str, message: str):
     data = {
@@ -133,6 +139,32 @@ def _facebook_audio_message(page_id: str, attachment_url: str):
                         "message": {
                             "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDHASD",
                             "attachments": [{"type": "audio", "payload": {"url": attachment_url}}],
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    return json.dumps(data)
+
+
+def _facebook_image_message(page_id: str, attachment_url: str):
+    data = {
+        "object": "page",
+        "entry": [
+            {
+                "id": page_id,
+                "time": 1699260776574,
+                "messaging": [
+                    {
+                        "sender": {"id": "6785984231"},
+                        "recipient": {
+                            "id": page_id,
+                        },
+                        "timestamp": 1699259349974,
+                        "message": {
+                            "mid": "m_IAx--vsBAYF3FYqN0LQN3sU3K_suxsIcKASSDHASD",
+                            "attachments": [{"type": "image", "payload": {"url": attachment_url}}],
                         },
                     }
                 ],

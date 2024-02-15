@@ -33,7 +33,10 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_twilio_message(self, message_data: str):
-    message = TwilioMessage.model_validate(json.loads(message_data))
+    try:
+        message = TwilioMessage.model_validate(json.loads(message_data))
+    except UnsupportedMessageTypeException:
+        return
     experiment_channel = ExperimentChannel.objects.filter(
         extra_data__contains={"number": message.to_number}, messaging_provider__type=MessagingProviderType.twilio
     ).first()
@@ -57,13 +60,16 @@ def handle_facebook_message(self, team_slug: str, message_data: str):
         media_url = attachment["payload"]["url"]
         content_type = attachment["type"]
 
-    message = FacebookMessage(
-        user_id=message["sender"]["id"],
-        page_id=page_id,
-        message_text=message["message"].get("text", ""),
-        media_url=media_url,
-        content_type=content_type,
-    )
+    try:
+        message = FacebookMessage(
+            user_id=message["sender"]["id"],
+            page_id=page_id,
+            message_text=message["message"].get("text", ""),
+            media_url=media_url,
+            content_type=content_type,
+        )
+    except UnsupportedMessageTypeException:
+        return
     experiment_channel = ExperimentChannel.objects.filter_extras(
         platform=ChannelPlatform.FACEBOOK, team_slug=team_slug, key="page_id", value=message.page_id
     ).first()

@@ -39,9 +39,11 @@ class TwilioMessage(BaseModel):
     @classmethod
     def determine_content_type(cls, value):
         if not value:
+            # Normal test messages doesn't have a content type
             return MESSAGE_TYPES.TEXT
         if value and value == "audio/ogg":
             return MESSAGE_TYPES.VOICE
+        raise UnsupportedMessageTypeException()
 
     @property
     def chat_id(self) -> str:
@@ -108,6 +110,7 @@ class FacebookMessage(BaseModel):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio":
             return MESSAGE_TYPES.VOICE
+        raise UnsupportedMessageTypeException()
 
     @property
     def chat_id(self) -> str:
