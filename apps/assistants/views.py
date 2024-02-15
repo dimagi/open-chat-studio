@@ -1,11 +1,9 @@
-import openai
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
-from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -125,8 +123,8 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         self.object.files.set(files)
         try:
             push_assistant_to_openai(self.object)
-        except openai.APIError as e:
-            messages.error(self.request, "Error syncing assistant to OpenAI: " + mark_safe(e.message))
+        except OpenAiSyncError as e:
+            messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form, file_formset)
         return HttpResponseRedirect(self.get_success_url())
 
@@ -145,7 +143,7 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         try:
             push_assistant_to_openai(self.object)
         except OpenAiSyncError as e:
-            messages.error(self.request, "Error syncing changes to OpenAI")
+            messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))
             return self.form_invalid(form)
         return response
@@ -159,8 +157,8 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         try:
             delete_openai_assistant(assistant)
-        except openai.APIError as e:
-            messages.error(request, "Error deleting assistant from OpenAI: " + e.message)
+        except OpenAiSyncError as e:
+            messages.error(request, f"Error deleting assistant from OpenAI: {e}")
             return HttpResponse(status=500)
         assistant.delete()
         messages.success(request, "Assistant Deleted")
@@ -185,8 +183,8 @@ class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
         try:
             sync_from_openai(assistant)
-        except openai.APIError as e:
-            messages.error(request, "Error syncing assistant: " + e.message)
+        except OpenAiSyncError as e:
+            messages.error(request, f"Error syncing assistant: {e}")
         return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
@@ -214,15 +212,8 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
         llm_provider = get_object_or_404(LlmProvider, team=self.request.team, pk=form.cleaned_data["llm_provider"])
         try:
             import_openai_assistant(form.cleaned_data["assistant_id"], llm_provider, self.request.team)
-        except openai.NotFoundError:
-            messages.error(
-                self.request,
-                "Assistant not found. Check the ID is correct and that the"
-                " selected LLM Provider has access to the assistant.",
-            )
-            return self.form_invalid(form)
-        except openai.APIError as e:
-            messages.error(self.request, "Error importing assistant: " + e.message)
+        except OpenAiSyncError as e:
+            messages.error(self.request, f"Error importing assistant: {e}")
             return self.form_invalid(form)
         return super().form_valid(form)
 
@@ -236,9 +227,12 @@ class AddFileToAssistant(BaseAddFileHtmxView):
         push_assistant_to_openai(assistant)
         return file
 
+    def get_delete_url(self, file):
+        return reverse("assistants:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
+
 
 class DeleteFileFromAssistant(BaseDeleteFileView):
     def get_success_response(self, file):
         assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
         delete_file_from_openai(assistant, file)
-        return super().get_success_response(file)
+        return HttpResponse()

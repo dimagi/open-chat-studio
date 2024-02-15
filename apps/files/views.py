@@ -39,12 +39,12 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         return HttpResponse(status=400)
 
     def get_success_response(self, file):
-        messages.success(self.request, "File Added")
         return render(
             self.request,
             "files/partials/file_item.html",
             {
                 "file": file,
+                "delete_url": self.get_delete_url(file),
             },
         )
 
@@ -57,6 +57,9 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
                 "error": error,
             },
         )
+
+    def get_delete_url(self, file):
+        raise NotImplementedError()
 
     def form_valid(self, form):
         file = form.save(commit=False)
