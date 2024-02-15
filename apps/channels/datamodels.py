@@ -95,7 +95,7 @@ class TurnWhatsappMessage(BaseModel):
     from_number: str = Field()
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     body: str = Field()
-    content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
 
@@ -138,7 +138,7 @@ class FacebookMessage(BaseModel):
     page_id: str = Field()
     user_id: str = Field()
     message_text: str | None = Field()
-    content_type: MESSAGE_TYPES = Field(default=MESSAGE_TYPES.TEXT)
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = None
     content_type_unparsed: str | None = Field(default=None)
 
