@@ -67,13 +67,13 @@ def delete_file_from_openai(assistant: OpenAiAssistant, file: File):
         return
 
     client = assistant.llm_provider.get_llm_service().get_raw_client()
+    client.beta.assistants.files.delete(assistant_id=assistant.assistant_id, file_id=file.external_id)
     try:
         client.files.delete(file.external_id)
     except openai.NotFoundError:
         pass
     file.external_id = ""
     file.external_source = ""
-    file.save()
 
 
 @wrap_openai_errors

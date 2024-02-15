@@ -21,15 +21,6 @@ class FileView(LoginAndTeamRequiredMixin, View):
         except FileNotFoundError:
             raise Http404()
 
-    @method_decorator(permission_required("files.delete_file"))
-    @transaction.atomic()
-    def delete(self, request, team_slug: str, pk: int):
-        file = get_object_or_404(File, team=request.team, pk=pk)
-        file.delete()
-        # TODO: delete from external source e.g. openai
-        messages.success(request, "File Deleted")
-        return HttpResponse()
-
 
 class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "files.add_file"
@@ -72,3 +63,18 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         file.team = self.request.team
         file.save()
         return file
+
+
+class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "files.delete_file"
+
+    @transaction.atomic()
+    def delete(self, request, team_slug: str, **kwargs):
+        file_id = kwargs["file_id"]
+        file = get_object_or_404(File, team=request.team, pk=file_id)
+        file.delete()
+        return self.get_success_response(file)
+
+    def get_success_response(self, file):
+        messages.success(self.request, "File Deleted")
+        return HttpResponse()

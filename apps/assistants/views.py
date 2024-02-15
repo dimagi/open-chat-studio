@@ -14,7 +14,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..files.forms import get_file_formset
-from ..files.views import BaseAddFileHtmxView
+from ..files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from ..generics import actions
 from ..service_providers.models import LlmProvider
 from ..utils.tables import render_table_row
@@ -22,6 +22,7 @@ from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
 from .sync import (
     OpenAiSyncError,
+    delete_file_from_openai,
     delete_openai_assistant,
     import_openai_assistant,
     push_assistant_to_openai,
@@ -234,3 +235,10 @@ class AddFileToAssistant(BaseAddFileHtmxView):
         assistant.files.add(file)
         push_assistant_to_openai(assistant)
         return file
+
+
+class DeleteFileFromAssistant(BaseDeleteFileView):
+    def get_success_response(self, file):
+        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
+        delete_file_from_openai(assistant, file)
+        return super().get_success_response(file)
