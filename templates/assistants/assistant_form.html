@@ -20,59 +20,14 @@
 {% block form %}
   {{ block.super }}
   {% if not object.id %}
-    <div x-data="{ count: {{ file_formset|length }}, get zeroCount() { return this.count-1 } }">
-      <div class="flex flex-row justify-between mb-4">
-        <h3 class="text-lg font-medium">FILES</h3>
-        <button type="button" class="btn btn-sm" @click="count++; $nextTick(() => { document.getElementById('id_form-' + zeroCount + '-file').click() })">
-          <i class="fa-solid fa-paperclip"></i> Add
-        </button>
-      </div>
-      <input type="hidden" name="form-TOTAL_FORMS" x-bind:value="count" id="id_form-TOTAL_FORMS">
-      <input type="hidden" name="form-INITIAL_FORMS" value="0" id="id_form-INITIAL_FORMS">
-      <input type="hidden" name="form-MIN_NUM_FORMS" value="0" id="id_form-MIN_NUM_FORMS">
-      <input type="hidden" name="form-MAX_NUM_FORMS" value="100" id="id_form-MAX_NUM_FORMS">
-      <template x-for="i in count">
-        <div class="flex flex-row" x-data="{ save: true, file: '', get index() { return i-1 } }" x-show="save">
-          <input type="hidden" :name="'form-' + index + '-id'" :id="'id_form-' + index + '-id'">
-          <input class="hidden " :name="'form-' + index + '-DELETE'" :id="'id_form-'+index+'-DELETE'"
-                 :value="save ? '' : 1">
-          <button type="button" class="btn btn-sm mr-4 self-center" @click="save = false; file = ''">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-          <div class="form-control w-full">
-            <input type="file" :name="'form-' + index + '-file'" class="file-input w-full max-w-xs"
-                   :id="'id_form-' + index + '-file'" x-model="file">
-          </div>
-        </div>
-      </template>
-    </div>
+    {% include "files/partials/file_formset.html" %}
   {% endif %}
 {% endblock form %}
 {% block post_form %}
   {% if object.id %}
     <hr class="my-4">
-    <div x-data="{}">
-      <div class="flex flex-row justify-between mb-4">
-        <h3 class="text-lg font-medium">FILES</h3>
-        <button type="button" class="btn btn-sm" @click="document.getElementById('fileInput').click()">
-          <i class="fa-solid fa-paperclip"></i> Add
-        </button>
-      </div>
-    <form id="fileUploadForm" enctype="multipart/form-data"
-          hx-post="{% url "assistants:add_file" request.team.slug object.id %}"
-          hx-trigger="change"
-          hx-swap="afterbegin"
-          hx-target="#fileList"
-    >
-      <input type="file" name="file" id="fileInput" class="hidden">
-      <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
-    </form>
-      <ul id="fileList">
-        {% for file in object.files.all %}
-          {% include "files/partials/file_item.html" %}
-        {% endfor %}
-      </ul>
-    </div>
+    {% url "assistants:add_file" request.team.slug object.id as uploadUrl %}
+    {% include "files/partials/file_list.html" with files=object.files.all %}
   {% endif %}
 {% endblock post_form %}
 {% block page_js %}
