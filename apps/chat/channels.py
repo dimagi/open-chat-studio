@@ -406,9 +406,7 @@ class ChannelBase:
         return self.message_content_type is not None and self.message_content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
-        """Use this method to generate a suitable response for the user. The `prompt_instruction`
-        dictates what to include
-        """
+        """Generates a suitable response to the user when they send unsupported messages"""
         prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
