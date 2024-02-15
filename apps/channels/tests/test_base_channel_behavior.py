@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
@@ -240,3 +241,39 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
+
+
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.chat.channels.TopicBot")
+@patch("apps.channels.models._set_telegram_webhook")
+def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user, db):
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    assert channel.experiment_session is None
+    telegram_chat_id = "123"
+
+    channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
+    assert channel.experiment_session is not None
+
+    channel.experiment_session.refresh_from_db()
+    message = channel.experiment_session.chat.messages.first()
+    assert message.message_type == ChatMessageType.SYSTEM
+    assert channel.message.content_type_unparsed == "photo"
+
+
+@patch("apps.chat.channels.ChannelBase._unsupported_message_type_response")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.channels.models._set_telegram_webhook")
+def test_unsupported_message_type_triggers_bot_response(
+    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response, db
+):
+    bot_response = "Nope, not suppoerted laddy"
+    _unsupported_message_type_response.return_value = bot_response
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    assert channel.experiment_session is None
+    telegram_chat_id = "123"
+
+    channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
+    assert channel.experiment_session is not None
+    assert send_text_to_user.call_args[0][0] == bot_response

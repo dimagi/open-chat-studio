@@ -181,6 +181,10 @@ class ChannelBase:
         The `message` here will probably be some object, depending on the channel being used.
         """
         self._add_message(message)
+
+        if not self.is_message_type_supported():
+            return self._handle_unsupported_message()
+
         if self.experiment_channel.platform != "web":
             if self._is_reset_conversation_request():
                 # Webchats' statuses are updated through an "external" flow
@@ -195,11 +199,7 @@ class ChannelBase:
                 # is ACTIVE
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-        if self.is_message_type_supported():
-            response = self._handle_supported_message()
-        else:
-            response = self._handle_unsupported_message()
-
+        response = self._handle_supported_message()
         return response
 
     def _handle_pre_conversation_requirements(self):
