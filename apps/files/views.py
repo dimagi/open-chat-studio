@@ -31,16 +31,32 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             request.FILES,
         )
         if form.is_valid():
-            file = self.form_valid(form)
-            messages.success(request, "File Added")
-            return render(
-                request,
-                "files/partials/file_item.html",
-                {
-                    "file": file,
-                },
-            )
+            try:
+                file = self.form_valid(form)
+            except Exception as e:
+                return self.get_error_response(e)
+            return self.get_success_response(file)
         return HttpResponse(status=400)
+
+    def get_success_response(self, file):
+        messages.success(self.request, "File Added")
+        return render(
+            self.request,
+            "files/partials/file_item.html",
+            {
+                "file": file,
+            },
+        )
+
+    def get_error_response(self, error):
+        messages.error(self.request, "Error uploading file")
+        return render(
+            self.request,
+            "files/partials/file_item_error.html",
+            {
+                "error": error,
+            },
+        )
 
     def form_valid(self, form):
         file = form.save(commit=False)

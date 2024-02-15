@@ -129,7 +129,10 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
             file.team = self.request.team
             file.save()
         self.object.files.set(files)
-        push_assistant_to_openai(self.object)
+        try:
+            push_assistant_to_openai(self.object)
+        except openai.APIError as e:
+            messages.error(self.request, "Error syncing assistant to OpenAI: " + e.message)
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -141,7 +144,10 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     @transaction.atomic()
     def form_valid(self, form, file_formset):
         response = super().form_valid(form)
-        push_assistant_to_openai(self.object)
+        try:
+            push_assistant_to_openai(self.object)
+        except openai.APIError as e:
+            messages.error(self.request, "Error syncing changes to OpenAI: " + e.message)
         return response
 
 
@@ -151,7 +157,11 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        delete_openai_assistant(assistant)
+        try:
+            delete_openai_assistant(assistant)
+        except openai.APIError as e:
+            messages.error(request, "Error deleting assistant from OpenAI: " + e.message)
+            return HttpResponse(status=500)
         assistant.delete()
         messages.success(request, "Assistant Deleted")
         return HttpResponse()
@@ -173,7 +183,10 @@ class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
 
     def post(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        sync_from_openai(assistant)
+        try:
+            sync_from_openai(assistant)
+        except openai.APIError as e:
+            messages.error(request, "Error syncing assistant: " + e.message)
         return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
@@ -208,10 +221,14 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
                 " selected LLM Provider has access to the assistant.",
             )
             return self.form_invalid(form)
+        except openai.APIError as e:
+            messages.error(self.request, "Error importing assistant: " + e.message)
+            return self.form_invalid(form)
         return super().form_valid(form)
 
 
 class AddFileToAssistant(BaseAddFileHtmxView):
+    @transaction.atomic()
     def form_valid(self, form):
         assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)

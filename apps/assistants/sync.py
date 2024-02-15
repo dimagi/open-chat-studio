@@ -65,7 +65,6 @@ def fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
         pass
 
     content_type = mimetypes.guess_type(filename)[0]
-    # content = client.files.retrieve_content(openai_file.id)
     file = File(
         team=assistant.team,
         name=filename,
@@ -73,6 +72,8 @@ def fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
         external_id=openai_file.id,
         external_source="openai",
     )
+    # Can't retrieve content from openai assistant files
+    # content = client.files.retrieve_content(openai_file.id)
     # file.file.save(filename, ContentFile(content.read()))
     file.save()
     return file
