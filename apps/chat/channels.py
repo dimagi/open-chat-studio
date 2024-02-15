@@ -196,9 +196,9 @@ class ChannelBase:
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
         if self.is_message_type_supported():
-            response = self._handle_message()
+            response = self._handle_supported_message()
         else:
-            response = self.send_text_to_user(self._unsupported_message_type_response())
+            response = self._handle_unsupported_message()
 
         return response
 
@@ -276,7 +276,7 @@ class ChannelBase:
     def _user_gave_consent(self) -> bool:
         return self.message_text.strip() == USER_CONSENT_TEXT
 
-    def _handle_message(self):
+    def _handle_supported_message(self):
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
             response = self._get_llm_response(self.message_text)
@@ -292,6 +292,9 @@ class ChannelBase:
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
+
+    def _handle_unsupported_message(self):
+        return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider

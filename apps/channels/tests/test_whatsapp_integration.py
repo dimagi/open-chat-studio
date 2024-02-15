@@ -260,15 +260,15 @@ class TestTurnio:
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         send_whatsapp_text_message.assert_called()
 
-    @patch("apps.chat.channels.WhatsappChannel.new_user_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
+    @patch("apps.chat.channels.ChannelBase._handle_supported_message")
+    @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")
     def test_unsupported_message_type_does_nothing(
-        self, get_llm_response_mock, new_user_message_mock, db, turnio_whatsapp_channel
+        self, _handle_unsupported_message, _handle_supported_message, db, turnio_whatsapp_channel
     ):
-        """Test that nothing happens for unsupported message types"""
-        get_llm_response_mock.return_value = "Hi"
+        """Test that unsupported messages are not"""
         incoming_message = TurnIOMessages.text_message()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        new_user_message_mock.assert_not_called()
+        _handle_unsupported_message.assert_called()
+        _handle_supported_message.assert_not_called()
