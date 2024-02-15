@@ -5,5 +5,5 @@ from apps.files import views
 app_name = "files"
 
 urlpatterns = [
-    path("<int:pk>/delete/", views.DeleteFile.as_view(), name="delete"),
+    path("<int:pk>/", views.FileView.as_view(), name="base"),
 ]

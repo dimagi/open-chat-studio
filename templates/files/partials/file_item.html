@@ -1,13 +1,12 @@
 <li class="flex items-center p-3 rounded-md hover:bg-base-200" id="file-{{ file.id }}">
   <button type="button" class="btn btn-sm mr-4"
-          hx-delete="{% url "files:delete" request.team.slug file.id %}"
+          hx-delete="{% url "files:base" request.team.slug file.id %}"
           hx-target="#file-{{ file.id }}"
           hx-swap="outerHTML"
   >
     <i class="fa-solid fa-trash"></i>
   </button>
   <div class="flex items-center">
-    {# TODO: link to download#}
-    <span class="text-sm font-medium hover:link">{{ file.name }}</span>
+    <a class="text-sm font-medium hover:link" href="{% url "files:base" request.team.slug file.id %}">{{ file.name }}</a>
   </div>
 </li>

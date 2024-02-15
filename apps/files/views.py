@@ -1,18 +1,27 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.forms import modelform_factory
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.decorators import method_decorator
 from django.views import View
 
 from apps.files.models import File
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class DeleteFile(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "files.delete_file"
+class FileView(LoginAndTeamRequiredMixin, View):
+    @method_decorator(permission_required("files.view_file"))
+    def get(self, request, team_slug: str, pk: int):
+        file = get_object_or_404(File, id=pk, team=request.team)
+        try:
+            return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
+        except FileNotFoundError:
+            raise Http404()
 
+    @method_decorator(permission_required("files.delete_file"))
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         file = get_object_or_404(File, team=request.team, pk=pk)
