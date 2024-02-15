@@ -2,6 +2,7 @@ import logging
 from abc import abstractmethod
 from enum import Enum
 from io import BytesIO
+from typing import ClassVar
 
 import requests
 from django.conf import settings
@@ -18,6 +19,10 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 
 USER_CONSENT_TEXT = "1"
+UNSUPPORTED_MESSAGE_BOT_PROMPT = """
+Tell the user (in the language being spoken) that {content_type} messages are not supported.
+You only support {supperted_types} messages types. Respond only with the message for the user
+"""
 
 
 class MESSAGE_TYPES(Enum):
@@ -54,6 +59,9 @@ class ChannelBase:
         message_text: An abstract property that must be implemented in subclasses to return the text
             content of the message.
 
+    Class variables:
+        supported_message_types: A list of message content types that are supported by this channel
+
     Abstract methods:
         initialize: (Optional) Performs any necessary initialization
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
@@ -63,14 +71,14 @@ class ChannelBase:
         transcription_started:A callback indicating that the transcription process has started
         transcription_finished: A callback indicating that the transcription process has finished.
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
-
     Public API:
         new_user_message: Handles a message coming from the user.
         new_bot_message: Handles a message coming from the bot.
         get_chat_id_from_message: Returns the unique identifier of the chat from the message object.
     """
 
-    voice_replies_supported = False
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types: ClassVar[str] = []
 
     def __init__(
         self,
@@ -187,7 +195,12 @@ class ChannelBase:
                 # is ACTIVE
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-        return self._handle_message()
+        if self.is_message_type_supported():
+            response = self._handle_message()
+        else:
+            response = self.send_text_to_user(self._unsupported_message_type_response())
+
+        return response
 
     def _handle_pre_conversation_requirements(self):
         """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
@@ -389,6 +402,19 @@ class ChannelBase:
     def _is_reset_conversation_request(self):
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
+    def is_message_type_supported(self) -> bool:
+        return self.message_content_type in self.supported_message_types
+
+    def _unsupported_message_type_response(self):
+        """Use this method to generate a suitable response for the user. The `prompt_instruction`
+        dictates what to include
+        """
+        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(
+            content_type=self.message_content_type, supperted_types=self.supported_message_types
+        )
+        topic_bot = TopicBot(self.experiment_session)
+        return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
+
 
 class WebChannel(ChannelBase):
     """Message Handler for the UI"""
@@ -413,6 +439,7 @@ class WebChannel(ChannelBase):
 
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     def initialize(self):
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
@@ -422,10 +449,9 @@ class TelegramChannel(ChannelBase):
 
     @property
     def message_content_type(self):
-        if self.message.content_type == "text":
-            return MESSAGE_TYPES.TEXT
-        elif self.message.content_type == "voice":
-            return MESSAGE_TYPES.VOICE
+        if MESSAGE_TYPES.is_member(self.message.content_type):
+            return MESSAGE_TYPES(self.message.content_type)
+        return self.message.content_type
 
     @property
     def message_text(self):
