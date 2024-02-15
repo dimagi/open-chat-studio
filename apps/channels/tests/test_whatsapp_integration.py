@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
-from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
@@ -192,10 +191,6 @@ class TestTwilio:
         else:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
             assert whatsapp_message.media_url == "http://example.com/media"
-
-    def test_unsupported_message_type_exception_raised(self):
-        with pytest.raises(UnsupportedMessageTypeException):
-            TwilioMessage.model_validate(json.loads(TwilioMessages.image_message()))
 
     @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(

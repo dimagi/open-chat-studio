@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
 
-from apps.channels.exceptions import UnsupportedMessageTypeException
 from apps.chat.channels import MESSAGE_TYPES
 
 
@@ -43,7 +42,6 @@ class TwilioMessage(BaseModel):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio/ogg":
             return MESSAGE_TYPES.VOICE
-        raise UnsupportedMessageTypeException()
 
     @property
     def chat_id(self) -> str:
@@ -64,9 +62,8 @@ class TurnWhatsappMessage(BaseModel):
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
-        if not MESSAGE_TYPES.is_member(value):
-            raise UnsupportedMessageTypeException()
-        return MESSAGE_TYPES(value)
+        if MESSAGE_TYPES.is_member(value):
+            return MESSAGE_TYPES(value)
 
     @property
     def chat_id(self) -> str:
@@ -110,7 +107,6 @@ class FacebookMessage(BaseModel):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio":
             return MESSAGE_TYPES.VOICE
-        raise UnsupportedMessageTypeException()
 
     @property
     def chat_id(self) -> str:
