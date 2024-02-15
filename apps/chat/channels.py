@@ -442,16 +442,15 @@ class TelegramChannel(ChannelBase):
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def get_chat_id_from_message(self, message):
-        return message.chat.id
+        return message.chat_id
 
     @property
     def message_content_type(self):
-        if MESSAGE_TYPES.is_member(self.message.content_type):
-            return MESSAGE_TYPES(self.message.content_type)
+        return self.message.content_type
 
     @property
     def message_text(self):
-        return self.message.text
+        return self.message.body
 
     def send_voice_to_user(self, voice_audio, duration):
         self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
@@ -461,7 +460,7 @@ class TelegramChannel(ChannelBase):
             self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
-        file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
+        file_url = self.telegram_bot.get_file_url(self.message.media_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 

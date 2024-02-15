@@ -5,7 +5,7 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import FacebookMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import FacebookMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
@@ -25,9 +25,11 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         # This is a chat member update that we don't care about.
         # See https://core.telegram.org/bots/api-changelog#march-9-2021
         return
+
+    message = TelegramMessage.parse(update)
     message_handler = TelegramChannel(experiment_channel=experiment_channel)
-    update_taskbadger_data(self, message_handler, update.message)
-    message_handler.new_user_message(update.message)
+    update_taskbadger_data(self, message_handler, message)
+    message_handler.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

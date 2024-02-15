@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase
 from telebot import types
 
+from apps.channels.datamodels import TelegramMessage
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
@@ -50,7 +51,7 @@ class TelegramMessageHandlerTest(TestCase):
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
     @patch("apps.chat.channels.TelegramChannel._get_llm_response")
-    def test_incoming_message_adds_adds_channel_info(self, _get_llm_response, _send_text_to_user_mock):
+    def test_incoming_message_adds_channel_info(self, _get_llm_response, _send_text_to_user_mock):
         """When an `experiment_session` is created, channel specific info like `external_chat_id` and
         `experiment_channel` should also be added to the `experiment_session`
         """
@@ -261,4 +262,5 @@ def _telegram_message(chat_id: int, message_text: str = "Hi there") -> types.Mes
         },
     }
     json_data = json.dumps(message_data)
-    return types.Update.de_json(json_data).message
+    update = types.Update.de_json(json_data)
+    return TelegramMessage.parse(update)

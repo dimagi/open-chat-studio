@@ -18,6 +18,30 @@ class WebMessage(BaseModel):
         return self.message_text
 
 
+class TelegramMessage(BaseModel):
+    chat_id: int = Field()
+    body: str | None = Field()
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    media_id: str | None = Field()
+    message_id: int = Field()
+
+    @field_validator("content_type", mode="before")
+    @classmethod
+    def determine_content_type(cls, value):
+        if MESSAGE_TYPES.is_member(value):
+            return MESSAGE_TYPES(value)
+
+    @staticmethod
+    def parse(update_obj) -> "TelegramMessage":
+        return TelegramMessage(
+            chat_id=update_obj.message.chat.id,
+            body=update_obj.message.text,
+            content_type=update_obj.message.content_type,
+            media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
+            message_id=update_obj.message.message_id,
+        )
+
+
 class TwilioMessage(BaseModel):
     """
     A wrapper class for user messages coming from the whatsapp
