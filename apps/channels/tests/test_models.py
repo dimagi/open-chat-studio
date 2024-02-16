@@ -2,10 +2,11 @@ import pytest
 from django.urls import reverse
 
 from apps.channels.models import ExperimentChannel
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
@@ -43,3 +44,26 @@ def test_channel_webhook_url(db):
     assert reverse("channels:new_twilio_message") in twilio_channel.webhook_url
     turnio_uri = reverse("channels:new_turn_message", kwargs={"experiment_id": turnio_channel.experiment.public_id})
     assert turnio_uri in turnio_channel.webhook_url
+
+
+def test_deleting_experiment_channel_only_removes_the_experiment_channel(db):
+    """Test to make sure that removing an experiment channel does not remove important related records"""
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    experiment_channel = ExperimentChannelFactory(experiment=experiment)
+    chat = Chat.objects.create(user=experiment.owner, team=experiment.team)
+    chat_messsage = ChatMessage.objects.create(chat=chat, content="Hi", message_type=ChatMessageType.HUMAN)
+    experiment_session = ExperimentSessionFactory(experiment=experiment, experiment_channel=experiment_channel)
+    experiment_session.chat = chat
+    experiment_session.save()
+
+    def _assert_not_deleted(instance):
+        instance.refresh_from_db()
+        assert instance is not None
+        assert instance.id is not None
+
+    experiment_channel.delete()
+    _assert_not_deleted(chat)
+    _assert_not_deleted(chat_messsage)
+    _assert_not_deleted(experiment)
+    _assert_not_deleted(experiment_session)
+    _assert_not_deleted(chat)
