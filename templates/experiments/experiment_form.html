@@ -7,10 +7,10 @@
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
       {% if experiment.id %}
-      <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
+        <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
+        <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
       {% else %}
-      <li class="pg-breadcrumb-active" aria-current="page">Create</li>
+        <li class="pg-breadcrumb-active" aria-current="page">Create</li>
       {% endif %}
     </ul>
   </div>
@@ -22,17 +22,17 @@
     <h3 class="font-semibold text-xl mt-4">Language Model Configuration</h3>
     <div class="divider divider-neutral"></div>
     <div class="pl-4">
-  <div role="tablist" class="tabs tabs-bordered mt-4">
-    <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly" {% if not object.assistant_id %}checked{% endif %}/>
-    <div role="tabpanel" class="tab-content pt-4">
-      {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "input_formatter" "tools_enabled" "source_material" %}
-    </div>
+      <div role="tablist" class="tabs tabs-bordered mt-4">
+        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly" {% if not object.assistant_id %}checked{% endif %}/>
+        <div role="tabpanel" class="tab-content pt-4">
+          {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "input_formatter" "tools_enabled" "source_material" %}
+        </div>
 
-    <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant" {% if object.assistant_id %}checked{% endif %} />
-    <div role="tabpanel" class="tab-content pt-4">
-      {% render_form_fields form "assistant" %}
-    </div>
-  </div>
+        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant" {% if object.assistant_id %}checked{% endif %} />
+        <div role="tabpanel" class="tab-content pt-4">
+          {% render_form_fields form "assistant" %}
+        </div>
+      </div>
     </div>
     <h3 class="font-semibold text-xl mt-4">General Configuration</h3>
     <div class="divider divider-neutral"></div>
@@ -51,36 +51,36 @@
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
-      const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
-      const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
-      const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
-      document.addEventListener('alpine:init', () => {
-          Alpine.data('experiment', () => ({
+    const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
+    const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
+    const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('experiment', () => ({
 
-              voiceProvider: null,
-              synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
-              synthetic_voice_options: [],
+        voiceProvider: null,
+        synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+        synthetic_voice_options: [],
 
-              llmProviderId: null,
-              llmProvider: null,
-              llm: '{{experiment.llm|default:form.llm.initial|default:'null'}}',
-              llm_options: [],
+        llmProviderId: null,
+        llmProvider: null,
+        llm: '{{experiment.llm|default:form.llm.initial|default:'null'}}',
+        llm_options: [],
 
-              init() {
+        init() {
 
-                  this.$watch('voiceProvider', () => {
-                      const providerType = voiceProviderTypes[this.voiceProvider];
-                      this.synthetic_voice_options = voiceOptions.filter(option => {
-                        return option.type === providerType;
-                      });
-                  });
+          this.$watch('voiceProvider', () => {
+            const providerType = voiceProviderTypes[this.voiceProvider];
+            this.synthetic_voice_options = voiceOptions.filter(option => {
+              return option.type === providerType;
+            });
+          });
 
-                  this.$watch('llmProviderId', () => {
-                      this.llmProvider = llmModelOptions[this.llmProviderId];
-                      this.llm_options = llmModelOptions[this.llmProviderId].models;
-                  })
-              }
-          }));
-      });
+          this.$watch('llmProviderId', () => {
+            this.llmProvider = llmModelOptions[this.llmProviderId];
+            this.llm_options = llmModelOptions[this.llmProviderId].models;
+          })
+        }
+      }));
+    });
   </script>
 {% endblock page_js %}

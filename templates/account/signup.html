@@ -16,7 +16,7 @@
           {% render_field form.email %}
           {% render_field form.password1 %}
           {% if project_settings.ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE %}
-          {% render_field form.password2 %}
+            {% render_field form.password2 %}
           {% endif %}
           {% if invitation %}
             <input type="hidden" name="invitation_id" value="{{ invitation.id }}">
@@ -25,7 +25,7 @@
             {% render_field form.team_name %}
           {% endif %}
           {% if project_meta.TERMS_URL %}
-          {% render_field form.terms_agreement %}
+            {% render_field form.terms_agreement %}
           {% endif %}
           <div>
             <input class="btn btn-primary btn-block" type="submit" value="{% translate "Sign Up" %}">

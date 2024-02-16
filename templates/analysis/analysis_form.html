@@ -5,10 +5,10 @@
     <ul>
       <li><a href="{% url 'analysis:home' request.team.slug %}">Analysis</a></li>
       {% if analysis.id %}
-      <li><a href="{% url 'analysis:details' request.team.slug analysis.id %}">"{{ analysis.name }}"</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Setup</li>
+        <li><a href="{% url 'analysis:details' request.team.slug analysis.id %}">"{{ analysis.name }}"</a></li>
+        <li class="pg-breadcrumb-active" aria-current="page">Setup</li>
       {% else %}
-      <li class="pg-breadcrumb-active" aria-current="page">Create</li>
+        <li class="pg-breadcrumb-active" aria-current="page">Create</li>
       {% endif %}
     </ul>
   </div>
@@ -39,20 +39,20 @@
     </div>
   {% endif %}
   <div role="tablist" class="tabs tabs-bordered">
-      <a role="tab" class="tab tab-active !border-primary !cursor-default">1. Setup</a>
-      {% if analysis.id %}
-        <a role="tab" class="tab" href="{% url "analysis:configure" request.team.slug analysis.id %}">2. Configure</a>
-      {% else %}
-        <a role="tab" class="tab !cursor-default">2. Configure</a>
-      {% endif %}
-    </div>
+    <a role="tab" class="tab tab-active !border-primary !cursor-default">1. Setup</a>
+    {% if analysis.id %}
+      <a role="tab" class="tab" href="{% url "analysis:configure" request.team.slug analysis.id %}">2. Configure</a>
+    {% else %}
+      <a role="tab" class="tab !cursor-default">2. Configure</a>
+    {% endif %}
+  </div>
 {% endblock pre_form %}
 {% block form_actions %}
   {% if analysis.id %}
-  <input type="submit" class="pg-button-primary mt-2" value="Save" name="save">
-  <input type="submit" class="pg-button-primary mt-2" value="Save and Continue" name="configure">
+    <input type="submit" class="pg-button-primary mt-2" value="Save" name="save">
+    <input type="submit" class="pg-button-primary mt-2" value="Save and Continue" name="configure">
   {% else %}
-  <input type="submit" class="pg-button-primary mt-2" value="Continue">
+    <input type="submit" class="pg-button-primary mt-2" value="Continue">
   {% endif %}
 {% endblock %}
 {% block page_js %}

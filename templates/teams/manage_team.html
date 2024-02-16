@@ -13,65 +13,65 @@
   </style>
 {% endblock %}
 {% block app %}
-<section class="app-card">
-  <h3 class="pg-subtitle">
-    {% translate "Team Details" %}
-  </h3>
-  <form method="post">
-    {% csrf_token %}
-    {% render_form_fields team_form %}
-    {% if create or request.team_membership.is_team_admin %}
-      <div class="pg-inline-buttons">
-        <input class="pg-button-secondary" type="submit" value="{% translate 'Save Details' %}">
-      </div>
-    {% endif %}
-  </form>
-</section>
-{% if not create %}
-{% translate "Large Language Model services" as llm_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
-{% translate "Speech to text and visa versa" as speech_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
-{% translate "WhatsApp, SMS etc" as messaging_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
-{% translate "Authentication credentials for integrations" as auth_subtitle %}
-{% include 'service_providers/service_provider_home.html' with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
-<section class="app-card">
-  <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
-  <div class='table-responsive'>
-    <table class="table pg-table">
-      <thead>
-      <tr>
-        <th>{% translate "Member" %}</th>
-        <th>{% translate "Roles" %}</th>
-      </tr>
-      </thead>
-      <tbody>
-      {% for membership in team.sorted_memberships.all %}
-        <tr>
-          <td>
-            {% if request.team_membership.is_team_admin or request.team_membership == membership %}
-              <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
-            {% else %}
-              {{ membership.user }}
-            {% endif %}
-          </td>
-          <td>{{ membership.groups.all|join:", " }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% include 'teams/components/team_invitations.html' %}
-{% if request.team_membership.is_team_admin %}
   <section class="app-card">
     <h3 class="pg-subtitle">
-      {% translate "Danger Zone" %}
+      {% translate "Team Details" %}
     </h3>
-    <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+    <form method="post">
+      {% csrf_token %}
+      {% render_form_fields team_form %}
+      {% if create or request.team_membership.is_team_admin %}
+        <div class="pg-inline-buttons">
+          <input class="pg-button-secondary" type="submit" value="{% translate 'Save Details' %}">
+        </div>
+      {% endif %}
+    </form>
   </section>
-  {% include 'teams/components/delete_team_modal.html' %}
-{% endif %}
-{% endif %}
+  {% if not create %}
+    {% translate "Large Language Model services" as llm_subtitle %}
+    {% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
+    {% translate "Speech to text and visa versa" as speech_subtitle %}
+    {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
+    {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
+    {% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
+    {% translate "Authentication credentials for integrations" as auth_subtitle %}
+    {% include 'service_providers/service_provider_home.html' with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
+    <section class="app-card">
+      <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
+      <div class='table-responsive'>
+        <table class="table pg-table">
+          <thead>
+            <tr>
+              <th>{% translate "Member" %}</th>
+              <th>{% translate "Roles" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for membership in team.sorted_memberships.all %}
+              <tr>
+                <td>
+                  {% if request.team_membership.is_team_admin or request.team_membership == membership %}
+                    <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
+                  {% else %}
+                    {{ membership.user }}
+                  {% endif %}
+                </td>
+                <td>{{ membership.groups.all|join:", " }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% include 'teams/components/team_invitations.html' %}
+    {% if request.team_membership.is_team_admin %}
+      <section class="app-card">
+        <h3 class="pg-subtitle">
+          {% translate "Danger Zone" %}
+        </h3>
+        <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+      </section>
+      {% include 'teams/components/delete_team_modal.html' %}
+    {% endif %}
+  {% endif %}
 {% endblock %}

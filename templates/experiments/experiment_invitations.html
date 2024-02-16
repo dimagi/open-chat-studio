@@ -1,24 +1,24 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
 {% block app %}
-<div class="app-card">
-  <h1 class="pg-title">{{ experiment.name }} Invitations</h1>
-  <h2 class="pg-subtitle">{{ experiment.description }}</h2>
-</div>
-<div class="app-card">
-  <h2 class="pg-subtitle">Add Participants</h2>
-  <form method="post" class="my-2 max-w-md">
-    {% csrf_token %}
-    {% render_form_fields invitation_form %}
-    <input type="submit" class="pg-button-primary mt-2" value="Invite Participant">
-  </form>
-</div>
-<div class="app-card">
-  <h2 class="pg-subtitle">All Pending Sessions</h2>
-  <ul role="list" class="divide-y divide-gray-100">
-    {% for session in sessions %}
-      {% include "experiments/manage/invite_row.html" %}
-    {% endfor %}
-  </ul>
-</div>
+  <div class="app-card">
+    <h1 class="pg-title">{{ experiment.name }} Invitations</h1>
+    <h2 class="pg-subtitle">{{ experiment.description }}</h2>
+  </div>
+  <div class="app-card">
+    <h2 class="pg-subtitle">Add Participants</h2>
+    <form method="post" class="my-2 max-w-md">
+      {% csrf_token %}
+      {% render_form_fields invitation_form %}
+      <input type="submit" class="pg-button-primary mt-2" value="Invite Participant">
+    </form>
+  </div>
+  <div class="app-card">
+    <h2 class="pg-subtitle">All Pending Sessions</h2>
+    <ul role="list" class="divide-y divide-gray-100">
+      {% for session in sessions %}
+        {% include "experiments/manage/invite_row.html" %}
+      {% endfor %}
+    </ul>
+  </div>
 {% endblock %}

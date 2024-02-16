@@ -10,181 +10,181 @@
   </div>
 {% endblock %}
 {% block app %}
-<div class="app-card">
-  <div class="flex">
-    <div class="flex-1">
-      <h1 class="pg-title">{{ experiment.name }}</h1>
-    </div>
-    <div class="justify-self-end">
-      <div class="join">
-        {% if experiment.is_active %}
-          <div class="tooltip" data-tip="Public Link">
-            <a class="btn btn-primary join-item rounded-l-full"
-               href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" target="_blank">
-              <i class="fa-solid fa-link"></i>
+  <div class="app-card">
+    <div class="flex">
+      <div class="flex-1">
+        <h1 class="pg-title">{{ experiment.name }}</h1>
+      </div>
+      <div class="justify-self-end">
+        <div class="join">
+          {% if experiment.is_active %}
+            <div class="tooltip" data-tip="Public Link">
+              <a class="btn btn-primary join-item rounded-l-full"
+                 href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" target="_blank">
+                <i class="fa-solid fa-link"></i>
+              </a>
+            </div>
+          {% endif %}
+          <div class="tooltip" data-tip="Start Web Session">
+            <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary join-item">
+                <i class="fa-solid fa-file-circle-plus"></i>
+              </button>
+            </form>
+          </div>
+          {% if perms.experiments.invite_participants %}
+            <div class="tooltip" data-tip="Invitations">
+              <a class="btn btn-primary join-item"
+                 href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+                <i class="fa-regular fa-envelope"></i>
+              </a>
+            </div>
+          {% endif %}
+          <div class="tooltip" data-tip="Edit">
+            <a class="btn btn-primary join-item"
+               href="{% url 'experiments:edit' team.slug experiment.id %}">
+              <i class="fa-solid fa-pencil"></i>
             </a>
           </div>
-        {% endif %}
-        <div class="tooltip" data-tip="Start Web Session">
-          <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-primary join-item">
-              <i class="fa-solid fa-file-circle-plus"></i>
-            </button>
-          </form>
-        </div>
-        {% if perms.experiments.invite_participants %}
-        <div class="tooltip" data-tip="Invitations">
-          <a class="btn btn-primary join-item"
-             href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
-            <i class="fa-regular fa-envelope"></i>
-          </a>
-        </div>
-        {% endif %}
-        <div class="tooltip" data-tip="Edit">
-          <a class="btn btn-primary join-item"
-             href="{% url 'experiments:edit' team.slug experiment.id %}">
-            <i class="fa-solid fa-pencil"></i>
-          </a>
-        </div>
-        <div class="tooltip" data-tip="Delete">
-          <a class="btn btn-primary join-item rounded-r-full"
-             href="{% url 'experiments:delete' team.slug experiment.id %}">
-            <i class="fa-solid fa-trash"></i>
-          </a>
+          <div class="tooltip" data-tip="Delete">
+            <a class="btn btn-primary join-item rounded-r-full"
+               href="{% url 'experiments:delete' team.slug experiment.id %}">
+              <i class="fa-solid fa-trash"></i>
+            </a>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-  <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
-  <h3 class="inline mr-4">Channels:</h3>
-  <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
+    <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
+    <h3 class="inline mr-4">Channels:</h3>
+    <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
   {#  Commented elements included for Tailwind processing #}
   {#  <i class="fa-brands fa-telegram"></i> #}
   {#  <i class="fa-brands fa-whatsapp"></i> #}
-  {% for channel in channels %}
-    <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
-      <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
-    </div>
-    <dialog id="channel_{{ channel.id }}_modal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
-        <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}">
-          {% csrf_token %}
-          {% render_form_fields channel.form %}
-          {% if channel.extra_form %}
-            {% render_form_fields channel.extra_form %}
-          {% endif %}
-          <div class="modal-action">
-            <button class="btn btn-primary" type="submit" name="action" value="update">Update</button>
-            <button class="btn btn-error" type="submit" name="action" value="delete">Delete</button>
-            <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()">Close</button>
-          </div>
-        </form>
+    {% for channel in channels %}
+      <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+        <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
       </div>
-    </dialog>
-  {% endfor %}
-  {% if platforms %}
-  <div class="dropdown">
-    <button tabindex="0" class="btn btn-ghost btn-sm">
-      <i class="fa-regular fa-plus"></i>
-    </button>
-    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border">
+      <dialog id="channel_{{ channel.id }}_modal" class="modal">
+        <div class="modal-box">
+          <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
+          <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}">
+            {% csrf_token %}
+            {% render_form_fields channel.form %}
+            {% if channel.extra_form %}
+              {% render_form_fields channel.extra_form %}
+            {% endif %}
+            <div class="modal-action">
+              <button class="btn btn-primary" type="submit" name="action" value="update">Update</button>
+              <button class="btn btn-error" type="submit" name="action" value="delete">Delete</button>
+              <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()">Close</button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+    {% endfor %}
+    {% if platforms %}
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-ghost btn-sm">
+          <i class="fa-regular fa-plus"></i>
+        </button>
+        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border">
+          {% for platform in platforms %}
+            <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
       {% for platform in platforms %}
-        <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% for platform in platforms %}
-    <dialog id="{{ platform.value }}_modal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-        <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}">
-          {% csrf_token %}
-          {% render_form_fields platform_forms|dict_lookup:platform %}
-          {% if platform.extra_form %}
-            {% render_form_fields platform.extra_form %}
-          {% endif %}
-          <div class="modal-action">
-            <button class="btn btn-primary" type="submit">Create Link</button>
-            <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()">Close</button>
+        <dialog id="{{ platform.value }}_modal" class="modal">
+          <div class="modal-box">
+            <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+            <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}">
+              {% csrf_token %}
+              {% render_form_fields platform_forms|dict_lookup:platform %}
+              {% if platform.extra_form %}
+                {% render_form_fields platform.extra_form %}
+              {% endif %}
+              <div class="modal-action">
+                <button class="btn btn-primary" type="submit">Create Link</button>
+                <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()">Close</button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
-    </dialog>
-  {% endfor %}
-  {% endif %}
-</div>
-<div class="app-card">
+        </dialog>
+      {% endfor %}
+    {% endif %}
+  </div>
+  <div class="app-card">
 
-  <h2 class="pg-subtitle">My Previous Chat Sessions</h2>
-  <div class="overflow-x-auto">
-    <table class="pg-table">
-    <thead>
-    <tr>
-      <th>Started</th>
-      <th>Last Message</th>
-      <th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for session in user_sessions %}
-      <tr>
-        <td>{{ session.created_at }}</td>
-        <td>{{ session.updated_at }}</td>
-        <td>
-          {% if session.is_complete %}
-            <a class="btn btn-sm btn-outline btn-primary"
-               href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
-               class="link">Review Chat</a>
-          {% else %}
-            <a class="btn btn-sm btn-outline btn-primary"
-               href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
-              Continue Chat
-            </a>
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-    </table>
+    <h2 class="pg-subtitle">My Previous Chat Sessions</h2>
+    <div class="overflow-x-auto">
+      <table class="pg-table">
+        <thead>
+          <tr>
+            <th>Started</th>
+            <th>Last Message</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for session in user_sessions %}
+            <tr>
+              <td>{{ session.created_at }}</td>
+              <td>{{ session.updated_at }}</td>
+              <td>
+                {% if session.is_complete %}
+                  <a class="btn btn-sm btn-outline btn-primary"
+                     href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
+                     class="link">Review Chat</a>
+                {% else %}
+                  <a class="btn btn-sm btn-outline btn-primary"
+                     href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+                    Continue Chat
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
-{% if perms.chat.view_chat %}
-<div class="app-card">
-  <h2 class="pg-subtitle">All Chat Sessions</h2>
-  {% if perms.experiments.download_chats %}
-  <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
-    {% csrf_token %}
-    <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
-  </form>
+  {% if perms.chat.view_chat %}
+    <div class="app-card">
+      <h2 class="pg-subtitle">All Chat Sessions</h2>
+      {% if perms.experiments.download_chats %}
+        <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+          {% csrf_token %}
+          <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+        </form>
+      {% endif %}
+      <div class="overflow-x-auto">
+        <table class="pg-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Started</th>
+              <th>Last Message</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in experiment.sessions.all %}
+              <tr>
+                <td>{{ session.user|default:"-" }}</td>
+                <td>{{ session.created_at }}</td>
+                <td>{{ session.updated_at }}</td>
+                <td>
+                  <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}" class="link">
+                    Session Details
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   {% endif %}
-  <div class="overflow-x-auto">
-    <table class="pg-table">
-    <thead>
-    <tr>
-      <th>User</th>
-      <th>Started</th>
-      <th>Last Message</th>
-      <th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for session in experiment.sessions.all %}
-      <tr>
-        <td>{{ session.user|default:"-" }}</td>
-        <td>{{ session.created_at }}</td>
-        <td>{{ session.updated_at }}</td>
-        <td>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}" class="link">
-            Session Details
-          </a>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
 {% endblock %}
