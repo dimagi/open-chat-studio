@@ -20,7 +20,7 @@ class FilesConfig(AppConfig):
                 continue
 
             def delete_orphaned_files(sender, m2m_field=field, **kwargs):
-                """Delete files when the related model is deleted."""
+                """Delete files when the related model is deleted and there are no other references."""
                 instance = kwargs["instance"]
                 files = getattr(instance, m2m_field.remote_field.name).all()
                 related = get_related_m2m_objects(files, exclude=[instance])
