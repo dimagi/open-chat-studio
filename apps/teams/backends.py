@@ -65,6 +65,7 @@ CONTENT_TYPES = {
         "survey",
         "syntheticvoice",
     ],
+    "files": ["file"],
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
 }
@@ -176,6 +177,7 @@ GROUPS = [
         ASSISTANT_ADMIN_GROUP,
         [
             AppPermSetDef("assistants", ALL),
+            AppPermSetDef("files", ALL),
         ],
     ),
 ]

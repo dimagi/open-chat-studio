@@ -1,0 +1,17 @@
+{% load url_partials %}
+{# Template fragment for displaying files in a list with a delete button #}
+{# Required template vars: #}
+{# - file: the file object #}
+<li class="flex items-center p-3 rounded-md hover:bg-base-200" id="file-{{ file.id }}">
+  <button type="button" class="btn btn-sm mr-4"
+          hx-delete="{% finalize_url delete_url file.id placeholder="000" %}"
+          hx-target="#file-{{ file.id }}"
+          hx-swap="outerHTML"
+  >
+    <i class="fa-solid fa-trash htmx-hide"></i>
+    <span class="loading loading-spinner loading-sm htmx-show"></span>
+  </button>
+  <div class="flex items-center">
+    <a class="text-sm font-medium hover:link" href="{% url "files:base" request.team.slug file.id %}">{{ file.name }}</a>
+  </div>
+</li>

@@ -1,4 +1,5 @@
 import factory
+from openai.types import FileObject
 from openai.types.beta import Assistant
 
 
@@ -20,3 +21,16 @@ class AssistantFactory(factory.Factory):
         {"type": "retrieval"},
         {"type": "function", "function": {"name": "test", "parameters": {"test": {"type": "string"}}}},
     ]
+
+
+class FileObjectFactory(factory.Factory):
+    class Meta:
+        model = FileObject
+
+    id = factory.Faker("uuid4")
+    bytes = factory.Faker("pyint")
+    created_at = factory.Faker("pyint")
+    filename = factory.Faker("file_name")
+    object = "file"
+    purpose = "assistants"
+    status = "processed"

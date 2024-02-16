@@ -1,0 +1,26 @@
+{# Template fragment for display a file list with ability to add and remove #}
+{# Required template vars: #}
+{#  - upload_url: URL to upload a file #}
+{#  - See also "files/partials/file_item.html" #}
+<div x-data="{}">
+  <div class="flex flex-row justify-between mb-4">
+    <h3 class="text-lg font-medium">FILES</h3>
+    <button type="button" class="btn btn-sm" @click="document.getElementById('fileInput').click()">
+      <i class="fa-solid fa-paperclip"></i> Add
+    </button>
+  </div>
+  <form id="fileUploadForm" enctype="multipart/form-data"
+        hx-post="{{ upload_url }}"
+        hx-trigger="change"
+        hx-swap="afterbegin"
+        hx-target="#fileList"
+  >
+    <input type="file" name="file" id="fileInput" class="hidden">
+    <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
+  </form>
+  <ul id="fileList">
+    {% for file in files %}
+      {% include "files/partials/file_item.html" %}
+    {% endfor %}
+  </ul>
+</div>

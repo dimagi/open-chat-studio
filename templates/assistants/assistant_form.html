@@ -17,6 +17,20 @@
     <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}
 {% endblock pre_form %}
+{% block form %}
+  {{ block.super }}
+  {% if not object.id %}
+    {% include "files/partials/file_formset.html" %}
+  {% endif %}
+{% endblock form %}
+{% block post_form %}
+  {% if object.id %}
+    <hr class="my-4">
+    {% url "assistants:add_file" request.team.slug object.id as upload_url %}
+    {% url "assistants:remove_file" request.team.slug object.id '000' as delete_url %}
+    {% include "files/partials/file_list.html" with files=object.files.all %}
+  {% endif %}
+{% endblock post_form %}
 {% block page_js %}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>

@@ -37,6 +37,7 @@ class OpenAiAssistant(BaseTeamModel):
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
+    files = models.ManyToManyField("files.File", blank=True)
 
     objects = OpenAiAssistantManager()
 
