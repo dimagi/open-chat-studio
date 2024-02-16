@@ -81,6 +81,9 @@ class ExperimentChannelObjectManager(AuditingManager):
         extra_data_filter = Q(extra_data__contains={key: value})
         return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
+    def get_queryset(self):
+        return super().get_queryset().filter(active=True)
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
 class ExperimentChannel(BaseModel):
@@ -165,6 +168,10 @@ class ExperimentChannel(BaseModel):
             uri,
             is_secure=True,
         )
+
+    def delete(self, *args, **kwargs):
+        self.active = False
+        self.save()
 
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
