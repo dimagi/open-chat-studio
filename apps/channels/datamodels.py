@@ -20,11 +20,11 @@ class WebMessage(BaseModel):
 
 class TelegramMessage(BaseModel):
     chat_id: int
-    body: str | None = Field()
+    body: str | None
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
-    media_id: str | None = Field()
+    media_id: str | None
     content_type_unparsed: str | None = Field(default=None)
-    message_id: int = Field()
+    message_id: int
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -49,9 +49,9 @@ class TwilioMessage(BaseModel):
     A wrapper class for user messages coming from the whatsapp
     """
 
-    from_number: str = Field()  # `from` is a reserved keyword
-    to_number: str = Field()
-    body: str = Field()
+    from_number: str
+    to_number: str
+    body: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
@@ -92,9 +92,9 @@ class TwilioMessage(BaseModel):
 
 
 class TurnWhatsappMessage(BaseModel):
-    from_number: str = Field()
+    from_number: str
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
-    body: str = Field()
+    body: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
@@ -135,9 +135,9 @@ class FacebookMessage(BaseModel):
     A wrapper class for user messages coming from Facebook
     """
 
-    page_id: str = Field()
-    user_id: str = Field()
-    message_text: str | None = Field()
+    page_id: str
+    user_id: str
+    message_text: str | None
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = None
     content_type_unparsed: str | None = Field(default=None)
