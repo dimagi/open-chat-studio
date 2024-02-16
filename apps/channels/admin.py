@@ -10,7 +10,7 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         "name",
         "team",
         "platform",
-        "active",
+        "deleted",
         "external_id",
     )
     search_fields = ("name", "external_id")

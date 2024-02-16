@@ -64,7 +64,7 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel(db):
     # Let's check soft delete first
     experiment_channel.soft_delete()
     experiment_channel.refresh_from_db()
-    assert experiment_channel.active is False
+    assert experiment_channel.deleted is True
 
     # Let's check actual delete
     experiment_channel.delete()

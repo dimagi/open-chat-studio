@@ -82,7 +82,7 @@ class ExperimentChannelObjectManager(AuditingManager):
         return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
     def get_queryset(self):
-        return super().get_queryset().filter(active=True)
+        return super().get_queryset().filter(deleted=False)
 
     def get_unfiltered_queryset(self):
         return super().get_queryset()
@@ -96,7 +96,7 @@ class ExperimentChannel(BaseModel):
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
-    active = models.BooleanField(default=True)
+    deleted = models.BooleanField(default=False)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
@@ -173,7 +173,7 @@ class ExperimentChannel(BaseModel):
         )
 
     def soft_delete(self):
-        self.active = False
+        self.deleted = True
         self.save()
 
 
@@ -182,10 +182,10 @@ def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     Set the webhook at Telegram to allow message forwarding to this platform
     """
     tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
-    if experiment_channel.active:
-        webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
-    else:
+    if experiment_channel.deleted:
         webhook_url = None
+    else:
+        webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
 
     tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
     tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
