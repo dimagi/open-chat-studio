@@ -1,5 +1,3 @@
-import sys
-
 from django.apps import AppConfig, apps
 
 
@@ -11,9 +9,6 @@ def setup_test_app(package, label=None):
     This function should be called from app.tests __init__ module and pass
     along __package__.
     """
-    is_testing = len(sys.argv) > 1 and sys.argv[1] == "test"
-    if not is_testing:
-        raise Exception("This function should only be called when running tests.")
     app_config = AppConfig.create(package)
     app_config.apps = apps
     if label is None:

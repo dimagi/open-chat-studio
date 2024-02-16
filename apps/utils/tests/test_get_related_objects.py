@@ -23,11 +23,13 @@ def test_get_related_objects():
     bot1.tools.set([tool1, tool2])
     bot2.tools.set([tool1])
 
-    assert get_related_m2m_objects([bot1]) == {tool1, tool2}
-    assert get_related_m2m_objects([bot1], exclude=[tool2]) == {tool1}
-    assert get_related_m2m_objects([bot2]) == {tool1}
-    assert get_related_m2m_objects([bot3]) == set()
-    assert get_related_m2m_objects([tool1]) == {bot1, bot2}
-    assert get_related_m2m_objects([tool2]) == {bot1}
-    assert get_related_m2m_objects([tool3]) == set()
-    assert get_related_m2m_objects([tool1], exclude=[bot1]) == {bot2}
+    assert get_related_m2m_objects([bot1]) == {bot1: {tool1, tool2}}
+    assert get_related_m2m_objects([bot1, bot2]) == {bot1: {tool1, tool2}, bot2: {tool1}}
+    assert get_related_m2m_objects([bot1], exclude=[tool2]) == {bot1: {tool1}}
+    assert get_related_m2m_objects([bot2]) == {bot2: {tool1}}
+    assert get_related_m2m_objects([bot3]) == {}
+    assert get_related_m2m_objects([tool1]) == {tool1: {bot1, bot2}}
+    assert get_related_m2m_objects([tool1, tool2]) == {tool1: {bot1, bot2}, tool2: {bot1}}
+    assert get_related_m2m_objects([tool2]) == {tool2: {bot1}}
+    assert get_related_m2m_objects([tool3]) == {}
+    assert get_related_m2m_objects([tool1], exclude=[bot1]) == {tool1: {bot2}}

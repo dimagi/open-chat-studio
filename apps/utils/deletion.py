@@ -1,24 +1,26 @@
+from typing import Any
+
+from django.contrib.admin.utils import NestedObjects
 from django.db import router
-from django.db.models.deletion import Collector, get_candidate_relations_to_delete
+from django.db.models.deletion import get_candidate_relations_to_delete
 
 
-def get_related_m2m_objects(objs, include_origin=False, exclude: list | None = None) -> set:
+def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
     """Returns a set of objects related to the given objects through many-to-many relationships.
 
     Args:
         objs (list): A list of objects to find related objects for.
-        include_origin (bool): Whether to include the origin objects in the result.
         exclude (list): A list of objects to exclude from the result.
     """
-    related_objects = set(objs) if include_origin else set()
+    related_mapping = {}
     try:
         obj = objs[0]
     except IndexError:
-        return related_objects
+        return related_mapping
 
     using = router.db_for_write(obj._meta.model)
     model = obj.__class__
-    collector = Collector(using=using, origin=objs)
+    collector = NestedObjects(using=using, origin=objs)
     m2m_models = _get_m2m_related_models(model)
     for related in get_candidate_relations_to_delete(model._meta):
         if related.many_to_many:
@@ -37,15 +39,18 @@ def get_related_m2m_objects(objs, include_origin=False, exclude: list | None = N
             f for f in through_model._meta.get_fields() if f.is_relation and f.related_model == related_model
         ][0]
 
-        qs = collector.related_objects(through_model, [related.field], objs)
+        field = related.field
+        qs = collector.related_objects(through_model, [field], objs)
         if exclude:
             exclude_instances = [instance for instance in exclude if isinstance(instance, related_model)]
             qs = qs.exclude(**{f"{related_field.name}__in": exclude_instances})
         qs = qs.select_related(related_field.name)
         for related_obj in qs:
-            related_objects.add(getattr(related_obj, related_field.name))
+            target_obj = getattr(related_obj, related_field.name)
+            source_obj = getattr(related_obj, field.name)
+            related_mapping.setdefault(source_obj, set()).add(target_obj)
 
-    return related_objects
+    return related_mapping
 
 
 def _get_m2m_related_models(model):
