@@ -17,8 +17,8 @@
 {% endblock %}
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "description" %}
   {% flag "assistants" %}
+    {% render_form_fields form "name" "description" %}
     <h3 class="font-semibold text-xl mt-4">Language Model Configuration</h3>
     <div class="divider divider-neutral"></div>
     <div class="pl-4">
