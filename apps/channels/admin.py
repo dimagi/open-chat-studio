@@ -32,3 +32,6 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
 
     def get_changeform_initial_data(self, request: HttpRequest) -> dict[str, str]:
         return {"extra_data": {"bot_token": "your token here"}}
+
+    def get_queryset(self, *args, **kwargs):
+        return ExperimentChannel.objects.get_unfiltered_queryset()

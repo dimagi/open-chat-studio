@@ -61,9 +61,13 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel(db):
         assert instance is not None
         assert instance.id is not None
 
-    experiment_channel.delete()
+    # Let's check soft delete first
+    experiment_channel.soft_delete()
     experiment_channel.refresh_from_db()
     assert experiment_channel.active is False
+
+    # Let's check actual delete
+    experiment_channel.delete()
     _assert_not_deleted(chat)
     _assert_not_deleted(chat_messsage)
     _assert_not_deleted(experiment)

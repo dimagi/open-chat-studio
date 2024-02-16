@@ -84,6 +84,9 @@ class ExperimentChannelObjectManager(AuditingManager):
     def get_queryset(self):
         return super().get_queryset().filter(active=True)
 
+    def get_unfiltered_queryset(self):
+        return super().get_queryset()
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
 class ExperimentChannel(BaseModel):
@@ -169,7 +172,7 @@ class ExperimentChannel(BaseModel):
             is_secure=True,
         )
 
-    def delete(self, *args, **kwargs):
+    def soft_delete(self):
         self.active = False
         self.save()
 
