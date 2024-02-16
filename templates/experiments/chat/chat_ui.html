@@ -32,15 +32,15 @@
     const chatUI = document.getElementById('message-list');
     chatUI.scrollTop = chatUI.scrollHeight;
   }
-  
+
   function appendMessage(messageHTML) {
     const messageList = document.getElementById('message-list');
     const newMessageDiv = document.createElement('div');
     newMessageDiv.innerHTML = messageHTML;
-    
+
     messageList.appendChild(newMessageDiv);
   }
-  
+
   function pollBackend() {
     document.body.addEventListener('htmx:afterOnLoad', function(evt) {
       // scroll to bottom of chat after every htmx request
@@ -63,13 +63,13 @@
         }
       });
   }
-  
+
   const pollInterval = 60000;
   setInterval(pollBackend, pollInterval);
-  
+
   // Scroll to the bottom of the chat after initial load
   window.addEventListener('load', scrollToBottom);
-  
+
   // Scroll to the bottom of the chat after every htmx request
   document.body.addEventListener('htmx:afterOnLoad', scrollToBottom);
-  </script>
+</script>

@@ -1,20 +1,20 @@
 <div id="message-list" class="w-full px-3 py-2 overflow-auto" x-init="watchForNewMessagesToScroll = (function() {
-    const el = $el;
-    return function(newMessages, oldMessages) {
-        if (newMessages && (newMessages.length > oldMessages.length)) {
-            el.scrollTop = el.scrollHeight;
-        }
-    }
-})(); $watch('$store.promptBuilder.currentState.messages', watchForNewMessagesToScroll)"
-    @add-new-message.window="addNewMessage($event.detail)">
+                                                                      const el = $el;
+                                                                      return function(newMessages, oldMessages) {
+                                                                      if (newMessages && (newMessages.length > oldMessages.length)) {
+                                                                      el.scrollTop = el.scrollHeight;
+                                                                      }
+                                                                      }
+                                                                      })(); $watch('$store.promptBuilder.currentState.messages', watchForNewMessagesToScroll)"
+     @add-new-message.window="addNewMessage($event.detail)">
     <!-- Message list goes here -->
     <ul>
         <template x-for="(message, index) in $store.promptBuilder.currentState.messages" :key="message.id">
             <li class="border-b border-base-500" x-data="messageActions()">
                 <div class="group/row px-5 pt-5 pb-2 flex flex-row w-full hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:cursor-pointer message-container"
-                    @click="messageContainerClick($event)">
+                     @click="messageContainerClick($event)">
                     <div class="flex-none w-32 font-bold author" @click.stop="changeAuthor(message, $event)"><span
-                            class="group-hover/row:bg-neutral-300 dark:group-hover/row:bg-neutral-600 rounded-sm p-3" x-text="message.author"></span></div>
+                        class="group-hover/row:bg-neutral-300 dark:group-hover/row:bg-neutral-600 rounded-sm p-3" x-text="message.author"></span></div>
                     <div class="flex-auto w-full message">
                         <template x-if="message.task_id">
                             <span class="loading-dots">Awaiting response</span>
@@ -22,21 +22,21 @@
                         <template x-if="message.task_id === undefined">
                             <div>
                                 <small x-text="message.prepend_input_formatting" class="disabled:bg-gray-100"
-                                    x-bind:disabled="$store.promptBuilder.disjointState()"></small>
+                                       x-bind:disabled="$store.promptBuilder.disjointState()"></small>
                                 <textarea type="text"
-                                    :placeholder="message.author === 'User' ? 'Enter a user message here' : 'Enter an assistant message here'"
-                                    rows="1" style="line-height:1.25em; height:40px;"
-                                    class="textarea disabled:bg-gray-100 bg-neutral-100 focus:bg-base-100 border-transparent focus:border-sky-500 resize-none rounded-md textarea-ghost w-full placeholder-gray-300 hover:cursor-pointer focus:cursor-text"
-                                    x-model="message.message" x-init="$nextTick(() => resize($el))"
-                                    x-bind:disabled="$store.promptBuilder.disjointState()"
-                                    @input="resize($el)"></textarea>
+                                          :placeholder="message.author === 'User' ? 'Enter a user message here' : 'Enter an assistant message here'"
+                                          rows="1" style="line-height:1.25em; height:40px;"
+                                          class="textarea disabled:bg-gray-100 bg-neutral-100 focus:bg-base-100 border-transparent focus:border-sky-500 resize-none rounded-md textarea-ghost w-full placeholder-gray-300 hover:cursor-pointer focus:cursor-text"
+                                          x-model="message.message" x-init="$nextTick(() => resize($el))"
+                                          x-bind:disabled="$store.promptBuilder.disjointState()"
+                                          @input="resize($el)"></textarea>
                                 <small x-text="message.appended_input_formatting" class="disabled:bg-gray-100"
-                                    x-bind:disabled="$store.promptBuilder.disjointState()"></small>
+                                       x-bind:disabled="$store.promptBuilder.disjointState()"></small>
                             </div>
                         </template>
                     </div>
                     <div class="flex-none ml-2 opacity-0 duration-300 group-hover/row:opacity-50 group-hover/row:hover:opacity-100 delete-button"
-                        @click.stop="if (!$store.promptBuilder.disjointState()) { deleteMessage(message.id) }">
+                         @click.stop="if (!$store.promptBuilder.disjointState()) { deleteMessage(message.id) }">
                         <i class="fa fa-times-circle-o px-2"></i>
                     </div>
                 </div>
@@ -44,8 +44,8 @@
         </template>
         <li>
             <div id="add-message-button" x-bind:disabled="$store.promptBuilder.disjointState()"
-                class="disabled:bg-gray-100 group/row p-5 items-center flex flex-row w-full hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:cursor-pointer"
-                x-init="addNewMessage()" x-on:click.stop="addNewMessage()">
+                 class="disabled:bg-gray-100 group/row p-5 items-center flex flex-row w-full hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:cursor-pointer"
+                 x-init="addNewMessage()" x-on:click.stop="addNewMessage()">
                 <i class="fas fa-plus-circle px-2"></i>
                 <span class="ml-2">Add message</span>
             </div>

@@ -2,21 +2,21 @@
     <div class="flex flex-col flex-grow min-h-64 bg-base-100 border rounded-md p-4">
         <label for="system-prompt" class="font-semibold uppercase mb-2">System <small x-text="$store.promptBuilder.promptTokenCount"></small></label>
         <textarea id="system-prompt"
-            x-bind:disabled="$store.promptBuilder.disjointState()"
-            class="disabled:bg-gray-100 bg-base-100 w-full py-0 px-0 flex-grow border-none resize-none focus:outline-none focus:shadow-none focus:ring-0"
-            placeholder="You are a helpful assistant" value="You write haikus about the topic provided"
-            x-bind:value="$store.promptBuilder.currentState.prompt"
-            x-on:input="$store.promptBuilder.currentState.prompt = $event.target.value"></textarea>
+                  x-bind:disabled="$store.promptBuilder.disjointState()"
+                  class="disabled:bg-gray-100 bg-base-100 w-full py-0 px-0 flex-grow border-none resize-none focus:outline-none focus:shadow-none focus:ring-0"
+                  placeholder="You are a helpful assistant" value="You write haikus about the topic provided"
+                  x-bind:value="$store.promptBuilder.currentState.prompt"
+                  x-on:input="$store.promptBuilder.currentState.prompt = $event.target.value"></textarea>
     </div>
 
     <div class="flex flex-grow flex-col max-h-40 min-h-0 bg-base-100 border rounded-md p-4">
         <label for="input-formatter" class="font-semibold uppercase mb-2">Input Formatting</label>
         <textarea id="input-formatter"
-        x-bind:disabled="$store.promptBuilder.disjointState()"
-            class="disabled:bg-gray-100 bg-base-100  w-full py-0 px-0 flex-grow border-none resize-none focus:outline-none focus:shadow-none focus:ring-0"
-            placeholder="Before a user message
-{input}
-After a user message" x-bind:value="$store.promptBuilder.currentState.inputFormatter"
-            x-on:input="$store.promptBuilder.currentState.inputFormatter = $event.target.value"></textarea>
+                  x-bind:disabled="$store.promptBuilder.disjointState()"
+                  class="disabled:bg-gray-100 bg-base-100  w-full py-0 px-0 flex-grow border-none resize-none focus:outline-none focus:shadow-none focus:ring-0"
+                  placeholder="Before a user message
+                               {input}
+                               After a user message" x-bind:value="$store.promptBuilder.currentState.inputFormatter"
+                  x-on:input="$store.promptBuilder.currentState.inputFormatter = $event.target.value"></textarea>
     </div>
 </div>

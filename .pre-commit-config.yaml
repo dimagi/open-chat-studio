@@ -8,3 +8,11 @@ repos:
       - id: ruff
         args: [ --fix ]
       - id: ruff-format
+  - repo: https://github.com/rtts/djhtml
+    rev: '3.0.6'
+    hooks:
+    - id: djhtml
+      files: templates/.*\.html$
+    - id: djcss
+    - id: djjs
+      exclude: mode_modules/.*

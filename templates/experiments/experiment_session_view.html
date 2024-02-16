@@ -1,12 +1,12 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
 {% block body %}
-<div class="app-card max-w-5xl mx-auto">
-  <h1 class="pg-title">Experiment Review</h1>
-  {% include "experiments/components/experiment_details.html" %}
-  <div class="px-4 sm:px-0 mt-8">
-    <h3 class="text-base font-semibold leading-7">Experiment chat</h3>
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">Experiment Review</h1>
+    {% include "experiments/components/experiment_details.html" %}
+    <div class="px-4 sm:px-0 mt-8">
+      <h3 class="text-base font-semibold leading-7">Experiment chat</h3>
+    </div>
+    {% include "experiments/components/experiment_chat.html" %}
   </div>
-{% include "experiments/components/experiment_chat.html" %}
-</div>
 {% endblock %}

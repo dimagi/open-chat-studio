@@ -1,11 +1,11 @@
 {% load chat_tags %}
 <div class="chat-message-system flex"
-   {% if not progress.complete %}
-   hx-get="{% url 'experiments:get_message_response' team.slug experiment.id session.id task_id %}"
-   hx-trigger="load delay:1s"
-   hx-swap="outerHTML"
-   {% endif %}
-   data-last-message-datetime="{{ last_message_datetime|safe }}"
+     {% if not progress.complete %}
+       hx-get="{% url 'experiments:get_message_response' team.slug experiment.id session.id task_id %}"
+       hx-trigger="load delay:1s"
+       hx-swap="outerHTML"
+     {% endif %}
+     data-last-message-datetime="{{ last_message_datetime|safe }}"
 >
   {% include "experiments/chat/components/system_icon.html" %}
   <div class="message-contents">

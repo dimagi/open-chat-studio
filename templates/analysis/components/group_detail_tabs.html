@@ -10,7 +10,7 @@
       {% else %}
         {# remove backticks around inline code with prose-code:... #}
         <div
-            class="prose prose-code:before:hidden prose-code:after:hidden">{{ run.output_summary|render_markdown }}</div>
+          class="prose prose-code:before:hidden prose-code:after:hidden">{{ run.output_summary|render_markdown }}</div>
       {% endif %}
     {% endwith %}
   </div>
