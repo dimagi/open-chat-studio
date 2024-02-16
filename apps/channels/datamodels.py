@@ -19,7 +19,7 @@ class WebMessage(BaseModel):
 
 
 class TelegramMessage(BaseModel):
-    chat_id: int = Field()
+    chat_id: int
     body: str | None = Field()
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field()
