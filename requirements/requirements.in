@@ -8,6 +8,7 @@ django-waffle
 psycopg2-binary
 django-cryptography
 django-environ
+django-redis
 djangorestframework
 djangorestframework-api-key
 drf-spectacular

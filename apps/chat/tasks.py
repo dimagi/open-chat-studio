@@ -5,6 +5,7 @@ from uuid import UUID
 import pytz
 from celery.app import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.db.models import F, OuterRef, Subquery
 from django.template.loader import render_to_string
@@ -58,8 +59,20 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
             logger.exception(exception)
 
 
-@shared_task
-def no_activity_pings():
+@shared_task(bind=True)
+def no_activity_pings(self):
+    key = f"no_activity_pings{self.app.oid}"
+    lock = cache.lock(key, timeout=60 * 5)
+    if lock.acquire(blocking=False):
+        try:
+            _no_activity_pings()
+        finally:
+            lock.release()
+    else:
+        logger.warning("Unable to acquire lock for no_activity_pings")
+
+
+def _no_activity_pings():
     experiment_sessions_to_ping = _get_sessions_to_ping()
 
     for experiment_session in experiment_sessions_to_ping:
