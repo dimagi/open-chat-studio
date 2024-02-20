@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.test import TestCase
 from freezegun import freeze_time
@@ -47,9 +47,7 @@ class TasksTest(TestCase):
         )
         self.experiment_session = self._add_session(self.experiment)
 
-    @patch("apps.chat.bots.create_conversation")
-    def test_getting_ping_message_saves_history(self, create_conversation):
-        create_conversation.return_value = Mock()
+    def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
         with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
             response = _bot_prompt_for_user(self.experiment_session, "Some message")
