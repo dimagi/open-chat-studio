@@ -14,22 +14,12 @@ from django.utils.translation import gettext_lazy as _
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
-
-
-@shared_task(bind=True)
-def periodic_tasks(self):
-    lock_id = self.name
-    with redis_task_lock(lock_id, self.app.oid) as acquired:
-        if not acquired:
-            return
-        _no_activity_pings()
 
 
 @shared_task
@@ -68,8 +58,8 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
             logger.exception(exception)
 
 
-@isolate_task
-def _no_activity_pings():
+@shared_task
+def no_activity_pings():
     experiment_sessions_to_ping = _get_sessions_to_ping()
 
     for experiment_session in experiment_sessions_to_ping:
