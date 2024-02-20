@@ -25,11 +25,35 @@ def send_invitation(invitation):
 
 
 def process_invitation(invitation: Invitation, user: CustomUser):
+    from .tasks import send_invitation_accepted_notification
+
     membership = Membership.objects.create(team=invitation.team, user=user, role=invitation.role)
     membership.groups.set(invitation.groups.all())
     invitation.is_accepted = True
     invitation.accepted_by = user
     invitation.save()
+    send_invitation_accepted_notification.delay(invitation.id)
+
+
+def send_invitation_accepted(invitation):
+    recipients = list(
+        Membership.objects.filter(team=invitation.team, groups__permission__codename="view_invitation").values_list(
+            "user__email", flat=True
+        )
+    )
+    project_name = settings.PROJECT_METADATA["NAME"]
+    email_context = {
+        "invitation": invitation,
+        "project_name": project_name,
+    }
+    send_mail(
+        subject=_("Invitation to {} has been accepted").format(project_name),
+        message=render_to_string("teams/email/invitation_accepted.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=recipients,
+        fail_silently=False,
+        html_message=render_to_string("teams/email/invitation_accepted.html", context=email_context),
+    )
 
 
 def get_invitation_id_from_request(request):
