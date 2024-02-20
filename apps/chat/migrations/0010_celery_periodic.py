@@ -26,6 +26,7 @@ def delete_celery_schedules(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
+        ('django_celery_beat', '0018_improve_crontab_helptext'),
         ('chat', '0009_chat_metadata'),
     ]
 
