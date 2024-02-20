@@ -25,7 +25,7 @@
       <div role="tablist" class="tabs tabs-bordered mt-4">
         <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly" {% if not object.assistant_id %}checked{% endif %}/>
         <div role="tabpanel" class="tab-content pt-4">
-          {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "input_formatter" "tools_enabled" "source_material" %}
+          {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" "source_material" %}
         </div>
 
         <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant" {% if object.assistant_id %}checked{% endif %} />
@@ -37,7 +37,7 @@
     <h3 class="font-semibold text-xl mt-4">General Configuration</h3>
     <div class="divider divider-neutral"></div>
     <div class="pl-4">
-      {% render_form_fields form "max_token_limit" "safety_layers" %}
+      {% render_form_fields form "input_formatter" "max_token_limit" "safety_layers" %}
       {% render_form_fields form "conversational_consent_enabled" "seed_message" "pre_survey" %}
       {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" %}
       {% render_form_fields form "no_activity_config" "safety_violation_notification_emails" %}
