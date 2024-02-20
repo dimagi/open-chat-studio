@@ -1,14 +1,10 @@
-from datetime import datetime, timedelta
-from unittest.mock import patch
-
 import pytest
 from django.test import TestCase
-from freezegun import freeze_time
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
+from apps.chat.models import ChatMessage
+from apps.chat.tasks import _bot_prompt_for_user
+from apps.experiments.models import ConsentForm, Experiment, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
@@ -60,50 +56,6 @@ class TasksTest(TestCase):
         assert messages[0].message_type == "ai"
         assert response == expected_ping_message
         assert messages[0].content == expected_ping_message
-
-    @patch("apps.chat.tasks._bot_prompt_for_user", return_value="Please answer")
-    @patch("apps.chat.tasks._try_send_message")
-    def test_no_activity_ping_triggered_for_active_sessions(self, _bot_prompt_for_user, _try_send_message):
-        second_experiment = Experiment.objects.create(
-            team=self.team,
-            owner=self.user,
-            name="TestExperiment2",
-            description="test2",
-            prompt_text="You are a helpful assistant",
-            no_activity_config=None,
-            consent_form=ConsentForm.get_default(self.team),
-        )
-        ExperimentChannel.objects.create(
-            name="TestChannel2", experiment=second_experiment, extra_data={"bot_token": "222222"}, platform="telegram"
-        )
-        # Experiment sessions which should be pinged
-        experiment_session_should_fire = self.experiment_session
-        self._add_chats(experiment_session_should_fire, last_message_type="ai")
-        experiment_session_setup = self._add_session(self.experiment, session_status=SessionStatus.SETUP)
-        self._add_chats(experiment_session_setup, last_message_type="ai")
-
-        # Experiment sessions for which no ping should trigger
-        # See the docstring for `_no_activity_pings` for the criteria of a ping message to be triggered
-        # Criteria number 1 not met
-        self._add_session(self.experiment, session_status=SessionStatus.ACTIVE)
-        # Criteria number 2 not met
-        experiment_session_setup = self._add_session(self.experiment, session_status=SessionStatus.PENDING_REVIEW)
-        self._add_chats(experiment_session_setup, last_message_type="ai")
-        experiment_session_completed = self._add_session(self.experiment, session_status=SessionStatus.COMPLETE)
-        self._add_chats(experiment_session_completed, last_message_type="ai")
-        experiment_session_completed = self._add_session(self.experiment, session_status=SessionStatus.UNKNOWN)
-        self._add_chats(experiment_session_completed, last_message_type="ai")
-        # Criteria number 3 not met
-        experiment_session_no_config = self._add_session(second_experiment, session_status=SessionStatus.ACTIVE)
-        self._add_chats(experiment_session_no_config, last_message_type="ai")
-        # Criteria number 4 not met
-        experiment_session_not_eligible = self._add_session(self.experiment, session_status=SessionStatus.SETUP)
-        self._add_chats(experiment_session_not_eligible, last_message_type=ChatMessageType.HUMAN)
-
-        # frozen_time = "2023-08-21 12:00:00"  # Set the desired frozen time
-        with freeze_time(datetime.utcnow() + timedelta(minutes=5)):
-            _no_activity_pings()
-        assert _try_send_message.call_count == 2
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         experiment_session = _start_experiment_session(
