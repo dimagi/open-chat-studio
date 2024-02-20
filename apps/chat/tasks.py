@@ -6,7 +6,7 @@ import pytz
 from celery.app import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db.models import OuterRef, Subquery
+from django.db.models import F, OuterRef, Subquery
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -111,6 +111,11 @@ def _get_sessions_to_ping():
         Chat.objects.filter(pk__in=Subquery(subquery))
         .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
         .exclude(experiment_session__experiment__no_activity_config=None)
+        .exclude(
+            experiment_session__no_activity_ping_count__gte=F(
+                "experiment_session__experiment__no_activity_config__max_pings"
+            )
+        )
         .select_related(
             "experiment_session",
             "experiment_session__experiment",
@@ -124,10 +129,9 @@ def _get_sessions_to_ping():
         if latest_message and latest_message.message_type == ChatMessageType.AI:
             experiment_session: ExperimentSession = chat.experiment_session
             no_activity_config = experiment_session.experiment.no_activity_config
-            max_pings_reached = experiment_session.no_activity_ping_count >= no_activity_config.max_pings
             message_created_at = latest_message.created_at.astimezone(UTC)
             max_time_elapsed = message_created_at < now - timedelta(minutes=no_activity_config.ping_after)
-            if not max_pings_reached and max_time_elapsed:
+            if max_time_elapsed:
                 experiment_sessions_to_ping.append(experiment_session)
 
     return experiment_sessions_to_ping

@@ -71,7 +71,7 @@ def test_status_filtering(status, matches, session):
 
 
 @pytest.mark.django_db()
-def test_no_human_message(session):
+def test_filter_when_no_human_message(session):
     with freeze_time("2022-01-01") as frozen_time:
         ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi!")
 
@@ -80,9 +80,19 @@ def test_no_human_message(session):
 
 
 @pytest.mark.django_db()
-def test_last_message_was_human(session):
+def test_filter_when_last_message_was_human(session):
     with freeze_time("2022-01-01") as frozen_time:
         _create_chat(session, frozen_time)
+        frozen_time.tick(delta=timedelta(minutes=2))
+        assert not _get_sessions_to_ping()
+
+
+@pytest.mark.django_db()
+def test_filter_on_max_pings(session):
+    session.no_activity_ping_count = 3
+    session.save()
+    with freeze_time("2022-01-01") as frozen_time:
+        _create_matching_chat(session, frozen_time)
         frozen_time.tick(delta=timedelta(minutes=2))
         assert not _get_sessions_to_ping()
 
