@@ -219,7 +219,8 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
 
         input_dict = {"content": input}
 
-        self._save_message_to_history(input, ChatMessageType.HUMAN)
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
