@@ -70,6 +70,29 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
 
 @isolate_task
 def _no_activity_pings():
+    experiment_sessions_to_ping = _get_sessions_to_ping()
+
+    for experiment_session in experiment_sessions_to_ping:
+        bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
+
+        experiment_channel = experiment_session.experiment_channel
+        if experiment_session.is_stale():
+            # The experiment channel's experiment might have changed
+            logger.warning(
+                f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
+                "whereas the current experiment session points to experiment"
+                f"'{experiment_session.experiment.name}'"
+            )
+            return
+        ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
+        try:
+            _try_send_message(experiment_session=experiment_session, message=ping_message)
+        finally:
+            experiment_session.no_activity_ping_count += 1
+            experiment_session.save(update_fields=["no_activity_ping_count"])
+
+
+def _get_sessions_to_ping():
     """
     Criteria:
     1. The user have communicated with the bot
@@ -84,7 +107,6 @@ def _no_activity_pings():
     experiment_sessions_to_ping: list[ExperimentSession] = []
 
     subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
-    # Why not exclude the SETUP status? "Normal" UI chats have a SETUP status
     chats = (
         Chat.objects.filter(pk__in=Subquery(subquery))
         .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
@@ -108,24 +130,7 @@ def _no_activity_pings():
             if not max_pings_reached and max_time_elapsed:
                 experiment_sessions_to_ping.append(experiment_session)
 
-    for experiment_session in experiment_sessions_to_ping:
-        bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-
-        experiment_channel = experiment_session.experiment_channel
-        if experiment_session.is_stale():
-            # The experiment channel's experiment might have changed
-            logger.warning(
-                f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
-                "whereas the current experiment session points to experiment"
-                f"'{experiment_session.experiment.name}'"
-            )
-            return
-        ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
-        try:
-            _try_send_message(experiment_session=experiment_session, message=ping_message)
-        finally:
-            experiment_session.no_activity_ping_count += 1
-            experiment_session.save()
+    return experiment_sessions_to_ping
 
 
 def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
