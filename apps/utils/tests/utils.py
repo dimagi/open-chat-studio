@@ -20,3 +20,15 @@ def setup_test_app(package, label=None):
     apps.app_configs[app_config.label] = app_config
     app_config.import_models()
     apps.clear_cache()
+    return app_config
+
+
+def tear_down_test_app(label):
+    """
+    Remove the test app from the app registry.
+    """
+    try:
+        del apps.app_configs[label]
+    except KeyError:
+        pass
+    apps.clear_cache()

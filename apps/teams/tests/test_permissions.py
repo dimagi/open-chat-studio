@@ -62,11 +62,11 @@ IGNORE_MODELS = {"teams": {"flag"}}
 
 
 def test_missing_content_types():
-    app_labels = set(apps.all_models) - set(IGNORE_APPS)
+    app_labels = set(apps.app_configs) - set(IGNORE_APPS)
     missing = app_labels - set(CONTENT_TYPES)
     assert not missing, f"Missing content types for {missing}"
 
-    for app_label in apps.all_models:
+    for app_label in apps.app_configs:
         if app_label in IGNORE_APPS:
             continue
         models = {m.__name__.lower() for m in apps.get_app_config(app_label).get_models()}
