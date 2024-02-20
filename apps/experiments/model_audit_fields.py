@@ -36,7 +36,7 @@ CONSENT_FORM_FIELDS = [
 EXPERIMENT_CHANNEL_FIELDS = [
     "name",
     "experiment",
-    "active",
+    "deleted",
     "extra_data",
     "platform",
     "messaging_provider",

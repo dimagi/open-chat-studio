@@ -423,7 +423,7 @@ class ExperimentSession(BaseTeamModel):
     external_chat_id = models.CharField(null=False)
     experiment_channel = models.ForeignKey(
         "channels.ExperimentChannel",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="experiment_sessions",
         null=True,
         blank=True,

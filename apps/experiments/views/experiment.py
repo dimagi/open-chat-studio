@@ -349,7 +349,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         if not request.user.has_perm("channels.delete_experimentchannel"):
             raise PermissionDenied
 
-        channel.delete()
+        channel.soft_delete()
         return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
     if not request.user.has_perm("channels.change_experimentchannel"):
