@@ -1,9 +1,9 @@
+from typing import Literal
 from unittest.mock import patch
 
 import pytest
 from openai.types.beta.threads import MessageContentText, Run, ThreadMessage
 from openai.types.beta.threads.message_content_text import Text
-from typing_extensions import Literal
 
 from apps.chat.models import Chat
 from apps.service_providers.llm_service.runnables import AssistantExperimentRunnable
@@ -29,7 +29,7 @@ def session(chat):
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_messages, session):
     chat = session.chat
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
@@ -52,7 +52,7 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.threads.runs.Runs.create")
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_message, list_messages, session):
     thread_id = "test_thread_id"
     chat = session.chat
@@ -71,6 +71,30 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
     assert create_message.call_args.args == (thread_id,)
     assert create_run.call_args.args == (thread_id,)
     assert result.output == "ai response"
+
+
+@patch("openai.resources.beta.threads.messages.Messages.list")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@pytest.mark.django_db()
+def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, list_messages, session):
+    session.experiment.input_formatter = "foo {input} bar"
+
+    chat = session.chat
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    list_messages.return_value = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
+    )
+
+    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    result = assistant.invoke("test")
+    assert result.output == "ai response"
+    assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
 
 
 def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):

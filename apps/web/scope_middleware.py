@@ -24,7 +24,7 @@ class RequestContextMiddleware:
 
 def make_json_safe(view_kwargs):
     def cast(value):
-        if isinstance(value, (int, str, bool)):
+        if isinstance(value, int | str | bool):
             return value
         return str(value)
 

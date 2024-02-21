@@ -1,4 +1,4 @@
-from .settings import *
+from .settings import *  # noqa F401
 
 DEBUG = False
 

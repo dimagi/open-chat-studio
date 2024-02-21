@@ -1,4 +1,3 @@
-import mock
 import pytest
 from pydantic import ValidationError
 
@@ -38,7 +37,7 @@ def test_twilio_messaging_provider_error(config_key):
 
 
 @pytest.mark.parametrize(
-    "platform,expected_provider_types",
+    ("platform", "expected_provider_types"),
     [
         ("whatsapp", ["twilio", "turnio"]),
         ("telegram", []),

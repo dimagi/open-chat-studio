@@ -58,7 +58,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
         if ":" not in tail:
             return {"date": date, "sender": "system", "message": tail.strip()}
         else:
-            sender, message = [r.strip() for r in tail.split(":", 1)]
+            sender, message = (r.strip() for r in tail.split(":", 1))
             return {"date": date, "sender": sender, "message": message}
 
     def _filter_messages(self, messages):

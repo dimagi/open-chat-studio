@@ -1,10 +1,8 @@
 from enum import StrEnum
-from typing import List
 from urllib.parse import quote
 
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
@@ -33,10 +31,10 @@ class Chat(BaseTeamModel):
         if commit:
             self.save()
 
-    def get_langchain_messages(self) -> List[BaseMessage]:
+    def get_langchain_messages(self) -> list[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
-    def get_langchain_messages_until_summary(self) -> List[BaseMessage]:
+    def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
         messages = []
         for message in self.messages.order_by("-created_at").iterator(100):
             messages.append(message.to_langchain_dict())
@@ -70,7 +68,7 @@ class ChatMessage(BaseModel):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
     content = models.TextField()
-    summary = models.TextField(
+    summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
 

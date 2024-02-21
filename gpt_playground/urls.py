@@ -19,7 +19,6 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 from django.views.generic import RedirectView
-from django.views.i18n import JavaScriptCatalog
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from apps.teams.urls import team_urlpatterns as single_team_urls
@@ -38,6 +37,7 @@ team_urlpatterns = [
     path("service_providers/", include("apps.service_providers.urls")),
     path("analysis/", include("apps.analysis.urls")),
     path("assistants/", include("apps.assistants.urls")),
+    path("files/", include("apps.files.urls")),
 ]
 
 urlpatterns = [

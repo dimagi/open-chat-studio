@@ -12,13 +12,15 @@ from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
+from .message_examples import turnio_messages, twilio_messages
 
-@pytest.fixture
+
+@pytest.fixture()
 def turn_io_provider():
     return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
 
 
-@pytest.fixture
+@pytest.fixture()
 def turnio_whatsapp_channel(turn_io_provider):
     return ExperimentChannelFactory(
         platform=ChannelPlatform.WHATSAPP,
@@ -28,15 +30,15 @@ def turnio_whatsapp_channel(turn_io_provider):
     )
 
 
-@pytest.fixture
-def twilio_provider():
+@pytest.fixture()
+def twilio_provider(db):
     return MessagingProviderFactory(
         name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
-@pytest.fixture
-def twilio_whatsapp_channel(twilio_provider):
+@pytest.fixture()
+def _twilio_whatsapp_channel(twilio_provider):
     ExperimentChannelFactory(
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=twilio_provider,
@@ -45,147 +47,25 @@ def twilio_whatsapp_channel(twilio_provider):
     )
 
 
-class TwilioMessages:
-    @staticmethod
-    def text_message():
-        return json.dumps(
-            {
-                "SmsMessageSid": "DDDDDDDDDDDDDdd",
-                "NumMedia": "0",
-                "ProfileName": "Chris Smit",
-                "SmsSid": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
-                "WaId": "27456897512",
-                "SmsStatus": "received",
-                "Body": "Dobroye utro",
-                "To": "whatsapp:+14155238886",
-                "NumSegments": "1",
-                "ReferralNumMedia": "0",
-                "MessageSid": "BBBBBBBBBB",
-                "AccountSid": "AAAAAAAAAAAAA",
-                "From": "whatsapp:+27456897512",
-                "ApiVersion": "2010-04-01",
-            }
-        )
-
-    @staticmethod
-    def audio_message():
-        message = TwilioMessages.text_message()
-        message_dict = json.loads(message)
-        message_dict["MediaContentType0"] = "audio/ogg"
-        message_dict["MediaUrl0"] = "http://example.com/media"
-        return json.dumps(message_dict)
-
-
-class TurnIOMessages:
-    @staticmethod
-    def text_message():
-        return {
-            "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
-            "messages": [
-                {
-                    "_vnd": {
-                        "v1": {
-                            "author": {"id": "27456897512", "name": "User", "type": "OWNER"},
-                            "card_uuid": "None",
-                            "chat": {
-                                "assigned_to": "None",
-                                "contact_uuid": "08a64841-32123-4111-b91f-4ff36d676c1c",
-                                "inserted_at": "2024-01-25T09:02:46.684610Z",
-                                "owner": "+27456897512",
-                                "permalink": "https://whatsapp.turn.io/app/c/08a64841-32123-4111-b91f-4ff36d676c1c",
-                                "state": "OPEN",
-                                "state_reason": "Re-opened by inbound message.",
-                                "unread_count": 1,
-                                "updated_at": "2024-01-31T14:01:56.486313Z",
-                                "uuid": "08a64841-32123-4111-b91f-4ff36d676c1c",
-                            },
-                            "direction": "inbound",
-                            "faq_uuid": "None",
-                            "in_reply_to": "None",
-                            "inserted_at": "2024-01-31T14:01:56.467839Z",
-                            "labels": [],
-                            "last_status": "None",
-                            "last_status_timestamp": "None",
-                            "on_fallback_channel": False,
-                            "rendered_content": "None",
-                            "uuid": "08a64841-32123-4111-b91f-4ff36d676c1c",
-                        }
-                    },
-                    "from": "27456897512",
-                    "id": "ABCDEFGHIJKL_Ags-sF0gx5ts0DDMxw",
-                    "text": {"body": "Hi there!"},
-                    "timestamp": "1706709716",
-                    "type": "text",
-                }
-            ],
-        }
-
-    @staticmethod
-    def audio_message():
-        return {
-            "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
-            "messages": [
-                {
-                    "_vnd": {
-                        "v1": {
-                            "author": {"id": "27456897512", "name": "Chris Smit", "type": "OWNER"},
-                            "card_uuid": "None",
-                            "chat": {
-                                "assigned_to": "None",
-                                "contact_uuid": "eeb51508-4ff0-4ca4-9bf8-69e548b1ceb3",
-                                "inserted_at": "2024-01-25T09:02:46.684610Z",
-                                "owner": "+27456897512",
-                                "permalink": "https://whatsapp.turn.io/app/c/08a64841-10df-4c11-b81f-4ec36d616c1c",
-                                "state": "OPEN",
-                                "state_reason": "Re-opened by inbound message.",
-                                "unread_count": 31,
-                                "updated_at": "2024-02-08T12:07:46.091528Z",
-                                "uuid": "08a64841-10df-4c11-b81f-4ec36d616c1c",
-                            },
-                            "direction": "inbound",
-                            "faq_uuid": "None",
-                            "in_reply_to": "None",
-                            "inserted_at": "2024-02-08T12:07:45.891699Z",
-                            "labels": [],
-                            "last_status": "None",
-                            "last_status_timestamp": "None",
-                            "on_fallback_channel": False,
-                            "rendered_content": "None",
-                            "uuid": "bd788d51-f3e1-11ff-e31d-0fc372a61d66",
-                        }
-                    },
-                    "from": "27456897512",
-                    "id": "ABGKLKLKLZd_Ags-DSDSdsWQUpsLqg",
-                    "timestamp": "1707394065",
-                    "type": "voice",
-                    "voice": {
-                        "id": "180e1c3f-ae50-481b-a9f0-7c698233965f",
-                        "mime_type": "audio/ogg; codecs=opus",
-                        "sha256": "407d8ac9d98ddddddd78c7bae4179ea131b55740214ccc42373c85d63aeb55b7",
-                        "status": "downloaded",
-                    },
-                }
-            ],
-        }
-
-
 class TestTwilio:
     @pytest.mark.parametrize(
-        "message, message_type", [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "voice")]
+        ("message", "message_type"),
+        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
-        whatsapp_message = TwilioMessage.model_validate(json.loads(message))
+        whatsapp_message = TwilioMessage.parse(json.loads(message))
         assert whatsapp_message.chat_id == whatsapp_message.from_number
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
-            assert whatsapp_message.media_url == None
+            assert whatsapp_message.media_url is None
         else:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
             assert whatsapp_message.media_url == "http://example.com/media"
 
+    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
-        "incoming_message, message_type",
-        [(TwilioMessages.text_message(), "text"), (TwilioMessages.audio_message(), "audio")],
+        ("incoming_message", "message_type"),
+        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "audio")],
     )
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
@@ -197,10 +77,8 @@ class TestTwilio:
         send_whatsapp_text_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
-        db,
         incoming_message,
         message_type,
-        twilio_whatsapp_channel,
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
@@ -222,7 +100,8 @@ class TestTwilio:
 
 class TestTurnio:
     @pytest.mark.parametrize(
-        "message, message_type", [(TurnIOMessages.text_message(), "text"), (TurnIOMessages.audio_message(), "voice")]
+        ("message", "message_type"),
+        [(turnio_messages.text_message(), "text"), (turnio_messages.audio_message(), "voice")],
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
@@ -234,7 +113,7 @@ class TestTurnio:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
 
-    @pytest.mark.parametrize("incoming_message", [TurnIOMessages.text_message(), TurnIOMessages.audio_message()])
+    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.audio_message()])
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
@@ -253,15 +132,15 @@ class TestTurnio:
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         send_whatsapp_text_message.assert_called()
 
-    @patch("apps.chat.channels.WhatsappChannel.new_user_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
+    @patch("apps.chat.channels.ChannelBase._handle_supported_message")
+    @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")
     def test_unsupported_message_type_does_nothing(
-        self, get_llm_response_mock, new_user_message_mock, db, turnio_whatsapp_channel
+        self, _handle_unsupported_message, _handle_supported_message, db, turnio_whatsapp_channel
     ):
-        """Test that nothing happens for unsupported message types"""
-        get_llm_response_mock.return_value = "Hi"
-        incoming_message = TurnIOMessages.text_message()
+        """Test that unsupported messages are not"""
+        incoming_message = turnio_messages.text_message()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        new_user_message_mock.assert_not_called()
+        _handle_unsupported_message.assert_called()
+        _handle_supported_message.assert_not_called()

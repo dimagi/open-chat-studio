@@ -9,11 +9,11 @@
       </div>
       <ul tabindex="0" class="menu menu-compact dropdown-content mt-3 p-2 shadow bg-base-100 rounded-box w-52">
         {% block mobile_nav %}
-        <li>
-          <a class="{% if request.path == '/' %}active{% endif %}" href="{% url 'web:home' %}">
-            <div>{{project_meta.NAME}}</div>
-          </a>
-        </li>
+          <li>
+            <a class="{% if request.path == '/' %}active{% endif %}" href="{% url 'web:home' %}">
+              <div>{{project_meta.NAME}}</div>
+            </a>
+          </li>
         {% endblock %}
       </ul>
     </div>
@@ -32,10 +32,10 @@
         <a href="{% url 'account_signup' %}" class="btn btn-primary">
           {% translate "Sign Up" %}
         </a>
-        {% endif %}
-    <a href="{% url 'account_login' %}" class="btn btn-outline ml-2">
-      {% translate "Sign In" %}
-    </a>
+      {% endif %}
+      <a href="{% url 'account_login' %}" class="btn btn-outline ml-2">
+        {% translate "Sign In" %}
+      </a>
     {% endif %}
   </div>
 </div>

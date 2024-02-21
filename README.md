@@ -41,8 +41,8 @@ pre-commit install --install-hooks
 
 Start the database and redis services and run the DB migrations:
 
-```
-inv up
+```shell
+docker compose -f docker-compose.dev.yml up -d  # equivalent of `inv up`
 cp .env.example .env
 ./manage.py migrate
 ```
@@ -117,33 +117,13 @@ Once these are installed they will be run on every commit.
 To run tests:
 
 ```bash
-./manage.py test
+pytest
 ```
 
 Or to test a specific app/module:
 
 ```bash
-./manage.py test apps.utils.tests.test_slugs
-```
-
-On Linux-based systems you can watch for changes using the following:
-
-```bash
-find . -name '*.py' | entr python ./manage.py test apps.utils.tests.test_slugs
-```
-
-### Testing bots
-
-To test a bot, first create an experiment. This can be done in the Django admin.
-
-After doing that you can use the UI to create a new chat session against the experiment.
-
-Note that celery needs to be running and your `OPENAI_API_KEY` needs to be set in order to get responses from the bot.
-
-You can also run experiments on the command line using:
-
-```bash
-python manage.py run_experiment <experiment_pk>
+pytest apps/utils/tests/test_slugs.py
 ```
 
 ### Notes
@@ -155,3 +135,19 @@ To test the webhooks, you can use a tool like [ngrok](https://ngrok.com/docs/get
 
 #### Auditing
 We use the [django-field-audit](https://github.com/dimagi/django-field-audit) library for auditing. Please see the [table of audited methods](https://github.com/dimagi/django-field-audit#audited-db-write-operations) and familiarize yourself on how to audit "special" functions like `QuerySet.bulk_create()`.
+
+#### Linting
+
+We use [ruff](https://docs.astral.sh/ruff/) for linting and formatting. You can run it directly or with the `inv ruff`
+command:
+
+```
+Usage: inv[oke] [--core-opts] ruff [--options] [other tasks here ...]
+
+Docstring:
+  Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes.
+
+Options:
+  -n, --no-fix
+  -u, --unsafe-fixes
+```

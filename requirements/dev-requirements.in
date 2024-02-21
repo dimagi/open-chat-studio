@@ -1,8 +1,7 @@
 -c requirements.txt
 pip-tools
 pre-commit
-black
-isort
+ruff
 mock
 freezegun
 invoke

@@ -56,3 +56,23 @@ img.socialicon
     height: 72px
     opacity: 0
 
+// htmx indicators that use display instead of opacity
+// htmx hide (hide element during htmx request)
+.htmx-hide
+  display: inline
+
+.htmx-request .htmx-hide
+  display: none
+
+.htmx-request.htmx-hide
+  display: none
+
+// htmx indicator inline (show element during htmx request)
+.htmx-show
+  display: none !important
+
+.htmx-request .htmx-show
+  display: inline-block !important
+
+.htmx-request.htmx-show
+  display: inline-block !important

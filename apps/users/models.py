@@ -21,7 +21,7 @@ class CustomUser(AbstractUser):
 
     objects = AuditedUserObjectManager()
     avatar = models.FileField(upload_to="profile-pictures/", blank=True, storage=get_public_media_storage)
-    language = models.CharField(max_length=10, blank=True, null=True)
+    language = models.CharField(max_length=10, blank=True, null=True)  # noqa DJ001
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"
@@ -36,7 +36,7 @@ class CustomUser(AbstractUser):
         if self.avatar:
             return self.avatar.url
         else:
-            return "https://www.gravatar.com/avatar/{}?s=128&d=identicon".format(self.gravatar_id)
+            return f"https://www.gravatar.com/avatar/{self.gravatar_id}?s=128&d=identicon"
 
     @property
     def gravatar_id(self) -> str:

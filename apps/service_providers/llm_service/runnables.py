@@ -1,7 +1,7 @@
 from abc import ABC
 from datetime import datetime
 from operator import itemgetter
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 import pytz
 from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -55,14 +55,15 @@ class ChainOutput(Serializable):
         return True
 
     @classmethod
-    def get_lc_namespace(cls) -> List[str]:
+    def get_lc_namespace(cls) -> list[str]:
         """Get the namespace of the langchain object."""
         return ["ocs", "schema", "chain_output"]
 
 
-class BaseExperimentRunnable(RunnableSerializable[Dict, ChainOutput], ABC):
+class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
     experiment: Experiment
     session: ExperimentSession
+    input_key: str = "input"
 
     class Config:
         arbitrary_types_allowed = True
@@ -83,6 +84,11 @@ class BaseExperimentRunnable(RunnableSerializable[Dict, ChainOutput], ABC):
             content=message,
         )
 
+    def format_input(self, input: dict):
+        if self.experiment.input_formatter:
+            input[self.input_key] = self.experiment.input_formatter.format(input=input[self.input_key])
+        return input
+
 
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True)
@@ -94,7 +100,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
         callback = self.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
@@ -117,7 +123,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         raise NotImplementedError
 
     @property
@@ -130,11 +136,6 @@ class ExperimentRunnable(BaseExperimentRunnable):
                 ("human", "{input}"),
             ]
         )
-
-    def format_input(self, input: dict):
-        if self.experiment.input_formatter:
-            input["input"] = self.experiment.input_formatter.format(input=input["input"])
-        return input
 
     def _populate_memory(self):
         # TODO: convert to use BaseChatMessageHistory object
@@ -151,7 +152,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         return (
             {"input": RunnablePassthrough()}
@@ -167,7 +168,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
 
 
 class AgentExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[Dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
         assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
@@ -199,6 +200,8 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):
+    input_key = "content"
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -206,17 +209,18 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
     def chat(self):
         return self.session.chat
 
-    def invoke(self, input: str, config: Optional[RunnableConfig] = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
         callback = self.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        assistant_runnable = self.experiment.assistant.get_assistant()
+        assistant_runnable = RunnableLambda(self.format_input) | self.experiment.assistant.get_assistant()
 
         input_dict = {"content": input}
 
-        self._save_message_to_history(input, ChatMessageType.HUMAN)
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)

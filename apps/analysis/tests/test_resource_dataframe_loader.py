@@ -9,7 +9,7 @@ from apps.analysis.models import Resource
 from apps.analysis.steps.loaders import ResourceDataframeLoader, ResourceLoaderParams, ResourceType
 
 
-@pytest.fixture
+@pytest.fixture()
 def resource_dataframe_loader():
     step = ResourceDataframeLoader()
     step.initialize(PipelineContext())
@@ -32,7 +32,7 @@ def get_params(resource):
 
 
 @pytest.mark.parametrize(
-    "resource_type,raw_data,expected",
+    ("resource_type", "raw_data", "expected"),
     [
         (ResourceType.CSV, "a,b,c\n1,2,3\n4,5,6", "a,b,c\n1,2,3\n4,5,6\n"),
         (
@@ -55,5 +55,5 @@ def test_resource_dataframe_loader(resource_type, raw_data, expected, resource_d
 def test_resource_dataframe_loader_raises_error_with_invalid_resource_type(resource_dataframe_loader):
     resource = make_resource("invalid", "")
     params = get_params(resource)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unsupported resource type"):
         resource_dataframe_loader.load(params)

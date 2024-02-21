@@ -2,9 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional, Type
 
-import pytz
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
 
@@ -15,7 +13,7 @@ BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
 
 
 class CustomBaseTool(BaseTool):
-    experiment_session: Optional[ExperimentSession] = None
+    experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session = False
 
@@ -40,7 +38,7 @@ class RecurringReminderTool(CustomBaseTool):
     name = "recurring-reminder"
     description = "useful to schedule recurring reminders"
     requires_session = True
-    args_schema: Type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
+    args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
 
     def action(
         self,
@@ -66,7 +64,7 @@ class OneOffReminderTool(CustomBaseTool):
     name = "one-off-reminder"
     description = "useful to schedule one-off reminders"
     requires_session = True
-    args_schema: Type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
+    args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
 
     def action(
         self,
@@ -100,7 +98,7 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
     )
 
 
-def get_tools(experiment_session) -> List[BaseTool]:
+def get_tools(experiment_session) -> list[BaseTool]:
     return [
         RecurringReminderTool(experiment_session=experiment_session),
         OneOffReminderTool(experiment_session=experiment_session),

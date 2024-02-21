@@ -1,0 +1,27 @@
+<div x-data="{ count: 0, get zeroCount() { return this.count-1 } }">
+  <div class="flex flex-row justify-between mb-4">
+    <h3 class="text-lg font-medium">FILES</h3>
+    <button type="button" class="btn btn-sm"
+            @click="count++; $nextTick(() => { document.getElementById('id_files-' + zeroCount + '-file').click() })">
+      <i class="fa-solid fa-paperclip"></i> Add
+    </button>
+  </div>
+  <input type="hidden" name="files-TOTAL_FORMS" x-bind:value="count" id="id_files-TOTAL_FORMS">
+  <input type="hidden" name="files-INITIAL_FORMS" value="0" id="id_files-INITIAL_FORMS">
+  <input type="hidden" name="files-MIN_NUM_FORMS" value="0" id="id_files-MIN_NUM_FORMS">
+  <input type="hidden" name="files-MAX_NUM_FORMS" value="100" id="id_files-MAX_NUM_FORMS">
+  <template x-for="i in count">
+    <div class="flex flex-row" x-data="{ save: true, file: '', get index() { return i-1 } }" x-show="save">
+      <input type="hidden" :name="'files-' + index + '-id'" :id="'id_files-' + index + '-id'">
+      <input class="hidden " :name="'files-' + index + '-DELETE'" :id="'id_files-'+index+'-DELETE'"
+             :value="save ? '' : 1">
+      <button type="button" class="btn btn-sm mr-4 self-center" @click="save = false; file = ''">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+      <div class="files-control w-full">
+        <input type="file" :name="'files-' + index + '-file'" class="file-input w-full max-w-xs"
+               :id="'id_files-' + index + '-file'" x-model="file">
+      </div>
+    </div>
+  </template>
+</div>

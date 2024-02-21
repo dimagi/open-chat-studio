@@ -1,9 +1,6 @@
-from allauth.socialaccount.forms import SignupForm as SocialSignupForm
 from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import UserChangeForm
-from django.urls import reverse
-from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 
 from .models import CustomUser

@@ -25,7 +25,7 @@ def test_permission_references():
 
 
 @pytest.mark.parametrize(
-    "perm_type, lines, expected",
+    ("perm_type", "lines", "expected"),
     [
         # return unique
         ("view", ['"fake_app.view_model"', '"fake_app.view_model"'], {"fake_app.view_model"}),

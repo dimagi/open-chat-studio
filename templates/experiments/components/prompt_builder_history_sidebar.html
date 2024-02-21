@@ -19,10 +19,10 @@
                         <!-- Iterate over each event in the day -->
                         <template x-for="(event, eventIndex) in day.events" :key="eventIndex">
                             <div x-bind:class="{'timeline-item-selected': event.history_id == $store.promptBuilder.getCurrentHistoryId(),
-                            'bg-green-50': event.history_id == $store.promptBuilder.getCurrentHistoryId(),
-                            'hover:bg-gray-50': event.history_id != $store.promptBuilder.getCurrentHistoryId()}"
-                                class="timeline-item"
-                                @click.stop="$store.promptBuilder.setCurrentHistoryId(event.history_id)">
+                                               'bg-green-50': event.history_id == $store.promptBuilder.getCurrentHistoryId(),
+                                               'hover:bg-gray-50': event.history_id != $store.promptBuilder.getCurrentHistoryId()}"
+                                 class="timeline-item"
+                                 @click.stop="$store.promptBuilder.setCurrentHistoryId(event.history_id)">
                                 <div class="timeline-item-header" x-text="event.time"></div>
                                 <div class="timeline-item-content line-clamp-2" x-text="event.preview"></div>
                             </div>
@@ -33,7 +33,7 @@
         </div>
 
         <button
-        class="w-32 px-6 py-2 text-white transition duration-500 ease-in-out transform bg-blue-600 rounded-lg focus:outline-none focus:ring-2 ring-offset-current ring-offset-2 hover:bg-blue-800"
-        @click.stop="$store.promptBuilder.loadSelectedState()">Restore</button>
+            class="w-32 px-6 py-2 text-white transition duration-500 ease-in-out transform bg-blue-600 rounded-lg focus:outline-none focus:ring-2 ring-offset-current ring-offset-2 hover:bg-blue-800"
+            @click.stop="$store.promptBuilder.loadSelectedState()">Restore</button>
     </div>
 </div>

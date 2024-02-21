@@ -1,14 +1,10 @@
 import logging
-import uuid
 from abc import abstractmethod
-from datetime import datetime, timedelta
 from enum import Enum
 from io import BytesIO
-from typing import Optional
+from typing import ClassVar
 
-import boto3
 import requests
-from botocore.client import Config
 from django.conf import settings
 from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions
@@ -23,6 +19,10 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 
 USER_CONSENT_TEXT = "1"
+UNSUPPORTED_MESSAGE_BOT_PROMPT = """
+Tell the user (in the language being spoken) that they sent an unsupported message.
+You only support {supperted_types} messages types. Respond only with the message for the user
+"""
 
 
 class MESSAGE_TYPES(Enum):
@@ -44,16 +44,23 @@ class ChannelBase:
 
     Args:
         experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
-        experiment_session: An optional ExperimentSession object representing the experiment session associated with the handler.
+        experiment_session: An optional ExperimentSession object representing the experiment session associated
+            with the handler.
 
         Either one of these arguments must to be provided
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Properties:
-        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier of the chat.
-        message_content_type: An abstract property that must be implemented in subclasses to return the type of message content (e.g., text, voice).
-        message_text: An abstract property that must be implemented in subclasses to return the text content of the message.
+        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier
+            of the chat.
+        message_content_type: An abstract property that must be implemented in subclasses to return the type
+            of message content (e.g., text, voice).
+        message_text: An abstract property that must be implemented in subclasses to return the text
+            content of the message.
+
+    Class variables:
+        supported_message_types: A list of message content types that are supported by this channel
 
     Abstract methods:
         initialize: (Optional) Performs any necessary initialization
@@ -64,19 +71,19 @@ class ChannelBase:
         transcription_started:A callback indicating that the transcription process has started
         transcription_finished: A callback indicating that the transcription process has finished.
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
-
     Public API:
         new_user_message: Handles a message coming from the user.
         new_bot_message: Handles a message coming from the bot.
         get_chat_id_from_message: Returns the unique identifier of the chat from the message object.
     """
 
-    voice_replies_supported = False
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types: ClassVar[str] = []
 
     def __init__(
         self,
-        experiment_channel: Optional[ExperimentChannel] = None,
-        experiment_session: Optional[ExperimentSession] = None,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
     ):
         if not experiment_channel and not experiment_session:
             raise MessageHandlerException("ChannelBase expects either")
@@ -174,6 +181,10 @@ class ChannelBase:
         The `message` here will probably be some object, depending on the channel being used.
         """
         self._add_message(message)
+
+        if not self.is_message_type_supported():
+            return self._handle_unsupported_message()
+
         if self.experiment_channel.platform != "web":
             if self._is_reset_conversation_request():
                 # Webchats' statuses are updated through an "external" flow
@@ -188,7 +199,8 @@ class ChannelBase:
                 # is ACTIVE
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-        return self._handle_message()
+        response = self._handle_supported_message()
+        return response
 
     def _handle_pre_conversation_requirements(self):
         """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
@@ -264,7 +276,7 @@ class ChannelBase:
     def _user_gave_consent(self) -> bool:
         return self.message_text.strip() == USER_CONSENT_TEXT
 
-    def _handle_message(self):
+    def _handle_supported_message(self):
         response = None
         if self.message_content_type == MESSAGE_TYPES.TEXT:
             response = self._get_llm_response(self.message_text)
@@ -280,6 +292,9 @@ class ChannelBase:
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
+
+    def _handle_unsupported_message(self):
+        return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
@@ -390,11 +405,26 @@ class ChannelBase:
     def _is_reset_conversation_request(self):
         return self.message_text == ExperimentChannel.RESET_COMMAND
 
+    def is_message_type_supported(self) -> bool:
+        return self.message_content_type is not None and self.message_content_type in self.supported_message_types
+
+    def _unsupported_message_type_response(self):
+        """Generates a suitable response to the user when they send unsupported messages"""
+        ChatMessage.objects.create(
+            chat=self.experiment_session.chat,
+            message_type=ChatMessageType.SYSTEM,
+            content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
+        )
+        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
+        topic_bot = TopicBot(self.experiment_session)
+        return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
+
 
 class WebChannel(ChannelBase):
     """Message Handler for the UI"""
 
     voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -414,23 +444,21 @@ class WebChannel(ChannelBase):
 
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     def initialize(self):
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def get_chat_id_from_message(self, message):
-        return message.chat.id
+        return message.chat_id
 
     @property
     def message_content_type(self):
-        if self.message.content_type == "text":
-            return MESSAGE_TYPES.TEXT
-        elif self.message.content_type == "voice":
-            return MESSAGE_TYPES.VOICE
+        return self.message.content_type
 
     @property
     def message_text(self):
-        return self.message.text
+        return self.message.body
 
     def send_voice_to_user(self, voice_audio, duration):
         self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
@@ -440,7 +468,7 @@ class TelegramChannel(ChannelBase):
             self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
-        file_url = self.telegram_bot.get_file_url(self.message.voice.file_id)
+        file_url = self.telegram_bot.get_file_url(self.message.media_id)
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
@@ -481,6 +509,10 @@ class WhatsappChannel(ChannelBase):
         return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
 
     @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
+
+    @property
     def message_content_type(self):
         return self.message.content_type
 
@@ -513,6 +545,7 @@ class WhatsappChannel(ChannelBase):
 
 class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
 
     def initialize(self):
         page_access_token = self.experiment_channel.extra_data["page_access_token"]

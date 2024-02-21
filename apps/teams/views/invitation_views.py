@@ -75,7 +75,7 @@ class SignupAfterInvite(SignupView):
         return initial
 
     def get_context_data(self, **kwargs):
-        context = super(SignupAfterInvite, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         if self.invitation:
             context["invitation"] = self.invitation
         return context

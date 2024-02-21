@@ -24,50 +24,50 @@ class TeamsAuthTest(TestCase):
 
     def test_unauthenticated_view(self):
         response = self.client.get(reverse("web:home"))
-        self.assertEqual(200, response.status_code)
+        assert 200 == response.status_code
         self._assertRequestHasTeam(response, None)
 
     def test_authenticated_non_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("users:user_profile"))
-        self.assertEqual(200, response.status_code, response)
+        assert 200 == response.status_code, response
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
-        self.assertEqual(200, response.status_code)
+        assert 200 == response.status_code
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_view_no_membership(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.yanks.slug]))
-        self.assertEqual(404, response.status_code)
+        assert 404 == response.status_code
         self._assertRequestHasTeam(response, self.yanks, None)
 
     def test_team_view_missing_team(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=["missing"]))
-        self.assertEqual(404, response.status_code)
+        assert 404 == response.status_code
         self._assertRequestHasTeam(response, None, None)
 
     def test_team_admin_view(self):
         self._login(self.sox_admin)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.sox.slug, invite.id]))
-        self.assertEqual(200, response.status_code)
+        assert 200 == response.status_code
         self._assertRequestHasTeam(response, self.sox, self.sox_admin)
 
     def test_team_admin_view_denied(self):
         self._login(self.yanks_member)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.yanks.slug, invite.id]))
-        self.assertEqual(403, response.status_code)
+        assert 403 == response.status_code
         self._assertRequestHasTeam(response, self.yanks, self.yanks_member)
 
     def _login(self, user):
         success = self.client.login(username=user.username, password="123")
-        self.assertTrue(success, f"User login failed: {user.username}")
+        assert success, f"User login failed: {user.username}"
 
     def _create_invitation(self):
         return Invitation.objects.create(
@@ -76,15 +76,15 @@ class TeamsAuthTest(TestCase):
 
     def _assertRequestHasTeam(self, response, team, user=None):
         request = response.wsgi_request
-        self.assertTrue(hasattr(request, "team"))
-        self.assertEqual(request.team, team)
-        self.assertTrue(hasattr(request, "team_membership"))
+        assert hasattr(request, "team")
+        assert request.team == team
+        assert hasattr(request, "team_membership")
         membership = request.team_membership
         if user:
-            self.assertEqual(membership.user, user)
+            assert membership.user == user
         else:
-            # use assertEqual to force setup of the lazy object
-            self.assertEqual(membership, None)
+            # use equality check to force setup of the lazy object
+            assert membership == None  # noqa E711
 
 
 def _create_user(username):

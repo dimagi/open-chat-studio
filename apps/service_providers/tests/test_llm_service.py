@@ -1,4 +1,4 @@
-from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService, OpenAILlmService
+from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService
 from apps.service_providers.models import LlmProviderTypes
 
 

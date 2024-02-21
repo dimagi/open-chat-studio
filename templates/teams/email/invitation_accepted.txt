@@ -1,0 +1,1 @@
+The invitation to join {{ project_name }} has been accepted by {{ invitation.accepted_by.get_display_name }}.

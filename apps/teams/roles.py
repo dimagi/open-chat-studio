@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import apps.teams.models
 from apps.users.models import CustomUser
 
 ROLE_ADMIN = "admin"

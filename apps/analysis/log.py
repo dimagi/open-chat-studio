@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from datetime import datetime
 from enum import IntEnum, auto
-from typing import TextIO
 
 
 class LogLevel(IntEnum):

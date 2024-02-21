@@ -1,18 +1,16 @@
-from datetime import datetime, timedelta
-
-import pytz
+import pytest
 from django.test import TestCase
-from freezegun import freeze_time
-from mock import Mock, patch
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chat.tasks import _bot_prompt_for_user, _no_activity_pings
+from apps.chat.tasks import _bot_prompt_for_user
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
+from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
 
 
@@ -48,62 +46,16 @@ class TasksTest(TestCase):
         )
         self.experiment_session = self._add_session(self.experiment)
 
-    @patch("apps.chat.bots.create_conversation")
-    def test_getting_ping_message_saves_history(self, create_conversation):
-        create_conversation.return_value = Mock()
+    def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
         with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
             response = _bot_prompt_for_user(self.experiment_session, "Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0].message_type, "ai")
-        self.assertEqual(response, expected_ping_message)
-        self.assertEqual(messages[0].content, expected_ping_message)
-
-    @patch("apps.chat.tasks._bot_prompt_for_user", return_value="Please answer")
-    @patch("apps.chat.tasks._try_send_message")
-    def test_no_activity_ping_triggered_for_active_sessions(self, _bot_prompt_for_user, _try_send_message):
-        second_experiment = Experiment.objects.create(
-            team=self.team,
-            owner=self.user,
-            name="TestExperiment2",
-            description="test2",
-            prompt_text="You are a helpful assistant",
-            no_activity_config=None,
-            consent_form=ConsentForm.get_default(self.team),
-        )
-        ExperimentChannel.objects.create(
-            name="TestChannel2", experiment=second_experiment, extra_data={"bot_token": "222222"}, platform="telegram"
-        )
-        # Experiment sessions which should be pinged
-        experiment_session_should_fire = self.experiment_session
-        self._add_chats(experiment_session_should_fire, last_message_type="ai")
-        experiment_session_setup = self._add_session(self.experiment, session_status=SessionStatus.SETUP)
-        self._add_chats(experiment_session_setup, last_message_type="ai")
-
-        # Experiment sessions for which no ping should trigger
-        # See the docstring for `_no_activity_pings` for the criteria of a ping message to be triggered
-        # Criteria number 1 not met
-        self._add_session(self.experiment, session_status=SessionStatus.ACTIVE)
-        # Criteria number 2 not met
-        experiment_session_setup = self._add_session(self.experiment, session_status=SessionStatus.PENDING_REVIEW)
-        self._add_chats(experiment_session_setup, last_message_type="ai")
-        experiment_session_completed = self._add_session(self.experiment, session_status=SessionStatus.COMPLETE)
-        self._add_chats(experiment_session_completed, last_message_type="ai")
-        experiment_session_completed = self._add_session(self.experiment, session_status=SessionStatus.UNKNOWN)
-        self._add_chats(experiment_session_completed, last_message_type="ai")
-        # Criteria number 3 not met
-        experiment_session_no_config = self._add_session(second_experiment, session_status=SessionStatus.ACTIVE)
-        self._add_chats(experiment_session_no_config, last_message_type="ai")
-        # Criteria number 4 not met
-        experiment_session_not_eligible = self._add_session(self.experiment, session_status=SessionStatus.SETUP)
-        self._add_chats(experiment_session_not_eligible, last_message_type=ChatMessageType.HUMAN)
-
-        # frozen_time = "2023-08-21 12:00:00"  # Set the desired frozen time
-        with freeze_time(datetime.utcnow() + timedelta(minutes=5)):
-            _no_activity_pings()
-        self.assertEqual(_try_send_message.call_count, 2)
+        assert len(messages) == 1
+        assert messages[0].message_type == "ai"
+        assert response == expected_ping_message
+        assert messages[0].content == expected_ping_message
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         experiment_session = _start_experiment_session(
@@ -121,3 +73,20 @@ class TasksTest(TestCase):
                 message_type=ChatMessageType.AI,
                 content="Hello. How can I assist you today?",
             )
+
+
+@pytest.mark.django_db()
+def test_no_activity_ping_with_assistant_bot():
+    session = ExperimentSessionFactory()
+    local_assistant = OpenAiAssistantFactory()
+    session.experiment.assistant = local_assistant
+
+    expected_ping_message = "Hey, answer me!"
+    with mock_experiment_llm(session.experiment, responses=[expected_ping_message]):
+        response = _bot_prompt_for_user(session, "Some message")
+    messages = ChatMessage.objects.filter(chat=session.chat).all()
+    # Only the AI message should be there
+    assert len(messages) == 1
+    assert messages[0].message_type == "ai"
+    assert response == expected_ping_message
+    assert messages[0].content == expected_ping_message

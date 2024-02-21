@@ -1,4 +1,3 @@
-from django import forms
 from django.contrib import admin
 
 from apps.experiments import models
@@ -54,14 +53,6 @@ class SurveyAdmin(admin.ModelAdmin):
     list_filter = ("team",)
 
 
-class ExperimentAdminForm(forms.ModelForm):
-    """We create a custom form for Experiment so that we can sort the prompt fields"""
-
-    class Meta:
-        model = models.Experiment
-        fields = "__all__"
-
-
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
     list_display = ("name", "team", "owner", "source_material", "llm", "llm_provider")
@@ -69,7 +60,6 @@ class ExperimentAdmin(admin.ModelAdmin):
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
-    form = ExperimentAdminForm
 
 
 @admin.register(models.ExperimentSession)

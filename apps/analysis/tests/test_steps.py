@@ -6,7 +6,7 @@ from .demo_steps import Divide, FactorSay, Multiply
 
 
 @pytest.mark.parametrize(
-    "step, context, output",
+    ("step", "context", "output"),
     [
         (Multiply(params=FactorSay(factor=3)), StepContext[int](2), 6),
         (Divide(params=FactorSay(factor=2)), StepContext[int](10), 5),

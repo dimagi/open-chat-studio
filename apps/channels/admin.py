@@ -1,5 +1,3 @@
-from typing import Dict
-
 from django.contrib import admin
 from django.http.request import HttpRequest
 
@@ -12,7 +10,7 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         "name",
         "team",
         "platform",
-        "active",
+        "deleted",
         "external_id",
     )
     search_fields = ("name", "external_id")
@@ -32,5 +30,8 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         if obj.experiment:
             return obj.experiment.team.name
 
-    def get_changeform_initial_data(self, request: HttpRequest) -> Dict[str, str]:
+    def get_changeform_initial_data(self, request: HttpRequest) -> dict[str, str]:
         return {"extra_data": {"bot_token": "your token here"}}
+
+    def get_queryset(self, *args, **kwargs):
+        return ExperimentChannel.objects.get_unfiltered_queryset()

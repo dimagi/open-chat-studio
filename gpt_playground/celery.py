@@ -18,16 +18,6 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 app.conf.result_expires = 86400  # expire results in redis in 1 day
-no_activity_ping_period = 60  # In seconds
-app.conf.beat_schedule = {
-    "periodic_tasks": {
-        "task": "apps.chat.tasks.periodic_tasks",
-        "schedule": no_activity_ping_period,
-        "options": {
-            "expires": 15.0,
-        },
-    },
-}
 
 trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\

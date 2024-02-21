@@ -46,7 +46,6 @@ class ChannelPlatform(models.TextChoices):
 
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
-        from apps.service_providers.models import MessagingProviderType
 
         channel = kwargs.pop("channel", None)
 
@@ -82,6 +81,12 @@ class ExperimentChannelObjectManager(AuditingManager):
         extra_data_filter = Q(extra_data__contains={key: value})
         return self.filter(extra_data_filter).filter(experiment__team__slug=team_slug, platform=platform)
 
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted=False)
+
+    def get_unfiltered_queryset(self):
+        return super().get_queryset()
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
 class ExperimentChannel(BaseModel):
@@ -91,7 +96,7 @@ class ExperimentChannel(BaseModel):
 
     name = models.CharField(max_length=40, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
-    active = models.BooleanField(default=True)
+    deleted = models.BooleanField(default=False)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
@@ -133,8 +138,9 @@ class ExperimentChannel(BaseModel):
     @staticmethod
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
         """
-        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified by its `identifier`
-        and `platform`. Raises `ChannelAlreadyUtilizedException` error when another experiment uses it.
+        Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified
+        by its `identifier` and `platform`. Raises `ChannelAlreadyUtilizedException` error when another
+        experiment uses it.
         """
 
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
@@ -166,16 +172,20 @@ class ExperimentChannel(BaseModel):
             is_secure=True,
         )
 
+    def soft_delete(self):
+        self.deleted = True
+        self.save()
+
 
 def _set_telegram_webhook(experiment_channel: ExperimentChannel):
     """
     Set the webhook at Telegram to allow message forwarding to this platform
     """
     tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
-    if experiment_channel.active:
-        webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
-    else:
+    if experiment_channel.deleted:
         webhook_url = None
+    else:
+        webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
 
     tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
     tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
