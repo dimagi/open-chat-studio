@@ -32,7 +32,7 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
 
     input_type = str
     output_type = pd.DataFrame
-    param_schema = WhatsappParserParams
+    params = WhatsappParserParams()
 
     def run(self, params: Params, context: StepContext[str]) -> StepContext[pd.DataFrame]:
         pattern = re.compile(r"^(\d{2}/\d{2}/\d{4},\s\d{2}:\d{2})\s-\s", flags=re.MULTILINE)
@@ -64,11 +64,11 @@ class WhatsappParser(BaseStep[str, pd.DataFrame]):
     def _filter_messages(self, messages):
         def _remove_message(message):
             match message:
-                case {"sender": "system"} if self._params.remove_system_messages:
+                case {"sender": "system"} if self.params.remove_system_messages:
                     return True
-                case {"message": "This message was deleted"} if self._params.remove_deleted_messages:
+                case {"message": "This message was deleted"} if self.params.remove_deleted_messages:
                     return True
-                case {"message": "<Media omitted>"} if self._params.remove_media_omitted_messages:
+                case {"message": "<Media omitted>"} if self.params.remove_media_omitted_messages:
                     return True
                 case _:
                     return False

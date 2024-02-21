@@ -62,7 +62,7 @@ class LlmCompletionStepParams(PromptParams):
 class LlmCompletionStep(core.BaseStep[Any, str]):
     """Pass the incoming data to the LLM in the prompt and return the result."""
 
-    param_schema = LlmCompletionStepParams
+    params = LlmCompletionStepParams()
     input_type = Any
     output_type = str
 
@@ -103,7 +103,7 @@ class AssistantOutput(pydantic.BaseModel):
 class AssistantStep(core.BaseStep[Any, str]):
     """Experimental assistant step."""
 
-    param_schema = AssistantParams
+    params = AssistantParams()
     input_type = Any
     output_type = str
     client = None

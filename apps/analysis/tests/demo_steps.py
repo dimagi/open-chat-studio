@@ -9,7 +9,7 @@ class FactorSay(Params):
 
 
 class Multiply(BaseStep[int, int]):
-    param_schema = FactorSay
+    params = FactorSay()
     input_type = int
     output_type = int
 
@@ -20,7 +20,7 @@ class Multiply(BaseStep[int, int]):
 
 
 class Divide(BaseStep[int, int]):
-    param_schema = FactorSay
+    params = FactorSay()
     input_type = int
     output_type = int
 
@@ -31,7 +31,7 @@ class Divide(BaseStep[int, int]):
 
 
 class SetFactor(BaseStep[Any, Any]):
-    param_schema = FactorSay
+    params = FactorSay()
     input_type = Any
     output_type = Any
 

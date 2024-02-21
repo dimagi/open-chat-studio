@@ -234,10 +234,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     input_type: PipeIn
     output_type: PipeOut
-    param_schema: type[Params] = NoParams
+    params: Params = NoParams()
 
     def __init__(self, params: Params = None):
-        self._params = params or self.param_schema()
+        self.params = params or self.params
         self.pipeline_context: PipelineContext | None = None
         self.resources = []
         self.log = logging.getLogger(self.name)
@@ -254,7 +254,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
-        self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
         if self.pipeline_context.log_handler:
             self.log.addHandler(self.pipeline_context.log_handler)
 
@@ -264,11 +264,11 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self._initialize(pipeline_context)
         self.log.info(f"Running step {self.name}")
         try:
-            self._params.check()
+            self.params.check()
             self.preflight_check(context)
 
-            self.log.debug(f"Params: {self._params}")
-            result = self.run(self._params, context)
+            self.log.debug(f"Params: {self.params}")
+            result = self.run(self.params, context)
             for res in [result] if isinstance(result, StepContext) else result:
                 if not res.name:
                     res.name = self.name
