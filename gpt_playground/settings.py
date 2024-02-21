@@ -33,7 +33,6 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-
 # Application definition
 
 DJANGO_APPS = [
@@ -110,9 +109,7 @@ MIDDLEWARE = [
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
 ]
 
-
 ROOT_URLCONF = "gpt_playground.urls"
-
 
 # used to disable the cache in dev, but turn it on in production.
 # more here: https://nickjanetakis.com/blog/django-4-1-html-templates-are-cached-by-default-with-debug-true
@@ -122,7 +119,6 @@ _DEFAULT_LOADERS = [
 ]
 
 _CACHED_LOADERS = [("django.template.loaders.cached.Loader", _DEFAULT_LOADERS)]
-
 
 TEMPLATES = [
     {
@@ -228,7 +224,6 @@ AUTHENTICATION_BACKENDS = (
     "allauth.account.auth_backends.AuthenticationBackend",
 )
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/3.2/topics/i18n/
 
@@ -245,7 +240,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/ref/contrib/staticfiles/
 
@@ -255,7 +249,6 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
-
 
 STORAGES = {
     "default": {
@@ -360,6 +353,16 @@ if REDIS_URL.startswith("rediss"):
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "health_check_interval": 30,
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    },
+}
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
@@ -388,7 +391,6 @@ GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'
 SENTRY_DSN = env("SENTRY_DSN", default="")
 
-
 if SENTRY_DSN:
     import sentry_sdk
     from sentry_sdk.integrations.celery import CeleryIntegration
@@ -401,7 +403,6 @@ if SENTRY_DSN:
             CeleryIntegration(),
         ],
     )
-
 
 # Taskbadger setup
 TASKBADGER_ORG = env("TASKBADGER_ORG", default=None)
@@ -416,9 +417,8 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
         token=TASKBADGER_API_KEY,
-        systems=[CelerySystemIntegration(excludes=["apps.chat.tasks.periodic_tasks"])],
+        systems=[CelerySystemIntegration()],
     )
-
 
 LOGGING = {
     "version": 1,

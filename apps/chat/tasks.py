@@ -5,8 +5,9 @@ from uuid import UUID
 import pytz
 from celery.app import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import send_mail
-from django.db.models import OuterRef, Subquery
+from django.db.models import F, OuterRef, Subquery
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -14,22 +15,12 @@ from django.utils.translation import gettext_lazy as _
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.chat.task_utils import isolate_task, redis_task_lock
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
-
-
-@shared_task(bind=True)
-def periodic_tasks(self):
-    lock_id = self.name
-    with redis_task_lock(lock_id, self.app.oid) as acquired:
-        if not acquired:
-            return
-        _no_activity_pings()
 
 
 @shared_task
@@ -68,45 +59,21 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
             logger.exception(exception)
 
 
-@isolate_task
+@shared_task(bind=True)
+def no_activity_pings(self):
+    key = f"no_activity_pings{self.app.oid}"
+    lock = cache.lock(key, timeout=60 * 5)
+    if lock.acquire(blocking=False):
+        try:
+            _no_activity_pings()
+        finally:
+            lock.release()
+    else:
+        logger.warning("Unable to acquire lock for no_activity_pings")
+
+
 def _no_activity_pings():
-    """
-    Criteria:
-    1. The user have communicated with the bot
-    2. The experiment session is not considered "complete"
-    3. The experiment_session has a "no activity config" and the number of pings already received is smaller than
-    the max number of pings defined in the config
-    4. The last message in a session was from a bot and was created more than <user defined> minutes ago
-    """
-
-    UTC = pytz.timezone("UTC")
-    now = datetime.now().astimezone(UTC)
-    experiment_sessions_to_ping: list[ExperimentSession] = []
-
-    subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
-    # Why not exclude the SETUP status? "Normal" UI chats have a SETUP status
-    chats = (
-        Chat.objects.filter(pk__in=Subquery(subquery))
-        .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
-        .exclude(experiment_session__experiment__no_activity_config=None)
-        .select_related(
-            "experiment_session",
-            "experiment_session__experiment",
-            "experiment_session__experiment__no_activity_config",
-        )
-        .all()
-    )
-
-    for chat in chats:
-        latest_message = ChatMessage.objects.filter(chat=chat).order_by("-created_at").first()
-        if latest_message and latest_message.message_type == ChatMessageType.AI:
-            experiment_session: ExperimentSession = chat.experiment_session
-            no_activity_config = experiment_session.experiment.no_activity_config
-            max_pings_reached = experiment_session.no_activity_ping_count >= no_activity_config.max_pings
-            message_created_at = latest_message.created_at.astimezone(UTC)
-            max_time_elapsed = message_created_at < now - timedelta(minutes=no_activity_config.ping_after)
-            if not max_pings_reached and max_time_elapsed:
-                experiment_sessions_to_ping.append(experiment_session)
+    experiment_sessions_to_ping = _get_sessions_to_ping()
 
     for experiment_session in experiment_sessions_to_ping:
         bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
@@ -125,7 +92,52 @@ def _no_activity_pings():
             _try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
-            experiment_session.save()
+            experiment_session.save(update_fields=["no_activity_ping_count"])
+
+
+def _get_sessions_to_ping():
+    """
+    Criteria:
+    1. The user have communicated with the bot
+    2. The experiment session is not considered "complete"
+    3. The experiment_session has a "no activity config" and the number of pings already received is smaller than
+    the max number of pings defined in the config
+    4. The last message in a session was from a bot and was created more than <user defined> minutes ago
+    """
+
+    UTC = pytz.timezone("UTC")
+    now = datetime.now().astimezone(UTC)
+    experiment_sessions_to_ping: list[ExperimentSession] = []
+
+    subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
+    chats = (
+        Chat.objects.filter(pk__in=Subquery(subquery))
+        .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
+        .exclude(experiment_session__experiment__no_activity_config=None)
+        .exclude(
+            experiment_session__no_activity_ping_count__gte=F(
+                "experiment_session__experiment__no_activity_config__max_pings"
+            )
+        )
+        .select_related(
+            "experiment_session",
+            "experiment_session__experiment",
+            "experiment_session__experiment__no_activity_config",
+        )
+        .all()
+    )
+
+    for chat in chats:
+        latest_message = ChatMessage.objects.filter(chat=chat).order_by("-created_at").first()
+        if latest_message and latest_message.message_type == ChatMessageType.AI:
+            experiment_session: ExperimentSession = chat.experiment_session
+            no_activity_config = experiment_session.experiment.no_activity_config
+            message_created_at = latest_message.created_at.astimezone(UTC)
+            max_time_elapsed = message_created_at < now - timedelta(minutes=no_activity_config.ping_after)
+            if max_time_elapsed:
+                experiment_sessions_to_ping.append(experiment_session)
+
+    return experiment_sessions_to_ping
 
 
 def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
