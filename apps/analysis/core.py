@@ -94,11 +94,8 @@ class Step(Protocol[PipeIn, PipeOut]):
     input_type: ClassVar
     output_type: ClassVar
 
-    def initialize(self, pipeline_context: PipelineContext):
-        ...
-
     @abstractmethod
-    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
+    def __call__(self, context: StepContext[PipeIn], pipeline_context: PipelineContext) -> StepContext[PipeOut]:
         ...
 
 
@@ -136,8 +133,7 @@ class Pipeline:
         for step in self.steps:
             # TODO: handle splitting the pipeline if step returns list
             assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
-            step.initialize(pipeline_context)
-            out_context = step(self.context_chain[-1])
+            out_context = step(self.context_chain[-1], pipeline_context)
             self.context_chain.append(out_context)
             if pipeline_context.is_cancelled:
                 return self.context_chain[-1]
@@ -243,9 +239,6 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def __init__(self, params: Params = None):
         self._params = params or self.param_schema()
         self.pipeline_context: PipelineContext | None = None
-        self.step_count = -1
-        self.current_step_index = -1
-        self.is_last = False
         self.resources = []
         self.log = logging.getLogger(self.name)
         self.log.propagate = False
@@ -259,13 +252,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def is_cancelled(self):
         return self.pipeline_context.is_cancelled
 
-    def initialize(self, pipeline_context: PipelineContext):
+    def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
         self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
         if self.pipeline_context.log_handler:
             self.log.addHandler(self.pipeline_context.log_handler)
 
-    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
+    def __call__(
+        self, context: StepContext[PipeIn], pipeline_context: PipelineContext
+    ) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
+        self._initialize(pipeline_context)
         self.log.info(f"Running step {self.name}")
         try:
             self._params.check()

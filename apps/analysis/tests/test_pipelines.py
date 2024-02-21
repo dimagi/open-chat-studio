@@ -52,7 +52,7 @@ def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
 )
 def test_params(params, context, expected):
     step = Divide(params)
-    step.initialize(PipelineContext(params=context))
+    step(StepContext.initial(2), PipelineContext(params=context))
     assert step._params == expected
 
 

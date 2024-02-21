@@ -83,11 +83,10 @@ def test_commcare_app_loader(get_auth_service, httpx_mock):
         cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
     )
     loader = CommCareAppLoader(params=params)
-    loader.initialize(PipelineContext())
 
     httpx_mock.add_response(
         url="https://www.commcarehq.org/a/domain2/api/v0.5/application/id2/?format=json",
         json={"app": "data"},
     )
 
-    assert loader(StepContext.initial()).data == '{"app": "data"}'
+    assert loader(StepContext.initial(), PipelineContext()).data == '{"app": "data"}'
