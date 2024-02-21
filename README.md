@@ -41,8 +41,8 @@ pre-commit install --install-hooks
 
 Start the database and redis services and run the DB migrations:
 
-```
-inv up
+```shell
+docker compose -f docker-compose.dev.yml up -d  # equivalent of `inv up`
 cp .env.example .env
 ./manage.py migrate
 ```
@@ -117,33 +117,13 @@ Once these are installed they will be run on every commit.
 To run tests:
 
 ```bash
-./manage.py test
+pytest
 ```
 
 Or to test a specific app/module:
 
 ```bash
-./manage.py test apps.utils.tests.test_slugs
-```
-
-On Linux-based systems you can watch for changes using the following:
-
-```bash
-find . -name '*.py' | entr python ./manage.py test apps.utils.tests.test_slugs
-```
-
-### Testing bots
-
-To test a bot, first create an experiment. This can be done in the Django admin.
-
-After doing that you can use the UI to create a new chat session against the experiment.
-
-Note that celery needs to be running and your `OPENAI_API_KEY` needs to be set in order to get responses from the bot.
-
-You can also run experiments on the command line using:
-
-```bash
-python manage.py run_experiment <experiment_pk>
+pytest apps/utils/tests/test_slugs.py
 ```
 
 ### Notes
