@@ -39,7 +39,6 @@ IGNORE_APPS = {
     "auth",
     "staticfiles",
     "rest_framework",
-    "llm_providers",
     "admin",
     "hijack",
     "otp_totp",

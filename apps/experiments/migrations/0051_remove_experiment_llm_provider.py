@@ -9,10 +9,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="experiment",
-            name="llm_provider",
-        ),
         migrations.RenameField(
             model_name="experiment",
             old_name="llm_provider_new",

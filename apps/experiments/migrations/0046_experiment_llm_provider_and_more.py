@@ -6,19 +6,12 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("llm_providers", "0001_initial"),
+        # removed when cleanup migrations
+        # ("llm_providers", "0001_initial"),
         ("experiments", "0045_alter_consentform_options_alter_experiment_options_and_more"),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="experiment",
-            name="llm_provider",
-            field=models.ForeignKey(
-                blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to="llm_providers.llmprovider",
-                verbose_name="LLM Provider",
-            ),
-        ),
         migrations.AlterField(
             model_name="experiment",
             name="llm",
