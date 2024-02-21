@@ -47,23 +47,20 @@ class TwilioService(MessagingService):
     def client(self) -> Client:
         return Client(self.account_sid, self.auth_token)
 
-    @property
-    def s3_client(self):
-        return boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION,
-            config=Config(signature_version="s3v4"),
-        )
-
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=message, to=f"whatsapp:{to_number}")
 
     def send_whatsapp_voice_message(self, voice_audio: BytesIO, duration: int, from_number: str, to_number):
         file_path = f"{uuid.uuid4()}.mp3"
         audio_bytes = voice_audio.getvalue()
-        self.s3_client.upload_fileobj(
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_S3_REGION,
+            config=Config(signature_version="s3v4"),
+        )
+        s3_client.upload_fileobj(
             BytesIO(audio_bytes),
             settings.WHATSAPP_S3_AUDIO_BUCKET,
             file_path,
@@ -75,7 +72,7 @@ class TwilioService(MessagingService):
                 "ContentType": "audio/mpeg",
             },
         )
-        public_url = self.s3_client.generate_presigned_url(
+        public_url = s3_client.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.WHATSAPP_S3_AUDIO_BUCKET,

@@ -1,6 +1,6 @@
 import json
 from io import BytesIO
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -82,11 +82,9 @@ class TestTwilio:
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
-        with patch(
-            "apps.service_providers.messaging_service.TwilioService.s3_client", new_callable=PropertyMock
-        ) as s3_client_property, patch("apps.service_providers.messaging_service.TwilioService.client"):
-            s3_client = s3_client_property.return_value
-            s3_client.generate_presigned_url = Mock()
+        with patch("apps.service_providers.messaging_service.boto3.client") as client, patch(
+            "apps.service_providers.messaging_service.TwilioService.client"
+        ):
             get_llm_response_mock.return_value = "Hi"
             get_voice_transcript_mock.return_value = "Hi"
 
@@ -95,7 +93,7 @@ class TestTwilio:
             if message_type == "text":
                 send_whatsapp_text_message.assert_called()
             elif message_type == "audio":
-                s3_client.generate_presigned_url.assert_called()
+                client.return_value.generate_presigned_url.assert_called()
 
 
 class TestTurnio:
