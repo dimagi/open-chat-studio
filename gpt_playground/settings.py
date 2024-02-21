@@ -78,7 +78,6 @@ PROJECT_APPS = [
     "apps.web",
     "apps.teams.apps.TeamConfig",
     "apps.channels",
-    "apps.llm_providers",
     "apps.service_providers",
     "apps.analysis",
     "apps.generics",
