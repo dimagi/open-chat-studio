@@ -118,3 +118,9 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False):
     unsafe_fixes_flag = "--unsafe-fixes" if unsafe_fixes else ""
     c.run(f"ruff check {fix_flag} {unsafe_fixes_flag}", echo=True, pty=True)
     c.run("ruff format", echo=True, pty=True)
+
+
+@task
+def npm(c: Context, watch=False):
+    cmd = "dev-watch" if watch else "dev"
+    c.run(f"npm run {cmd}", echo=True, pty=True)
