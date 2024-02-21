@@ -239,7 +239,6 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def __init__(self, params: Params = None):
         self.params = params or self.params
         self.pipeline_context: PipelineContext | None = None
-        self.resources = []
         self.log = logging.getLogger(self.name)
         self.log.propagate = False
         self.log.setLevel(logging.DEBUG)
@@ -294,7 +293,4 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         step in the pipeline (or force=True).
         """
 
-        resource = self.pipeline_context.create_resource(data, name, serialize, metadata)
-        if resource:
-            self.resources.append(resource)
-        return resource
+        return self.pipeline_context.create_resource(data, name, serialize, metadata)
