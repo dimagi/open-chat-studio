@@ -97,7 +97,7 @@ def ngrok_url(c: Context):
     return public_url
 
 
-@task
+@task(aliases=["django"])
 def runserver(c: Context, public=False):
     runserver_command = "python manage.py runserver"
     if public:
