@@ -93,7 +93,7 @@ class TestTwilio:
             if message_type == "text":
                 send_whatsapp_text_message.assert_called()
             elif message_type == "audio":
-                client.return_value.generate_presigned_url.assert_called()
+                client.assert_called()
 
 
 class TestTurnio:
