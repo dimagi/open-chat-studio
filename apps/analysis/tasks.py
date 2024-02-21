@@ -171,11 +171,13 @@ def run_pipeline(
         return result
 
 
-def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext):
+def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext | list[StepContext]):
     run = pipeline_context.run
     if isinstance(result, list):
         run.output_summary = f"{len(result)} groups created"
         for res in result:
             run.output_summary += f"\n  - {res.name}"
+            res.get_or_create_resource(pipeline_context)
     else:
+        result.get_or_create_resource(pipeline_context)
         run.output_summary = get_serializer_by_type(result.data).get_summary(result.data)

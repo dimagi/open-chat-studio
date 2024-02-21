@@ -65,7 +65,7 @@ def test_run_analysis_with_split_pipeline(mock_get_source_pipeline, mock_get_dat
 
     runs = list(run_group.analysisrun_set.all())
     assert len(runs) == 8
-    check_run(runs[0], RunStatus.SUCCESS)
+    check_run(runs[0], RunStatus.SUCCESS, resource_count=7)
     assert f"{len(INPUT_DATA.split())} groups created" in runs[0].output_summary
 
     # run each step manually since celery isn't running
@@ -74,11 +74,12 @@ def test_run_analysis_with_split_pipeline(mock_get_source_pipeline, mock_get_dat
         run_pipline_split(run.id)
         run.refresh_from_db()
         assert run.error == ""
-        check_run(run, RunStatus.SUCCESS)
+        check_run(run, RunStatus.SUCCESS, resource_count=1)
         assert run.output_summary == tokens[index][::-1]
 
 
-def check_run(run, status):
+def check_run(run, status, resource_count=1):
     assert run.status == status
     assert run.start_time is not None
     assert run.end_time is not None
+    assert run.output_resources.count() == resource_count

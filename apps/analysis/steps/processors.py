@@ -246,7 +246,7 @@ class AssistantStep(core.BaseStep[Any, str]):
         metadata = ResourceMetadata(
             type="", format=resource_type, data_schema={}, openai_file_id=file.id, content_type=content_type
         )
-        return self.create_resource(content.read(), filename, force=True, serialize=False, metadata=metadata)
+        return self.create_resource(content.read(), filename, serialize=False, metadata=metadata)
 
 
 def get_resource_markdown_link(resource: Resource, link_text: str = None, image=False) -> str:
