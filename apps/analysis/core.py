@@ -235,10 +235,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     input_type: PipeIn
     output_type: PipeOut
     params: Params = NoParams()
+    pipeline_context: PipelineContext | None = None
 
     def __init__(self, params: Params = None):
         self.params = params or self.params
-        self.pipeline_context: PipelineContext | None = None
         self.log = logging.getLogger(self.name)
         self.log.propagate = False
         self.log.setLevel(logging.DEBUG)
