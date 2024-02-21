@@ -63,6 +63,7 @@ class ChainOutput(Serializable):
 class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
     experiment: Experiment
     session: ExperimentSession
+    input_key: str = "input"
 
     class Config:
         arbitrary_types_allowed = True
@@ -82,6 +83,11 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
             message_type=type_.value,
             content=message,
         )
+
+    def format_input(self, input: dict):
+        if self.experiment.input_formatter:
+            input[self.input_key] = self.experiment.input_formatter.format(input=input[self.input_key])
+        return input
 
 
 class ExperimentRunnable(BaseExperimentRunnable):
@@ -130,11 +136,6 @@ class ExperimentRunnable(BaseExperimentRunnable):
                 ("human", "{input}"),
             ]
         )
-
-    def format_input(self, input: dict):
-        if self.experiment.input_formatter:
-            input["input"] = self.experiment.input_formatter.format(input=input["input"])
-        return input
 
     def _populate_memory(self):
         # TODO: convert to use BaseChatMessageHistory object
@@ -199,6 +200,8 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):
+    input_key = "content"
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -212,11 +215,12 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        assistant_runnable = self.experiment.assistant.get_assistant()
+        assistant_runnable = RunnableLambda(self.format_input) | self.experiment.assistant.get_assistant()
 
         input_dict = {"content": input}
 
-        self._save_message_to_history(input, ChatMessageType.HUMAN)
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)

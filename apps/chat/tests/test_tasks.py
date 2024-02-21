@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
+import pytest
 from django.test import TestCase
 from freezegun import freeze_time
 
@@ -12,6 +13,8 @@ from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
+from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
 
 
@@ -47,9 +50,7 @@ class TasksTest(TestCase):
         )
         self.experiment_session = self._add_session(self.experiment)
 
-    @patch("apps.chat.bots.create_conversation")
-    def test_getting_ping_message_saves_history(self, create_conversation):
-        create_conversation.return_value = Mock()
+    def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
         with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
             response = _bot_prompt_for_user(self.experiment_session, "Some message")
@@ -120,3 +121,20 @@ class TasksTest(TestCase):
                 message_type=ChatMessageType.AI,
                 content="Hello. How can I assist you today?",
             )
+
+
+@pytest.mark.django_db()
+def test_no_activity_ping_with_assistant_bot():
+    session = ExperimentSessionFactory()
+    local_assistant = OpenAiAssistantFactory()
+    session.experiment.assistant = local_assistant
+
+    expected_ping_message = "Hey, answer me!"
+    with mock_experiment_llm(session.experiment, responses=[expected_ping_message]):
+        response = _bot_prompt_for_user(session, "Some message")
+    messages = ChatMessage.objects.filter(chat=session.chat).all()
+    # Only the AI message should be there
+    assert len(messages) == 1
+    assert messages[0].message_type == "ai"
+    assert response == expected_ping_message
+    assert messages[0].content == expected_ping_message

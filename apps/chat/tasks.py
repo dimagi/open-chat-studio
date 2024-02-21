@@ -89,7 +89,11 @@ def _no_activity_pings():
         Chat.objects.filter(pk__in=Subquery(subquery))
         .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
         .exclude(experiment_session__experiment__no_activity_config=None)
-        .select_related("experiment_session")
+        .select_related(
+            "experiment_session",
+            "experiment_session__experiment",
+            "experiment_session__experiment__no_activity_config",
+        )
         .all()
     )
 

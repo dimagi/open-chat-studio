@@ -73,6 +73,30 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
     assert result.output == "ai response"
 
 
+@patch("openai.resources.beta.threads.messages.Messages.list")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@pytest.mark.django_db()
+def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, list_messages, session):
+    session.experiment.input_formatter = "foo {input} bar"
+
+    chat = session.chat
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    list_messages.return_value = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
+    )
+
+    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    result = assistant.invoke("test")
+    assert result.output == "ai response"
+    assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
+
+
 def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):
     """
     Create a list of ThreadMessage objects from a list of message dictionaries:
