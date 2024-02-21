@@ -9,7 +9,6 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.analysis.log import LogEntry
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 
@@ -185,6 +184,3 @@ class AnalysisRun(BaseRun):
 
     class Meta:
         ordering = ["created_at"]
-
-    def get_log_entries(self):
-        return [LogEntry.from_json(entry) for entry in self.log.get("entries", [])]

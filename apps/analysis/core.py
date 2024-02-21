@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from abc import abstractmethod
 from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
@@ -10,7 +11,6 @@ from apps.service_providers.llm_service import LlmService
 from apps.teams.models import Team
 
 from .exceptions import StepError
-from .log import Logger
 from .models import AnalysisRun, Resource, ResourceMetadata
 from .serializers import create_resource_for_data, create_resource_for_raw_data, get_serializer_by_name
 
@@ -49,7 +49,7 @@ class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
     run: AnalysisRun = None
-    log: Logger = dataclasses.field(default_factory=Logger)
+    log_handler: logging.Handler = None
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
@@ -247,10 +247,9 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self.current_step_index = -1
         self.is_last = False
         self.resources = []
-
-    @property
-    def log(self):
-        return self.pipeline_context.log
+        self.log = logging.getLogger(self.name)
+        self.log.propagate = False
+        self.log.setLevel(logging.DEBUG)
 
     @property
     def name(self):
@@ -263,22 +262,25 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
         self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        if self.pipeline_context.log_handler:
+            self.log.addHandler(self.pipeline_context.log_handler)
 
     def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         self.log.info(f"Running step {self.name}")
         try:
-            with self.log(self.name):
-                self._params.check()
-                self.preflight_check(context)
+            self._params.check()
+            self.preflight_check(context)
 
-                self.log.debug(f"Params: {self._params}")
-                result = self.run(self._params, context)
-                for res in [result] if isinstance(result, StepContext) else result:
-                    if not res.name:
-                        res.name = self.name
-                return result
+            self.log.debug(f"Params: {self._params}")
+            result = self.run(self._params, context)
+            for res in [result] if isinstance(result, StepContext) else result:
+                if not res.name:
+                    res.name = self.name
+            return result
         finally:
             self.log.info(f"Step {self.name} complete")
+            if self.pipeline_context.log_handler:
+                self.log.removeHandler(self.pipeline_context.log_handler)
 
     def run(self, params: Params, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""

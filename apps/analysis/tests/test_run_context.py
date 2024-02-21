@@ -2,8 +2,10 @@ from unittest import mock
 
 import pytest
 
+from apps.analysis.core import StepContext
 from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
 from apps.analysis.tasks import PipelineSplitSignal, RunStatusContext, run_context
+from apps.analysis.tests.demo_steps import Multiply
 from apps.service_providers.models import LlmProvider
 
 
@@ -67,16 +69,18 @@ def test_run_context(mock_analysis_run):
     with run_context(mock_analysis_run) as pipeline_context:
         assert mock_analysis_run.start_time is not None
         assert mock_analysis_run.status == RunStatus.RUNNING
-        pipeline_context.log.info("test log")
-        with pipeline_context.log("magic"):
-            pipeline_context.log.info("test log 2")
+        pipeline_context.params = {"factor": 2}
+        step = Multiply()
+        step.initialize(pipeline_context)
+        step(StepContext.initial(1))
 
     assert mock_analysis_run.end_time is not None
     assert mock_analysis_run.status == RunStatus.SUCCESS
     logs = [(entry["logger"], entry["message"]) for entry in mock_analysis_run.log["entries"]]
     assert logs == [
-        ("root", "test log"),
-        ("magic", "test log 2"),
+        ("Multiply", "Running step Multiply"),
+        ("Multiply", "Params: factor=2 say=None"),
+        ("Multiply", "Step Multiply complete"),
     ]
 
 

@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 from apps.analysis.core import PipelineContext, StepContext
-from apps.analysis.log import Logger, StdoutLogStream
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
@@ -184,7 +183,7 @@ def timeseries_data():
 @pytest.fixture()
 def timeseries_filter():
     step = TimeseriesFilter()
-    step.initialize(PipelineContext(log=Logger(StdoutLogStream())))
+    step.initialize(PipelineContext())
     return step
 
 
