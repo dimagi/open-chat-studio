@@ -71,7 +71,7 @@ def test_run_context(mock_analysis_run):
         assert mock_analysis_run.status == RunStatus.RUNNING
         pipeline_context.params = {"factor": 2}
         step = Multiply()
-        step(StepContext.initial(1), pipeline_context)
+        step.invoke(StepContext.initial(1), pipeline_context)
 
     assert mock_analysis_run.end_time is not None
     assert mock_analysis_run.status == RunStatus.SUCCESS

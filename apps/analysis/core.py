@@ -95,7 +95,7 @@ class Step(Protocol[PipeIn, PipeOut]):
     output_type: ClassVar
 
     @abstractmethod
-    def __call__(self, context: StepContext[PipeIn], pipeline_context: PipelineContext) -> StepContext[PipeOut]:
+    def invoke(self, context: StepContext[PipeIn], pipeline_context: PipelineContext) -> StepContext[PipeOut]:
         ...
 
 
@@ -133,7 +133,7 @@ class Pipeline:
         for step in self.steps:
             # TODO: handle splitting the pipeline if step returns list
             assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
-            out_context = step(self.context_chain[-1], pipeline_context)
+            out_context = step.invoke(self.context_chain[-1], pipeline_context)
             self.context_chain.append(out_context)
             if pipeline_context.is_cancelled:
                 return self.context_chain[-1]
@@ -258,7 +258,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         if self.pipeline_context.log_handler:
             self.log.addHandler(self.pipeline_context.log_handler)
 
-    def __call__(
+    def invoke(
         self, context: StepContext[PipeIn], pipeline_context: PipelineContext
     ) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         self._initialize(pipeline_context)

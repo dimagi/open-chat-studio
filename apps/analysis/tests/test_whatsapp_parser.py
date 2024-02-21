@@ -32,7 +32,7 @@ def test_whatsapp_parser_parses_valid_log(valid_whatsapp_log):
     params = WhatsappParserParams(
         remove_deleted_messages=False, remove_system_messages=False, remove_media_omitted_messages=False
     )
-    result = WhatsappParser()(StepContext(valid_whatsapp_log), PipelineContext(params=params.model_dump()))
+    result = WhatsappParser().invoke(StepContext(valid_whatsapp_log), PipelineContext(params=params.model_dump()))
     df = result.data
     assert len(df) == 5
     _check_message(df, "2021-01-01 00:00", "system", "System Message")

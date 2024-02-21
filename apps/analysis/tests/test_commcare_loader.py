@@ -89,4 +89,4 @@ def test_commcare_app_loader(get_auth_service, httpx_mock):
         json={"app": "data"},
     )
 
-    assert loader(StepContext.initial(), PipelineContext()).data == '{"app": "data"}'
+    assert loader.invoke(StepContext.initial(), PipelineContext()).data == '{"app": "data"}'

@@ -25,7 +25,7 @@ def test_logging_no_duplicates():
 
 def _run_step(logs):
     step = StrInt(params=NoParams())
-    step(StepContext.initial("1"), PipelineContext(log_handler=FakeHandler(logs)))
+    step.invoke(StepContext.initial("1"), PipelineContext(log_handler=FakeHandler(logs)))
 
 
 def check_logs(logs):

@@ -190,7 +190,7 @@ def test_timeseries_filter_with_valid_params(timeseries_data):
         minimum_data_points=1,
         calendar_time=True,
     )
-    result = TimeseriesFilter(params=params)(StepContext(timeseries_data), PipelineContext())
+    result = TimeseriesFilter(params=params).invoke(StepContext(timeseries_data), PipelineContext())
     assert len(result.data) == 7
     assert result.data["value"].tolist() == list(range(1, 8))
 
