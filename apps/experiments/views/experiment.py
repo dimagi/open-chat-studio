@@ -805,3 +805,20 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
             ],
         },
     )
+
+
+@experiment_session_view()
+def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
+    session = request.experiment_session
+    experiment = request.experiment
+    query = ExperimentSession.objects.exclude(public_id=session_id).filter(experiment=experiment)
+    if request.GET.get("dir", "next") == "next":
+        next_session = query.filter(created_at__lte=session.created_at).first()
+    else:
+        next_session = query.filter(created_at__gte=session.created_at).last()
+
+    if not next_session:
+        messages.warning(request, "No more sessions to paginate")
+        return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
+
+    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.public_id)

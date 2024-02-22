@@ -104,6 +104,11 @@ urlpatterns = [
         views.experiment_session_details_view,
         name="experiment_session_view",
     ),
+    path(
+        "e/<slug:experiment_id>/s/<slug:session_id>/paginate/",
+        views.experiment_session_pagination_view,
+        name="experiment_session_pagination_view",
+    ),
     # public link
     path("e/<slug:experiment_id>/start/", views.start_experiment, name="start_experiment"),
 ]

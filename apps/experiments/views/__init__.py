@@ -21,6 +21,7 @@ from .experiment import (  # noqa: F401
     experiment_review,
     experiment_session_details_view,
     experiment_session_message,
+    experiment_session_pagination_view,
     experiments_home,
     get_message_response,
     poll_messages,
