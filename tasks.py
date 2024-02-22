@@ -1,9 +1,13 @@
+import textwrap
 import time
+from distutils.version import LooseVersion
 from pathlib import Path
 
 import requests
 from invoke import Context, Exit, call, task
 from termcolor import cprint
+
+MIN_NODE_VERSION = "18"
 
 
 @task
@@ -53,30 +57,59 @@ def schema(c: Context):
 
 
 @task
-def setup_dev_env(c: Context):
+def setup_dev_env(c: Context, step=False):
     cprint("Setting up dev environment", "green")
-    docker(c, command="up")
+    if not step and not _confirm(
+        textwrap.dedent(
+            """
+    This will start docker, run DB migrations, build JS & CSS resources, and install pre-commit hooks.
+    Do you want to continue?
+    """
+        ),
+        _exit=False,
+    ):
+        cprint("You can also run this one step at a time with the '-s' or '--step' flag", "yellow")
+        raise Exit(None, -1)
 
-    cprint("\nInstalling pre-commit hooks", "green")
-    c.run("pre-commit install --install-hooks", echo=True)
+    cprint("\nStarting docker", "green")
+    if not step or _confirm("\tOK?", _exit=False):
+        docker(c, command="up")
+
+    _run_with_confirm(c, "Install pre-commit hooks", "pre-commit install --install-hooks", step)
 
     if not Path(".env").exists():
         cprint("\nCreating .env file", "green")
-        c.run("cp .env.example .env", echo=True)
+        _run_with_confirm(c, "Create .env file", "cp .env.example .env", step)
     else:
-        print("\nSkipping .env file creation, file already exists")
+        cprint("\nSkipping .env file creation, file already exists", "yellow")
 
-    cprint("\nRunning DB migrations", "green")
-    c.run("python manage.py migrate", echo=True)
+    _run_with_confirm(c, "Run DB migrations", "python manage.py migrate", step)
 
-    cprint("\nInstalling npm packages", "green")
-    c.run("npm install", echo=True)
+    cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
+    if not _check_node_version(c):
+        cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
+        cprint("\nSkipping font end build. Run 'inv npm --install' once you have upgraded node.", "yellow")
+    else:
+        cprint("\nInstalling npm packages and building front end resources", "green")
+        if not step or _confirm("\tOK?", _exit=False):
+            npm(c, install=True)
 
-    cprint("\nBuilding JS & CSS resources", "green")
-    c.run("npm run dev", echo=True)
+    _run_with_confirm(c, "Create superuser", "python manage.py createsuperuser", step)
 
-    cprint("\nCreating superuser", "green")
-    c.run("python manage.py createsuperuser", echo=True, pty=True)
+
+def _run_with_confirm(c: Context, message, command, step=False):
+    cprint(f"\n{message}", "green")
+    if not step or _confirm("\tOK?", _exit=False):
+        c.run(command, echo=True, pty=True)
+
+
+def _check_node_version(c: Context):
+    res = c.run("node -v", echo=True)
+    version = res.stdout.strip()
+    if version.startswith("v"):
+        version = version[1:]
+    ver = LooseVersion(version)
+    return ver >= LooseVersion(MIN_NODE_VERSION)
 
 
 @task
@@ -121,6 +154,16 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False):
 
 
 @task
-def npm(c: Context, watch=False):
+def npm(c: Context, watch=False, install=False):
+    if install:
+        c.run("npm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
     c.run(f"npm run {cmd}", echo=True, pty=True)
+
+
+def _confirm(message, _exit=True, exit_message="Done"):
+    response = input(f"{message} (y/n): ")
+    confirmed = response.lower() == "y"
+    if not confirmed and _exit:
+        raise Exit(exit_message, -1)
+    return confirmed
