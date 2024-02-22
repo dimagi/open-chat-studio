@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 from apps.analysis.core import PipelineContext, StepContext
-from apps.analysis.log import Logger, StdoutLogStream
 from apps.analysis.steps.filters import DurationUnit, TimeseriesFilter, TimeseriesFilterParams
 
 
@@ -181,14 +180,7 @@ def timeseries_data():
     return data
 
 
-@pytest.fixture()
-def timeseries_filter():
-    step = TimeseriesFilter()
-    step.initialize(PipelineContext(log=Logger(StdoutLogStream())))
-    return step
-
-
-def test_timeseries_filter_with_valid_params(timeseries_filter, timeseries_data):
+def test_timeseries_filter_with_valid_params(timeseries_data):
     params = TimeseriesFilterParams(
         duration_unit=DurationUnit.days,
         duration_value=7,
@@ -198,12 +190,12 @@ def test_timeseries_filter_with_valid_params(timeseries_filter, timeseries_data)
         minimum_data_points=1,
         calendar_time=True,
     )
-    result = timeseries_filter.run(params, StepContext(timeseries_data))
+    result = TimeseriesFilter(params=params).invoke(StepContext(timeseries_data), PipelineContext())
     assert len(result.data) == 7
     assert result.data["value"].tolist() == list(range(1, 8))
 
 
-def test_timeseries_filter_with_empty_data(timeseries_filter):
+def test_timeseries_filter_with_empty_data():
     params = TimeseriesFilterParams(
         duration_unit=DurationUnit.days,
         duration_value=7,
@@ -212,11 +204,11 @@ def test_timeseries_filter_with_empty_data(timeseries_filter):
         minimum_data_points=0,
     )
     empty_data = pd.DataFrame()
-    result = timeseries_filter.run(params, StepContext(empty_data))
+    result = TimeseriesFilter().run(params, StepContext(empty_data))
     assert len(result.data) == 0
 
 
-def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data):
+def test_timeseries_filter_with_future_dates(timeseries_data):
     params = TimeseriesFilterParams(
         duration_unit=DurationUnit.days,
         duration_value=7,
@@ -225,7 +217,7 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
         anchor_mode="absolute",
         minimum_data_points=0,
     )
-    result = timeseries_filter.run(params, StepContext(timeseries_data))
+    result = TimeseriesFilter().run(params, StepContext(timeseries_data))
     assert len(result.data) == 0
 
 
@@ -237,7 +229,7 @@ def test_timeseries_filter_with_future_dates(timeseries_filter, timeseries_data)
         ("last", "relative_end", [29, 30]),
     ],
 )
-def test_timeseries_filter_anchor_mode(anchor_type, anchor_mode, expected, timeseries_filter, timeseries_data):
+def test_timeseries_filter_anchor_mode(anchor_type, anchor_mode, expected, timeseries_data):
     params = TimeseriesFilterParams(
         duration_unit=DurationUnit.days,
         duration_value=2,
@@ -246,7 +238,7 @@ def test_timeseries_filter_anchor_mode(anchor_type, anchor_mode, expected, times
         anchor_point=datetime.fromisoformat("2021-01-02"),
         minimum_data_points=0,
     )
-    result = timeseries_filter.run(params, StepContext(timeseries_data))
+    result = TimeseriesFilter().run(params, StepContext(timeseries_data))
     assert len(result.data) == 2
     assert result.data["value"].tolist() == expected
 

@@ -44,16 +44,16 @@ def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
 @pytest.mark.parametrize(
     ("params", "context", "expected"),
     [
-        (None, {"factor": 2}, Divide.param_schema(factor=2)),
-        (Divide.param_schema(say="hi"), {"factor": 2}, Divide.param_schema(factor=2, say="hi")),
-        (None, {"factor": 2, "say": "hi", "Divide": {"factor": 3}}, Divide.param_schema(factor=3, say="hi")),
-        (Divide.param_schema(factor=1), {"factor": 2, "Divide": {"factor": 3}}, Divide.param_schema(factor=1)),
+        (None, {"factor": 2}, FactorSay(factor=2)),
+        (FactorSay(say="hi"), {"factor": 2}, FactorSay(factor=2, say="hi")),
+        (None, {"factor": 2, "say": "hi", "Divide": {"factor": 3}}, FactorSay(factor=3, say="hi")),
+        (FactorSay(factor=1), {"factor": 2, "Divide": {"factor": 3}}, FactorSay(factor=1)),
     ],
 )
 def test_params(params, context, expected):
     step = Divide(params)
-    step.initialize(PipelineContext(params=context))
-    assert step._params == expected
+    step.invoke(StepContext.initial(2), PipelineContext(params=context))
+    assert step.params == expected
 
 
 @pytest.mark.parametrize(

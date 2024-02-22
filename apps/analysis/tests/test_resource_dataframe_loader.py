@@ -4,16 +4,8 @@ import pandas as pd
 import pytest
 from django.core.files.base import ContentFile
 
-from apps.analysis.core import PipelineContext
 from apps.analysis.models import Resource
 from apps.analysis.steps.loaders import ResourceDataframeLoader, ResourceLoaderParams, ResourceType
-
-
-@pytest.fixture()
-def resource_dataframe_loader():
-    step = ResourceDataframeLoader()
-    step.initialize(PipelineContext())
-    return step
 
 
 def make_resource(resource_type, content):
@@ -44,16 +36,16 @@ def get_params(resource):
         (ResourceType.TEXT, "This is some text\nAnd some more text", "line\nThis is some text\nAnd some more text\n"),
     ],
 )
-def test_resource_dataframe_loader(resource_type, raw_data, expected, resource_dataframe_loader):
+def test_resource_dataframe_loader(resource_type, raw_data, expected):
     resource = make_resource(resource_type, raw_data)
     params = get_params(resource)
-    result = resource_dataframe_loader.load(params)
+    result = ResourceDataframeLoader().load(params)
     assert isinstance(result.data, pd.DataFrame)
     assert result.data.to_csv(index=False) == expected
 
 
-def test_resource_dataframe_loader_raises_error_with_invalid_resource_type(resource_dataframe_loader):
+def test_resource_dataframe_loader_raises_error_with_invalid_resource_type():
     resource = make_resource("invalid", "")
     params = get_params(resource)
     with pytest.raises(ValueError, match="Unsupported resource type"):
-        resource_dataframe_loader.load(params)
+        ResourceDataframeLoader().load(params)

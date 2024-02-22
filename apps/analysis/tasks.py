@@ -1,5 +1,6 @@
 import logging
 from contextlib import contextmanager
+from datetime import datetime
 
 from celery import chord, shared_task
 from celery import group as celery_group
@@ -7,7 +8,6 @@ from django.utils import timezone
 
 from apps.analysis.core import PipelineContext, StepContext
 from apps.analysis.exceptions import StepError
-from apps.analysis.log import LogEntry, Logger, LogStream
 from apps.analysis.models import AnalysisRun, RunGroup, RunStatus
 from apps.analysis.pipelines import get_data_pipeline, get_source_pipeline
 from apps.analysis.serializers import get_serializer_by_type
@@ -55,25 +55,33 @@ class RunStatusContext:
 @contextmanager
 def run_context(run, bubble_errors=True):
     """Context manager to create the pipeline context and manage run status."""
-    log_stream = RunLogStream(run)
+    log_handler = RunLogHandler(run)
     params = run.group.params
     params["llm_model"] = run.group.analysis.llm_model
-    pipeline_context = PipelineContext(run, log=Logger(log_stream), params=params, create_resources=True)
+    pipeline_context = PipelineContext(run, log_handler=log_handler, params=params, create_resources=True)
 
     with RunStatusContext(run, bubble_errors=bubble_errors):
         yield pipeline_context
 
 
-class RunLogStream(LogStream):
+class RunLogHandler(logging.Handler):
     def __init__(self, run):
+        super().__init__(level=logging.DEBUG)
         self.run = run
         self.logs = []
 
-    def write(self, entry: LogEntry):
-        self.logs.append(entry.to_json())
-        self.flush()
+    def emit(self, record: logging.LogRecord):
+        self.logs.append(
+            {
+                "level": record.levelname,
+                "message": record.getMessage(),
+                "logger": record.name,
+                "timestamp": datetime.utcnow().isoformat(timespec="milliseconds"),
+            }
+        )
+        self.flush_db()
 
-    def flush(self):
+    def flush_db(self):
         self.run.log = {"entries": self.logs}
         self.run.save(update_fields=["log"])
 
@@ -171,11 +179,13 @@ def run_pipeline(
         return result
 
 
-def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext):
+def process_pipeline_output(pipeline_context: PipelineContext, result: StepContext | list[StepContext]):
     run = pipeline_context.run
     if isinstance(result, list):
         run.output_summary = f"{len(result)} groups created"
         for res in result:
             run.output_summary += f"\n  - {res.name}"
+            res.get_or_create_resource(pipeline_context)
     else:
+        result.get_or_create_resource(pipeline_context)
         run.output_summary = get_serializer_by_type(result.data).get_summary(result.data)

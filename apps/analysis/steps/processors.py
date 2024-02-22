@@ -62,7 +62,7 @@ class LlmCompletionStepParams(PromptParams):
 class LlmCompletionStep(core.BaseStep[Any, str]):
     """Pass the incoming data to the LLM in the prompt and return the result."""
 
-    param_schema = LlmCompletionStepParams
+    params = LlmCompletionStepParams()
     input_type = Any
     output_type = str
 
@@ -103,7 +103,7 @@ class AssistantOutput(pydantic.BaseModel):
 class AssistantStep(core.BaseStep[Any, str]):
     """Experimental assistant step."""
 
-    param_schema = AssistantParams
+    params = AssistantParams()
     input_type = Any
     output_type = str
     client = None
@@ -246,7 +246,7 @@ class AssistantStep(core.BaseStep[Any, str]):
         metadata = ResourceMetadata(
             type="", format=resource_type, data_schema={}, openai_file_id=file.id, content_type=content_type
         )
-        return self.create_resource(content.read(), filename, force=True, serialize=False, metadata=metadata)
+        return self.create_resource(content.read(), filename, serialize=False, metadata=metadata)
 
 
 def get_resource_markdown_link(resource: Resource, link_text: str = None, image=False) -> str:

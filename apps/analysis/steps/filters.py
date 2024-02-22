@@ -109,7 +109,7 @@ class TimeseriesStep(BaseStep[pd.DataFrame, pd.DataFrame]):
 class TimeseriesFilter(TimeseriesStep):
     """Filter timeseries data based on the date index to extract a time window."""
 
-    param_schema = TimeseriesFilterParams
+    params = TimeseriesFilterParams()
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 

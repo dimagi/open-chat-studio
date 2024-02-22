@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from abc import abstractmethod
 from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
@@ -10,7 +11,6 @@ from apps.service_providers.llm_service import LlmService
 from apps.teams.models import Team
 
 from .exceptions import StepError
-from .log import Logger
 from .models import AnalysisRun, Resource, ResourceMetadata
 from .serializers import create_resource_for_data, create_resource_for_raw_data, get_serializer_by_name
 
@@ -49,7 +49,7 @@ class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
     run: AnalysisRun = None
-    log: Logger = dataclasses.field(default_factory=Logger)
+    log_handler: logging.Handler = None
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
@@ -94,11 +94,8 @@ class Step(Protocol[PipeIn, PipeOut]):
     input_type: ClassVar
     output_type: ClassVar
 
-    def initialize(self, pipeline_context: PipelineContext, step_count: int, current_step_index: int):
-        ...
-
     @abstractmethod
-    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut]:
+    def invoke(self, context: StepContext[PipeIn], pipeline_context: PipelineContext) -> StepContext[PipeOut]:
         ...
 
 
@@ -133,12 +130,10 @@ class Pipeline:
 
     def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext | list[StepContext]:
         self.context_chain.append(initial_context)
-        step_count = len(self.steps)
-        for index, step in enumerate(self.steps):
+        for step in self.steps:
             # TODO: handle splitting the pipeline if step returns list
             assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
-            step.initialize(pipeline_context, step_count, index)
-            out_context = step(self.context_chain[-1])
+            out_context = step.invoke(self.context_chain[-1], pipeline_context)
             self.context_chain.append(out_context)
             if pipeline_context.is_cancelled:
                 return self.context_chain[-1]
@@ -239,19 +234,14 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     input_type: PipeIn
     output_type: PipeOut
-    param_schema: type[Params] = NoParams
+    params: Params = NoParams()
+    pipeline_context: PipelineContext | None = None
 
     def __init__(self, params: Params = None):
-        self._params = params or self.param_schema()
-        self.pipeline_context: PipelineContext | None = None
-        self.step_count = -1
-        self.current_step_index = -1
-        self.is_last = False
-        self.resources = []
-
-    @property
-    def log(self):
-        return self.pipeline_context.log
+        self.params = params or self.params
+        self.log = logging.getLogger(self.name)
+        self.log.propagate = False
+        self.log.setLevel(logging.DEBUG)
 
     @property
     def name(self):
@@ -261,31 +251,31 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def is_cancelled(self):
         return self.pipeline_context.is_cancelled
 
-    def initialize(self, pipeline_context: PipelineContext, step_count: int = 1, current_step_index: int = 0):
+    def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
-        self._params = self._params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
-        self.step_count = step_count
-        self.current_step_index = current_step_index
-        self.is_last = current_step_index == step_count - 1
+        self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        if self.pipeline_context.log_handler:
+            self.log.addHandler(self.pipeline_context.log_handler)
 
-    def __call__(self, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
+    def invoke(
+        self, context: StepContext[PipeIn], pipeline_context: PipelineContext
+    ) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
+        self._initialize(pipeline_context)
         self.log.info(f"Running step {self.name}")
         try:
-            with self.log(self.name):
-                self._params.check()
-                self.preflight_check(context)
+            self.params.check()
+            self.preflight_check(context)
 
-                self.log.debug(f"Params: {self._params}")
-                result = self.run(self._params, context)
-                for res in [result] if isinstance(result, StepContext) else result:
-                    if not res.name:
-                        res.name = self.name
-                    if self.is_last and not self.is_cancelled:
-                        # always create resources for last step
-                        res.get_or_create_resource(self.pipeline_context)
-                return result
+            self.log.debug(f"Params: {self.params}")
+            result = self.run(self.params, context)
+            for res in [result] if isinstance(result, StepContext) else result:
+                if not res.name:
+                    res.name = self.name
+            return result
         finally:
             self.log.info(f"Step {self.name} complete")
+            if self.pipeline_context.log_handler:
+                self.log.removeHandler(self.pipeline_context.log_handler)
 
     def run(self, params: Params, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""
@@ -296,15 +286,11 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         pass
 
     def create_resource(
-        self, data: Any, name: str, force=False, serialize=True, metadata: ResourceMetadata = None
+        self, data: Any, name: str, serialize=True, metadata: ResourceMetadata = None
     ) -> Resource | None:
         """Create a Resource for the data and add it to the step.
         This will only create resources if the pipeline context is configured to do so and this step is the last
         step in the pipeline (or force=True).
         """
 
-        if force or self.is_last:
-            resource = self.pipeline_context.create_resource(data, name, serialize, metadata)
-            if resource:
-                self.resources.append(resource)
-            return resource
+        return self.pipeline_context.create_resource(data, name, serialize, metadata)

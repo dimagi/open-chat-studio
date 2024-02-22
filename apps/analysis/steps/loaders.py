@@ -38,7 +38,7 @@ class ResourceLoaderParams(Params):
 
 
 class ResourceTextLoader(BaseLoader[str]):
-    param_schema = ResourceLoaderParams
+    params = ResourceLoaderParams()
     output_type = str
 
     def load(self, params: ResourceLoaderParams) -> StepContext[str]:
@@ -50,7 +50,7 @@ class ResourceTextLoader(BaseLoader[str]):
 
 
 class ResourceDataframeLoader(BaseLoader[pd.DataFrame]):
-    param_schema = ResourceLoaderParams
+    params = ResourceLoaderParams()
     output_type = pd.DataFrame
 
     def load(self, params: ResourceLoaderParams) -> StepContext[pd.DataFrame]:
@@ -141,7 +141,7 @@ def _get_auth_service(auth_provider_id: int) -> AuthService:
 class CommCareAppLoader(BaseLoader[str]):
     """Load data from a CommCare app API."""
 
-    param_schema = CommCareAppLoaderParams
+    params = CommCareAppLoaderParams()
     output_type = str
 
     def load(self, params: CommCareAppLoaderParams) -> StepContext[str]:

@@ -42,7 +42,7 @@ class TimeseriesSplitterParams(Params):
 class TimeseriesSplitter(BaseStep[pd.DataFrame, pd.DataFrame]):
     """Splits input data by a time group to produce multiple output dataframes."""
 
-    param_schema = TimeseriesSplitterParams
+    params = TimeseriesSplitterParams()
     input_type = pd.DataFrame
     output_type = pd.DataFrame
 

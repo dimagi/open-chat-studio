@@ -13,5 +13,4 @@ from .demo_steps import Divide, FactorSay, Multiply
     ],
 )
 def test_call(step: Step, context, output):
-    step.initialize(PipelineContext())
-    assert step(context).data == output
+    assert step.invoke(context, PipelineContext()).data == output

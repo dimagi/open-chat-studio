@@ -102,12 +102,12 @@ def get_data_pipeline(name: str) -> Pipeline:
 
 
 def get_static_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
-    forms_by_step = {step.name: step.param_schema().get_static_config_form_class() for step in pipeline.steps}
+    forms_by_step = {step.name: step.params.get_static_config_form_class() for step in pipeline.steps}
     return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
 
 
 def get_dynamic_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
-    forms_by_step = {step.name: step.param_schema().get_dynamic_config_form_class() for step in pipeline.steps}
+    forms_by_step = {step.name: step.params.get_dynamic_config_form_class() for step in pipeline.steps}
     return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
 
 
