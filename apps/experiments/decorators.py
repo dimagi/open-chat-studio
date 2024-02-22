@@ -79,7 +79,9 @@ def verify_session_access_cookie(view):
 
     @wraps(view)
     def _inner(request, *args, **kwargs):
-        if request.user.is_authenticated and request.user.has_perm("chat.view_chat"):
+        if request.user.is_authenticated and (
+            request.experiment_session.user_id == request.user.id or request.user.has_perm("chat.view_chat")
+        ):
             return view(request, *args, **kwargs)
 
         try:

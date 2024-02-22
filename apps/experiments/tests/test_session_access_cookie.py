@@ -18,6 +18,66 @@ def session():
 
 @pytest.mark.django_db()
 def test_session_flow_with_access_cookie(client, session):
+    _start_session(client, session)
+
+
+@pytest.mark.django_db()
+def test_access_denied_with_no_cookie(client, session):
+    next_url = _start_session(client, session)
+
+    # making a request without the chat_session_access cookie should 404
+    del client.cookies[CHAT_SESSION_ACCESS_COOKIE]
+    response = client.get(next_url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_access_permitted_for_authenticated_user(client, session):
+    next_url = _start_session(client, session)
+
+    # unless the request is for an authenticated user with the view_chat permission
+    client.login(username=session.experiment.owner.username, password="password")
+    session.experiment.owner.user_permissions.add(Permission.objects.get(codename="view_chat"))
+    response = client.get(next_url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_access_permitted_for_session_user(client, session):
+    next_url = _start_session(client, session)
+    session.user = session.experiment.owner
+    session.save(update_fields=["user"])
+    client.login(username=session.experiment.owner.username, password="password")
+    response = client.get(next_url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_access_cookie_not_set_on_session_start_get(client, session):
+    response = client.get(
+        reverse(
+            "experiments:start_experiment_session",
+            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+        ),
+    )
+    assert response.status_code == 200
+    assert CHAT_SESSION_ACCESS_COOKIE not in client.cookies
+
+
+@pytest.mark.django_db()
+def test_access_cookie_not_set_on_session_start_with_inavalid_form(client, session):
+    response = client.post(
+        reverse(
+            "experiments:start_experiment_session",
+            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+        ),
+        data={},
+    )
+    assert response.status_code == 200
+    assert CHAT_SESSION_ACCESS_COOKIE not in client.cookies
+
+
+def _start_session(client, session):
     response = client.post(
         reverse(
             "experiments:start_experiment_session",
@@ -46,39 +106,4 @@ def test_session_flow_with_access_cookie(client, session):
 
     response = client.get(next_url)
     assert response.status_code == 200
-
-    # making a request without the chat_session_access cookie should 404
-    del client.cookies[CHAT_SESSION_ACCESS_COOKIE]
-    response = client.get(next_url)
-    assert response.status_code == 404
-
-    # unless the request is for an authenticated user with the view_chat permission
-    client.login(username=session.experiment.owner.username, password="password")
-    session.experiment.owner.user_permissions.add(Permission.objects.get(codename="view_chat"))
-    response = client.get(next_url)
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
-def test_access_cookie_not_set_on_session_start_get(client, session):
-    response = client.get(
-        reverse(
-            "experiments:start_experiment_session",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
-        ),
-    )
-    assert response.status_code == 200
-    assert CHAT_SESSION_ACCESS_COOKIE not in client.cookies
-
-
-@pytest.mark.django_db()
-def test_access_cookie_not_set_on_session_start_with_inavlid_form(client, session):
-    response = client.post(
-        reverse(
-            "experiments:start_experiment_session",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
-        ),
-        data={},
-    )
-    assert response.status_code == 200
-    assert CHAT_SESSION_ACCESS_COOKIE not in client.cookies
+    return next_url
