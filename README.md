@@ -56,6 +56,13 @@ npm install
 npm run dev
 ```
 
+**Note**
+
+You should be using node >= 18.0.0. If you have [nvm](https://github.com/nvm-sh/nvm/blob/master/README.md) 
+installed, you can run `nvm use` to switch to the correct version.
+
+To check which version you are using use `node --version`.
+
 #### Create a superuser
 
 ```bash
