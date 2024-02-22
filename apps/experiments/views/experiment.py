@@ -785,7 +785,7 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 
 
 @experiment_session_view()
-def experiment_session_view(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
     return TemplateResponse(

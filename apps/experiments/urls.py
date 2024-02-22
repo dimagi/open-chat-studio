@@ -101,7 +101,7 @@ urlpatterns = [
     ),
     path(
         "e/<slug:experiment_id>/s/<slug:session_id>/view/",
-        views.experiment_session_view,
+        views.experiment_session_details_view,
         name="experiment_session_view",
     ),
     # public link
