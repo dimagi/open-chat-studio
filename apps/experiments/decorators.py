@@ -91,8 +91,7 @@ def verify_session_access_cookie(view):
         except (signing.BadSignature, KeyError):
             raise Http404()
 
-        access_data = access_value
-        if not _validate_access_cookie_data(request.experiment_session, access_data):
+        if not _validate_access_cookie_data(request.experiment_session, access_value):
             raise Http404()
 
         return view(request, *args, **kwargs)
