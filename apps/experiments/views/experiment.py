@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
@@ -784,13 +785,40 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 
 
 @experiment_session_view()
-def experiment_session_view(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
+    session = request.experiment_session
+    experiment = request.experiment
     return TemplateResponse(
         request,
         "experiments/experiment_session_view.html",
         {
-            "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
+            "experiment": experiment,
+            "experiment_session": session,
             "active_tab": "experiments",
+            "details": [
+                (gettext("Participant"), session.get_participant_display),
+                (gettext("Status"), session.get_status_display),
+                (gettext("Started"), session.consent_date or session.created_at),
+                (gettext("Ended"), session.ended_at or "-"),
+                (gettext("Experiment"), experiment.name),
+                (gettext("Platform"), session.get_platform_name),
+            ],
         },
     )
+
+
+@experiment_session_view()
+def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
+    session = request.experiment_session
+    experiment = request.experiment
+    query = ExperimentSession.objects.exclude(public_id=session_id).filter(experiment=experiment)
+    if request.GET.get("dir", "next") == "next":
+        next_session = query.filter(created_at__lte=session.created_at).first()
+    else:
+        next_session = query.filter(created_at__gte=session.created_at).last()
+
+    if not next_session:
+        messages.warning(request, "No more sessions to paginate")
+        return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
+
+    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.public_id)

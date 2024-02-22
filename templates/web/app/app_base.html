@@ -8,11 +8,13 @@
   {% endblock %}
   <section class="section">
     <div class="container flex flex-row">
-      <div class="w-64 hidden lg:flex">
-        {% block sidebar-nav %}
-          {% include "web/components/app_nav.html" %}
-        {% endblock %}
-      </div>
+      {% if request.user.is_authenticated %}
+        <div class="w-64 hidden lg:flex">
+          {% block sidebar-nav %}
+            {% include "web/components/app_nav.html" %}
+          {% endblock %}
+        </div>
+      {% endif %}
       <div class="w-full">
         {% block breadcrumbs %}
         {% endblock breadcrumbs %}

@@ -430,7 +430,7 @@ class ExperimentSession(BaseTeamModel):
     )
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["-created_at"]
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
