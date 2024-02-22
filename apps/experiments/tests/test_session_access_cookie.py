@@ -1,8 +1,9 @@
 import pytest
 from django.contrib.auth.models import Permission
+from django.core import signing
 from django.urls import reverse
 
-from apps.experiments.decorators import CHAT_SESSION_ACCESS_COOKIE
+from apps.experiments.decorators import CHAT_SESSION_ACCESS_COOKIE, CHAT_SESSION_ACCESS_SALT
 from apps.experiments.models import Participant
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -25,8 +26,24 @@ def test_session_flow_with_access_cookie(client, session):
 def test_access_denied_with_no_cookie(client, session):
     next_url = _start_session(client, session)
 
-    # making a request without the chat_session_access cookie should 404
     del client.cookies[CHAT_SESSION_ACCESS_COOKIE]
+    response = client.get(next_url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_access_denied_with_bad_cookie(client, session):
+    next_url = _start_session(client, session)
+
+    value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(
+        {
+            "experiment_id": "abc",
+            "session_id": "def",
+            "participant_id": 1,
+            "user_id": 2,
+        }
+    )
+    client.cookies[CHAT_SESSION_ACCESS_COOKIE] = value
     response = client.get(next_url)
     assert response.status_code == 404
 
