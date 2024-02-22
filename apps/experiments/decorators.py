@@ -1,11 +1,18 @@
 from functools import wraps
 
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.core import signing
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+
+MAX_AGE = 180 * 24 * 60 * 60  # 6 months
+
+CHAT_SESSION_ACCESS_SALT = "ocs.chat_session_access.salt"
+
+CHAT_SESSION_ACCESS_COOKIE = "chat_session_access"
 
 
 def experiment_session_view(allowed_states=None):
@@ -28,6 +35,81 @@ def experiment_session_view(allowed_states=None):
         return decorated_view
 
     return decorator
+
+
+def set_session_access_cookie(view):
+    """Decorator for view functions that should set the session access cookie.
+    This decorator must be applied on a view that is also decorated with the
+    `experiment_session_view` decorator (though the order doesn't matter):
+
+    @experiment_session_view(...)
+    @set_session_access_cookie
+    def my_view(request, team_slug, experiment_id, session_id):
+        ...
+    """
+
+    @wraps(view)
+    def _inner(request, *args, **kwargs):
+        response = view(request, *args, **kwargs)
+        experiment_session = request.experiment_session
+        value = _get_access_cookie_data(experiment_session)
+        value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(value)
+        response.set_cookie(
+            CHAT_SESSION_ACCESS_COOKIE,
+            value,
+            max_age=MAX_AGE,
+            secure=True,
+            httponly=True,
+            samesite="Strict",
+        )
+        return response
+
+    return _inner
+
+
+def verify_session_access_cookie(view):
+    """View decorator for views that provide public access to an experiment session.
+    This decorator must be applied before the `experiment_session_view` decorator:
+
+    @experiment_session_view(...)
+    @verify_session_access_cookie
+    def my_view(request, team_slug, experiment_id, session_id):
+        ...
+    """
+
+    @wraps(view)
+    def _inner(request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.has_perm("chat.view_chat"):
+            return view(request, *args, **kwargs)
+
+        try:
+            access_value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(
+                request.COOKIES[CHAT_SESSION_ACCESS_COOKIE], max_age=MAX_AGE
+            )
+        except (signing.BadSignature, KeyError):
+            raise Http404()
+
+        # access_data = json.loads(access_value)
+        access_data = access_value
+        if not _validate_access_cookie_data(request.experiment_session, access_data):
+            raise Http404()
+
+        return view(request, *args, **kwargs)
+
+    return _inner
+
+
+def _get_access_cookie_data(experiment_session):
+    return {
+        "experiment_id": str(experiment_session.experiment.public_id),
+        "session_id": str(experiment_session.public_id),
+        "participant_id": experiment_session.participant_id,
+        "user_id": experiment_session.user_id,
+    }
+
+
+def _validate_access_cookie_data(experiment_session, access_data):
+    return _get_access_cookie_data(experiment_session) == access_data
 
 
 def _redirect_for_state(request, experiment_session, team_slug):
