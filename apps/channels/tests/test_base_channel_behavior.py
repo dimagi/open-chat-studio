@@ -60,10 +60,9 @@ class TelegramMessageHandlerTest(TestCase):
         message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
 
-        experiment_session = ExperimentSession.objects.filter(
+        experiment_session = ExperimentSession.objects.get(
             experiment=self.experiment, external_chat_id=self.telegram_chat_id
-        ).first()
-        assert experiment_session is not None
+        )
         assert experiment_session.experiment_channel is not None
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
@@ -76,7 +75,7 @@ class TelegramMessageHandlerTest(TestCase):
         message_handler.new_user_message(message)
 
         # Let's remove the `experiment_channel` from experiment_session
-        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
+        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).get()
         experiment_session.experiment_channel = None
         experiment_session.save()
 
@@ -84,7 +83,7 @@ class TelegramMessageHandlerTest(TestCase):
         message_handler = self._get_telegram_channel(self.experiment_channel)
         message = telegram_messages.text_message(chat_id=self.telegram_chat_id)
         message_handler.new_user_message(message)
-        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).first()
+        experiment_session = ExperimentSession.objects.filter(external_chat_id=self.telegram_chat_id).get()
         assert experiment_session.experiment_channel is not None
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
@@ -154,7 +153,7 @@ class TelegramMessageHandlerTest(TestCase):
             chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
         )
         message_handler.new_user_message(reset_message)
-        sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
+        sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).order_by("created_at").all()
         assert len(sessions) == 2
         assert sessions[0].ended_at is not None
         assert sessions[1].ended_at is None

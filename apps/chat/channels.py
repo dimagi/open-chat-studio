@@ -363,10 +363,14 @@ class ChannelBase:
             # so we don't create channel_sessions for them.
             return
 
-        self.experiment_session = ExperimentSession.objects.filter(
-            experiment=self.experiment,
-            external_chat_id=str(self.chat_id),
-        ).last()
+        self.experiment_session = (
+            ExperimentSession.objects.filter(
+                experiment=self.experiment,
+                external_chat_id=str(self.chat_id),
+            )
+            .order_by("-created_at")
+            .first()
+        )
 
         if not self.experiment_session:
             self._create_new_experiment_session()
