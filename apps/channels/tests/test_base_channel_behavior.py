@@ -5,12 +5,13 @@ intended. It utilizes the Telegram channel subclass to serve as a testing framew
 
 from unittest.mock import Mock, patch
 
+import pytest
 from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus, VoiceResponseBehaviours
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -276,3 +277,50 @@ def test_unsupported_message_type_triggers_bot_response(
     channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
     assert channel.experiment_session is not None
     assert send_text_to_user.call_args[0][0] == bot_response
+
+
+@pytest.fixture()
+@patch("apps.channels.models._set_telegram_webhook")
+def telegram_channel(db):
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    experiment.conversational_consent_enabled = False
+    channel = ExperimentChannelFactory(experiment=experiment)
+    return TelegramChannel(experiment_channel=channel)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("voice_behaviour", "user_message", "voice_response_expected"),
+    [
+        (VoiceResponseBehaviours.ALWAYS, telegram_messages.text_message(), True),
+        (VoiceResponseBehaviours.ALWAYS, telegram_messages.audio_message(), True),
+        (VoiceResponseBehaviours.NEVER, telegram_messages.text_message(), False),
+        (VoiceResponseBehaviours.NEVER, telegram_messages.audio_message(), False),
+        (VoiceResponseBehaviours.RECIPROCAL, telegram_messages.text_message(), False),
+        (VoiceResponseBehaviours.RECIPROCAL, telegram_messages.audio_message(), True),
+    ],
+)
+@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.chat.channels.TelegramChannel._get_llm_response")
+def test_voice_response_behaviour(
+    get_llm_response,
+    _reply_voice_message,
+    send_text_to_user,
+    get_voice_transcript,
+    voice_behaviour,
+    user_message,
+    voice_response_expected,
+    telegram_channel,
+):
+    get_voice_transcript.return_value = "Hello bot. Please assist me"
+    get_llm_response.return_value = "Hello user. No"
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = voice_behaviour
+    experiment.save()
+
+    telegram_channel.new_user_message(user_message)
+
+    assert _reply_voice_message.called == voice_response_expected
+    assert send_text_to_user.called == (not voice_response_expected)

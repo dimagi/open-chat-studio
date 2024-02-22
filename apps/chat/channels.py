@@ -16,7 +16,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
@@ -278,17 +278,29 @@ class ChannelBase:
 
     def _handle_supported_message(self):
         response = None
-        if self.message_content_type == MESSAGE_TYPES.TEXT:
+        # TODO: Refactor into `get_user_query` and `handle_response` methods
+        message_is_text = self.message_content_type == MESSAGE_TYPES.TEXT
+        message_is_voice = self.message_content_type == MESSAGE_TYPES.VOICE
+
+        if message_is_text:
             response = self._get_llm_response(self.message_text)
-            self.send_text_to_user(response)
-        elif self.message_content_type == MESSAGE_TYPES.VOICE:
+        elif message_is_voice:
+            # TODO: Make this an else. By now unsupported messages will not get to this point
             # TODO: Error handling
             transcript = self._get_voice_transcript()
             response = self._get_llm_response(transcript)
-            if self.voice_replies_supported and self.experiment.synthetic_voice:
+
+        # Send response as text only when it cannot send voice
+        if not (self.voice_replies_supported and self.experiment.synthetic_voice):
+            self.send_text_to_user(response)
+        else:
+            if self.experiment.voice_response_behaviour == VoiceResponseBehaviours.ALWAYS:
                 self._reply_voice_message(response)
+            elif self.experiment.voice_response_behaviour == VoiceResponseBehaviours.RECIPROCAL:
+                self.send_text_to_user(response) if message_is_text else self._reply_voice_message(response)
             else:
                 self.send_text_to_user(response)
+
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
