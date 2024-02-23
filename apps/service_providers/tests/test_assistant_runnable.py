@@ -22,14 +22,11 @@ ASSISTANT_ID = "test_assistant_id"
 
 
 @pytest.fixture()
-def chat(team_with_users):
-    return Chat.objects.create(team=team_with_users)
-
-
-@pytest.fixture()
-def session(chat):
-    session = ExperimentSessionFactory(chat=chat)
-    local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
+def session():
+    chat = Chat()
+    chat.save = lambda: None
+    session = ExperimentSessionFactory.build(chat=chat)
+    local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
     return session
 
@@ -37,7 +34,6 @@ def session(chat):
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-@pytest.mark.django_db()
 def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_messages, session):
     chat = session.chat
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
@@ -50,7 +46,7 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    assistant = _get_assistant_mocked_history_recording(session)
     result = assistant.invoke("test")
     assert result.output == "ai response"
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
@@ -60,7 +56,6 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.threads.runs.Runs.create")
-@pytest.mark.django_db()
 def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_message, list_messages, session):
     thread_id = "test_thread_id"
     chat = session.chat
@@ -73,7 +68,7 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    assistant = _get_assistant_mocked_history_recording(session)
     result = assistant.invoke("test")
 
     assert create_message.call_args.args == (thread_id,)
@@ -84,7 +79,6 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-@pytest.mark.django_db()
 def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, list_messages, session):
     session.experiment.input_formatter = "foo {input} bar"
 
@@ -99,37 +93,32 @@ def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, l
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    assistant = _get_assistant_mocked_history_recording(session)
     result = assistant.invoke("test")
     assert result.output == "ai response"
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
 
 
-@pytest.mark.django_db()
 def test_assistant_runnable_raises_error(session):
     experiment = session.experiment
 
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
     with mock_experiment_llm(experiment, [error]):
-        assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
-
+        assistant = _get_assistant_mocked_history_recording(session)
         with pytest.raises(openai.BadRequestError):
             assistant.invoke("test")
 
 
-@pytest.mark.django_db()
 def test_assistant_runnable_handles_cancellation_status(session):
     experiment = session.experiment
 
     error = ValueError("unexpected status: cancelled")
     with mock_experiment_llm(experiment, [error]):
-        assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
-
+        assistant = _get_assistant_mocked_history_recording(session)
         with pytest.raises(GenerationCancelled):
             assistant.invoke("test")
 
 
-@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("responses", "exception", "output"),
     [
@@ -165,20 +154,25 @@ def test_assistant_runnable_handles_cancellation_status(session):
     ],
 )
 def test_assistant_runnable_cancels_existing_run(responses, exception, output, session):
-    experiment = session.experiment
-
     thread_id = "thread_abc"
     session.chat.set_metadata(session.chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
-    assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
+
+    assistant = _get_assistant_mocked_history_recording(session)
     cancel_run = mock.Mock()
     assistant.__dict__["_cancel_run"] = cancel_run
-    with mock_experiment_llm(experiment, responses):
+    with mock_experiment_llm(session.experiment, responses):
         with exception:
             result = assistant.invoke("test")
 
     if output:
         assert result.output == "normal response"
         cancel_run.assert_called_once()
+
+
+def _get_assistant_mocked_history_recording(session):
+    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
+    assistant.__dict__["_save_message_to_history"] = lambda *args, **kwargs: None
+    return assistant
 
 
 def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):
