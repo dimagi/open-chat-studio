@@ -36,11 +36,7 @@ def process_invitation(invitation: Invitation, user: CustomUser):
 
 
 def send_invitation_accepted(invitation):
-    recipients = list(
-        Membership.objects.filter(team=invitation.team, groups__permissions__codename="view_invitation").values_list(
-            "user__email", flat=True
-        )
-    )
+    recipients = get_admin_emails(invitation.team)
     project_name = settings.PROJECT_METADATA["NAME"]
     email_context = {
         "invitation": invitation,
@@ -53,6 +49,14 @@ def send_invitation_accepted(invitation):
         recipient_list=recipients,
         fail_silently=False,
         html_message=render_to_string("teams/email/invitation_accepted.html", context=email_context),
+    )
+
+
+def get_admin_emails(team):
+    return list(
+        Membership.objects.filter(team=team, groups__permissions__codename="view_invitation").values_list(
+            "user__email", flat=True
+        )
     )
 
 
