@@ -145,9 +145,13 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
         output = ""
         for token in chain.stream(input, config):
-            output += token
+            output += self._parse_output(token)
             if self._chat_is_cancelled():
                 return output
+        return output
+
+    def _parse_output(self, output):
+        return output
 
     def _chat_is_cancelled(self):
         if self.cancelled:
@@ -216,14 +220,8 @@ class SimpleExperimentRunnable(ExperimentRunnable):
 
 
 class AgentExperimentRunnable(ExperimentRunnable):
-    def _get_output_check_cancellation(self, input, config):
-        chain = self._build_chain()
-        output = ""
-        for step in chain.stream(input, config):
-            if "output" in step:
-                output += step["output"]
-            if self._chat_is_cancelled():
-                return output
+    def _parse_output(self, output):
+        return output.get("output", "")
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         assert self.experiment.tools_enabled
