@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 from collections.abc import Sequence
 
@@ -19,7 +20,7 @@ from apps.utils.langchain import FakeLlm, FakeLlmService
 
 @pytest.fixture()
 def fake_llm():
-    return FakeLlm(responses=["this is a test message"], token_counts=[30, 20, 10])
+    return FakeLlm(responses=["this is a test message"], token_counts=[30, 20, 10], sleep=1)
 
 
 @pytest.fixture()
@@ -79,6 +80,30 @@ def test_runnable(runnable, session, fake_llm):
         assert "tools" in fake_llm.get_calls()[0].kwargs
     else:
         assert "tools" not in fake_llm.get_calls()[0].kwargs
+
+
+async def run_runnable(runnable, session):
+    print("run_runnable")
+    task = asyncio.gather(
+        runnable.ainvoke("hi"),
+        update_chat(session.chat),
+    )
+    while not task.done():
+        await asyncio.sleep(0.1)
+    return task.result()
+
+
+async def update_chat(chat):
+    await asyncio.sleep(0.1)
+    chat.metadata = {"cancelled": True}
+    chat.asave()
+
+
+@pytest.mark.django_db(transaction=True, available_apps=["apps.experiments", "apps.chat", "apps.teams"])
+def test_async_runnable(session, fake_llm):
+    runnable = SimpleExperimentRunnable(experiment=session.experiment, session=session)
+    result = asyncio.run(run_runnable(runnable, session))
+    print(result)
 
 
 @pytest.mark.django_db()

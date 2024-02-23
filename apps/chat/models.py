@@ -34,9 +34,9 @@ class Chat(BaseTeamModel):
     def get_langchain_messages(self) -> list[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
-    def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
+    async def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
         messages = []
-        for message in self.messages.order_by("-created_at").iterator(100):
+        async for message in self.messages.order_by("-created_at").aiterator(100):
             messages.append(message.to_langchain_dict())
             if message.summary:
                 messages.append(message.summary_to_langchain_dict())

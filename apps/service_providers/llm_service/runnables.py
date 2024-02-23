@@ -1,3 +1,4 @@
+import asyncio
 from abc import ABC
 from datetime import datetime
 from operator import itemgetter
@@ -119,6 +120,44 @@ class ExperimentRunnable(BaseExperimentRunnable):
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
 
+    async def ainvoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
+        callback = self.callback_handler
+        config = ensure_config(config)
+        config["callbacks"] = config["callbacks"] or []
+        config["callbacks"].append(callback)
+
+        chain = self._build_chain()
+        await self._populate_memory()
+
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            await self._save_message_to_history(input, ChatMessageType.HUMAN)
+
+        chat = self.session.chat
+        output = ""
+        async for s in chain.astream(input, config):
+            print(s, end="", flush=True)
+            output += s
+            await asyncio.sleep(0.1)
+            chat.arefresh_from_db(fields=["metadata"])
+            if chat.metadata.get("cancelled", False):
+                print("aborting early")
+                break
+
+        # task = asyncio.create_task(chain.ainvoke(input, config))
+        # while not task.done():
+        #     await asyncio.sleep(0.1)
+        #     chat.arefresh_from_db(fields=["metadata"])
+        #     if chat.metadata.get("cancelled", False):
+        #         print("cancelling task")
+        #         task.cancel()
+        #
+        # output = task.result()
+
+        self._save_message_to_history(output, ChatMessageType.AI)
+        return ChainOutput(
+            output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
+        )
+
     @property
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
@@ -137,14 +176,13 @@ class ExperimentRunnable(BaseExperimentRunnable):
             ]
         )
 
-    def _populate_memory(self):
-        # TODO: convert to use BaseChatMessageHistory object
+    async def _populate_memory(self):
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
+        messages = await compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
         self.memory.chat_memory.messages = messages
 
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
+    async def _save_message_to_history(self, message: str, type_: ChatMessageType):
+        await ChatMessage.objects.acreate(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
