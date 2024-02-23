@@ -37,7 +37,7 @@ def process_invitation(invitation: Invitation, user: CustomUser):
 
 def send_invitation_accepted(invitation):
     recipients = list(
-        Membership.objects.filter(team=invitation.team, groups__permission__codename="view_invitation").values_list(
+        Membership.objects.filter(team=invitation.team, groups__permissions__codename="view_invitation").values_list(
             "user__email", flat=True
         )
     )
