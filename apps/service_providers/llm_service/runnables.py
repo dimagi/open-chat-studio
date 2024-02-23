@@ -96,7 +96,8 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 
 
 class ExperimentRunnable(BaseExperimentRunnable):
-    memory: BaseMemory = ConversationBufferMemory(return_messages=True)
+    memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
+    cancelled: bool = False
 
     class Config:
         arbitrary_types_allowed = True
@@ -111,35 +112,45 @@ class ExperimentRunnable(BaseExperimentRunnable):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        chain = self._build_chain()
         self._populate_memory()
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self._save_message_to_history(input, ChatMessageType.HUMAN)
 
-        output = ""
-        cancelled = False
-        for token in chain.stream(input, config):
-            output += token
-            self.session.chat.refresh_from_db(fields=["metadata"])
-            if self.session.chat.metadata.get("cancelled", False):
-                cancelled = True
-                break
-
+        output = self._get_output_check_cancellation(input, config)
         result = ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
-        if cancelled:
+        if self.cancelled:
             raise GenerationCancelled(result)
 
         self._save_message_to_history(output, ChatMessageType.AI)
         return result
 
+    def _get_output_check_cancellation(self, input, config):
+        chain = self._build_chain()
+
+        output = ""
+        for token in chain.stream(input, config):
+            output += token
+            if self._chat_is_cancelled():
+                return output
+
+    def _chat_is_cancelled(self):
+        if self.cancelled:
+            return True
+
+        self.session.chat.refresh_from_db(fields=["metadata"])
+        if self.session.chat.metadata.get("cancelled", False):
+            self.cancelled = True
+
+        return self.cancelled
+
     @property
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
-    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+    def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
     @property
@@ -184,7 +195,16 @@ class SimpleExperimentRunnable(ExperimentRunnable):
 
 
 class AgentExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+    def _get_output_check_cancellation(self, input, config):
+        chain = self._build_chain()
+        output = ""
+        for step in chain.stream(input, config):
+            if "output" in step:
+                output += step["output"]
+            if self._chat_is_cancelled():
+                return output
+
+    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
         assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
@@ -201,7 +221,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
             memory=self.memory,
             max_execution_time=120,
         )
-        return {"input": RunnablePassthrough()} | executor | itemgetter("output")
+        return {"input": RunnablePassthrough()} | executor
 
     @property
     def prompt(self):

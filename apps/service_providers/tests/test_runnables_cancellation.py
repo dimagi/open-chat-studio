@@ -1,6 +1,8 @@
 import pytest
+from langchain_core.messages import AIMessageChunk
 
 from apps.service_providers.llm_service.runnables import (
+    AgentExperimentRunnable,
     ChainOutput,
     GenerationCancelled,
     SimpleExperimentRunnable,
@@ -23,12 +25,26 @@ def session(fake_llm):
 
 
 @pytest.mark.django_db()
-def test_simple(session, fake_llm):
+def test_simple_runnable_cancellation(session, fake_llm):
     runnable = SimpleExperimentRunnable(session=session, experiment=session.experiment)
-    _test_runnable(runnable, session)
+    _test_runnable(runnable, session, "This is")
 
 
-def _test_runnable(runnable, session):
+@pytest.mark.django_db()
+def test_agent_runnable_cancellation(session, fake_llm):
+    runnable = AgentExperimentRunnable(session=session, experiment=session.experiment)
+
+    fake_llm.responses = [
+        AIMessageChunk(
+            content="call tool",
+            additional_kwargs={"tool_calls": [{"function": {"name": "foo", "arguments": "{}"}, "id": "1"}]},
+        ),
+        ["This is a test message"],
+    ]
+    _test_runnable(runnable, session, "")
+
+
+def _test_runnable(runnable, session, expected_output):
     original_build = runnable._build_chain
 
     def _new_build():
@@ -38,7 +54,7 @@ def _test_runnable(runnable, session):
         def _stream(*args, **kwargs):
             """Simulate a cancellation after the 2nd token."""
             for i, token in enumerate(orig_stream(*args, **kwargs)):
-                if i == 2:
+                if i == 1:
                     session.chat.metadata = {"cancelled": True}
                     session.chat.save(update_fields=["metadata"])
                 yield token
@@ -50,4 +66,4 @@ def _test_runnable(runnable, session):
 
     with pytest.raises(GenerationCancelled) as exc_info:
         runnable.invoke("hi")
-    assert exc_info.value.output == ChainOutput(output="This is a", prompt_tokens=30, completion_tokens=20)
+    assert exc_info.value.output == ChainOutput(output=expected_output, prompt_tokens=30, completion_tokens=20)
