@@ -1,6 +1,7 @@
 import pytest
 from langchain_core.messages import AIMessageChunk
 
+from apps.chat.models import Chat
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -18,19 +19,21 @@ def fake_llm():
 
 @pytest.fixture()
 def session(fake_llm):
-    session = ExperimentSessionFactory()
+    chat = Chat()
+    chat.get_langchain_messages_until_summary = lambda: []
+    chat.refresh_from_db = lambda *args, **kwargs: None
+    chat.save = lambda: None
+    session = ExperimentSessionFactory.build(chat=chat)
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
     session.experiment.tools_enabled = True
     return session
 
 
-@pytest.mark.django_db()
 def test_simple_runnable_cancellation(session, fake_llm):
     runnable = _get_assistant_mocked_history_recording(session, SimpleExperimentRunnable)
     _test_runnable(runnable, session, "This is")
 
 
-@pytest.mark.django_db()
 def test_agent_runnable_cancellation(session, fake_llm):
     runnable = _get_assistant_mocked_history_recording(session, AgentExperimentRunnable)
 
@@ -56,7 +59,6 @@ def _test_runnable(runnable, session, expected_output):
             for i, token in enumerate(orig_stream(*args, **kwargs)):
                 if i == 1:
                     session.chat.metadata = {"cancelled": True}
-                    session.chat.save(update_fields=["metadata"])
                 yield token
 
         chain.__dict__["stream"] = _stream
