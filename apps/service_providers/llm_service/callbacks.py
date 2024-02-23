@@ -1,5 +1,6 @@
 import threading
 from typing import Any
+from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseLanguageModel
@@ -33,3 +34,17 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
 
         with self._lock:
             self.completion_tokens += self.model.get_num_tokens_from_messages(messages)
+
+    def on_llm_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run when LLM errors and collect token usage."""
+        response = kwargs.get("response", None)
+        if not response:
+            return
+        self.on_llm_end(response)
