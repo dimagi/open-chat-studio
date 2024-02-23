@@ -81,9 +81,10 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
     i: int = 0
 
     def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:
-        return OpenAIAssistantFinish(
-            return_values={"output": self._get_next_response()}, log="", thread_id="123", run_id="456"
-        )
+        response = self._get_next_response()
+        if isinstance(response, BaseException):
+            raise response
+        return OpenAIAssistantFinish(return_values={"output": response}, log="", thread_id="123", run_id="456")
 
     def _get_next_response(self):
         response = self.responses[self.i]
@@ -95,7 +96,7 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 
 @contextmanager
-def mock_experiment_llm(experiment, responses: list[str], token_counts: list[int] = None):
+def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
     original = experiment.get_llm_service
 
     experiment.get_llm_service = lambda: FakeLlmService(

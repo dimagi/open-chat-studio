@@ -1,8 +1,12 @@
+import logging
+import re
 from abc import ABC
 from datetime import datetime
 from operator import itemgetter
+from time import sleep
 from typing import Any, Literal
 
+import openai
 import pytz
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
@@ -24,6 +28,12 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+
+logger = logging.getLogger(__name__)
+
+
+class GenerationError(Exception):
+    pass
 
 
 class GenerationCancelled(Exception):
@@ -251,8 +261,6 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        assistant_runnable = RunnableLambda(self.format_input) | self.experiment.assistant.get_assistant()
-
         input_dict = {"content": input}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
@@ -263,7 +271,7 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         if thread_id:
             input_dict["thread_id"] = thread_id
 
-        response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
+        response = self._get_response_with_retries(config, input_dict, thread_id)
         if not thread_id:
             self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
@@ -271,3 +279,43 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         self._save_message_to_history(output, ChatMessageType.AI)
 
         return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
+
+    def _get_response_with_retries(self, config, input_dict, thread_id):
+        assistant = self.experiment.assistant.get_assistant()
+        assistant_runnable = RunnableLambda(self.format_input) | assistant
+        for i in range(3):
+            try:
+                response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
+            except openai.BadRequestError as e:
+                self._handle_api_error(thread_id, assistant, e)
+            except ValueError as e:
+                if re.search(r"cancelling|cancelled", str(e)):
+                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
+            else:
+                return response
+        raise GenerationError("Failed to get response after 3 retries")
+
+    def _handle_api_error(self, thread_id, assistant, exc):
+        """Handle OpenAI API errors.
+        This should either raise an exception or return if the error was handled and the run should be retried.
+        """
+        message = exc.body.get("message") or ""
+        match = re.match(r".*(thread_[\w]+) while a run (run_[\w]+) is active.*", message)
+        if not match:
+            raise exc
+
+        error_thread_id, run_id = match.groups()
+        if error_thread_id != thread_id:
+            raise GenerationError(f"Thread ID mismatch: {error_thread_id} != {thread_id}", exc)
+
+        self._cancel_run(assistant, thread_id, run_id)
+
+    def _cancel_run(self, assistant, thread_id, run_id):
+        logger.info("Cancelling run %s in thread %s", run_id, thread_id)
+        run = assistant.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+        cancelling = run.status == "cancelling"
+        while cancelling:
+            run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+            cancelling = run.status == "cancelling"
+            if cancelling:
+                sleep(assistant.check_every_ms / 1000)

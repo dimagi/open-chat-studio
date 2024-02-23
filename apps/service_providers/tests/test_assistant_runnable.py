@@ -1,14 +1,22 @@
+from contextlib import nullcontext as does_not_raise
 from typing import Literal
+from unittest import mock
 from unittest.mock import patch
 
+import openai
 import pytest
 from openai.types.beta.threads import MessageContentText, Run, ThreadMessage
 from openai.types.beta.threads.message_content_text import Text
 
 from apps.chat.models import Chat
-from apps.service_providers.llm_service.runnables import AssistantExperimentRunnable
+from apps.service_providers.llm_service.runnables import (
+    AssistantExperimentRunnable,
+    GenerationCancelled,
+    GenerationError,
+)
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.langchain import mock_experiment_llm
 
 ASSISTANT_ID = "test_assistant_id"
 
@@ -95,6 +103,82 @@ def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, l
     result = assistant.invoke("test")
     assert result.output == "ai response"
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
+
+
+@pytest.mark.django_db()
+def test_assistant_runnable_raises_error(session):
+    experiment = session.experiment
+
+    error = openai.BadRequestError("test", response=mock.Mock(), body={})
+    with mock_experiment_llm(experiment, [error]):
+        assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
+
+        with pytest.raises(openai.BadRequestError):
+            assistant.invoke("test")
+
+
+@pytest.mark.django_db()
+def test_assistant_runnable_handles_cancellation_status(session):
+    experiment = session.experiment
+
+    error = ValueError("unexpected status: cancelled")
+    with mock_experiment_llm(experiment, [error]):
+        assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
+
+        with pytest.raises(GenerationCancelled):
+            assistant.invoke("test")
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("responses", "exception", "output"),
+    [
+        (
+            [
+                openai.BadRequestError(
+                    "", response=mock.Mock(), body={"message": "thread_abc while a run run_def is active"}
+                ),
+                "normal response",
+            ],
+            does_not_raise(),
+            "normal response",
+        ),
+        (
+            [
+                # response list is cycled to the exception is raised on every call
+                openai.BadRequestError(
+                    "", response=mock.Mock(), body={"message": "thread_abc while a run run_def is active"}
+                )
+            ],
+            pytest.raises(GenerationError, match="retries"),
+            None,
+        ),
+        (
+            [
+                openai.BadRequestError(
+                    "", response=mock.Mock(), body={"message": "thread_def while a run run_def is active"}
+                )
+            ],
+            pytest.raises(GenerationError, match="Thread ID mismatch"),
+            None,
+        ),
+    ],
+)
+def test_assistant_runnable_cancels_existing_run(responses, exception, output, session):
+    experiment = session.experiment
+
+    thread_id = "thread_abc"
+    session.chat.set_metadata(session.chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
+    assistant = AssistantExperimentRunnable(experiment=experiment, session=session)
+    cancel_run = mock.Mock()
+    assistant.__dict__["_cancel_run"] = cancel_run
+    with mock_experiment_llm(experiment, responses):
+        with exception:
+            result = assistant.invoke("test")
+
+    if output:
+        assert result.output == "normal response"
+        cancel_run.assert_called_once()
 
 
 def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):
