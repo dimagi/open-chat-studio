@@ -26,6 +26,11 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
 
+class GenerationCancelled(Exception):
+    def __init__(self, output: "ChainOutput"):
+        self.output = output
+
+
 def create_experiment_runnable(experiment: Experiment, session: ExperimentSession) -> "BaseExperimentRunnable":
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
@@ -112,12 +117,23 @@ class ExperimentRunnable(BaseExperimentRunnable):
         if config.get("configurable", {}).get("save_input_to_history", True):
             self._save_message_to_history(input, ChatMessageType.HUMAN)
 
-        output = chain.invoke(input, config)
+        output = ""
+        cancelled = False
+        for token in chain.stream(input, config):
+            output += token
+            self.session.chat.refresh_from_db(fields=["metadata"])
+            if self.session.chat.metadata.get("cancelled", False):
+                cancelled = True
+                break
 
-        self._save_message_to_history(output, ChatMessageType.AI)
-        return ChainOutput(
+        result = ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )
+        if cancelled:
+            raise GenerationCancelled(result)
+
+        self._save_message_to_history(output, ChatMessageType.AI)
+        return result
 
     @property
     def source_material(self):
