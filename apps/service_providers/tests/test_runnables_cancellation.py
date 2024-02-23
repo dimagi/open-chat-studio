@@ -26,13 +26,13 @@ def session(fake_llm):
 
 @pytest.mark.django_db()
 def test_simple_runnable_cancellation(session, fake_llm):
-    runnable = SimpleExperimentRunnable(session=session, experiment=session.experiment)
+    runnable = _get_assistant_mocked_history_recording(session, SimpleExperimentRunnable)
     _test_runnable(runnable, session, "This is")
 
 
 @pytest.mark.django_db()
 def test_agent_runnable_cancellation(session, fake_llm):
-    runnable = AgentExperimentRunnable(session=session, experiment=session.experiment)
+    runnable = _get_assistant_mocked_history_recording(session, AgentExperimentRunnable)
 
     fake_llm.responses = [
         AIMessageChunk(
@@ -67,3 +67,9 @@ def _test_runnable(runnable, session, expected_output):
     with pytest.raises(GenerationCancelled) as exc_info:
         runnable.invoke("hi")
     assert exc_info.value.output == ChainOutput(output=expected_output, prompt_tokens=30, completion_tokens=20)
+
+
+def _get_assistant_mocked_history_recording(session, cls):
+    assistant = cls(experiment=session.experiment, session=session, check_every_ms=0)
+    assistant.__dict__["_save_message_to_history"] = lambda *args, **kwargs: None
+    return assistant

@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from abc import ABC
 from datetime import datetime
 from operator import itemgetter
@@ -108,6 +109,8 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
+    last_cancel_check: float | None = None
+    check_every_ms: int = 1000
 
     class Config:
         arbitrary_types_allowed = True
@@ -149,6 +152,12 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def _chat_is_cancelled(self):
         if self.cancelled:
             return True
+
+        if self.last_cancel_check and self.check_every_ms:
+            if self.last_cancel_check + self.check_every_ms > time.time():
+                return False
+
+        self.last_cancel_check = time.time()
 
         self.session.chat.refresh_from_db(fields=["metadata"])
         if self.session.chat.metadata.get("cancelled", False):
