@@ -160,6 +160,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
         self.last_cancel_check = time.time()
 
         self.session.chat.refresh_from_db(fields=["metadata"])
+        # temporary mechanism to cancel the chat
+        # TODO: change this to something specific to the current chat message
         if self.session.chat.metadata.get("cancelled", False):
             self.cancelled = True
 
