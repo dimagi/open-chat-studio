@@ -19,12 +19,13 @@ class File(BaseTeamModel):
         if self.file:
             self.content_size = self.file.size
             filename = self.file.name
-            try:
-                filename = pathlib.Path(filename).name
-            except Exception:
-                pass
-
-            self.content_type = mimetypes.guess_type(filename)[0]
             if not self.name:
                 self.name = filename
+            if not self.content_type:
+                try:
+                    filename = pathlib.Path(filename).name
+                except Exception:
+                    pass
+
+                self.content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         super().save(*args, **kwargs)
