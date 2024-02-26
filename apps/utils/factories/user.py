@@ -10,6 +10,7 @@ class UserFactory(factory.django.DjangoModelFactory):
         skip_postgeneration_save = True
 
     username = factory.Faker("email")
+    email = factory.SelfAttribute("username")
 
     @factory.post_generation
     def set_password(self, create, extracted, **kwargs):
