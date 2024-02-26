@@ -83,6 +83,7 @@ PROJECT_APPS = [
     "apps.generics",
     "apps.assistants",
     "apps.files",
+    "apps.events",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
