@@ -4,11 +4,34 @@ from django.db import models
 from pytz import UTC
 
 from apps.chat.models import ChatMessageType
+from apps.events.actions import log
 from apps.experiments.models import Experiment
 from apps.utils.models import BaseModel
 
+ACTION_FUNCTIONS = {"log": log}
 
-class TimeoutTrigger(BaseModel):
+
+class EventActionType(models.TextChoices):
+    LOG = "log"  # Prints the last message
+    SUMMARIZE = "summarize"  # requires prompt
+
+
+class EventAction(BaseModel):
+    action_type = models.CharField(choices=EventActionType.choices)
+    params = models.JSONField(null=True)  # The parameters for the specific action
+
+
+class BaseTrigger(BaseModel):
+    action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="action")
+
+    class Meta:
+        abstract = True
+
+    def fire(self, session):
+        return ACTION_FUNCTIONS[self.action.action_type](session)
+
+
+class TimeoutTrigger(BaseTrigger):
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
         help_text="The amount of time in seconds to fire this trigger.",
@@ -37,16 +60,6 @@ class TimeoutTrigger(BaseModel):
                 # TODO: should this use updated_at instead? When can you edit a chat message?
                 sessions.append(session)
         return sessions
-
-
-# class EventActionType(Enum):
-#     SUMMARIZE = "summarize"     # requires prompt
-
-
-# class EventAction(BaseModel):
-#     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="event_actions")
-#     action_type = models.CharField(choices=EventActionType)
-#     params = models.JSONField()  # The parameters for the specific action
 
 
 # class EventTrigger(BaseTeamModel):
