@@ -134,11 +134,17 @@ def test_fire_trigger_increments_stats(session, experiment):
     timeout_trigger = TimeoutTrigger.objects.create(
         experiment=experiment,
         action=EventAction.objects.create(action_type=EventActionType.LOG),
-        total_num_triggers=7,
+        total_num_triggers=2,
         delay=10 * 60,
     )
-    stats = TriggerStats.objects.create(trigger=timeout_trigger, session=session, trigger_count=6)
-    timeout_trigger.fire(session)
-    stats.refresh_from_db()
 
-    assert stats.trigger_count == 7
+    timeout_trigger.fire(session)
+    session.refresh_from_db()
+
+    assert timeout_trigger.stats.get(session=session).trigger_count == 1
+    assert session.ended_at is None
+
+    timeout_trigger.fire(session)
+    session.refresh_from_db()
+    assert timeout_trigger.stats.get(session=session).trigger_count == 2
+    assert session.ended_at is not None

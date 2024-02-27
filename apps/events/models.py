@@ -5,7 +5,7 @@ from pytz import UTC
 
 from apps.chat.models import ChatMessageType
 from apps.events.actions import log
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.models import BaseModel
 
 ACTION_FUNCTIONS = {"log": log}
@@ -70,6 +70,7 @@ class TimeoutTrigger(BaseTrigger):
             raise
 
         self._increment_triggered_count(session)
+        self._end_conversation(session)
 
         return result
 
@@ -82,6 +83,12 @@ class TimeoutTrigger(BaseTrigger):
             stats.save()
         except TriggerStats.DoesNotExist:
             TriggerStats.objects.create(trigger=self, session=session, trigger_count=1, last_triggered=now)
+
+    def _end_conversation(self, session):
+        if self.end_conversation and self.stats.get(session=session).trigger_count >= self.total_num_triggers:
+            session.ended_at = datetime.now().astimezone(UTC)
+            session.status = SessionStatus.PENDING_REVIEW
+            session.save()
 
 
 class TriggerStats(BaseModel):
