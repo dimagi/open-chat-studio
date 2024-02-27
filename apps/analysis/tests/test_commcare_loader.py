@@ -54,12 +54,12 @@ def test_commcare_dynamic_form_select():
     ]
     form = CommCareAppLoaderParamsForm(
         None,
-        {"select_app_id": "id2"},
+        {"selected_app_ids": ["id2", "id3"]},
         initial={"app_list": app_list, "cc_url": "https://www.commcarehq.org", "auth_provider_id": 1},
     )
-    assert form.is_valid()
+    assert form.is_valid(), form.errors
     assert form.get_params() == CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org", auth_provider_id=1, selected_apps=app_list[1:]
     )
 
 
@@ -71,7 +71,9 @@ def test_commcare_dynamic_form_manual_input():
     )
     assert form.is_valid()
     assert form.get_params() == CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org",
+        auth_provider_id=1,
+        selected_apps=[{"domain": "domain2", "app_id": "id2", "name": ""}],
     )
 
 
@@ -80,7 +82,9 @@ def test_commcare_app_loader(get_auth_service, httpx_mock):
     get_auth_service.return_value = CommCareAuthService(username="user", api_key="key")
 
     params = CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org",
+        auth_provider_id=1,
+        selected_apps=[{"domain": "domain2", "app_id": "id2", "name": ""}],
     )
     loader = CommCareAppLoader(params=params)
 
@@ -89,4 +93,4 @@ def test_commcare_app_loader(get_auth_service, httpx_mock):
         json={"app": "data"},
     )
 
-    assert loader.invoke(StepContext.initial(), PipelineContext()).data == '{"app": "data"}'
+    assert loader.invoke(StepContext.initial(), PipelineContext())[0].data == '{"app": "data"}'

@@ -281,35 +281,41 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
 class CommCareAppLoaderParamsForm(ParamsForm):
     form_name = "CommCare App Loader Parameters"
     template_name = "analysis/forms/commcare_loader_params.html"
-    select_app_id = forms.ChoiceField(label="Application", required=False)
+    selected_app_ids = forms.MultipleChoiceField(
+        label="Application", required=False, widget=forms.CheckboxSelectMultiple
+    )
     domain = forms.CharField(required=False, label="CommCare Project Space")
     app_id = forms.CharField(required=False, label="CommCare Application ID")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        initial = kwargs.get("initial")
+        initial = kwargs.get("initial") or {}
         if initial and initial.get("app_list"):
-            self.fields["select_app_id"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+            self.fields["selected_app_ids"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+
+    def reformat_initial(self, initial):
+        if "selected_apps" in initial:
+            initial["selected_app_ids"] = [app["app_id"] for app in initial["selected_apps"]]
+        return initial
 
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
 
-        select_app_id = self.cleaned_data.get("select_app_id")
+        selected_app_ids = self.cleaned_data.get("selected_app_ids")
         app_id = self.cleaned_data.get("app_id")
         domain = self.cleaned_data.get("domain")
-        if not select_app_id and not app_id and not domain:
+        if not selected_app_ids and not app_id and not domain:
             raise forms.ValidationError("Either an application or a domain and app_id must be provided.")
 
-        if select_app_id:
+        if selected_app_ids:
             app_list = self.initial.get("app_list")
-            app = next((app for app in app_list if app["app_id"] == select_app_id), None)
-            app_id = app["app_id"]
-            domain = app["domain"]
+            apps = [app for app in app_list if app["app_id"] in selected_app_ids]
+        else:
+            apps = [{"domain": domain, "app_id": app_id, "name": ""}]
 
         try:
             return CommCareAppLoaderParams(
-                cc_domain=domain,
-                cc_app_id=app_id,
+                selected_apps=apps,
                 cc_url=self.initial["cc_url"],
                 auth_provider_id=self.initial["auth_provider_id"],
             )
