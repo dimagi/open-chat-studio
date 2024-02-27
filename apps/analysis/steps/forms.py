@@ -281,7 +281,9 @@ class CommCareAppLoaderStaticConfigForm(ParamsForm):
 class CommCareAppLoaderParamsForm(ParamsForm):
     form_name = "CommCare App Loader Parameters"
     template_name = "analysis/forms/commcare_loader_params.html"
-    selected_app_ids = forms.MultipleChoiceField(label="Application", required=False)
+    selected_app_ids = forms.MultipleChoiceField(
+        label="Application", required=False, widget=forms.CheckboxSelectMultiple
+    )
     domain = forms.CharField(required=False, label="CommCare Project Space")
     app_id = forms.CharField(required=False, label="CommCare Application ID")
 
