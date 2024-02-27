@@ -150,14 +150,18 @@ class CommCareAppLoader(BaseLoader[str]):
     def load(self, params: CommCareAppLoaderParams) -> list[StepContext[str]]:
         self.log.info(f"Loading data from {len(params.selected_apps)} CommCare apps")
         data = []
-        with params.get_auth_service().get_http_client() as client:
+        auth_service = params.get_auth_service()
+        with auth_service.get_http_client() as client:
             try:
                 for app_meta in params.selected_apps:
-                    app_data = self._fetch_app_json(app_meta, params.cc_url, client, params.api_params)
+                    app_data = auth_service.call_with_retries(
+                        self._fetch_app_json, app_meta, params.cc_url, client, params.api_params
+                    )
                     self.log.info(f"Loaded app {app_meta.name} with {len(app_data)} records")
                     data.append(StepContext(json.dumps(app_data), name=app_meta.name))
-            except StepError as e:
+            except httpx.HTTPError as e:
                 self.log.error(str(e))
+                raise StepError("Failed to load app data", e)
 
         return data
 
@@ -167,5 +171,6 @@ class CommCareAppLoader(BaseLoader[str]):
             response = http_client.get(app_meta.app_url(cc_url), params=params)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise StepError(f"Unable to load data from CommCare API for app {app_meta.name}", exc)
+            self.log.error(f"Failed to load app {app_meta.name}: {exc}")
+            raise
         return response.json()
