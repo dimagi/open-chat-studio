@@ -25,8 +25,6 @@ def delete_periodic_task(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("events", "0001_initial"),
-    ]
+    dependencies = []
 
     operations = [migrations.RunPython(create_periodic_task, delete_periodic_task)]
