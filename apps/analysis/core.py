@@ -1,6 +1,8 @@
 import dataclasses
 import logging
+import uuid
 from abc import abstractmethod
+from collections.abc import Callable
 from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
 
@@ -50,7 +52,7 @@ class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
     run: AnalysisRun = None
-    log_handler: logging.Handler = None
+    log_handler_factory: Callable[[], logging.Handler] = None
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
@@ -237,13 +239,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     output_type: PipeOut
     params: Params = NoParams()
     pipeline_context: PipelineContext | None = None
+    id: str = None
 
     def __init__(self, params: Params = None):
+        self.id = uuid.uuid4().hex
         self.params = params or self.params
-        self.log = logging.getLogger(self.name)
+        log_name = f"{self.name}_{self.id}"
+        self.log = logging.getLogger(log_name)
         self.log.propagate = False
         self.log.setLevel(logging.DEBUG)
-        ignore_logger(self.name)
+        ignore_logger(log_name)
 
     @property
     def name(self):
@@ -256,8 +261,8 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
         self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
-        if self.pipeline_context.log_handler:
-            self.log.addHandler(self.pipeline_context.log_handler)
+        if self.pipeline_context.log_handler_factory:
+            self.log.addHandler(self.pipeline_context.log_handler_factory(self.id))
 
     def invoke(
         self, context: StepContext[PipeIn], pipeline_context: PipelineContext
@@ -276,8 +281,8 @@ class BaseStep(Generic[PipeIn, PipeOut]):
             return result
         finally:
             self.log.info(f"Step {self.name} complete")
-            if self.pipeline_context.log_handler:
-                self.log.removeHandler(self.pipeline_context.log_handler)
+            if self.pipeline_context.log_handler_factory:
+                self.log.removeHandler(self.pipeline_context.log_handler_factory(self.id))
 
     def run(self, params: Params, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""
