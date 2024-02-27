@@ -5,7 +5,8 @@ from apps.events.models import TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 
 
-def trigger_timed_out_events():
+@shared_task()
+def enqueue_timed_out_events():
     active_triggers = TimeoutTrigger.objects.filter(trigger_count__lt=models.F("total_num_triggers"))
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
