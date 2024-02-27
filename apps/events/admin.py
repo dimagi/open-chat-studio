@@ -1,14 +1,16 @@
 from django.contrib import admin
 
-from .models import EventAction, TimeoutTrigger
+from .models import EventAction, TimeoutTrigger, TriggerStats
+
+
+class TriggerStatsInline(admin.TabularInline):
+    model = TriggerStats
+    extra = 0
 
 
 @admin.register(TimeoutTrigger)
 class TimeoutTriggerAdmin(admin.ModelAdmin):
-    readonly_fields = (
-        "last_triggered",
-        "trigger_count",
-    )
+    inlines = [TriggerStatsInline]
 
 
 @admin.register(EventAction)

@@ -4,8 +4,13 @@ import pytest
 from pytz import UTC
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.events.models import EventAction, EventActionType, TimeoutTrigger
-from apps.events.tasks import trigger_timed_out_events
+from apps.events.models import (
+    EventAction,
+    EventActionType,
+    TimeoutTrigger,
+    TriggerStats,
+)
+from apps.events.tasks import enqueue_timed_out_events
 from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
@@ -37,7 +42,11 @@ def test_timed_out_sessions(session, experiment):
     message.save()
     session.chat = chat
     session.save()
-    timeout_trigger = TimeoutTrigger(experiment=experiment, delay=10 * 60)
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        delay=10 * 60,
+    )
     timed_out_sessions = timeout_trigger.timed_out_sessions()
     assert len(timed_out_sessions) == 1
     assert timed_out_sessions[0] == session
@@ -54,7 +63,11 @@ def test_non_timed_out_sessions(session, experiment):
     )
     session.chat = chat
     session.save()
-    timeout_trigger = TimeoutTrigger(experiment=experiment, delay=10)
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        delay=10,
+    )
     timed_out_sessions = timeout_trigger.timed_out_sessions()
     assert len(timed_out_sessions) == 0
 
@@ -81,5 +94,51 @@ def test_timed_out_sessions_fired(session, experiment):
     )
     timed_out_sessions = timeout_trigger.timed_out_sessions()
     assert len(timed_out_sessions) == 1
-    trigger_timed_out_events()
+    enqueue_timed_out_events()
     # TODO: How to assert this?
+
+
+def test_trigger_count_reached(session, experiment):
+    now = datetime.now().astimezone(UTC)
+    fifteen_minutes_ago = now - timedelta(minutes=15)
+    chat = Chat.objects.create(team=session.team)
+    message = ChatMessage.objects.create(
+        chat=chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    message.created_at = fifteen_minutes_ago
+    message.save()
+    session.chat = chat
+    session.save()
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        total_num_triggers=5,
+        delay=10 * 60,
+    )
+    TriggerStats.objects.create(trigger=timeout_trigger, session=session, trigger_count=6)
+    timed_out_sessions = timeout_trigger.timed_out_sessions()
+    assert len(timed_out_sessions) == 0
+
+
+def test_fire_trigger_increments_stats(session, experiment):
+    chat = Chat.objects.create(team=session.team)
+    ChatMessage.objects.create(
+        chat=chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    session.chat = chat
+    session.save()
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        total_num_triggers=7,
+        delay=10 * 60,
+    )
+    stats = TriggerStats.objects.create(trigger=timeout_trigger, session=session, trigger_count=6)
+    timeout_trigger.fire(session)
+    stats.refresh_from_db()
+
+    assert stats.trigger_count == 7
