@@ -289,9 +289,14 @@ class CommCareAppLoaderParamsForm(ParamsForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        initial = kwargs.get("initial")
+        initial = kwargs.get("initial") or {}
         if initial and initial.get("app_list"):
             self.fields["selected_app_ids"].choices = [(app["app_id"], app["name"]) for app in initial["app_list"]]
+
+    def reformat_initial(self, initial):
+        if "selected_apps" in initial:
+            initial["selected_app_ids"] = [app["app_id"] for app in initial["selected_apps"]]
+        return initial
 
     def get_params(self):
         from .loaders import CommCareAppLoaderParams
