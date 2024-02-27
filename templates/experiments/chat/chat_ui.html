@@ -28,9 +28,14 @@
 {% include 'experiments/chat/input_bar.html' %}
 {% include 'experiments/chat/end_experiment_modal.html' %}
 <script>
+  let refreshTimer = null;
+  const pollInterval = 60000;
+
   function scrollToBottom() {
     const chatUI = document.getElementById('message-list');
     chatUI.scrollTop = chatUI.scrollHeight;
+    cancelPolling();
+    refreshTimer = setTimeout(pollBackend, pollInterval);
   }
 
   function appendMessage(messageHTML) {
@@ -51,6 +56,9 @@
     var url = messageListDiv.getAttribute('data-url');
     const lastMessage = messageListDiv.lastElementChild
     const lastDateTime = lastMessage.getAttribute('data-last-message-datetime')
+    if (!lastDateTime) {
+      return;
+    }
     url = url + "?since=" + lastDateTime
     console.log(url);
     fetch(url)
@@ -64,12 +72,16 @@
       });
   }
 
-  const pollInterval = 60000;
-  setInterval(pollBackend, pollInterval);
+  function cancelPolling() {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+  }
 
   // Scroll to the bottom of the chat after initial load
   window.addEventListener('load', scrollToBottom);
 
   // Scroll to the bottom of the chat after every htmx request
   document.body.addEventListener('htmx:afterOnLoad', scrollToBottom);
+  document.body.addEventListener('htmx:beforeRequest', cancelPolling);
 </script>
