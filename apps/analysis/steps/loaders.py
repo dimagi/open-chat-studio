@@ -157,7 +157,7 @@ class CommCareAppLoader(BaseLoader[str]):
                     app_data = auth_service.call_with_retries(
                         self._fetch_app_json, app_meta, params.cc_url, client, params.api_params
                     )
-                    self.log.info(f"Loaded app {app_meta.name} with {len(app_data)} records")
+                    self.log.info(f"Loaded app {app_meta.name}")
                     data.append(StepContext(json.dumps(app_data), name=app_meta.name))
             except httpx.HTTPError as e:
                 self.log.error(str(e))
@@ -171,6 +171,9 @@ class CommCareAppLoader(BaseLoader[str]):
             response = http_client.get(app_meta.app_url(cc_url), params=params)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            self.log.error(f"Failed to load app {app_meta.name}: {exc}")
+            if exc.response.status_code == 429:
+                retry_after = exc.response.headers.get("Retry-After")
+                retry_msg = f"retrying after {retry_after} seconds" if retry_after else "retrying"
+                self.log.warning(f"Received 429 response, {retry_msg}")
             raise
         return response.json()
