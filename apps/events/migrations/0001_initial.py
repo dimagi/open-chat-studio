@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
                         choices=[("log", "Log"), ("summarize", "Summarize")]
                     ),
                 ),
-                ("params", models.JSONField(null=True)),
+                ("params", models.JSONField(blank=True, null=True)),
             ],
             options={
                 "abstract": False,

@@ -18,7 +18,7 @@ class EventActionType(models.TextChoices):
 
 class EventAction(BaseModel):
     action_type = models.CharField(choices=EventActionType.choices)
-    params = models.JSONField(null=True)  # The parameters for the specific action
+    params = models.JSONField(null=True, blank=True)  # The parameters for the specific action
 
 
 class BaseTrigger(BaseModel):
