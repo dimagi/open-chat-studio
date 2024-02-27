@@ -22,6 +22,7 @@ httpx
 openai
 pandas
 sentry-sdk
+tenacity
 whitenoise[brotli]
 langchain
 langchain-openai
