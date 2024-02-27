@@ -28,7 +28,7 @@ from waffle import flag_is_active
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.decorators import experiment_session_view
+from apps.experiments.decorators import experiment_session_view, set_session_access_cookie, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
@@ -639,6 +639,7 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
     )
 
 
+@set_session_access_cookie
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
@@ -696,6 +697,7 @@ def start_experiment_session(request, team_slug: str, experiment_id: str, sessio
 
 
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_PRE_SURVEY])
+@verify_session_access_cookie
 def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_id: str):
     if request.method == "POST":
         form = SurveyForm(request.POST)
@@ -723,6 +725,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
+@verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
     return TemplateResponse(
         request,
@@ -736,6 +739,7 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
+@verify_session_access_cookie
 @require_POST
 def end_experiment(request, team_slug: str, experiment_id: str, session_id: str):
     experiment_session = request.experiment_session
@@ -746,6 +750,7 @@ def end_experiment(request, team_slug: str, experiment_id: str, session_id: str)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
+@verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: str, session_id: str):
     form = None
     if request.method == "POST":
@@ -772,6 +777,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
 
 
 @experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
+@verify_session_access_cookie
 def experiment_complete(request, team_slug: str, experiment_id: str, session_id: str):
     return TemplateResponse(
         request,
@@ -785,6 +791,7 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 
 
 @experiment_session_view()
+@verify_session_access_cookie
 def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
@@ -808,6 +815,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
 
 
 @experiment_session_view()
+@login_and_team_required
 def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
