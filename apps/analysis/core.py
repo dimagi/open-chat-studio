@@ -6,6 +6,7 @@ from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _Annota
 
 from django import forms
 from pydantic import BaseModel
+from sentry_sdk.integrations.logging import ignore_logger
 
 from apps.service_providers.llm_service import LlmService
 from apps.teams.models import Team
@@ -242,6 +243,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self.log = logging.getLogger(self.name)
         self.log.propagate = False
         self.log.setLevel(logging.DEBUG)
+        ignore_logger(self.name)
 
     @property
     def name(self):
