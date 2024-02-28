@@ -16,6 +16,7 @@ TEAM_ADMIN_GROUP = "Team Admin"
 EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
 ANALYSIS_ADMIN_GROUP = "Analysis Admin"
 ANALYSIS_USER_GROUP = "Analysis Users"
+EVENT_ADMIN_GROUP = "Event Admin"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 
@@ -24,6 +25,7 @@ NORMAL_USER_GROUPS = [
     ANALYSIS_ADMIN_GROUP,
     ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
+    EVENT_ADMIN_GROUP,
 ]
 
 
@@ -53,6 +55,7 @@ CONTENT_TYPES = {
     "assistants": ["openaiassistant"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage"],
+    "events": ["eventaction", "timeouttrigger", "eventlog"],
     "experiments": [
         "consentform",
         "experiment",
@@ -178,6 +181,12 @@ GROUPS = [
         [
             AppPermSetDef("assistants", ALL),
             AppPermSetDef("files", ALL),
+        ],
+    ),
+    GroupDef(
+        EVENT_ADMIN_GROUP,
+        [
+            AppPermSetDef("events", ALL),
         ],
     ),
 ]
