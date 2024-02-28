@@ -413,7 +413,7 @@ def _check_and_process_seed_message(session: ExperimentSession):
 
 @require_POST
 @login_and_team_required
-def start_session(request, team_slug: str, experiment_id: int):
+def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     experiment_channel = _ensure_experiment_channel_exists(
         experiment=experiment, platform="web", name=f"{experiment.id}-web"
@@ -517,7 +517,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
-def start_experiment(request, team_slug: str, experiment_id: str):
+def start_session_public(request, team_slug: str, experiment_id: str):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
     except ValidationError:
@@ -660,7 +660,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
-def start_experiment_session(request, team_slug: str, experiment_id: str, session_id: str):
+def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
     consent = experiment.consent_form
@@ -668,11 +668,11 @@ def start_experiment_session(request, team_slug: str, experiment_id: str, sessio
     initial = {
         "experiment_id": experiment.id,
     }
-    if experiment_session.participant:
-        initial["participant_id"] = experiment_session.participant.id
-        initial["identifier"] = experiment_session.participant.identifier
-    elif not request.user.is_anonymous:
-        initial["identifier"] = request.user.email
+    if not experiment_session.participant:
+        raise Http404()
+
+    initial["participant_id"] = experiment_session.participant.id
+    initial["identifier"] = experiment_session.participant.identifier
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)

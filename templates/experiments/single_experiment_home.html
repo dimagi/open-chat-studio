@@ -20,13 +20,13 @@
           {% if experiment.is_active %}
             <div class="tooltip" data-tip="Public Link">
               <a class="btn btn-primary join-item rounded-l-full"
-                 href="{% url 'experiments:start_experiment' team.slug experiment.public_id %}" target="_blank">
+                 href="{% url 'experiments:start_session_public' team.slug experiment.public_id %}" target="_blank">
                 <i class="fa-solid fa-link"></i>
               </a>
             </div>
           {% endif %}
           <div class="tooltip" data-tip="Start Web Session">
-            <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
+            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
                 <i class="fa-solid fa-file-circle-plus"></i>

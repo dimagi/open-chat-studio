@@ -62,7 +62,7 @@ class BotUser(HttpUser):
         logging.debug("===================== %s: %s =====================", chat_id, len(messages))
         csrftoken = self._get_csrf(f"/a/{team}/experiments/e/{experiment_id}/")
         with self.client.post(
-            f"/a/{team}/experiments/e/{experiment_id}/start_session/",
+            f"/a/{team}/experiments/e/{experiment_id}/start_authed_web_session/",
             headers={"X-CSRFToken": csrftoken},
             cookies={"csrftoken": csrftoken},
             allow_redirects=False,
