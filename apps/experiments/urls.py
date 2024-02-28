@@ -110,7 +110,7 @@ urlpatterns = [
         name="experiment_session_pagination_view",
     ),
     # public link
-    path("e/<slug:experiment_id>/start/", views.start_experiment, name="start_experiment"),
+    path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
