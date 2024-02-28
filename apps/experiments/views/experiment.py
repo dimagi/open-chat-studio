@@ -660,7 +660,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
-def start_experiment_session(request, team_slug: str, experiment_id: str, session_id: str):
+def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
     consent = experiment.consent_form

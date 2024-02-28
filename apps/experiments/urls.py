@@ -75,8 +75,8 @@ urlpatterns = [
     # public links
     path(
         "e/<slug:experiment_id>/s/<slug:session_id>/",
-        views.start_experiment_session,
-        name="start_experiment_session",
+        views.start_session_from_invite,
+        name="start_session_from_invite",
     ),
     path(
         "e/<slug:experiment_id>/s/<slug:session_id>/pre-survey/",

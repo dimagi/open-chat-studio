@@ -73,7 +73,7 @@ def test_access_permitted_for_session_user(client, session):
 def test_access_cookie_not_set_on_session_start_get(client, session):
     response = client.get(
         reverse(
-            "experiments:start_experiment_session",
+            "experiments:start_session_from_invite",
             args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
         ),
     )
@@ -85,7 +85,7 @@ def test_access_cookie_not_set_on_session_start_get(client, session):
 def test_access_cookie_not_set_on_session_start_with_inavalid_form(client, session):
     response = client.post(
         reverse(
-            "experiments:start_experiment_session",
+            "experiments:start_session_from_invite",
             args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
         ),
         data={},
@@ -97,7 +97,7 @@ def test_access_cookie_not_set_on_session_start_with_inavalid_form(client, sessi
 def _start_session(client, session):
     response = client.post(
         reverse(
-            "experiments:start_experiment_session",
+            "experiments:start_session_from_invite",
             args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
         ),
         data={

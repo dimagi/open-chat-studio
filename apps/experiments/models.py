@@ -461,7 +461,8 @@ class ExperimentSession(BaseTeamModel):
     def get_invite_url(self) -> str:
         return absolute_url(
             reverse(
-                "experiments:start_experiment_session", args=[self.team.slug, self.experiment.public_id, self.public_id]
+                "experiments:start_session_from_invite",
+                args=[self.team.slug, self.experiment.public_id, self.public_id],
             )
         )
 

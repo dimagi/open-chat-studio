@@ -115,7 +115,7 @@ def _validate_access_cookie_data(experiment_session, access_data):
 def _redirect_for_state(request, experiment_session, team_slug):
     view_args = [team_slug, experiment_session.experiment.public_id, experiment_session.public_id]
     if experiment_session.status in [SessionStatus.SETUP, SessionStatus.PENDING]:
-        return HttpResponseRedirect(reverse("experiments:start_experiment_session", args=view_args))
+        return HttpResponseRedirect(reverse("experiments:start_session_from_invite", args=view_args))
     elif experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:
         return HttpResponseRedirect(reverse("experiments:experiment_pre_survey", args=view_args))
     elif experiment_session.status == SessionStatus.ACTIVE:
