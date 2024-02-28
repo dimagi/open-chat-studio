@@ -1,9 +1,10 @@
 from datetime import timedelta
 
 from django.db import models
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import log
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.models import BaseModel
@@ -46,16 +47,35 @@ class TimeoutTrigger(BaseTrigger):
     )
 
     def timed_out_sessions(self):
-        sessions = []
+        """Finds all the timed out sessions where:
+        - The last human message was sent at a time earlier than the trigger time
+        - There have been fewer trigger attempts than the total number defined by the trigger
+        """
+
         trigger_time = timezone.now() - timedelta(seconds=self.delay)
-        open_experiment_sessions = self.experiment.sessions.filter(ended_at=None)
-        for session in open_experiment_sessions:
-            if not self.has_triggers_left(session):
-                continue
-            last_human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).last()
-            if last_human_message and last_human_message.created_at < trigger_time:
-                # TODO: should this use updated_at instead? When can you edit a chat message?
-                sessions.append(session)
+
+        last_human_message_time = (
+            ChatMessage.objects.filter(chat__experiment_session=OuterRef("pk"), message_type=ChatMessageType.HUMAN)
+            .order_by("-created_at")
+            .values("created_at")[:1]
+        )
+
+        sessions = (
+            ExperimentSession.objects.filter(
+                experiment=self.experiment,
+                ended_at=None,
+            )
+            .annotate(
+                last_human_message_created_at=Subquery(last_human_message_time),
+                success_event_log_count=Count("event_logs", filter=Q(event_logs__status=EventLogStatusChoices.SUCCESS)),
+            )
+            .filter(
+                last_human_message_created_at__lt=trigger_time,
+                last_human_message_created_at__isnull=False,
+                success_event_log_count__lt=self.total_num_triggers,
+            )
+            .all()
+        )
         return sessions
 
     def fire(self, session):
@@ -69,20 +89,20 @@ class TimeoutTrigger(BaseTrigger):
 
         return result
 
-    def has_triggers_left(self, session):
-        return (
-            self.event_logs.filter(session=session, status=EventLogStatusChoices.SUCCESS).count()
-            < self.total_num_triggers
-        )
-
     def add_event_log(self, session, status):
         self.event_logs.create(session=session, status=status)
 
     def _end_conversation(self, session):
-        if self.end_conversation and not self.has_triggers_left(session):
+        if self.end_conversation and not self._has_triggers_left(session):
             session.ended_at = timezone.now()
             session.status = SessionStatus.PENDING_REVIEW
             session.save()
+
+    def _has_triggers_left(self, session):
+        return (
+            self.event_logs.filter(session=session, status=EventLogStatusChoices.SUCCESS).count()
+            < self.total_num_triggers
+        )
 
 
 class EventLogStatusChoices(models.TextChoices):
