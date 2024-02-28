@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
+from unittest import mock
 
 import pytest
+from django.test import override_settings
 from pytz import UTC
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -72,8 +74,10 @@ def test_non_timed_out_sessions(session, experiment):
     assert len(timed_out_sessions) == 0
 
 
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@mock.patch("apps.events.tasks.fire_trigger.run")
 @pytest.mark.django_db()
-def test_timed_out_sessions_fired(session, experiment):
+def test_timed_out_sessions_fired(mock_fire_trigger, session, experiment):
     """A human chat message was sent more recently than the timeout"""
     now = datetime.now().astimezone(UTC)
     fifteen_minutes_ago = now - timedelta(minutes=15)
@@ -95,7 +99,7 @@ def test_timed_out_sessions_fired(session, experiment):
     timed_out_sessions = timeout_trigger.timed_out_sessions()
     assert len(timed_out_sessions) == 1
     enqueue_timed_out_events()
-    # TODO: How to assert this?
+    mock_fire_trigger.assert_called_with(timeout_trigger.id, experiment.id)
 
 
 def test_trigger_count_reached(session, experiment):
