@@ -4,8 +4,8 @@ from apps.analysis.tests.demo_steps import StrInt
 
 
 class FakeHandler(RunLogHandler):
-    def __init__(self, logs):
-        super().__init__(None)
+    def __init__(self, logs, step_id):
+        super().__init__(None, step_id)
         self.logs = logs
 
     def flush_db(self):
@@ -25,7 +25,8 @@ def test_logging_no_duplicates():
 
 def _run_step(logs):
     step = StrInt(params=NoParams())
-    step.invoke(StepContext.initial("1"), PipelineContext(log_handler=FakeHandler(logs)))
+    pipeline_context = PipelineContext(log_handler_factory=lambda step_id: FakeHandler(logs, step_id))
+    step.invoke(StepContext.initial("1"), pipeline_context)
 
 
 def check_logs(logs):
