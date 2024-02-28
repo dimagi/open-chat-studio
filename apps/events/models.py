@@ -18,7 +18,7 @@ class EventActionType(models.TextChoices):
 
 class EventAction(BaseModel):
     action_type = models.CharField(choices=EventActionType.choices)
-    params = models.JSONField(null=True, blank=True)  # The parameters for the specific action
+    params = models.JSONField(blank=True, default=dict)
 
 
 class BaseTrigger(BaseModel):
@@ -50,12 +50,8 @@ class TimeoutTrigger(BaseTrigger):
         trigger_time = datetime.now().astimezone(UTC) - timedelta(seconds=self.delay)
         open_experiment_sessions = self.experiment.sessions.filter(ended_at=None)
         for session in open_experiment_sessions:
-            try:
-                if self.stats.get(session=session).trigger_count >= self.total_num_triggers:
-                    continue
-            except TriggerStats.DoesNotExist:
-                # This trigger didn't run yet
-                pass
+            if not self.has_triggers_left(session):
+                continue
             last_human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).last()
             if last_human_message and last_human_message.created_at < trigger_time:
                 # TODO: should this use updated_at instead? When can you edit a chat message?
@@ -65,43 +61,39 @@ class TimeoutTrigger(BaseTrigger):
     def fire(self, session):
         try:
             result = super().fire(session)
+            self.add_event_log(session, EventLogStatusChoices.SUCCESS)
         except Exception:
-            # TODO handle exception
-            raise
+            self.add_event_log(session, EventLogStatusChoices.FAILURE)
 
-        self._increment_triggered_count(session)
         self._end_conversation(session)
 
         return result
 
-    def _increment_triggered_count(self, session):
-        now = datetime.now().astimezone(UTC)
-        try:
-            stats = self.stats.get(session=session)
-            stats.trigger_count = stats.trigger_count + 1
-            stats.last_triggered = now
-            stats.save()
-        except TriggerStats.DoesNotExist:
-            TriggerStats.objects.create(trigger=self, session=session, trigger_count=1, last_triggered=now)
+    def has_triggers_left(self, session):
+        return (
+            self.event_logs.filter(session=session, status=EventLogStatusChoices.SUCCESS).count()
+            < self.total_num_triggers
+        )
+
+    def add_event_log(self, session, status):
+        self.event_logs.create(session=session, status=status)
 
     def _end_conversation(self, session):
-        if self.end_conversation and self.stats.get(session=session).trigger_count >= self.total_num_triggers:
+        if self.end_conversation and not self.has_triggers_left(session):
             session.ended_at = datetime.now().astimezone(UTC)
             session.status = SessionStatus.PENDING_REVIEW
             session.save()
 
 
-class TriggerStats(BaseModel):
-    trigger = models.ForeignKey(TimeoutTrigger, on_delete=models.CASCADE, related_name="stats")
-    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="timout_trigger_stats")
-    last_triggered = models.DateTimeField(null=True, help_text="The last time the trigger was fired for the session")
-    trigger_count = models.IntegerField(
-        default=0,
-        help_text="The number of times this trigger was fired for the session",
-    )
+class EventLogStatusChoices(models.TextChoices):
+    SUCCESS = "success"
+    FAILURE = "failure"
 
-    class Meta:
-        unique_together = ("trigger", "session")
+
+class EventLog(BaseModel):
+    trigger = models.ForeignKey(TimeoutTrigger, on_delete=models.CASCADE, related_name="event_logs")
+    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="event_logs")
+    status = models.CharField(choices=EventLogStatusChoices.choices)
 
 
 # class EventTrigger(BaseTeamModel):

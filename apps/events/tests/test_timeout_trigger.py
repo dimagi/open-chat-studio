@@ -9,8 +9,8 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventAction,
     EventActionType,
+    EventLogStatusChoices,
     TimeoutTrigger,
-    TriggerStats,
 )
 from apps.events.tasks import enqueue_timed_out_events
 from apps.utils.factories.experiment import (
@@ -118,12 +118,15 @@ def test_trigger_count_reached(session, experiment):
     timeout_trigger = TimeoutTrigger.objects.create(
         experiment=experiment,
         action=EventAction.objects.create(action_type=EventActionType.LOG),
-        total_num_triggers=5,
+        total_num_triggers=2,
         delay=10 * 60,
     )
-    TriggerStats.objects.create(trigger=timeout_trigger, session=session, trigger_count=6)
-    timed_out_sessions = timeout_trigger.timed_out_sessions()
-    assert len(timed_out_sessions) == 0
+    timeout_trigger.add_event_log(session, EventLogStatusChoices.SUCCESS)
+    assert len(timeout_trigger.timed_out_sessions()) == 1
+    timeout_trigger.add_event_log(session, EventLogStatusChoices.FAILURE)
+    assert len(timeout_trigger.timed_out_sessions()) == 1
+    timeout_trigger.add_event_log(session, EventLogStatusChoices.SUCCESS)
+    assert len(timeout_trigger.timed_out_sessions()) == 0
 
 
 def test_fire_trigger_increments_stats(session, experiment):
@@ -145,10 +148,14 @@ def test_fire_trigger_increments_stats(session, experiment):
     timeout_trigger.fire(session)
     session.refresh_from_db()
 
-    assert timeout_trigger.stats.get(session=session).trigger_count == 1
+    assert timeout_trigger.event_logs.filter(session=session).count() == 1
     assert session.ended_at is None
 
     timeout_trigger.fire(session)
     session.refresh_from_db()
-    assert timeout_trigger.stats.get(session=session).trigger_count == 2
+    assert timeout_trigger.event_logs.filter(session=session).count() == 2
     assert session.ended_at is not None
+
+
+def test_new_human_message_resets_count(session, experiment):
+    pass

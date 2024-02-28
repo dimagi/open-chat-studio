@@ -14,13 +14,7 @@ def enqueue_timed_out_events():
 
 @shared_task
 def fire_trigger(trigger_id, session_id):
-    trigger = TimeoutTrigger.objects.prefetch_related("stats").get(id=trigger_id)
+    trigger = TimeoutTrigger.objects.get(id=trigger_id)
     session = ExperimentSession.objects.get(id=session_id)
-
-    try:
-        triggered = trigger.fire(session)
-    except Exception:
-        # TODO: add errors into stats model
-        raise
-
+    triggered = trigger.fire(session)
     return triggered
