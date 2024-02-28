@@ -113,11 +113,29 @@ def test_trigger_count_reached(session):
         total_num_triggers=2,
         delay=10 * 60,
     )
-    timeout_trigger.add_event_log(session, EventLogStatusChoices.SUCCESS)
+    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.SUCCESS)
     assert len(timeout_trigger.timed_out_sessions()) == 1
-    timeout_trigger.add_event_log(session, EventLogStatusChoices.FAILURE)
+    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.FAILURE)
     assert len(timeout_trigger.timed_out_sessions()) == 1
-    timeout_trigger.add_event_log(session, EventLogStatusChoices.SUCCESS)
+    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.SUCCESS)
+    assert len(timeout_trigger.timed_out_sessions()) == 0
+
+    # A new message 14 minutes ago will trigger a timeout again
+    message_2 = ChatMessage.objects.create(
+        chat=chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    message_2.created_at = fifteen_minutes_ago + timedelta(minutes=1)
+    message_2.save()
+    assert len(timeout_trigger.timed_out_sessions()) == 1
+
+    # A new message sooner than the timeout will now no longer be returned
+    ChatMessage.objects.create(
+        chat=chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
     assert len(timeout_trigger.timed_out_sessions()) == 0
 
 
@@ -152,4 +170,42 @@ def test_fire_trigger_increments_stats(session):
 
 @pytest.mark.django_db()
 def test_new_human_message_resets_count(session):
-    pass
+    chat = Chat.objects.create(team=session.team)
+    first_message = ChatMessage.objects.create(
+        chat=chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    session.chat = chat
+    session.save()
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        total_num_triggers=2,
+        delay=10 * 60,
+    )
+
+    timeout_trigger.fire(session)
+    session.refresh_from_db()
+
+    assert timeout_trigger.event_logs.filter(session=session).count() == 1
+    assert session.ended_at is None
+
+    second_message = ChatMessage.objects.create(
+        chat=chat,
+        content="I'm still here!",
+        message_type=ChatMessageType.HUMAN,
+    )
+
+    timeout_trigger.fire(session)
+    session.refresh_from_db()
+    assert timeout_trigger.event_logs.filter(session=session).count() == 2
+    assert timeout_trigger.event_logs.filter(session=session, chat_message=first_message).count() == 1
+    assert timeout_trigger.event_logs.filter(session=session, chat_message=second_message).count() == 1
+    assert session.ended_at is None
+
+    timeout_trigger.fire(session)
+    session.refresh_from_db()
+    assert timeout_trigger.event_logs.filter(session=session, chat_message=first_message).count() == 1
+    assert timeout_trigger.event_logs.filter(session=session, chat_message=second_message).count() == 2
+    assert session.ended_at is not None
