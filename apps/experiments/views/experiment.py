@@ -639,7 +639,6 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
     )
 
 
-@set_session_access_cookie
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
@@ -651,12 +650,13 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
         experiment_session.status = SessionStatus.ACTIVE
         redirct_url_name = "experiments:experiment_chat"
     experiment_session.save()
-    return HttpResponseRedirect(
+    response = HttpResponseRedirect(
         reverse(
             redirct_url_name,
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.public_id],
         )
     )
+    return set_session_access_cookie(response, experiment_session)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
