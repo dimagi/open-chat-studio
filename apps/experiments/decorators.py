@@ -37,34 +37,19 @@ def experiment_session_view(allowed_states=None):
     return decorator
 
 
-def set_session_access_cookie(view):
-    """Decorator for view functions that should set the session access cookie.
-    This decorator must be applied on a view that is also decorated with the
-    `experiment_session_view` decorator (though the order doesn't matter):
-
-    @experiment_session_view(...)
-    @set_session_access_cookie
-    def my_view(request, team_slug, experiment_id, session_id):
-        ...
-    """
-
-    @wraps(view)
-    def _inner(request, *args, **kwargs):
-        response = view(request, *args, **kwargs)
-        experiment_session = request.experiment_session
-        value = _get_access_cookie_data(experiment_session)
-        value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(value)
-        response.set_cookie(
-            CHAT_SESSION_ACCESS_COOKIE,
-            value,
-            max_age=MAX_AGE,
-            secure=True,
-            httponly=True,
-            samesite="Strict",
-        )
-        return response
-
-    return _inner
+def set_session_access_cookie(response, experiment_session):
+    """Set the session access cookie on the response"""
+    value = _get_access_cookie_data(experiment_session)
+    value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(value)
+    response.set_cookie(
+        CHAT_SESSION_ACCESS_COOKIE,
+        value,
+        max_age=MAX_AGE,
+        secure=True,
+        httponly=True,
+        samesite="Strict",
+    )
+    return response
 
 
 def verify_session_access_cookie(view):
