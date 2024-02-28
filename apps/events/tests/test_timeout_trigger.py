@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest import mock
 
 import pytest
 from django.test import override_settings
-from pytz import UTC
+from django.utils import timezone
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -32,8 +32,7 @@ def session(experiment):
 @pytest.mark.django_db()
 def test_timed_out_sessions(session, experiment):
     """A human chat message was sent longer ago than the timeout"""
-    now = datetime.now().astimezone(UTC)
-    fifteen_minutes_ago = now - timedelta(minutes=15)
+    fifteen_minutes_ago = timezone.now() - timedelta(minutes=15)
     chat = Chat.objects.create(team=session.team)
     message = ChatMessage.objects.create(
         chat=chat,
@@ -79,8 +78,7 @@ def test_non_timed_out_sessions(session, experiment):
 @pytest.mark.django_db()
 def test_timed_out_sessions_fired(mock_fire_trigger, session, experiment):
     """A human chat message was sent more recently than the timeout"""
-    now = datetime.now().astimezone(UTC)
-    fifteen_minutes_ago = now - timedelta(minutes=15)
+    fifteen_minutes_ago = timezone.now() - timedelta(minutes=15)
     chat = Chat.objects.create(team=session.team)
     message = ChatMessage.objects.create(
         chat=chat,
@@ -103,8 +101,7 @@ def test_timed_out_sessions_fired(mock_fire_trigger, session, experiment):
 
 
 def test_trigger_count_reached(session, experiment):
-    now = datetime.now().astimezone(UTC)
-    fifteen_minutes_ago = now - timedelta(minutes=15)
+    fifteen_minutes_ago = timezone.now() - timedelta(minutes=15)
     chat = Chat.objects.create(team=session.team)
     message = ChatMessage.objects.create(
         chat=chat,

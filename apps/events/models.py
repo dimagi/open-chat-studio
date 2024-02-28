@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.db import models
-from pytz import UTC
+from django.utils import timezone
 
 from apps.chat.models import ChatMessageType
 from apps.events.actions import log
@@ -47,7 +47,7 @@ class TimeoutTrigger(BaseTrigger):
 
     def timed_out_sessions(self):
         sessions = []
-        trigger_time = datetime.now().astimezone(UTC) - timedelta(seconds=self.delay)
+        trigger_time = timezone.now() - timedelta(seconds=self.delay)
         open_experiment_sessions = self.experiment.sessions.filter(ended_at=None)
         for session in open_experiment_sessions:
             if not self.has_triggers_left(session):
@@ -80,7 +80,7 @@ class TimeoutTrigger(BaseTrigger):
 
     def _end_conversation(self, session):
         if self.end_conversation and not self.has_triggers_left(session):
-            session.ended_at = datetime.now().astimezone(UTC)
+            session.ended_at = timezone.now()
             session.status = SessionStatus.PENDING_REVIEW
             session.save()
 
