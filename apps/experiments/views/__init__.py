@@ -28,7 +28,7 @@ from .experiment import (  # noqa: F401
     send_invitation,
     single_experiment_home,
     start_experiment_session,
-    start_session,
+    start_authed_web_session,
     start_session_public,
     update_delete_channel,
 )

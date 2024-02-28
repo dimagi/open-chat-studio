@@ -26,7 +26,7 @@
             </div>
           {% endif %}
           <div class="tooltip" data-tip="Start Web Session">
-            <form method="post" action="{% url 'experiments:start_session' team.slug experiment.id %}" class="inline">
+            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
                 <i class="fa-solid fa-file-circle-plus"></i>

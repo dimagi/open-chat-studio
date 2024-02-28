@@ -413,7 +413,7 @@ def _check_and_process_seed_message(session: ExperimentSession):
 
 @require_POST
 @login_and_team_required
-def start_session(request, team_slug: str, experiment_id: int):
+def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     experiment_channel = _ensure_experiment_channel_exists(
         experiment=experiment, platform="web", name=f"{experiment.id}-web"

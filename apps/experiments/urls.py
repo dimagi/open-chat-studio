@@ -43,7 +43,11 @@ urlpatterns = [
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:experiment_id>/start_session/", views.start_session, name="start_session"),
+    path(
+        "e/<int:experiment_id>/start_authed_web_session/",
+        views.start_authed_web_session,
+        name="start_authed_web_session",
+    ),
     path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
     path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
