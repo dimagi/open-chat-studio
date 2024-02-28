@@ -668,11 +668,11 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     initial = {
         "experiment_id": experiment.id,
     }
-    if experiment_session.participant:
-        initial["participant_id"] = experiment_session.participant.id
-        initial["identifier"] = experiment_session.participant.identifier
-    elif not request.user.is_anonymous:
-        initial["identifier"] = request.user.email
+    if not experiment_session.participant:
+        raise Http404()
+
+    initial["participant_id"] = experiment_session.participant.id
+    initial["identifier"] = experiment_session.participant.identifier
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
