@@ -3,7 +3,7 @@ from apps.analysis.steps.parsers import WhatsappParser
 
 from .core import ParamsForm, Pipeline
 from .steps.filters import TimeseriesFilter
-from .steps.processors import AssistantStep, LlmCompletionStep
+from .steps.processors import AssistantStep, JinjaTemplateStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
 TEXT_DATA_PIPE = "text_data"
@@ -40,9 +40,10 @@ SOURCE_PIPELINES = {
     COMMCARE_APP_PIPE: PiplineDefinition(
         [
             CommCareAppLoader,
+            JinjaTemplateStep,
         ],
         "CommCare Application",
-        "Load data from a CommCare application API.",
+        "Load data from a CommCare application API and format it with a Jinja template.",
     ),
     FILTERED_WHATSAPP_DATA_PIPE: PiplineDefinition(
         [
