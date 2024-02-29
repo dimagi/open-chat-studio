@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("experiments", "0065_alter_experimentsession_experiment_channel_and_more"),
+        ("experiments", "0066_alter_experimentsession_options"),
     ]
 
     operations = [

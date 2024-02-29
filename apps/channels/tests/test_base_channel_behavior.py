@@ -43,7 +43,7 @@ def test_incoming_message_adds_channel_info(_get_llm_response, _send_text_to_use
 
     experiment_session = ExperimentSession.objects.filter(
         experiment=telegram_channel.experiment, external_chat_id=chat_id
-    ).first()
+    ).get()
     assert experiment_session is not None
     assert experiment_session.experiment_channel is not None
 
