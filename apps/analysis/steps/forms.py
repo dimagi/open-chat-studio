@@ -325,3 +325,23 @@ class CommCareAppLoaderParamsForm(ParamsForm):
 
 def _get_auth_provider_queryset(request):
     return AuthProvider.objects.filter(team=request.team)
+
+
+JINJA_DOCS = "https://jinja.palletsprojects.com/en/3.1.x/templates/"
+
+
+class JinjaTemplateParamsForm(ParamsForm):
+    form_name = "Jinja Template Parameters"
+    template = forms.CharField(
+        widget=forms.Textarea,
+        initial="{{ data }}",
+        help_text=f'Use <a class="link" target="_blank" href="{JINJA_DOCS}">Jinja2 syntax</a> to format the data.',
+    )
+
+    def get_params(self):
+        from .processors import JinjaTemplateParams
+
+        try:
+            return JinjaTemplateParams(template=self.cleaned_data["template"])
+        except ValueError as e:
+            raise forms.ValidationError(repr(e))

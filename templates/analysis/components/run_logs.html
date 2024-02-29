@@ -16,7 +16,7 @@
                   {% endif %}
                  ">{{ entry.level.name }}</div>
       <div class="badge badge-ghost">[{{ entry.logger }}]</div>
-      <span>{{ entry.message }}</span>
+      <span>{{ entry.message|linebreaksbr }}</span>
     </div>
   {% endfor %}
 </div>

@@ -158,7 +158,7 @@ class CommCareAppLoader(BaseLoader[str]):
                         self._fetch_app_json, app_meta, params.cc_url, client, params.api_params
                     )
                     self.log.info(f"Loaded app {app_meta.name}")
-                    data.append(StepContext(json.dumps(app_data), name=app_meta.name))
+                    data.append(StepContext(app_data, name=app_meta.name))
             except httpx.HTTPError as e:
                 self.log.error(str(e))
                 raise StepError("Failed to load app data", e)

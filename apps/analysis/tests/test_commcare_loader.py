@@ -118,4 +118,4 @@ def test_commcare_app_loader(get_auth_service, httpx_mock, responses, error_expe
         httpx_mock.add_response(url=expected_url, **response)
 
     with error_expectation:
-        assert loader.invoke(StepContext.initial(), PipelineContext())[0].data == '{"app": "data"}'
+        assert loader.invoke(StepContext.initial(), PipelineContext())[0].data == {"app": "data"}
