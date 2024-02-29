@@ -324,3 +324,29 @@ def test_voice_response_behaviour(
 
     assert _reply_voice_message.called == voice_response_expected
     assert send_text_to_user.called == (not voice_response_expected)
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.chat.channels.TelegramChannel._get_llm_response")
+def test_reply_with_text_when_synthetic_voice_not_specified(
+    get_llm_response,
+    _reply_voice_message,
+    send_text_to_user,
+    get_voice_transcript,
+    telegram_channel,
+):
+    get_voice_transcript.return_value = "Hello bot. Please assist me"
+    get_llm_response.return_value = "Hello user. No"
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
+    # Let's remove the synthetic voice and see what happens
+    experiment.synthetic_voice = None
+    experiment.save()
+
+    telegram_channel.new_user_message(telegram_messages.text_message())
+
+    _reply_voice_message.assert_not_called()
+    send_text_to_user.assert_called()
