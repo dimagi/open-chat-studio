@@ -18,6 +18,17 @@ from apps.utils.langchain import mock_experiment_llm
 from .message_examples import telegram_messages
 
 
+@pytest.fixture()
+@patch("apps.channels.models._set_telegram_webhook")
+def telegram_channel(db):
+    experiment = ExperimentFactory(conversational_consent_enabled=True)
+    experiment.conversational_consent_enabled = False
+    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = TelegramChannel(experiment_channel=channel)
+    channel.telegram_bot = Mock()
+    return channel
+
+
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
@@ -243,17 +254,6 @@ def test_unsupported_message_type_triggers_bot_response(
     channel.new_user_message(telegram_messages.photo_message(telegram_chat_id))
     assert channel.experiment_session is not None
     assert send_text_to_user.call_args[0][0] == bot_response
-
-
-@pytest.fixture()
-@patch("apps.channels.models._set_telegram_webhook")
-def telegram_channel(db):
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    experiment.conversational_consent_enabled = False
-    channel = ExperimentChannelFactory(experiment=experiment)
-    channel = TelegramChannel(experiment_channel=channel)
-    channel.telegram_bot = Mock()
-    return channel
 
 
 @pytest.mark.django_db()
