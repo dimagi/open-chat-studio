@@ -3,7 +3,7 @@ import pytest
 from apps.analysis.core import NoParams, Pipeline, PipelineContext, StepContext
 
 from ..exceptions import StepError
-from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
+from .demo_steps import Divide, FactorSay, IntStr, Multiply, Reverse, SetFactor, SplitLines, StrInt, TokenizeStr
 
 
 @pytest.mark.parametrize(
@@ -35,10 +35,29 @@ from .demo_steps import Divide, FactorSay, IntStr, Multiply, SetFactor, StrInt
             StepContext[int](2),
             3,
         ),
+        (
+            Pipeline(
+                [
+                    SplitLines(),
+                    TokenizeStr(),
+                    Reverse(),
+                ]
+            ),
+            PipelineContext(),
+            StepContext[int]("This is a\nmultiline string\nwith 3 lines."),
+            [["sihT", "si", "a"], ["enilitlum", "gnirts"], ["htiw", "3", ".senil"]],
+        ),
     ],
 )
 def test_pipeline(pipeline: Pipeline, pipeline_context, context, output):
-    assert pipeline.run(pipeline_context, context).data == output
+    def _unwrap_result(res):
+        if isinstance(res, list):
+            return [_unwrap_result(r) for r in res]
+        else:
+            return res.get_data()
+
+    result = pipeline.run(pipeline_context, context)
+    assert _unwrap_result(result) == output
 
 
 @pytest.mark.parametrize(

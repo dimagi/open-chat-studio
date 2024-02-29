@@ -133,10 +133,15 @@ class Pipeline:
 
     def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext | list[StepContext]:
         self.context_chain.append(initial_context)
+
+        def _run_step(step, context):
+            if isinstance(context, list):
+                return [_run_step(step, ctx) for ctx in context]
+            else:
+                return step.invoke(context, pipeline_context)
+
         for step in self.steps:
-            # TODO: handle splitting the pipeline if step returns list
-            assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
-            out_context = step.invoke(self.context_chain[-1], pipeline_context)
+            out_context = _run_step(step, self.context_chain[-1])
             self.context_chain.append(out_context)
             if pipeline_context.is_cancelled:
                 return self.context_chain[-1]
