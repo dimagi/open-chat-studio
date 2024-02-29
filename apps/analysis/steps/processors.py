@@ -318,4 +318,4 @@ class JinjaTemplateStep(core.BaseStep[Any, str]):
             self.log.debug(f"Rendered template: {result}")
         except Exception as e:
             raise StepError(f"Error rendering template: {e}")
-        return StepContext(result, name="jinja_output")
+        return StepContext(result, name=f"template: {context.name}")

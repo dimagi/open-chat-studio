@@ -70,12 +70,11 @@ class RunLogHandler(logging.Handler):
     def __init__(self, run, step_id: str):
         self.run = run
         self.step_id = step_id
-        self.logs = []
         super().__init__(level=logging.DEBUG)
 
     def emit(self, record: logging.LogRecord):
         name = record.name.removesuffix(f"_{self.step_id}")
-        self.logs.append(
+        self.save_log(
             {
                 "level": record.levelname,
                 "message": record.getMessage(),
@@ -83,10 +82,12 @@ class RunLogHandler(logging.Handler):
                 "timestamp": datetime.utcnow().isoformat(timespec="milliseconds"),
             }
         )
-        self.flush_db()
 
-    def flush_db(self):
-        self.run.log = {"entries": self.logs}
+    def save_log(self, log):
+        self.run.refresh_from_db(fields=["log"])
+        logs = self.run.log.get("entries", [])
+        # TODO: this is very inefficient - make it better
+        self.run.log = {"entries": logs + [log]}
         self.run.save(update_fields=["log"])
 
     def __hash__(self):

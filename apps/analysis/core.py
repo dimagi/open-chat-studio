@@ -52,7 +52,7 @@ class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
     run: AnalysisRun = None
-    log_handler_factory: Callable[[], logging.Handler] = None
+    log_handler_factory: Callable[[str], logging.Handler] = None
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
@@ -133,10 +133,19 @@ class Pipeline:
 
     def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext | list[StepContext]:
         self.context_chain.append(initial_context)
+        unique_id = uuid.uuid4().hex
+        log = _create_logger("pipeline", unique_id)
+        if pipeline_context.log_handler_factory:
+            log.addHandler(pipeline_context.log_handler_factory(unique_id))
 
         def _run_step(step, context):
             if isinstance(context, list):
-                return [_run_step(step, ctx) for ctx in context]
+                log.info("Running step %s %s times", step.name, len(context))
+                ret = []
+                for i, ctx in enumerate(context):
+                    ret.append(_run_step(step, ctx))
+                log.info("Step %s complete", step.name)
+                return ret
             else:
                 return step.invoke(context, pipeline_context)
 
@@ -247,13 +256,9 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     id: str = None
 
     def __init__(self, params: Params = None):
-        self.id = uuid.uuid4().hex
         self.params = params or self.params
-        log_name = f"{self.name}_{self.id}"
-        self.log = logging.getLogger(log_name)
-        self.log.propagate = False
-        self.log.setLevel(logging.DEBUG)
-        ignore_logger(log_name)
+        self.id = uuid.uuid4().hex
+        self.log = _create_logger(self.name, self.id)
 
     @property
     def name(self):
@@ -266,6 +271,8 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
         self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        self.id = uuid.uuid4().hex
+        self.log = _create_logger(self.name, self.id)
         if self.pipeline_context.log_handler_factory:
             self.log.addHandler(self.pipeline_context.log_handler_factory(self.id))
 
@@ -306,3 +313,12 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         """
 
         return self.pipeline_context.create_resource(data, name, serialize, metadata)
+
+
+def _create_logger(name, unique_id):
+    log_name = f"{name}_{unique_id}"
+    log = logging.getLogger(log_name)
+    log.propagate = False
+    log.setLevel(logging.DEBUG)
+    ignore_logger(log_name)
+    return log

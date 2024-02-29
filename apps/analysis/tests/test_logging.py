@@ -8,8 +8,8 @@ class FakeHandler(RunLogHandler):
         super().__init__(None, step_id)
         self.logs = logs
 
-    def flush_db(self):
-        pass
+    def save_log(self, log):
+        self.logs.append(log)
 
 
 def test_logging_no_duplicates():
