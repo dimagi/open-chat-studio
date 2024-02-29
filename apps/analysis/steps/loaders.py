@@ -152,17 +152,17 @@ class CommCareAppLoader(BaseLoader[str]):
         data = []
         auth_service = params.get_auth_service()
         with auth_service.get_http_client() as client:
-            try:
-                for app_meta in params.selected_apps:
+            for app_meta in params.selected_apps:
+                try:
                     app_data = auth_service.call_with_retries(
                         self._fetch_app_json, app_meta, params.cc_url, client, params.api_params
                     )
                     self.log.info(f"Loaded app {app_meta.name}")
                     data.append(StepContext(app_data, name=app_meta.name))
-            except httpx.HTTPError as e:
-                self.log.error(str(e))
-                raise StepError("Failed to load app data", e)
-
+                except httpx.HTTPError as e:
+                    self.log.error(f"Error loading app {app_meta.name} ({app_meta.domain}:{app_meta.app_id})", e)
+        if not data:
+            raise StepError("Unable to load any data from CommCare")
         return data
 
     def _fetch_app_json(self, app_meta: CommCareAppMeta, cc_url: str, http_client: httpx.Client, params: dict) -> dict:
@@ -170,7 +170,7 @@ class CommCareAppLoader(BaseLoader[str]):
         try:
             response = http_client.get(app_meta.app_url(cc_url), params=params)
             response.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 429:
                 retry_after = exc.response.headers.get("Retry-After")
                 retry_msg = f"retrying after {retry_after} seconds" if retry_after else "retrying"
