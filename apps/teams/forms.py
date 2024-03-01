@@ -114,11 +114,11 @@ class InvitationForm(forms.ModelForm):
 
     def clean_email(self):
         email = self.cleaned_data["email"]
-        if Membership.objects.filter(team=self.team, user__email=email).exists():
+        if Membership.objects.filter(team=self.team, user__email__iexact=email).exists():
             raise ValidationError(_("A user with that email is already a member of this team."))
 
         # confirm no other pending invitations for this email
-        if Invitation.objects.filter(team=self.team, email=email, is_accepted=False).exists():
+        if Invitation.objects.filter(team=self.team, email__iexact=email, is_accepted=False).exists():
             raise ValidationError(
                 _(
                     'There is already a pending invitation for {}. You can resend it by clicking "Resend Invitation".'
