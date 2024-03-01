@@ -127,9 +127,15 @@ class InvitationForm(forms.ModelForm):
     class Meta:
         model = Invitation
         fields = ("email", "groups")
+        widgets = {
+            "groups": forms.CheckboxSelectMultiple(),
+        }
 
 
 class MembershipForm(forms.ModelForm):
     class Meta:
         model = Membership
         fields = ("groups",)
+        widgets = {
+            "groups": forms.CheckboxSelectMultiple(),
+        }
