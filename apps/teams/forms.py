@@ -71,8 +71,8 @@ class TeamSignupForm(SignupForm):
             if invite.is_accepted:
                 raise forms.ValidationError(
                     _(
-                        "It looks like that invitation link has expired. "
-                        "Please request a new invitation or sign in to continue."
+                        "The invitation has already been accepted. "
+                        "Please sign in to continue or request a new invitation."
                     )
                 )
 
