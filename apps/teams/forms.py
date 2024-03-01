@@ -30,6 +30,9 @@ class TeamSignupForm(SignupForm):
         else:
             del self.fields["terms_agreement"]
 
+        if "email" in kwargs.get("initial", {}):
+            self.fields["email"].widget.attrs = {"readonly": "readonly"}
+
     def clean(self):
         cleaned_data = super().clean()
         if not self.errors:
