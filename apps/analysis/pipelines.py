@@ -102,25 +102,31 @@ def get_data_pipeline(name: str) -> Pipeline:
     return PIPELINES[name].build()
 
 
-def get_static_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
-    forms_by_step = {step.name: step.params.get_static_config_form_class() for step in pipeline.steps}
-    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+def get_static_param_forms(pipeline, offset) -> dict[str, type[ParamsForm]]:
+    forms_by_step = {
+        f"{step.name}-{i+offset}": step.params.get_static_config_form_class() for i, step in enumerate(pipeline.steps)
+    }
+    return dict((id, form_class) for id, form_class in forms_by_step.items() if form_class)
 
 
-def get_dynamic_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
-    forms_by_step = {step.name: step.params.get_dynamic_config_form_class() for step in pipeline.steps}
-    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+def get_dynamic_param_forms(pipeline, offset) -> dict[str, type[ParamsForm]]:
+    forms_by_step = {
+        f"{step.name}-{i+offset}": step.params.get_dynamic_config_form_class() for i, step in enumerate(pipeline.steps)
+    }
+    return dict((id, form_class) for id, form_class in forms_by_step.items() if form_class)
 
 
 def get_static_forms_for_analysis(analysis):
+    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_static_param_forms(get_source_pipeline(analysis.source)),
-        **get_static_param_forms(get_data_pipeline(analysis.pipeline)),
+        **get_static_param_forms(source_pipeline, 0),
+        **get_static_param_forms(get_data_pipeline(analysis.pipeline), len(source_pipeline.steps)),
     }
 
 
 def get_dynamic_forms_for_analysis(analysis):
+    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_dynamic_param_forms(get_source_pipeline(analysis.source)),
-        **get_dynamic_param_forms(get_data_pipeline(analysis.pipeline)),
+        **get_dynamic_param_forms(source_pipeline, 0),
+        **get_dynamic_param_forms(get_data_pipeline(analysis.pipeline), len(source_pipeline.steps)),
     }
