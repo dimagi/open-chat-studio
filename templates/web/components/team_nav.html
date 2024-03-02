@@ -51,16 +51,14 @@
       {% translate "Prompt Builder" %}
     </a>
   </li>
-  {% flag "assistants" %}
-    <li>
-      {% if perms.assistants.view_openaiassistant %}
-        <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="active"{% endif %}>
-          <i class="fa-solid fa-robot"></i>
-          {% translate "Assistants" %}<span class="badge badge-sm">beta</span>
-        </a>
-      {% endif %}
-    </li>
-  {% endflag %}
+  <li>
+    {% if perms.assistants.view_openaiassistant %}
+      <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="active"{% endif %}>
+        <i class="fa-solid fa-robot"></i>
+        {% translate "Assistants" %}<span class="badge badge-sm">beta</span>
+      </a>
+    {% endif %}
+  </li>
   {% flag "pipelines" %}
     <li>
       {% if perms.analysis.view_analysis %}

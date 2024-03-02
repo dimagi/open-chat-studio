@@ -19,49 +19,45 @@
 {% endblock %}
 {% block form %}
   {{ form.non_field_errors }}
-  {% flag "assistants" %}
-    {% render_form_fields form "name" "description" %}
-    <div role="tablist" class="tabs tabs-bordered grid-flow-col auto-cols-max mt-4">
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Language Model" checked>
-      <div role="tabpanel" class="tab-content">
-        <div role="tablist" class="tabs tabs-lifted grid-flow-col auto-cols-max mt-4">
-          <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly"
-                 {% if not object.assistant_id %}checked{% endif %}/>
-          <div role="tabpanel" class="tab-content pt-4">
-            {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" "source_material" %}
-          </div>
+  {% render_form_fields form "name" "description" %}
+  <div role="tablist" class="tabs tabs-bordered grid-flow-col auto-cols-max mt-4">
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Language Model" checked>
+    <div role="tabpanel" class="tab-content">
+      <div role="tablist" class="tabs tabs-lifted grid-flow-col auto-cols-max mt-4">
+        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly"
+               {% if not object.assistant_id %}checked{% endif %}/>
+        <div role="tabpanel" class="tab-content pt-4">
+          {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" "source_material" %}
+        </div>
 
-          <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant"
-                 {% if object.assistant_id %}checked{% endif %}/>
-          <div role="tabpanel" class="tab-content pt-4">
-            {% render_form_fields form "assistant" %}
-          </div>
+        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant"
+               {% if object.assistant_id %}checked{% endif %}/>
+        <div role="tabpanel" class="tab-content pt-4">
+          {% render_form_fields form "assistant" %}
         </div>
       </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety">
-      <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
-      </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent">
-      <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "consent_form" "conversational_consent_enabled" %}
-      </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys">
-      <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "pre_survey" "post_survey" %}
-      </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
-      <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "voice_provider" "synthetic_voice" %}
-      </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
-      <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "seed_message" "no_activity_config" %}
-      </div>
     </div>
-  {% else %}
-    {% render_form_fields form %}
-  {% endflag %}
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety">
+    <div role="tabpanel" class="tab-content">
+      {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
+    </div>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent">
+    <div role="tabpanel" class="tab-content">
+      {% render_form_fields form "consent_form" "conversational_consent_enabled" %}
+    </div>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys">
+    <div role="tabpanel" class="tab-content">
+      {% render_form_fields form "pre_survey" "post_survey" %}
+    </div>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
+    <div role="tabpanel" class="tab-content">
+      {% render_form_fields form "voice_provider" "synthetic_voice" %}
+    </div>
+    <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
+    <div role="tabpanel" class="tab-content">
+      {% render_form_fields form "seed_message" "no_activity_config" %}
+    </div>
+  </div>
 {% endblock form %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}

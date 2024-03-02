@@ -23,7 +23,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from langchain_core.prompts import PromptTemplate
-from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -116,13 +115,7 @@ class ExperimentForm(forms.ModelForm):
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
-        if flag_is_active(request, "assistants"):
-            self.fields["assistant"].queryset = team.openaiassistant_set
-        else:
-            del self.fields["assistant"]
-            self.fields["prompt_text"].required = True
-            self.fields["llm_provider"].required = True
-            self.fields["llm"].required = True
+        self.fields["assistant"].queryset = team.openaiassistant_set
         self.fields["voice_provider"].queryset = team.voiceprovider_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
