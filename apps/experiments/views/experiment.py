@@ -75,6 +75,11 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
+    type = forms.ChoiceField(
+        choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
+        widget=forms.RadioSelect(attrs={"x-model": "type"}),
+    )
+
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
@@ -137,15 +142,19 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        assistant = cleaned_data.get("assistant")
         errors = {}
-        if not assistant:
+        bot_type = cleaned_data["type"]
+        if bot_type == "llm":
+            cleaned_data["assistant"] = None
             if not cleaned_data.get("prompt_text"):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm"):
                 errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
+        else:
+            if not cleaned_data.get("assistant"):
+                errors["assistant"] = "Assistant is required when creating an assistant experiment"
 
         if errors:
             raise forms.ValidationError(errors)
@@ -188,11 +197,15 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
     @property
     def extra_context(self):
+        experiment_type = "assistant" if self.object and self.object.assistant_id else "llm"
+        if self.request.POST.get("type"):
+            experiment_type = self.request.POST.get("type")
         return {
             **{
                 "title": self.title,
                 "button_text": self.button_title,
                 "active_tab": "experiments",
+                "experiment_type": experiment_type,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -235,6 +248,11 @@ class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
     button_title = "Update"
     permission_required = "experiments.change_experiment"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        initial["type"] = "assistant" if self.object.assistant_id else "llm"
+        return initial
 
 
 def _get_voice_provider_alpine_context(request):
