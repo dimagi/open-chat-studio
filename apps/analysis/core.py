@@ -260,10 +260,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self.params = params or self.params
         self.id = uuid.uuid4().hex
         self.log = _create_logger(self.name, self.id)
-
-        # TODO: this should probably be in a function so that it is concatenated consistently
-        # This will append none if they don't supply a step count and that's fine.
-        self.unique_step_name = f"{self.name}-{step_count}"
+        self.unique_step_name = self.name
+        if step_count is not None:
+            # TODO: this should probably be in a function so that it is concatenated consistently
+            self.unique_step_name = f"{self.name}-{step_count}"
 
     @property
     def name(self):
