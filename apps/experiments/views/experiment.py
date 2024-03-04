@@ -104,6 +104,7 @@ class ExperimentForm(forms.ModelForm):
             "synthetic_voice",
             "no_activity_config",
             "safety_violation_notification_emails",
+            "voice_response_behaviour",
         ]
         help_texts = {
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
