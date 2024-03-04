@@ -22,7 +22,7 @@ class PiplineDefinition:
         self.steps = steps
 
     def build(self):
-        steps = [step() for step in self.steps]
+        steps = [step(step_count=i) for i, step in enumerate(self.steps)]
         return Pipeline(steps)
 
     def __str__(self):

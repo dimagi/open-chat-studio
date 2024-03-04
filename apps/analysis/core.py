@@ -253,12 +253,17 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     output_type: PipeOut
     params: Params = NoParams()
     pipeline_context: PipelineContext | None = None
+    unique_step_name: str = None
     id: str = None
 
-    def __init__(self, params: Params = None):
+    def __init__(self, step_count=None, params: Params = None):
         self.params = params or self.params
         self.id = uuid.uuid4().hex
         self.log = _create_logger(self.name, self.id)
+
+        # TODO: this should probably be in a function so that it is concatenated consistently
+        # This will append none if they don't supply a step count and that's fine.
+        self.unique_step_name = f"{self.name}-{step_count}"
 
     @property
     def name(self):
@@ -270,7 +275,9 @@ class BaseStep(Generic[PipeIn, PipeOut]):
 
     def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
-        self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
+        self.params = self.params.merge(
+            self.pipeline_context.params, self.pipeline_context.params.get(self.unique_step_name, {})
+        )
         self.id = uuid.uuid4().hex
         self.log = _create_logger(self.name, self.id)
         if self.pipeline_context.log_handler_factory:
@@ -280,7 +287,7 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         self, context: StepContext[PipeIn], pipeline_context: PipelineContext
     ) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         self._initialize(pipeline_context)
-        self.log.info(f"Running step {self.name}")
+        self.log.info(f"Running step {self.unique_step_name}")
         try:
             self.params.check()
             self.preflight_check(context)
@@ -289,10 +296,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
             result = self.run(self.params, context)
             for res in [result] if isinstance(result, StepContext) else result:
                 if not res.name:
-                    res.name = self.name
+                    res.name = self.unique_step_name
             return result
         finally:
-            self.log.info(f"Step {self.name} complete")
+            self.log.info(f"Step {self.unique_step_name} complete")
             if self.pipeline_context.log_handler_factory:
                 self.log.removeHandler(self.pipeline_context.log_handler_factory(self.id))
 
