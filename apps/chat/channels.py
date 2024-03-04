@@ -294,8 +294,6 @@ class ChannelBase:
                 voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
             ):
                 send_message_func = self._reply_voice_message
-        else:
-            send_message_func = self.send_text_to_user
 
         send_message_func(bot_message)
 
