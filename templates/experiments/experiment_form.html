@@ -20,7 +20,9 @@
 {% endblock %}
 {% block form %}
   <div>
-    {% render_form_fields form "name" "description" "type" %}
+    {% render_form_fields form "name" "description" "consent_form" %}
+    <div class="divider"></div>
+    {% render_form_fields form "type" %}
     {% if not form.fields.assistant.choices %}
       <div x-show="type === 'assistant'">
         <p class="text-error">{% blocktranslate %}
@@ -44,7 +46,7 @@
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "consent_form" "conversational_consent_enabled" %}
+        {% render_form_fields form "conversational_consent_enabled" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys">
       <div role="tabpanel" class="tab-content">
