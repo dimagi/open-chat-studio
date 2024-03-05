@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -23,6 +24,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from langchain_core.prompts import PromptTemplate
+from waffle import flag_is_active
 
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -37,6 +39,8 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
+from apps.files.forms import get_file_formset
+from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -236,12 +240,42 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if "file_formset" not in context:
+            context["file_formset"] = self._get_file_formset()
+        return context
+
+    def _get_file_formset(self):
+        if flag_is_active(self.request, "experiment_rag"):
+            return get_file_formset(self.request)
+
     def get_initial(self):
         initial = super().get_initial()
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
         if long_data:
             initial.update(long_data)
         return initial
+
+    def post(self, request, *args, **kwargs):
+        self.object = None
+        form = self.get_form()
+        file_formset = self._get_file_formset()
+        if form.is_valid() and (not file_formset or file_formset.is_valid()):
+            return self.form_valid(form, file_formset)
+        else:
+            return self.form_invalid(form, file_formset)
+
+    @transaction.atomic()
+    def form_valid(self, form, file_formset):
+        self.object = form.save()
+        if file_formset:
+            files = file_formset.save(self.request)
+            self.object.files.set(files)
+        return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form, file_formset):
+        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
 
 
 class EditExperiment(BaseExperimentView, UpdateView):
@@ -258,7 +292,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     return {
-        "form_attrs": {"x-data": "experiment"},
+        "form_attrs": {"x-data": "experiment", "enctype": "multipart/form-data"},
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
@@ -280,6 +314,22 @@ def delete_experiment(request, team_slug: str, pk: int):
     safety_layer.delete()
     messages.success(request, "Experiment Deleted")
     return redirect("experiments:experiments_home", team_slug)
+
+
+class AddFileToExperiment(BaseAddFileHtmxView):
+    @transaction.atomic()
+    def form_valid(self, form):
+        experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
+        file = super().form_valid(form)
+        experiment.files.add(file)
+        return file
+
+    def get_delete_url(self, file):
+        return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
+
+
+class DeleteFileFromExperiment(BaseDeleteFileView):
+    pass
 
 
 @login_and_team_required

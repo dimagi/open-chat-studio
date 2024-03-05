@@ -43,6 +43,8 @@ urlpatterns = [
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
+    path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
+    path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
         "e/<int:experiment_id>/start_authed_web_session/",
         views.start_authed_web_session,
