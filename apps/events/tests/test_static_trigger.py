@@ -59,7 +59,7 @@ def test_last_timeout_can_end_conversation(session):
         delay=10 * 60,
     )
 
-    StaticTrigger.objects.create(
+    static_trigger = StaticTrigger.objects.create(
         experiment=session.experiment,
         action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
         type=StaticTriggerType.LAST_TIMEOUT,
@@ -68,7 +68,9 @@ def test_last_timeout_can_end_conversation(session):
     timeout_trigger.fire(session)
     session.refresh_from_db()
     assert session.ended_at is None
+    assert static_trigger.event_logs.count() == 0
 
     timeout_trigger.fire(session)
     session.refresh_from_db()
     assert session.ended_at is not None
+    assert static_trigger.event_logs.count() == 1

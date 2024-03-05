@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -23,6 +25,29 @@ class EventAction(BaseModel):
     params = models.JSONField(blank=True, default=dict)
 
 
+class EventLogStatusChoices(models.TextChoices):
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class EventLog(BaseModel):
+    # StaticTrigger or TimeoutTrigger
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveBigIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="event_logs")
+    chat_message = models.ForeignKey(
+        ChatMessage, on_delete=models.CASCADE, related_name="event_logs", null=True, blank=True
+    )
+    status = models.CharField(choices=EventLogStatusChoices.choices)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+
+
 class StaticTriggerType(models.TextChoices):
     CONVERSATION_END = "conversation_end"
     LAST_TIMEOUT = "last_timeout"
@@ -32,9 +57,16 @@ class StaticTrigger(BaseModel):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
+    event_logs = GenericRelation(EventLog)
 
     def fire(self, session):
-        return ACTION_FUNCTIONS[self.action.action_type](session, self.actions.params)
+        try:
+            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
+            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS)
+        except Exception:
+            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE)
+
+        return result
 
 
 class TimeoutTrigger(BaseModel):
@@ -47,6 +79,7 @@ class TimeoutTrigger(BaseModel):
         default=1,
         help_text="The number of times to fire this trigger",
     )
+    event_logs = GenericRelation(EventLog)
 
     def timed_out_sessions(self):
         """Finds all the timed out sessions where:
@@ -130,20 +163,3 @@ class TimeoutTrigger(BaseModel):
             ).count()
             < self.total_num_triggers
         )
-
-
-class EventLogStatusChoices(models.TextChoices):
-    SUCCESS = "success"
-    FAILURE = "failure"
-
-
-class EventLog(BaseModel):
-    trigger = models.ForeignKey(TimeoutTrigger, on_delete=models.CASCADE, related_name="event_logs")
-    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="event_logs")
-    chat_message = models.ForeignKey(ChatMessage, on_delete=models.CASCADE, related_name="event_logs")
-    status = models.CharField(choices=EventLogStatusChoices.choices)
-
-
-# class EventTrigger(BaseTeamModel):
-#     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="event_triggers")
-#     action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="triggers")
