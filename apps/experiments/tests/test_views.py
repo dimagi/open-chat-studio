@@ -2,6 +2,7 @@ from contextlib import nullcontext as does_not_raise
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
@@ -95,3 +96,12 @@ def test_prompt_variable_validation(source_material, prompt_str, expectation):
                 "prompt_text": prompt_str,
             }
         )
+
+
+@pytest.mark.django_db()
+def test_form_fields():
+    path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
+    form_html = path.read_text()
+    request = mock.Mock()
+    for field in ExperimentForm(request).fields:
+        assert field in form_html, f"{field} missing from 'experiment_form.html' template"
