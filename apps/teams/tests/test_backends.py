@@ -21,14 +21,14 @@ def experiment_permissions(experiment_content_type):
 
 @pytest.fixture()
 def group1(experiment_permissions):
-    group = GroupFactory()
+    group = GroupFactory(name="group1")
     group.permissions.add(experiment_permissions["add_experiment"], experiment_permissions["change_experiment"])
     return group
 
 
 @pytest.fixture()
 def group2(experiment_permissions):
-    group = GroupFactory()
+    group = GroupFactory(name="group2")
     group.permissions.add(experiment_permissions["view_experiment"], experiment_permissions["delete_experiment"])
     return group
 
