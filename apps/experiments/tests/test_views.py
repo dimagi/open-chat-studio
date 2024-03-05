@@ -35,7 +35,7 @@ def test_create_experiment_success(db, client, team_with_users):
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
-    assert response.status_code == 302
+    assert response.status_code == 302, response.context.form.errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
 
