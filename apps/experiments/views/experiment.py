@@ -83,6 +83,10 @@ class ExperimentForm(forms.ModelForm):
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
     class Meta:
         model = Experiment
@@ -116,12 +120,6 @@ class ExperimentForm(forms.ModelForm):
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
-        }
-        widgets = {
-            "description": forms.Textarea(attrs={"rows": 2}),
-            "prompt_text": forms.Textarea(attrs={"rows": 5}),
-            "input_formatter": forms.Textarea(attrs={"rows": 2}),
-            "seed_message": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, request, *args, **kwargs):
