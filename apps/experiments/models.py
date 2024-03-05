@@ -359,6 +359,7 @@ class Experiment(BaseTeamModel):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
+    files = models.ManyToManyField("files.File", blank=True)
 
     class Meta:
         ordering = ["name"]

@@ -24,6 +24,7 @@ def test_create_experiment_success(db, client, team_with_users):
     post_data = {
         "name": "some name",
         "description": "Some description",
+        "type": "llm",
         "prompt_text": "You are a helpful assistant",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
@@ -35,7 +36,7 @@ def test_create_experiment_success(db, client, team_with_users):
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
-    assert response.status_code == 302
+    assert response.status_code == 302, response.context.form.errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
 
@@ -62,6 +63,7 @@ def test_experiment_form_with_assistants(
         request,
         data={
             "name": "some name",
+            "type": "assistant" if with_assistant else "llm",
             "assistant": assistant.id if with_assistant else None,
             "prompt_text": "text" if with_prompt else None,
             "llm_provider": llm_provider.id if with_llm_provider else None,

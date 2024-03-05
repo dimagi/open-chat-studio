@@ -1,4 +1,5 @@
 {% extends "generic/object_form.html" %}
+{% load i18n %}
 {% load waffle_tags %}
 {% load form_tags %}
 {% load waffle_tags %}
@@ -7,7 +8,9 @@
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
       {% if experiment.id %}
-        <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
+        <li><a
+          href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a>
+        </li>
         <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
       {% else %}
         <li class="pg-breadcrumb-active" aria-current="page">Create</li>
@@ -16,35 +19,64 @@
   </div>
 {% endblock %}
 {% block form %}
-  {{ form.non_field_errors }}
-  {% flag "assistants" %}
-    {% render_form_fields form "name" "description" %}
-    <h3 class="font-semibold text-xl mt-4">Language Model Configuration</h3>
-    <div class="divider divider-neutral"></div>
-    <div class="pl-4">
-      <div role="tablist" class="tabs tabs-bordered mt-4">
-        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use LLM Directly" {% if not object.assistant_id %}checked{% endif %}/>
-        <div role="tabpanel" class="tab-content pt-4">
-          {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" "source_material" %}
-        </div>
+  <div>
+    {% render_form_fields form "name" "description" "consent_form" %}
+    <div class="divider"></div>
+    {% render_form_fields form "type" %}
+    {% if form.fields.assistant.choices|length <= 1 %}
+      {# choices has an option for none so it is never empty #}
+      <div x-show="type === 'assistant'" x-cloak>
+        {% url "assistants:home" request.team.slug as new_assistant_url %}
+        <p class="text-error">{% blocktranslate %}
+          No assistants have been created. <a class="link" href="{{ new_assistant_url  }}">Create one now</a>.
+        {% endblocktranslate %}</p>
+      </div>
+    {% endif %}
 
-        <input type="radio" name="bot_type_tabs" role="tab" class="tab" aria-label="Use OpenAI Assistant" {% if object.assistant_id %}checked{% endif %} />
-        <div role="tabpanel" class="tab-content pt-4">
-          {% render_form_fields form "assistant" %}
-        </div>
+    <div role="tablist" class="tabs tabs-bordered grid-flow-col auto-cols-max mt-4">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Language Model" x-bind:checked="type === 'llm'" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="OpenAI Assistant" x-bind:checked="type === 'assistant'" x-show="type === 'assistant'" {% if experiment_type != "assistant" %}x-cloak{% endif %}>
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "assistant" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety">
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent">
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "conversational_consent_enabled" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys">
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "pre_survey" "post_survey" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Source Material" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "source_material" %}
+        {% flag "experiment_rag" %}
+          {% if not object.id %}
+            {% include "files/partials/file_formset.html" %}
+          {% else %}
+            <hr class="my-4">
+            {% url "experiments:add_file" request.team.slug object.id as upload_url %}
+            {% url "experiments:remove_file" request.team.slug object.id '000' as delete_url %}
+            {% include "files/partials/file_list.html" with files=object.files.all %}
+          {% endif %}
+        {% endflag %}
+      </div>
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "seed_message" "no_activity_config" %}
       </div>
     </div>
-    <h3 class="font-semibold text-xl mt-4">General Configuration</h3>
-    <div class="divider divider-neutral"></div>
-    <div class="pl-4">
-      {% render_form_fields form "input_formatter" "max_token_limit" "safety_layers" %}
-      {% render_form_fields form "conversational_consent_enabled" "seed_message" "pre_survey" %}
-      {% render_form_fields form "post_survey" "consent_form" "voice_provider" "synthetic_voice" "voice_response_behaviour" %}
-      {% render_form_fields form "no_activity_config" "safety_violation_notification_emails" %}
-    </div>
-  {% else %}
-    {% render_form_fields form %}
-  {% endflag %}
 {% endblock form %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
@@ -56,6 +88,7 @@
     const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
     document.addEventListener('alpine:init', () => {
       Alpine.data('experiment', () => ({
+        type: '{{ experiment_type }}',
 
         voiceProvider: null,
         synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
@@ -63,7 +96,7 @@
 
         llmProviderId: null,
         llmProvider: null,
-        llm: '{{experiment.llm|default:form.llm.initial|default:'null'}}',
+        llm: '{{experiment.llm|default:form.llm.value|default:'null'}}',
         llm_options: [],
 
         init() {

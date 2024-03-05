@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -38,6 +39,8 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
+from apps.files.forms import get_file_formset
+from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -76,7 +79,12 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
+    type = forms.ChoiceField(
+        choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
+        widget=forms.RadioSelect(attrs={"x-model": "type"}),
+    )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
@@ -106,7 +114,11 @@ class ExperimentForm(forms.ModelForm):
             "safety_violation_notification_emails",
             "voice_response_behaviour",
         ]
+        labels = {
+            "source_material": "Inline Source Material",
+        }
         help_texts = {
+            "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
         }
 
@@ -117,13 +129,7 @@ class ExperimentForm(forms.ModelForm):
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
-        if flag_is_active(request, "assistants"):
-            self.fields["assistant"].queryset = team.openaiassistant_set
-        else:
-            del self.fields["assistant"]
-            self.fields["prompt_text"].required = True
-            self.fields["llm_provider"].required = True
-            self.fields["llm"].required = True
+        self.fields["assistant"].queryset = team.openaiassistant_set
         self.fields["voice_provider"].queryset = team.voiceprovider_set
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
@@ -145,15 +151,19 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        assistant = cleaned_data.get("assistant")
         errors = {}
-        if not assistant:
+        bot_type = cleaned_data["type"]
+        if bot_type == "llm":
+            cleaned_data["assistant"] = None
             if not cleaned_data.get("prompt_text"):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm"):
                 errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
+        else:
+            if not cleaned_data.get("assistant"):
+                errors["assistant"] = "Assistant is required when creating an assistant experiment"
 
         if errors:
             raise forms.ValidationError(errors)
@@ -196,11 +206,15 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
     @property
     def extra_context(self):
+        experiment_type = "assistant" if self.object and self.object.assistant_id else "llm"
+        if self.request.POST.get("type"):
+            experiment_type = self.request.POST.get("type")
         return {
             **{
                 "title": self.title,
                 "button_text": self.button_title,
                 "active_tab": "experiments",
+                "experiment_type": experiment_type,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -231,6 +245,16 @@ class CreateExperiment(BaseExperimentView, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if "file_formset" not in context:
+            context["file_formset"] = self._get_file_formset()
+        return context
+
+    def _get_file_formset(self):
+        if flag_is_active(self.request, "experiment_rag"):
+            return get_file_formset(self.request)
+
     def get_initial(self):
         initial = super().get_initial()
         long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
@@ -238,17 +262,42 @@ class CreateExperiment(BaseExperimentView, CreateView):
             initial.update(long_data)
         return initial
 
+    def post(self, request, *args, **kwargs):
+        self.object = None
+        form = self.get_form()
+        file_formset = self._get_file_formset()
+        if form.is_valid() and (not file_formset or file_formset.is_valid()):
+            return self.form_valid(form, file_formset)
+        else:
+            return self.form_invalid(form, file_formset)
+
+    @transaction.atomic()
+    def form_valid(self, form, file_formset):
+        self.object = form.save()
+        if file_formset:
+            files = file_formset.save(self.request)
+            self.object.files.set(files)
+        return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form, file_formset):
+        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
+
 
 class EditExperiment(BaseExperimentView, UpdateView):
     title = "Update Experiment"
     button_title = "Update"
     permission_required = "experiments.change_experiment"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        initial["type"] = "assistant" if self.object.assistant_id else "llm"
+        return initial
+
 
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     return {
-        "form_attrs": {"x-data": "experiment"},
+        "form_attrs": {"x-data": "experiment", "enctype": "multipart/form-data"},
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
@@ -270,6 +319,22 @@ def delete_experiment(request, team_slug: str, pk: int):
     safety_layer.delete()
     messages.success(request, "Experiment Deleted")
     return redirect("experiments:experiments_home", team_slug)
+
+
+class AddFileToExperiment(BaseAddFileHtmxView):
+    @transaction.atomic()
+    def form_valid(self, form):
+        experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
+        file = super().form_valid(form)
+        experiment.files.add(file)
+        return file
+
+    def get_delete_url(self, file):
+        return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
+
+
+class DeleteFileFromExperiment(BaseDeleteFileView):
+    pass
 
 
 @login_and_team_required
