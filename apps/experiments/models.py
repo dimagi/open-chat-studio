@@ -104,23 +104,13 @@ class Survey(BaseTeamModel):
     """
 
     name = models.CharField(max_length=50)
-    url = models.URLField(
-        help_text=(
-            "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
-            "include the participant, session and experiment session ids in the url."
-        ),
-        max_length=500,
-    )
+    url = models.URLField(max_length=500)
     confirmation_text = models.TextField(
         null=False,
         default=(
-            "Before starting the experiment, we ask that you complete a short survey. Please click on the "
-            "survey link, fill it out, and, when you have finished, respond with '1' to let us know that"
-            "you've completed it. Survey link: {survey_link}"
-        ),
-        help_text=(
-            "Use this text to ask the user to complete the survey. The {survey_link} will contain the "
-            "link to the survey"
+            "Please complete the following survey by clicking on the survey link."
+            " When you have finished, respond with '1' to let us know that you've completed it."
+            " Survey link: {survey_link}"
         ),
     )
 

@@ -32,7 +32,7 @@ from apps.experiments.decorators import experiment_session_view, set_session_acc
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
-from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
+from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyCompletedForm
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentTable
@@ -220,7 +220,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         experiment = form.instance
         if experiment.conversational_consent_enabled and not experiment.seed_message:
             messages.error(
-                request=self.request, message="A seed message is required when conversational " "consent is enabled!"
+                request=self.request, message="A seed message is required when conversational consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
         return super().form_valid(form)
@@ -701,7 +701,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
 @verify_session_access_cookie
 def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_id: str):
     if request.method == "POST":
-        form = SurveyForm(request.POST)
+        form = SurveyCompletedForm(request.POST)
         if form.is_valid():
             request.experiment_session.status = SessionStatus.ACTIVE
             request.experiment_session.save()
@@ -712,7 +712,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
                 )
             )
     else:
-        form = SurveyForm()
+        form = SurveyCompletedForm()
     return TemplateResponse(
         request,
         "experiments/pre_survey.html",
@@ -754,6 +754,8 @@ def end_experiment(request, team_slug: str, experiment_id: str, session_id: str)
 @verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: str, session_id: str):
     form = None
+    survey_link = None
+    survey_text = None
     if request.method == "POST":
         # no validation needed
         request.experiment_session.status = SessionStatus.COMPLETE
@@ -763,7 +765,9 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
         )
     elif request.experiment.post_survey:
-        form = SurveyForm()
+        form = SurveyCompletedForm()
+        survey_link = request.experiment_session.get_post_survey_link()
+        survey_text = request.experiment.post_survey.confirmation_text.format(survey_link=survey_link)
 
     return TemplateResponse(
         request,
@@ -772,6 +776,8 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
             "active_tab": "experiments",
+            "survey_link": survey_link,
+            "survey_text": survey_text,
             "form": form,
         },
     )

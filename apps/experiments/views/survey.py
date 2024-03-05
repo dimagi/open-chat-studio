@@ -6,6 +6,7 @@ from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.experiments.forms import SurveyForm
 from apps.experiments.models import Survey
 from apps.experiments.tables import SurveyTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -35,7 +36,7 @@ class SurveyTableView(SingleTableView):
 
 class CreateSurvey(CreateView):
     model = Survey
-    fields = ["name", "url", "confirmation_text"]
+    form_class = SurveyForm
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Survey",
@@ -54,7 +55,7 @@ class CreateSurvey(CreateView):
 
 class EditSurvey(UpdateView):
     model = Survey
-    fields = ["name", "url", "confirmation_text"]
+    form_class = SurveyForm
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Survey",
