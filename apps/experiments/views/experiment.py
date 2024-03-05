@@ -84,10 +84,6 @@ class ExperimentForm(forms.ModelForm):
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
 
-    description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-
     class Meta:
         model = Experiment
         fields = [
@@ -113,8 +109,18 @@ class ExperimentForm(forms.ModelForm):
             "no_activity_config",
             "safety_violation_notification_emails",
         ]
+        labels = {
+            "source_material": "Inline Source Material",
+        }
         help_texts = {
+            "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
+        }
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2}),
+            "prompt_text": forms.Textarea(attrs={"rows": 5}),
+            "input_formatter": forms.Textarea(attrs={"rows": 2}),
+            "seed_message": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, request, *args, **kwargs):
