@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, VoiceResponseBehaviours
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
@@ -30,6 +30,7 @@ def test_create_experiment_success(db, client, team_with_users):
         "llm_provider": LlmProviderFactory(team=team_with_users).id,
         "llm": "gpt-3.5",
         "max_token_limit": 100,
+        "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
@@ -67,6 +68,7 @@ def test_experiment_form_with_assistants(
             "temperature": 0.7,
             "max_token_limit": 10,
             "consent_form": ConsentFormFactory(team=team_with_users).id,
+            "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
         },
     )
     assert form.is_valid() == bool(not errors), form.errors

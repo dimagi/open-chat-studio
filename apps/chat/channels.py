@@ -16,7 +16,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
@@ -276,19 +276,31 @@ class ChannelBase:
     def _user_gave_consent(self) -> bool:
         return self.message_text.strip() == USER_CONSENT_TEXT
 
-    def _handle_supported_message(self):
-        response = None
-        if self.message_content_type == MESSAGE_TYPES.TEXT:
-            response = self._get_llm_response(self.message_text)
-            self.send_text_to_user(response)
-        elif self.message_content_type == MESSAGE_TYPES.VOICE:
+    def _extract_user_query(self) -> str:
+        if self.message_content_type == MESSAGE_TYPES.VOICE:
             # TODO: Error handling
-            transcript = self._get_voice_transcript()
-            response = self._get_llm_response(transcript)
-            if self.voice_replies_supported and self.experiment.synthetic_voice:
-                self._reply_voice_message(response)
-            else:
-                self.send_text_to_user(response)
+            return self._get_voice_transcript()
+        return self.message_text
+
+    def _send_message_to_user(self, bot_message: str):
+        """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
+        send_message_func = self.send_text_to_user
+
+        if self.voice_replies_supported and self.experiment.synthetic_voice:
+            voice_config = self.experiment.voice_response_behaviour
+            if voice_config == VoiceResponseBehaviours.ALWAYS:
+                send_message_func = self._reply_voice_message
+            elif (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
+            ):
+                send_message_func = self._reply_voice_message
+
+        send_message_func(bot_message)
+
+    def _handle_supported_message(self):
+        user_query = self._extract_user_query()
+        response = self._get_llm_response(user_query)
+        self._send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response

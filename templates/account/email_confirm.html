@@ -2,28 +2,38 @@
 {% load i18n %}
 {% load account %}
 {% block content %}
-  <h1 class="pg-title">{% translate "Confirm E-mail Address" %}</h1>
   {% if confirmation %}
     {% user_display confirmation.email_address.user as user_display %}
-    <p class="pg-content">
-      {% blocktranslate with confirmation.email_address.email as email %}
-        Please confirm that <a href="mailto:{{ email }}">{{ email }}</a>
-        is an e-mail address for user {{ user_display }}.
-      {% endblocktranslate %}
+    <p class="pg-content text-center">
+      <i class="fa-solid fa-circle-check fa-beat mb-4 text-success" style="--fa-beat-scale: 2.0; --fa-animation-iteration-count: 1;"></i>
+      <br/>
+      <a href="mailto:{{ confirmation.email_address.email }}">{{ confirmation.email_address.email }}</a>
     </p>
-    <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+    <p class="pg-content text-center">
+      {% translate "Thanks for verifying your email address." %}<br/>
+      {% translate "You will be redirected shortly." %}
+    </p>
+    <form method="post" action="{% url 'account_confirm_email' confirmation.key %}" id="confirmation_form">
       {% csrf_token %}
-      <div class="mt-2">
-        <button class="pg-button-primary" type="submit">{% translate 'Confirm' %}</button>
-      </div>
     </form>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById("confirmation_form").submit();
+      });
+    </script>
   {% else %}
     {% url 'account_email' as email_url %}
-    <p class="pg-content">
-      {% blocktranslate %}
-        This e-mail confirmation link expired or is invalid.
-        Please <a href="{{ email_url }}">issue a new e-mail confirmation request</a>.
-      {% endblocktranslate %}
-    </p>
+    <div class="prose max-w-none lg:prose-lg">
+      <p>
+        {% blocktranslate %}
+          This e-mail confirmation link expired or the email address has already been confirmed.
+        {% endblocktranslate %}
+      </p>
+      <p>
+        {% blocktranslate %}
+          If you are not able to log in, you can <a href="{{ email_url }}">request a new e-mail confirmation link</a>.
+        {% endblocktranslate %}
+      </p>
+    </div>
   {% endif %}
 {% endblock %}

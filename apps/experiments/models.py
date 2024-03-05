@@ -241,6 +241,12 @@ class NoActivityMessageConfig(BaseTeamModel):
         return self.name
 
 
+class VoiceResponseBehaviours(models.TextChoices):
+    ALWAYS = "always", gettext("Always")
+    RECIPROCAL = "reciprocal", gettext("Reciprocal")
+    NEVER = "never", gettext("Never")
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -346,6 +352,12 @@ class Experiment(BaseTeamModel):
         default=8192,
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
+    )
+    voice_response_behaviour = models.CharField(
+        max_length=10,
+        choices=VoiceResponseBehaviours.choices,
+        default=VoiceResponseBehaviours.RECIPROCAL,
+        help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
 

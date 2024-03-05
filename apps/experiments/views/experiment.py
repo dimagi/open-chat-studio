@@ -108,6 +108,7 @@ class ExperimentForm(forms.ModelForm):
             "synthetic_voice",
             "no_activity_config",
             "safety_violation_notification_emails",
+            "voice_response_behaviour",
         ]
         labels = {
             "source_material": "Inline Source Material",
