@@ -347,6 +347,7 @@ class Experiment(BaseTeamModel):
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
+    files = models.ManyToManyField("files.File", blank=True)
 
     class Meta:
         ordering = ["name"]
