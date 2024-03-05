@@ -118,9 +118,8 @@ class TimeoutTrigger(BaseTrigger):
 
     def _end_conversation(self, session, message):
         if self.end_conversation and not self._has_triggers_left(session, message):
-            session.ended_at = timezone.now()
-            session.status = SessionStatus.PENDING_REVIEW
-            session.save()
+            session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
+            session.end(commit=True)
 
     def _has_triggers_left(self, session, message):
         return (

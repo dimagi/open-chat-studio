@@ -6,6 +6,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -486,6 +487,12 @@ class ExperimentSession(BaseTeamModel):
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
 
-    def update_status(self, new_status: SessionStatus):
+    def update_status(self, new_status: SessionStatus, commit: bool = True):
         self.status = new_status
-        self.save()
+        if commit:
+            self.save()
+
+    def end(self, commit: bool = True):
+        self.ended_at = timezone.now()
+        if commit:
+            self.save()

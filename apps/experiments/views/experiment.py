@@ -739,9 +739,8 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
 @require_POST
 def end_experiment(request, team_slug: str, experiment_id: str, session_id: str):
     experiment_session = request.experiment_session
-    experiment_session.ended_at = timezone.now()
-    experiment_session.status = SessionStatus.PENDING_REVIEW
-    experiment_session.save()
+    experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
+    experiment_session.end(commit=True)
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 

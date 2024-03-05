@@ -6,7 +6,6 @@ from typing import ClassVar
 
 import requests
 from django.conf import settings
-from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
@@ -391,8 +390,7 @@ class ChannelBase:
 
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""
-        self.experiment_session.ended_at = timezone.now()
-        self.experiment_session.save()
+        self.experiment_session.end()
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
