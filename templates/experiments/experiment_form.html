@@ -23,10 +23,12 @@
     {% render_form_fields form "name" "description" "consent_form" %}
     <div class="divider"></div>
     {% render_form_fields form "type" %}
-    {% if not form.fields.assistant.choices %}
-      <div x-show="type === 'assistant'">
+    {% if form.fields.assistant.choices|length <= 1 %}
+      {# choices has an option for none so it is never empty #}
+      <div x-show="type === 'assistant'" x-cloak>
+        {% url "assistants:home" request.team.slug as new_assistant_url %}
         <p class="text-error">{% blocktranslate %}
-          No assistants have been created. Please create an assistant before creating an 'assistant' experiment.
+          No assistants have been created. <a class="link" href="{{ new_assistant_url  }}">Create one now</a>.
         {% endblocktranslate %}</p>
       </div>
     {% endif %}
