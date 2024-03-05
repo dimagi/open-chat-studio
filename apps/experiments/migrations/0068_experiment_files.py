@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("files", "0001_initial"),
-        ("experiments", "0066_alter_experimentsession_options"),
+        ("experiments", "0067_experiment_voice_response_behaviour"),
     ]
 
     operations = [
