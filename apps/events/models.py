@@ -5,16 +5,16 @@ from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import log
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.events.actions import end_conversation, log
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 
-ACTION_FUNCTIONS = {"log": log}
+ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation}
 
 
 class EventActionType(models.TextChoices):
     LOG = "log"  # Prints the last message
-    SUMMARIZE = "summarize"  # requires prompt
+    END_CONVERSATION = "end_conversation"  # Ends the conversation
 
 
 class EventAction(BaseModel):
@@ -24,6 +24,7 @@ class EventAction(BaseModel):
 
 class StaticTriggerType(models.TextChoices):
     CONVERSATION_END = "conversation_end"
+    LAST_TIMEOUT = "last_timeout"
 
 
 class StaticTrigger(BaseModel):
@@ -44,10 +45,6 @@ class TimeoutTrigger(BaseModel):
     total_num_triggers = models.IntegerField(
         default=1,
         help_text="The number of times to fire this trigger",
-    )
-    end_conversation = models.BooleanField(
-        default=True,
-        help_text="Whether to end the conversation after all the triggers have expired",
     )
 
     def timed_out_sessions(self):
@@ -113,17 +110,15 @@ class TimeoutTrigger(BaseModel):
         except Exception:
             self.add_event_log(session, last_human_message, EventLogStatusChoices.FAILURE)
 
-        self._end_conversation(session, last_human_message)
+        if not self._has_triggers_left(session, last_human_message):
+            from apps.events.tasks import enqueue_static_triggers
+
+            enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
         return result
 
     def add_event_log(self, session, message, status):
         self.event_logs.create(session=session, chat_message=message, status=status)
-
-    def _end_conversation(self, session, message):
-        if self.end_conversation and not self._has_triggers_left(session, message):
-            session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-            session.end(commit=True)
 
     def _has_triggers_left(self, session, message):
         return (

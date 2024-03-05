@@ -160,12 +160,10 @@ def test_fire_trigger_increments_stats(session):
     session.refresh_from_db()
 
     assert timeout_trigger.event_logs.filter(session=session).count() == 1
-    assert session.ended_at is None
 
     timeout_trigger.fire(session)
     session.refresh_from_db()
     assert timeout_trigger.event_logs.filter(session=session).count() == 2
-    assert session.ended_at is not None
 
 
 @pytest.mark.django_db()
@@ -189,7 +187,6 @@ def test_new_human_message_resets_count(session):
     session.refresh_from_db()
 
     assert timeout_trigger.event_logs.filter(session=session).count() == 1
-    assert session.ended_at is None
 
     second_message = ChatMessage.objects.create(
         chat=chat,
@@ -202,10 +199,8 @@ def test_new_human_message_resets_count(session):
     assert timeout_trigger.event_logs.filter(session=session).count() == 2
     assert timeout_trigger.event_logs.filter(session=session, chat_message=first_message).count() == 1
     assert timeout_trigger.event_logs.filter(session=session, chat_message=second_message).count() == 1
-    assert session.ended_at is None
 
     timeout_trigger.fire(session)
     session.refresh_from_db()
     assert timeout_trigger.event_logs.filter(session=session, chat_message=first_message).count() == 1
     assert timeout_trigger.event_logs.filter(session=session, chat_message=second_message).count() == 2
-    assert session.ended_at is not None
