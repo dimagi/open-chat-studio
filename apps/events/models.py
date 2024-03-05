@@ -5,16 +5,17 @@ from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import end_conversation, log
+from apps.events.actions import end_conversation, log, summarize_conversation
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 
-ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation}
+ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation, "summarize": summarize_conversation}
 
 
 class EventActionType(models.TextChoices):
     LOG = "log"  # Prints the last message
     END_CONVERSATION = "end_conversation"  # Ends the conversation
+    SUMMARIZE = "summarize"  # Summarize the conversation
 
 
 class EventAction(BaseModel):
@@ -33,7 +34,7 @@ class StaticTrigger(BaseModel):
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
 
     def fire(self, session):
-        return ACTION_FUNCTIONS[self.action.action_type](session)
+        return ACTION_FUNCTIONS[self.action.action_type](session, self.actions.params)
 
 
 class TimeoutTrigger(BaseModel):
@@ -105,7 +106,7 @@ class TimeoutTrigger(BaseModel):
     def fire(self, session):
         last_human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).last()
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type](session)
+            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
             self.add_event_log(session, last_human_message, EventLogStatusChoices.SUCCESS)
         except Exception:
             self.add_event_log(session, last_human_message, EventLogStatusChoices.FAILURE)
