@@ -21,7 +21,7 @@ from apps.experiments.models import ExperimentSession, SessionStatus, VoiceRespo
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
-You only support {supperted_types} messages types. Respond only with the message for the user
+You only support {supported_types} messages types. Respond only with the message for the user
 """
 
 
@@ -431,7 +431,7 @@ class ChannelBase:
             message_type=ChatMessageType.SYSTEM,
             content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
         )
-        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
+        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
