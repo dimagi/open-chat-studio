@@ -55,7 +55,7 @@ CONTENT_TYPES = {
     "assistants": ["openaiassistant"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage"],
-    "events": ["eventaction", "timeouttrigger", "eventlog"],
+    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog"],
     "experiments": [
         "consentform",
         "experiment",

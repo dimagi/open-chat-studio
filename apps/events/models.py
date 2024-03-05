@@ -22,17 +22,21 @@ class EventAction(BaseModel):
     params = models.JSONField(blank=True, default=dict)
 
 
-class BaseTrigger(BaseModel):
-    action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="action")
+class StaticTriggerType(models.TextChoices):
+    CONVERSATION_END = "conversation_end"
 
-    class Meta:
-        abstract = True
+
+class StaticTrigger(BaseModel):
+    action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
+    type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
 
     def fire(self, session):
         return ACTION_FUNCTIONS[self.action.action_type](session)
 
 
-class TimeoutTrigger(BaseTrigger):
+class TimeoutTrigger(BaseModel):
+    action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
         help_text="The amount of time in seconds to fire this trigger.",
@@ -104,7 +108,7 @@ class TimeoutTrigger(BaseTrigger):
     def fire(self, session):
         last_human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).last()
         try:
-            result = super().fire(session)
+            result = ACTION_FUNCTIONS[self.action.action_type](session)
             self.add_event_log(session, last_human_message, EventLogStatusChoices.SUCCESS)
         except Exception:
             self.add_event_log(session, last_human_message, EventLogStatusChoices.FAILURE)

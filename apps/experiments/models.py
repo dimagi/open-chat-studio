@@ -492,7 +492,14 @@ class ExperimentSession(BaseTeamModel):
         if commit:
             self.save()
 
-    def end(self, commit: bool = True):
+    def end(self, commit: bool = True, propagate: bool = True):
+        if propagate and not commit:
+            raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()
         if commit:
             self.save()
+        if commit and propagate:
+            from apps.events.models import StaticTriggerType
+            from apps.events.tasks import enqueue_static_triggers
+
+            enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
