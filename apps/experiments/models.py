@@ -493,6 +493,16 @@ class ExperimentSession(BaseTeamModel):
             self.save()
 
     def end(self, commit: bool = True, propagate: bool = True):
+        """
+        Ends this experiment session
+
+        Args:
+            commit: Whether to save the model after setting the ended_at value
+            propagate: Whether to enqueue any static event triggers defined for this experiment_session
+        Raises:
+            ValueError: If propagate is True but commit is not.
+        """
+
         if propagate and not commit:
             raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()
