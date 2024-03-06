@@ -12,6 +12,11 @@
     <span class="loading loading-spinner loading-sm htmx-show"></span>
   </button>
   <div class="flex items-center">
-    <a class="text-sm font-medium hover:link" href="{% url "files:base" request.team.slug file.id %}">{{ file.name }}</a>
+    {% if file.file %}
+      <a class="text-sm font-medium hover:link" href="{% url "files:base" request.team.slug file.id %}?from={{ request.path }}">{{ file.name }}</a>
+    {% else %}
+      <span class="text-sm font-medium mr-2">{{ file.name }}</span>
+      <span class="tooltip" data-tip="File contents not available"><i class="fa-solid fa-triangle-exclamation text-warning"></i></span>
+    {% endif %}
   </div>
 </li>
