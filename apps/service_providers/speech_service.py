@@ -8,6 +8,7 @@ import boto3
 import pydantic
 from pydub import AudioSegment
 
+from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 
@@ -96,7 +97,9 @@ class AzureSpeechService(SpeechService):
                 with open(temp_file.name, "rb") as f:
                     file_content = f.read()
 
-                return BytesIO(file_content), duration_seconds
+                return convert_audio(
+                    audio=BytesIO(file_content), target_format="mp3", source_format="wav"
+                ), duration_seconds
             elif result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
                 msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
