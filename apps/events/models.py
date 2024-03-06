@@ -137,7 +137,7 @@ class TimeoutTrigger(BaseModel):
         return sessions.all()
 
     def fire(self, session):
-        last_human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).last()
+        last_human_message = ChatMessage.objects.filter(chat_id=session.chat_id).last()
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
             self.add_event_log(session, last_human_message, EventLogStatusChoices.SUCCESS)
