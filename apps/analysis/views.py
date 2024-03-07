@@ -57,19 +57,19 @@ def analysis_configure(request, team_slug: str, pk: int):
     param_forms = get_static_forms_for_analysis(analysis)
     if request.method == "POST":
         forms = {
-            step_name: form(request, data=request.POST, files=request.FILES) for step_name, form in param_forms.items()
+            step_id: form(request, prefix=step_id, data=request.POST, files=request.FILES)
+            for step_id, form in param_forms.items()
         }
         if all(form.is_valid() for form in forms.values()):
-            step_params = {
-                step_name: form.save().model_dump(exclude_defaults=True) for step_name, form in forms.items()
-            }
+            step_params = {step_id: form.save().model_dump(exclude_defaults=True) for step_id, form in forms.items()}
             analysis.config = step_params
             analysis.save()
             return redirect("analysis:details", team_slug=team_slug, pk=pk)
     else:
         initial = analysis.config or {}
         forms = {
-            step_name: form(request, initial=initial.get(step_name, {})) for step_name, form in param_forms.items()
+            step_id: form(request, prefix=step_id, initial=initial.get(step_id, {}))
+            for step_id, form in param_forms.items()
         }
 
     return render(

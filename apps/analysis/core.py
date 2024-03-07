@@ -253,16 +253,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     output_type: PipeOut
     params: Params = NoParams()
     pipeline_context: PipelineContext | None = None
+    name: str = None
     id: str = None
 
-    def __init__(self, params: Params = None):
+    def __init__(self, step_id=None, params: Params = None):
         self.params = params or self.params
         self.id = uuid.uuid4().hex
         self.log = _create_logger(self.name, self.id)
-
-    @property
-    def name(self):
-        return self.__class__.__name__
+        self.name = self.__class__.__name__
+        if step_id:
+            self.name = f"{self.name}:{step_id}"
 
     @property
     def is_cancelled(self):
