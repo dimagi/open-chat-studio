@@ -8,7 +8,7 @@ from apps.service_providers.speech_service import SynthesizedAudio
 
 @pytest.mark.parametrize(
     ("source_format", "target_format", "codec", "conversion_expected"),
-    [("mp3", "ogg", None, True), ("mp3", "mp3", None, False), ("mp3", "ogg", "libopus", True)],
+    [("mp3", "ogg", None, True), ("mp3", "mp3", None, False), ("ogg", "ogg", "libopus", True)],
 )
 def test_synthesized_audio(source_format, target_format, codec, conversion_expected):
     audio = SynthesizedAudio(audio=BytesIO(b"123"), duration=10.0, format=source_format)
