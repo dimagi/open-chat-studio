@@ -15,6 +15,7 @@ from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.service_providers.speech_service import SynthesizedAudio
 
 
 class MessagingService(pydantic.BaseModel):
@@ -26,7 +27,7 @@ class MessagingService(pydantic.BaseModel):
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         raise NotImplementedError
 
-    def send_whatsapp_voice_message(self, media_url: str, from_number: str, to_number):
+    def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number: str):
         raise NotImplementedError
 
     def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
@@ -60,9 +61,9 @@ class TwilioService(MessagingService):
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=message, to=f"whatsapp:{to_number}")
 
-    def send_whatsapp_voice_message(self, voice_audio: BytesIO, duration: int, from_number: str, to_number):
+    def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number):
         file_path = f"{uuid.uuid4()}.mp3"
-        audio_bytes = voice_audio.getvalue()
+        audio_bytes = synthetic_voice.get_audio_bytes(format="mp3")
         self.s3_client.upload_fileobj(
             BytesIO(audio_bytes),
             settings.WHATSAPP_S3_AUDIO_BUCKET,
@@ -70,7 +71,7 @@ class TwilioService(MessagingService):
             ExtraArgs={
                 "Expires": datetime.utcnow() + timedelta(minutes=7),
                 "Metadata": {
-                    "DurationSeconds": str(duration),
+                    "DurationSeconds": str(synthetic_voice.duration),
                 },
                 "ContentType": "audio/mpeg",
             },
@@ -106,12 +107,10 @@ class TurnIOService(MessagingService):
     def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
         self.client.messages.send_text(to_number, message)
 
-    def send_whatsapp_voice_message(self, voice_audio: BytesIO, duration: int, from_number: str, to_number: str):
-        from apps.channels.audio import convert_audio
-
+    def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number: str):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
-        voice_audio = convert_audio(voice_audio, target_format="ogg", source_format="mp3", codec="libopus")
-        media_id = self.client.media.upload_media(voice_audio.read(), content_type="audio/ogg")
+        voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
+        media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
         self.client.messages.send_audio(whatsapp_id=to_number, media_id=media_id)
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:

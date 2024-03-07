@@ -17,6 +17,7 @@ from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.service_providers.speech_service import SynthesizedAudio
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
@@ -118,7 +119,7 @@ class ChannelBase:
         raise NotImplementedError()
 
     @abstractmethod
-    def send_voice_to_user(self, voice_audio, duration):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         if self.voice_replies_supported:
             raise Exception(
                 "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
@@ -312,8 +313,8 @@ class ChannelBase:
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
         try:
-            voice_audio, duration = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
-            self.send_voice_to_user(voice_audio, duration)
+            synthetic_voice_audio = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
             logging.exception(e)
             self.send_text_to_user(text)
@@ -476,8 +477,8 @@ class TelegramChannel(ChannelBase):
     def message_text(self):
         return self.message.body
 
-    def send_voice_to_user(self, voice_audio, duration):
-        self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+        self.telegram_bot.send_voice(self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration)
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
@@ -548,14 +549,14 @@ class WhatsappChannel(ChannelBase):
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, voice_audio, duration):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.messaging_service.send_whatsapp_voice_message(
-            voice_audio=voice_audio, duration=duration, from_number=from_number, to_number=to_number
+            synthetic_voice, from_number=from_number, to_number=to_number
         )
 
 

@@ -9,6 +9,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.service_providers.models import MessagingProviderType
+from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -81,7 +82,7 @@ class TestTwilio:
         message_type,
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
-        synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
+        synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
         ):
