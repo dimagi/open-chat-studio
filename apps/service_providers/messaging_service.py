@@ -11,7 +11,7 @@ from django.conf import settings
 from turn import TurnClient
 from twilio.rest import Client
 
-from apps.channels import audio
+from apps.channels.audio import convert_audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
@@ -64,7 +64,7 @@ class TwilioService(MessagingService):
     def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number):
         voice_audio = synthetic_voice.audio
         if synthetic_voice.format != "mp3":
-            voice_audio = audio.convert_audio(
+            voice_audio = convert_audio(
                 synthetic_voice.audio, target_format="mp3", source_format=synthetic_voice.format
             )
 
@@ -95,7 +95,7 @@ class TwilioService(MessagingService):
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
         ogg_audio = BytesIO(requests.get(message.media_url, auth=auth).content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+        return convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
 
 class TurnIOService(MessagingService):
@@ -115,7 +115,7 @@ class TurnIOService(MessagingService):
 
     def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number: str):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
-        voice_audio = audio.convert_audio(
+        voice_audio = convert_audio(
             synthetic_voice.audio, target_format="ogg", source_format=synthetic_voice.format, codec="libopus"
         )
         media_id = self.client.media.upload_media(voice_audio.read(), content_type="audio/ogg")
@@ -124,4 +124,4 @@ class TurnIOService(MessagingService):
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
         ogg_audio = BytesIO(response.content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+        return convert_audio(ogg_audio, target_format="wav", source_format="ogg")

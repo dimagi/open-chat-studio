@@ -101,7 +101,7 @@ class TestTwilio:
         "synthesized_audio_format",
         ["wav", "mp3"],
     )
-    @patch("apps.service_providers.messaging_service.audio.convert_audio")
+    @patch("apps.service_providers.messaging_service.convert_audio")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
@@ -179,7 +179,7 @@ class TestTurnio:
         _handle_supported_message.assert_not_called()
 
     @pytest.mark.parametrize("synthesized_audio_format", ["wav", "ogg", "mp3"])
-    @patch("apps.service_providers.messaging_service.audio.convert_audio")
+    @patch("apps.service_providers.messaging_service.convert_audio")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
