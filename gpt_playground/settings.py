@@ -397,6 +397,7 @@ if SENTRY_DSN:
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
+        send_default_pii=True,  # include user details in events
         integrations=[
             DjangoIntegration(),
             CeleryIntegration(),
