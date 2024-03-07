@@ -84,7 +84,7 @@ class ExperimentForm(forms.ModelForm):
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
