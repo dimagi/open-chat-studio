@@ -9,6 +9,7 @@ import boto3
 import pydantic
 from pydub import AudioSegment
 
+from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 
@@ -18,6 +19,15 @@ class SynthesizedAudio:
     audio: BytesIO
     duration: float
     format: str
+
+    def get_audio_bytes(self, format: str, codec: str | None = None) -> bytes:
+        """Returns the audio bytes in the specified `format` and `codec`. A conversion will always be triggered
+        when `codec` is specified to ensure that this codec was used.
+        """
+        audio = self.audio
+        if self.format != format or codec is not None:
+            audio = convert_audio(audio=self.audio, target_format=format, source_format=self.format, codec=codec)
+        return audio.getvalue()
 
 
 class SpeechService(pydantic.BaseModel):

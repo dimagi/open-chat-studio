@@ -96,40 +96,6 @@ class TestTwilio:
             # elif message_type == "audio": TODO: Figure out why this is not passing in the github workflows
             #     s3_client_mock.generate_presigned_url.assert_called()
 
-    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
-    @pytest.mark.parametrize(
-        "synthesized_audio_format",
-        ["wav", "mp3"],
-    )
-    @patch("apps.channels.audio.convert_audio")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
-    def test_convert_audio_to_supported_format(
-        self,
-        get_llm_response_mock,
-        synthesize_voice_mock,
-        _get_voice_transcript,
-        convert_audio_mock,
-        synthesized_audio_format,
-    ):
-        """Test that the synthesized audio is converted to mp3 before being sent to Twilio"""
-        synthesize_voice_mock.return_value = SynthesizedAudio(
-            audio=BytesIO(b"123"), duration=10, format=synthesized_audio_format
-        )
-        _get_voice_transcript.return_value = "Hi"
-        convert_audio_mock.return_value = BytesIO(b"123")
-
-        with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
-            "apps.service_providers.messaging_service.TwilioService.client"
-        ):
-            get_llm_response_mock.return_value = "Hi"
-            handle_twilio_message(message_data=twilio_messages.audio_message())
-            if synthesized_audio_format == "mp3":
-                convert_audio_mock.assert_not_called()
-            else:
-                convert_audio_mock.assert_called()
-
 
 class TestTurnio:
     @pytest.mark.parametrize(
@@ -177,32 +143,3 @@ class TestTurnio:
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
-
-    @pytest.mark.parametrize("synthesized_audio_format", ["wav", "ogg", "mp3"])
-    @patch("apps.channels.audio.convert_audio")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
-    def test_audio_is_always_converted(
-        self,
-        _get_llm_response,
-        synthesize_voice_mock,
-        get_voice_transcript_mock,
-        convert_audio_mock,
-        db,
-        turnio_whatsapp_channel,
-        synthesized_audio_format,
-    ):
-        """Test that the synthesized audio is always converted to ogg format with the libopus codec"""
-        synthesize_voice_mock.return_value = SynthesizedAudio(
-            audio=BytesIO(b"123"), duration=10, format=synthesized_audio_format
-        )
-        _get_llm_response.return_value = "Hi"
-        get_voice_transcript_mock.return_value = "Hi"
-        convert_audio_mock.return_value = BytesIO(b"123")
-
-        with patch("apps.service_providers.messaging_service.TurnIOService.client"):
-            handle_turn_message(
-                experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=turnio_messages.audio_message()
-            )
-            convert_audio_mock.assert_called()

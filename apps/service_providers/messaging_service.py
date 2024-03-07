@@ -62,14 +62,8 @@ class TwilioService(MessagingService):
         self.client.messages.create(from_=f"whatsapp:{from_number}", body=message, to=f"whatsapp:{to_number}")
 
     def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number):
-        voice_audio = synthetic_voice.audio
-        if synthetic_voice.format != "mp3":
-            voice_audio = audio.convert_audio(
-                synthetic_voice.audio, target_format="mp3", source_format=synthetic_voice.format
-            )
-
         file_path = f"{uuid.uuid4()}.mp3"
-        audio_bytes = voice_audio.getvalue()
+        audio_bytes = synthetic_voice.get_audio_bytes(format="mp3")
         self.s3_client.upload_fileobj(
             BytesIO(audio_bytes),
             settings.WHATSAPP_S3_AUDIO_BUCKET,
@@ -115,10 +109,8 @@ class TurnIOService(MessagingService):
 
     def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number: str):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
-        voice_audio = audio.convert_audio(
-            synthetic_voice.audio, target_format="ogg", source_format=synthetic_voice.format, codec="libopus"
-        )
-        media_id = self.client.media.upload_media(voice_audio.read(), content_type="audio/ogg")
+        voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
+        media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
         self.client.messages.send_audio(whatsapp_id=to_number, media_id=media_id)
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
