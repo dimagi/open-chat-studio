@@ -6,7 +6,9 @@ from .consent import (  # noqa: F401
     EditConsentForm,
 )
 from .experiment import (  # noqa: F401
+    AddFileToExperiment,
     CreateExperiment,
+    DeleteFileFromExperiment,
     EditExperiment,
     ExperimentTableView,
     create_channel,

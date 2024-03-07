@@ -9,15 +9,15 @@
       <i class="fa-solid fa-paperclip"></i> Add
     </button>
   </div>
-  <form id="fileUploadForm" enctype="multipart/form-data"
-        hx-post="{{ upload_url }}"
-        hx-trigger="change"
-        hx-swap="afterbegin"
-        hx-target="#fileList"
+  <div id="fileUploadForm" hx-encoding="multipart/form-data"
+       hx-post="{{ upload_url }}"
+       hx-trigger="change"
+       hx-swap="afterbegin"
+       hx-target="#fileList"
   >
     <input type="file" name="file" id="fileInput" class="hidden">
     <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
-  </form>
+  </div>
   <ul id="fileList">
     {% for file in files %}
       {% include "files/partials/file_item.html" %}

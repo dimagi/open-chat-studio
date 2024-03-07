@@ -5,6 +5,7 @@ import pytest
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
+from apps.service_providers.speech_service import SynthesizedAudio
 
 
 def test_aws_voice_provider(team_with_users):
@@ -100,7 +101,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
 
     speech_service = provider.get_speech_service()
     # bypass pydantic validation
-    mock_synthesize = mock.Mock(return_value=(None, 0.0))
+    mock_synthesize = mock.Mock(return_value=(SynthesizedAudio(audio=None, duration=0.0, format="mp3")))
     object.__setattr__(speech_service, "_synthesize_voice", mock_synthesize)
     speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1

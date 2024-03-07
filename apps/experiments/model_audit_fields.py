@@ -19,6 +19,7 @@ EXPERIMENT_FIELDS = [
     "no_activity_config",
     "conversational_consent_enabled",
     "team",
+    "voice_response_behaviour",
 ]
 
 SOURCE_MATERIAL_FIELDS = ["owner", "topic", "description", "material", "team"]

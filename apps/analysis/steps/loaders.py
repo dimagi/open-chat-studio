@@ -160,7 +160,7 @@ class CommCareAppLoader(BaseLoader[str]):
                     self.log.info(f"Loaded app {app_meta.name}")
                     data.append(StepContext(app_data, name=app_meta.name))
                 except httpx.HTTPError as e:
-                    self.log.error(f"Error loading app {app_meta.name} ({app_meta.domain}:{app_meta.app_id})", e)
+                    self.log.error(f"Error loading app {app_meta.name} ({app_meta.domain}:{app_meta.app_id}): {e}")
         if not data:
             raise StepError("Unable to load any data from CommCare")
         return data

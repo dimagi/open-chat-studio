@@ -16,12 +16,13 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.service_providers.speech_service import SynthesizedAudio
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
-You only support {supperted_types} messages types. Respond only with the message for the user
+You only support {supported_types} messages types. Respond only with the message for the user
 """
 
 
@@ -118,7 +119,7 @@ class ChannelBase:
         raise NotImplementedError()
 
     @abstractmethod
-    def send_voice_to_user(self, voice_audio, duration):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         if self.voice_replies_supported:
             raise Exception(
                 "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
@@ -276,19 +277,31 @@ class ChannelBase:
     def _user_gave_consent(self) -> bool:
         return self.message_text.strip() == USER_CONSENT_TEXT
 
-    def _handle_supported_message(self):
-        response = None
-        if self.message_content_type == MESSAGE_TYPES.TEXT:
-            response = self._get_llm_response(self.message_text)
-            self.send_text_to_user(response)
-        elif self.message_content_type == MESSAGE_TYPES.VOICE:
+    def _extract_user_query(self) -> str:
+        if self.message_content_type == MESSAGE_TYPES.VOICE:
             # TODO: Error handling
-            transcript = self._get_voice_transcript()
-            response = self._get_llm_response(transcript)
-            if self.voice_replies_supported and self.experiment.synthetic_voice:
-                self._reply_voice_message(response)
-            else:
-                self.send_text_to_user(response)
+            return self._get_voice_transcript()
+        return self.message_text
+
+    def _send_message_to_user(self, bot_message: str):
+        """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
+        send_message_func = self.send_text_to_user
+
+        if self.voice_replies_supported and self.experiment.synthetic_voice:
+            voice_config = self.experiment.voice_response_behaviour
+            if voice_config == VoiceResponseBehaviours.ALWAYS:
+                send_message_func = self._reply_voice_message
+            elif (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
+            ):
+                send_message_func = self._reply_voice_message
+
+        send_message_func(bot_message)
+
+    def _handle_supported_message(self):
+        user_query = self._extract_user_query()
+        response = self._get_llm_response(user_query)
+        self._send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
@@ -300,8 +313,8 @@ class ChannelBase:
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
         try:
-            voice_audio, duration = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
-            self.send_voice_to_user(voice_audio, duration)
+            synthetic_voice_audio = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
             logging.exception(e)
             self.send_text_to_user(text)
@@ -419,7 +432,7 @@ class ChannelBase:
             message_type=ChatMessageType.SYSTEM,
             content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
         )
-        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supperted_types=self.supported_message_types)
+        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
@@ -464,8 +477,8 @@ class TelegramChannel(ChannelBase):
     def message_text(self):
         return self.message.body
 
-    def send_voice_to_user(self, voice_audio, duration):
-        self.telegram_bot.send_voice(self.chat_id, voice=voice_audio, duration=duration)
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+        self.telegram_bot.send_voice(self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration)
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
@@ -536,14 +549,14 @@ class WhatsappChannel(ChannelBase):
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
-    def send_voice_to_user(self, voice_audio, duration):
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
         self.messaging_service.send_whatsapp_voice_message(
-            voice_audio=voice_audio, duration=duration, from_number=from_number, to_number=to_number
+            synthetic_voice, from_number=from_number, to_number=to_number
         )
 
 
