@@ -18,9 +18,9 @@ class Chat(BaseTeamModel):
     class MetadataKeys(StrEnum):
         OPENAI_THREAD_ID = "openai_thread_id"
 
-    # tbd what goes in here
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
-    name = models.CharField(max_length=100, default="Unnamed Chat")
+    # must match or be greater than experiment name field
+    name = models.CharField(max_length=128, default="Unnamed Chat")
     metadata = models.JSONField(default=dict)
 
     def get_metadata(self, key: MetadataKeys):

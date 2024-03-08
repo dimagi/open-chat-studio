@@ -75,7 +75,7 @@ class SourceMaterial(BaseTeamModel):
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
     objects = SafetyLayerObjectManager()
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
@@ -103,7 +103,7 @@ class Survey(BaseTeamModel):
     A survey.
     """
 
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     url = models.URLField(
         help_text=(
             "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
@@ -146,7 +146,7 @@ class ConsentForm(BaseTeamModel):
     """
 
     objects = ConsentFormObjectManager()
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     consent_text = models.TextField(help_text="Custom markdown text")
     capture_identifier = models.BooleanField(default=True)
     identifier_label = models.CharField(max_length=200, default="Email Address")
@@ -196,7 +196,7 @@ class SyntheticVoice(BaseModel):
     )
 
     name = models.CharField(
-        max_length=64, help_text="The name of the synthetic voice, as per the documentation of the service"
+        max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
     neural = models.BooleanField(default=False, help_text="Indicates whether this voice is a neural voice")
     language = models.CharField(null=False, blank=False, max_length=64, help_text="The language this voice is for")
@@ -230,7 +230,7 @@ class NoActivityMessageConfig(BaseTeamModel):
 
     objects = NoActivityMessageConfigObjectManager()
     message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=128)
     max_pings = models.IntegerField()
     ping_after = models.IntegerField(help_text="The amount of minutes after which to ping the user. Minimum 1.")
 
@@ -256,7 +256,7 @@ class Experiment(BaseTeamModel):
 
     objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
