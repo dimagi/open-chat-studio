@@ -6,16 +6,15 @@
     <div class="prose !max-w-none">
       <p>Thanks for completing the experiment!</p>
       {% if experiment.post_survey %}
-        <p>
-          As a final step, please click on <a href="{{ experiment_session.get_post_survey_link }}" target="_blank">this survey link</a>, fill it out, and when you have finished,
-          return to this screen to continue.
-        </p>
+        <p>{{ survey_text }}</p>
+        <p><a class="btn btn-accent" href="{{ survey_link }}" target="_blank">Take the Survey</a></p>
       {% else %}
         <p>
           Please click the button below to end the experiment and submit your chat details.
         </p>
       {% endif %}
     </div>
+    <div class="divider"></div>
     <form method="post" class="my-2 max-w-md">
       {% csrf_token %}
       {% if form %}
