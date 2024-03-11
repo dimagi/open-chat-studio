@@ -94,7 +94,7 @@ class ExperimentChannel(BaseModel):
     RESET_COMMAND = "/reset"
     PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"), (FACEBOOK, "Facebook"))
 
-    name = models.CharField(max_length=40, help_text="The name of this channel")
+    name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
     deleted = models.BooleanField(default=False)
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")

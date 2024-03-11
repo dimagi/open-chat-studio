@@ -62,7 +62,7 @@ class Analysis(BaseTeamModel):
     pipeline = models.CharField(max_length=255, help_text="Data processing pipeline")
     llm_provider = models.ForeignKey("service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True)
     llm_model = models.CharField(
-        max_length=20,
+        max_length=255,
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
