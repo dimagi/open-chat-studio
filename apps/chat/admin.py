@@ -6,7 +6,7 @@ from .models import Chat, ChatMessage
 @admin.register(Chat)
 class ChatAdmin(admin.ModelAdmin):
     list_display = ("user", "team", "created_at", "updated_at")
-    search_fields = ("user",)
+    search_fields = ("user__email",)
     list_filter = (
         "team",
         "user",
@@ -23,7 +23,7 @@ class ChatAdmin(admin.ModelAdmin):
 class ChatMessageAdmin(admin.ModelAdmin):
     list_display = ("chat", "team", "message_type", "content", "created_at", "updated_at")
     search_fields = (
-        "chat",
+        "chat_id",
         "content",
     )
     list_filter = (
