@@ -7,6 +7,7 @@ from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.teams.models import BaseTeamModel
+from apps.users.models import CustomUser
 from apps.utils.models import BaseModel
 
 
@@ -22,6 +23,9 @@ class Chat(BaseTeamModel):
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
     metadata = models.JSONField(default=dict)
+
+    def add_tags(self, tags: list[str], added_by: CustomUser):
+        self.tags.add(tags, through_defaults={"team": self.team, "user": added_by})
 
     def get_metadata(self, key: MetadataKeys):
         return self.metadata.get(key, None)
