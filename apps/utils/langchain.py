@@ -5,8 +5,9 @@ from unittest import mock
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
-from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatGenerationChunk
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 
 from apps.service_providers.llm_service import LlmService
@@ -19,13 +20,33 @@ class FakeLlm(FakeListChatModel):
     token_i: int = 0
     calls: list = []
 
-    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str:
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        output = self._call(messages, stop=stop, run_manager=run_manager, **kwargs)
+        if isinstance(output, BaseMessage):
+            message = output
+        else:
+            message = AIMessage(content=output)
+
+        generation = ChatGeneration(message=message)
+        return ChatResult(generations=[generation])
+
+    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         self.calls.append(mock.call(messages, *args, **kwargs))
         return super()._call(messages, *args, **kwargs)
 
     def _stream(self, messages: list[BaseMessage], *args, **kwargs) -> Iterator[ChatGenerationChunk]:
-        self.calls.append(mock.call(messages, *args, **kwargs))
-        return super()._stream(messages, *args, **kwargs)
+        response = self._call(messages, *args, **kwargs)
+        if isinstance(response, BaseMessage):
+            yield ChatGenerationChunk(message=response)
+        else:
+            for c in response:
+                yield ChatGenerationChunk(message=AIMessageChunk(content=c))
 
     def get_num_tokens_from_messages(self, messages: list) -> int:
         token_counts = self.token_counts[self.token_i]
@@ -60,9 +81,10 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
     i: int = 0
 
     def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:
-        return OpenAIAssistantFinish(
-            return_values={"output": self._get_next_response()}, log="", thread_id="123", run_id="456"
-        )
+        response = self._get_next_response()
+        if isinstance(response, BaseException):
+            raise response
+        return OpenAIAssistantFinish(return_values={"output": response}, log="", thread_id="123", run_id="456")
 
     def _get_next_response(self):
         response = self.responses[self.i]
@@ -74,7 +96,7 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 
 @contextmanager
-def mock_experiment_llm(experiment, responses: list[str], token_counts: list[int] = None):
+def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
     original = experiment.get_llm_service
 
     experiment.get_llm_service = lambda: FakeLlmService(
