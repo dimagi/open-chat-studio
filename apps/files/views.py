@@ -46,7 +46,7 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             except Exception as e:
                 return self.get_error_response(e)
             return self.get_success_response(file)
-        return HttpResponse(status=400)
+        return self.get_error_response(form.errors.as_text())
 
     def get_success_response(self, file):
         return render(
