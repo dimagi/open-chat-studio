@@ -6,13 +6,7 @@ from apps.channels.models import ExperimentChannel
 
 @admin.register(ExperimentChannel)
 class ExperimentChannelAdmin(admin.ModelAdmin):
-    list_display = (
-        "name",
-        "team",
-        "platform",
-        "deleted",
-        "external_id",
-    )
+    list_display = ("name", "team", "platform", "deleted", "external_id", "messaging_provider")
     search_fields = ("name", "external_id")
     list_filter = (
         "platform",
@@ -24,6 +18,11 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    @admin.display(description="Messaging Provider")
+    def messaging_provider(self, obj):
+        if obj.messaging_provider:
+            return obj.messaging_provider.name
 
     @admin.display(description="Team")
     def team(self, obj):
