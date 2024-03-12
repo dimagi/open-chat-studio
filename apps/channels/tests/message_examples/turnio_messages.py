@@ -41,21 +41,21 @@ def text_message():
     }
 
 
-def audio_message():
+def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
         "messages": [
             {
                 "_vnd": {
                     "v1": {
-                        "author": {"id": "27456897512", "name": "Chris Smit", "type": "OWNER"},
+                        "author": {"id": "27456897512", "name": "John Doe", "type": "OWNER"},
                         "card_uuid": "None",
                         "chat": {
                             "assigned_to": "None",
-                            "contact_uuid": "eeb51508-4ff0-4ca4-9bf8-69e548b1ceb3",
+                            "contact_uuid": "ef59c32dsd9-289d-474e-aab1-e0dsss19f1f4",
                             "inserted_at": "2024-01-25T09:02:46.684610Z",
                             "owner": "+27456897512",
-                            "permalink": "https://whatsapp.turn.io/app/c/08a64841-10df-4c11-b81f-4ec36d616c1c",
+                            "permalink": "https://whatsapp.turn.io/app/c/ef59c32dsd9-289d-474e-aab1-e0dsss19f1f4",
                             "state": "OPEN",
                             "state_reason": "Re-opened by inbound message.",
                             "unread_count": 31,

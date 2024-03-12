@@ -100,7 +100,7 @@ class TestTwilio:
 class TestTurnio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
-        [(turnio_messages.text_message(), "text"), (turnio_messages.audio_message(), "voice")],
+        [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "voice")],
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
@@ -112,7 +112,7 @@ class TestTurnio:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
 
-    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.audio_message()])
+    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.voice_message()])
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
