@@ -11,4 +11,10 @@ register = template.Library()
 def render_markdown(text):
     if not text:
         return ""
-    return linebreaksbr(mark_safe(markdown.markdown(text, extensions=[FencedCodeExtension()])))
+    text = markdown.markdown(text, extensions=[FencedCodeExtension()])
+    text = text.replace("</li>\n<li>", "</li><li>")
+    text = text.replace("<ol>\n<li>", "<ol><li>")
+    text = text.replace("</li>\n</ol>", "</li></ol>")
+    text = text.replace("<li>\n<p>", "<li><p>")
+    text = text.replace("</p>\n</li>", "</p></li>")
+    return linebreaksbr(mark_safe(text))
