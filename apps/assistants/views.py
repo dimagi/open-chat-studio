@@ -8,14 +8,14 @@ from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.files.forms import get_file_formset
+from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
+from apps.generics import actions
+from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.tables import render_table_row
 
-from ..files.forms import get_file_formset
-from ..files.views import BaseAddFileHtmxView, BaseDeleteFileView
-from ..generics import actions
-from ..service_providers.models import LlmProvider
-from ..utils.tables import render_table_row
 from .forms import ImportAssistantForm, OpenAiAssistantForm
 from .models import OpenAiAssistant
 from .sync import (
@@ -222,6 +222,8 @@ class AddFileToAssistant(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
         assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
+        if not assistant.builtin_tools:
+            raise ValueError("Files are only supported if retrieval or code_interpreter tools are enabled.")
         file = super().form_valid(form)
         assistant.files.add(file)
         push_assistant_to_openai(assistant)
