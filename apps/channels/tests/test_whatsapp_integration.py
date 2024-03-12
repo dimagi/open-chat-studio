@@ -1,8 +1,10 @@
 import json
 from io import BytesIO
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from django.urls import reverse
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
@@ -143,3 +145,12 @@ class TestTurnio:
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
+        url = reverse("channels:new_turn_message", kwargs={"experiment_id": str(uuid4())})
+        response = client.post(url, data=message, content_type="application/json")
+        response.status_code == 200
+        handle_turn_message_task.assert_not_called()
