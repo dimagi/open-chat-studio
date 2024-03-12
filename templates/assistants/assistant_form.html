@@ -28,7 +28,7 @@
     <hr class="my-4">
     {% url "assistants:add_file" request.team.slug object.id as upload_url %}
     {% url "assistants:remove_file" request.team.slug object.id '000' as delete_url %}
-    {% include "files/partials/file_list.html" with files=object.files.all %}
+    {% include "files/partials/file_list.html" with files=object.files.all nested=False %}
   {% endif %}
 {% endblock post_form %}
 {% block page_js %}

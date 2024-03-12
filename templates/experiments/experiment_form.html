@@ -68,7 +68,7 @@
             <hr class="my-4">
             {% url "experiments:add_file" request.team.slug object.id as upload_url %}
             {% url "experiments:remove_file" request.team.slug object.id '000' as delete_url %}
-            {% include "files/partials/file_list.html" with files=object.files.all %}
+            {% include "files/partials/file_list.html" with files=object.files.all nested=True %}
           {% endif %}
         {% endflag %}
       </div>
