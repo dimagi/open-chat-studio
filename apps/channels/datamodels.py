@@ -125,7 +125,7 @@ class TurnWhatsappMessage(BaseModel):
             from_number=message_data["contacts"][0]["wa_id"],
             body=body,
             content_type=message_type,
-            media_id=message[message_type].get("id"),
+            media_id=message.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
         )
 
