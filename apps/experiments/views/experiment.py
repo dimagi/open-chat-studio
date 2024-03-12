@@ -28,13 +28,30 @@ from waffle import flag_is_active
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import (
+    StaticTrigger,
+    TimeoutTrigger,
+)
+from apps.events.tables import (
+    EventsTable,
+)
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
-from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyForm
+from apps.experiments.forms import (
+    ConsentForm,
+    ExperimentInvitationForm,
+    SurveyForm,
+)
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
+from apps.experiments.models import (
+    Experiment,
+    ExperimentSession,
+    Participant,
+    SessionStatus,
+    SyntheticVoice,
+)
 from apps.experiments.tables import ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
@@ -298,8 +315,25 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
+            **_get_events_context(experiment),
         },
     )
+
+
+def _get_events_context(experiment: Experiment):
+    combined_events = list(
+        StaticTrigger.objects.filter(experiment=experiment)
+        .values("type", "action__action_type", "action__params")
+        .all()
+    )
+    timeout_events = (
+        TimeoutTrigger.objects.filter(experiment=experiment)
+        .values("delay", "action__action_type", "action__params", "total_num_triggers")
+        .all()
+    )
+    for event in timeout_events:
+        combined_events.append({**event, "type": "__timeout__"})
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
 
 
 @login_and_team_required

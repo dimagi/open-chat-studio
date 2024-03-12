@@ -1,6 +1,7 @@
 {% extends 'web/app/app_base.html' %}
 {% load team_tags %}
 {% load form_tags %}
+{% load render_table from django_tables2 %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
@@ -113,6 +114,12 @@
           </div>
         </dialog>
       {% endfor %}
+    {% endif %}
+    {% if show_events %}
+      <h2>Events</h2>
+      <div class="flex">
+        {% render_table events_table %}
+      </div>
     {% endif %}
   </div>
   <div class="app-card">

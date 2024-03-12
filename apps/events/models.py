@@ -15,9 +15,9 @@ ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation, "summarize
 
 
 class EventActionType(models.TextChoices):
-    LOG = "log"  # Prints the last message
-    END_CONVERSATION = "end_conversation"  # Ends the conversation
-    SUMMARIZE = "summarize"  # Summarize the conversation
+    LOG = ("log", "Log the last message")
+    END_CONVERSATION = ("end_conversation", "End the conversation")
+    SUMMARIZE = ("summarize", "Summarize the conversation")
 
 
 class EventAction(BaseModel):
@@ -49,8 +49,8 @@ class EventLog(BaseModel):
 
 
 class StaticTriggerType(models.TextChoices):
-    CONVERSATION_END = "conversation_end"
-    LAST_TIMEOUT = "last_timeout"
+    CONVERSATION_END = ("conversation_end", "The conversation ends")
+    LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
 
 
 class StaticTrigger(BaseModel):
