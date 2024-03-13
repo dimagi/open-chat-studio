@@ -73,11 +73,11 @@ class TimeoutTrigger(BaseModel):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
-        help_text="The amount of time in seconds to fire this trigger.",
+        help_text="Seconds to wait after last response before triggering action",
     )
     total_num_triggers = models.IntegerField(
         default=1,
-        help_text="The number of times to fire this trigger",
+        help_text="The number of times to trigger the action",
     )
     event_logs = GenericRelation(EventLog)
 

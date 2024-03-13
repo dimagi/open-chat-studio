@@ -1,69 +1,75 @@
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 
-from apps.events.forms import EventActionForm, StaticTriggerForm
-from apps.events.models import StaticTrigger
+from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
+from apps.events.models import StaticTrigger, TimeoutTrigger
+
+
+def create_timeout_event_view(request, team_slug: str, experiment_id: str):
+    return _create_event_view(TimeoutTriggerForm, request, team_slug, experiment_id)
 
 
 def create_static_event_view(request, team_slug: str, experiment_id: str):
+    return _create_event_view(StaticTriggerForm, request, team_slug, experiment_id)
+
+
+def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         action_form = EventActionForm(request.POST)
         if action_form.is_valid():
             saved_action = action_form.save(experiment_id=experiment_id)
-            trigger_form = StaticTriggerForm(request.POST)
+            trigger_form = trigger_form_class(request.POST)
             if trigger_form.is_valid():
-                static_trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
-                static_trigger.action = saved_action
-                static_trigger.save()
-                # TODO: return HttpResponseRedirect(reverse("experiment"))
-                return JsonResponse({"success": True, "message": "Static trigger created successfully."})
-        return JsonResponse({"success": False, "message": "There was an error processing your request."})
+                trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
+                trigger.action = saved_action
+                trigger.save()
+                return HttpResponseRedirect(
+                    reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+                )
     else:
         action_form = EventActionForm()
-        static_trigger_form = StaticTriggerForm()
+        trigger_form = trigger_form_class()
     context = {
         "action_form": action_form,
-        "static_trigger_form": static_trigger_form,
+        "trigger_form": trigger_form,
     }
-    return render(request, "events/create_static_event.html", context)
+    return render(request, "events/manage_event.html", context)
 
 
-def edit_static_event_view(request, team_slug: str, experiment_id: str, static_trigger_id):
-    # Fetch the StaticTrigger instance you wish to edit
-    static_trigger = get_object_or_404(StaticTrigger, id=static_trigger_id, experiment_id=experiment_id)
+def edit_static_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _edit_event_view("static", request, team_slug, experiment_id, trigger_id)
+
+
+def edit_timeout_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _edit_event_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
+    trigger_form_class = {
+        "static": StaticTriggerForm,
+        "timeout": TimeoutTriggerForm,
+    }[trigger_type]
+    model_class = {
+        "static": StaticTrigger,
+        "timeout": TimeoutTrigger,
+    }[trigger_type]
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     if request.method == "POST":
-        action_form = EventActionForm(request.POST, instance=static_trigger.action)
-        trigger_form = StaticTriggerForm(request.POST, instance=static_trigger)
+        action_form = EventActionForm(request.POST, instance=trigger.action)
+        trigger_form = trigger_form_class(request.POST, instance=trigger)
 
         if action_form.is_valid() and trigger_form.is_valid():
             action_form.save(experiment_id=experiment_id)
-            static_trigger = trigger_form.save(experiment_id=experiment_id)
-
-            # return HttpResponseRedirect(reverse("experiment"))  # Redirect to a specific URL
-            return JsonResponse({"success": True, "message": "Static trigger updated successfully."})
-        else:
-            # Return an error response if forms are not valid
-            return JsonResponse({"success": False, "message": "There was an error processing your request."})
+            trigger = trigger_form.save(experiment_id=experiment_id)
+            return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
         # Instantiate the forms with instance data for GET requests
-        action_form = EventActionForm(instance=static_trigger.action)
-        trigger_form = StaticTriggerForm(instance=static_trigger)
+        action_form = EventActionForm(instance=trigger.action)
+        trigger_form = trigger_form_class(instance=trigger)
 
     context = {
         "action_form": action_form,
-        "static_trigger_form": trigger_form,
+        "trigger_form": trigger_form,
     }
-    return render(request, "events/create_static_event.html", context)
-
-
-# def create_event_view(request, team_slug: str):
-#     action_form = EventActionForm()
-#     static_trigger_form = StaticTriggerForm()
-#     timeout_trigger_form = TimeoutTriggerForm()
-
-#     context = {
-#         "action_form": action_form,
-#         "static_trigger_form": static_trigger_form,
-#         "timeout_trigger_form": timeout_trigger_form,
-#     }
-#     return render(request, "events/create_form.html", context)
+    return render(request, "events/manage_event.html", context)

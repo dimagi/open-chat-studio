@@ -18,12 +18,7 @@ class EventActionForm(forms.ModelForm):
         return instance
 
 
-class StaticTriggerForm(forms.ModelForm):
-    class Meta:
-        model = StaticTrigger
-        fields = ["type"]
-        labels = {"type": "When..."}
-
+class BaseTriggerForm(forms.ModelForm):
     def save(self, commit=True, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
         instance = super().save(commit=False, *args, **kwargs)
@@ -33,7 +28,15 @@ class StaticTriggerForm(forms.ModelForm):
         return instance
 
 
-class TimeoutTriggerForm(forms.ModelForm):
+class StaticTriggerForm(BaseTriggerForm):
+    class Meta:
+        model = StaticTrigger
+        fields = ["type"]
+        labels = {"type": "When..."}
+
+
+class TimeoutTriggerForm(BaseTriggerForm):
     class Meta:
         model = TimeoutTrigger
         fields = ["delay", "total_num_triggers"]
+        labels = {"total_num_triggers": "Trigger count", "delay": "Wait time"}

@@ -18,7 +18,7 @@
                 {% csrf_token %}
                 {% block form %}
                     <h1 class="pg-title">Event Details</h1>
-                    {% render_form_fields static_trigger_form %}
+                    {% render_form_fields trigger_form %}
                     {% render_form_fields action_form %}
                     {{ form.non_field_errors }}
                 {% endblock form %}
