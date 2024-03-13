@@ -15,6 +15,8 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import StaticTriggerType
+from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus
 
 USER_CONSENT_TEXT = "1"
@@ -198,6 +200,7 @@ class ChannelBase:
                 # is ACTIVE
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
+        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
         response = self._handle_supported_message()
         return response
 

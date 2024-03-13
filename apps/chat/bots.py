@@ -66,6 +66,8 @@ class TopicBot:
                 }
             },
         )
+
+        enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
