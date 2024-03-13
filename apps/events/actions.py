@@ -6,8 +6,10 @@ from apps.experiments.models import ExperimentSession
 
 
 def log(session: ExperimentSession, params):
-    print(session.chat.messages.last().content)
-    return session.chat.messages.last().content
+    last_message = session.chat.messages.last()
+    if last_message:
+        print(last_message.content)
+        return last_message.content
 
 
 def end_conversation(session: ExperimentSession, params):

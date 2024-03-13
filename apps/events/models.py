@@ -53,6 +53,7 @@ class StaticTriggerType(models.TextChoices):
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
     HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
     BOT_SAFETY_LAYER_TRIGGERED = ("bot_safety_layer_triggered", "The safety layer is triggered by a bot")
+    CONVERSATION_START = ("conversation_start", "A new conversation is started")
 
 
 class StaticTrigger(BaseModel):
@@ -65,10 +66,9 @@ class StaticTrigger(BaseModel):
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS)
+            return result
         except Exception:
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE)
-
-        return result
 
 
 class TimeoutTrigger(BaseModel):

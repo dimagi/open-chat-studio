@@ -30,11 +30,13 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import (
     StaticTrigger,
+    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.events.tables import (
     EventsTable,
 )
+from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
@@ -436,6 +438,7 @@ def _start_experiment_session(
         external_chat_id=external_chat_id,
         experiment_channel=experiment_channel,
     )
+    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
 
