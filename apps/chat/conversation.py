@@ -131,21 +131,50 @@ def compress_chat_history(
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
 
-    history_tokens = llm.get_num_tokens_from_messages(history)
-    while history_tokens > max_token_limit:
+    history_tokens, summary, summary_tokens = prune_history(
+        history, pruned_memory, llm, max_token_limit, summary=summary
+    )
+    last_message = history[0] if history else pruned_memory[-1]
+    ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+    return [SystemMessage(content=summary)] + history
+
+
+def prune_history(
+    history: list[BaseMessage],
+    pruned_memory: list[BaseMessage],
+    llm: BaseChatModel,
+    max_token_limit: int,
+    starting_count=None,
+    additional_tokens=0,
+    summary="",
+):
+    token_count = (starting_count or llm.get_num_tokens_from_messages(history)) + additional_tokens
+    while history and token_count > max_token_limit:
         pruned_memory.append(history.pop(0))
-        history_tokens = llm.get_num_tokens_from_messages(history)
+        token_count = llm.get_num_tokens_from_messages(history) + additional_tokens
 
+    history_tokens = token_count - additional_tokens
     summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
-    ChatMessage.objects.filter(id=history[0].additional_kwargs["id"]).update(summary=summary)
-    summary_messages = [SystemMessage(content=summary)]
+    summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+    total_tokens = summary_tokens + history_tokens
+    if history and total_tokens > max_token_limit:
+        log.info("Token count too high after initial compression, trying again")
+        history_tokens, summary, summary_tokens = prune_history(
+            history,
+            pruned_memory,
+            llm,
+            max_token_limit,
+            starting_count=history_tokens,
+            additional_tokens=summary_tokens,
+            summary=summary,
+        )
+        return history_tokens, summary, summary_tokens
 
-    summary_tokens = llm.get_num_tokens_from_messages(summary_messages)
     log.info(
         "Compressed chat history to %s tokens (%s summary + %s history)",
-        summary_tokens + history_tokens,
+        total_tokens,
         summary_tokens,
         history_tokens,
     )
 
-    return summary_messages + history
+    return history_tokens, summary, summary_tokens
