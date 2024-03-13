@@ -45,7 +45,7 @@ class EventsTable(tables.Table):
         return f"{value} times"
 
     class Meta:
-        template_name = "django_tables2/bootstrap.html"
+        orderable = False
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         fields = (
             "type",
