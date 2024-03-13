@@ -315,24 +315,27 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
-            **_get_events_context(experiment),
+            **_get_events_context(experiment, team_slug),
         },
     )
 
 
-def _get_events_context(experiment: Experiment):
-    combined_events = list(
+def _get_events_context(experiment: Experiment, team_slug: str):
+    combined_events = []
+    static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
-        .values("type", "action__action_type", "action__params")
+        .values("id", "experiment_id", "type", "action__action_type", "action__params")
         .all()
     )
     timeout_events = (
         TimeoutTrigger.objects.filter(experiment=experiment)
-        .values("delay", "action__action_type", "action__params", "total_num_triggers")
+        .values("id", "experiment_id", "delay", "action__action_type", "action__params", "total_num_triggers")
         .all()
     )
+    for event in static_events:
+        combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
-        combined_events.append({**event, "type": "__timeout__"})
+        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
 
 
