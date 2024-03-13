@@ -24,7 +24,6 @@ def _patch_initial_tokens():
 
 @pytest.fixture()
 def chat(team_with_users):
-    # TODO: change to using unsaved / mock instance
     chat = Chat.objects.create(team=team_with_users)
     ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
     return chat
