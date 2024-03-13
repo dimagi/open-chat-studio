@@ -67,9 +67,11 @@ class StaticTrigger(BaseModel):
     def fire(self, session):
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
+            # TODO: handle message here.
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS)
             return result
         except Exception:
+            # TODO: log exception reason in the event_log
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE)
 
 
