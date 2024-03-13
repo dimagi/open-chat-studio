@@ -51,6 +51,8 @@ class EventLog(BaseModel):
 class StaticTriggerType(models.TextChoices):
     CONVERSATION_END = ("conversation_end", "The conversation ends")
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
+    HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
+    BOT_SAFETY_LAYER_TRIGGERED = ("bot_safety_layer_triggered", "The safety layer is triggered by a bot")
 
 
 class StaticTrigger(BaseModel):

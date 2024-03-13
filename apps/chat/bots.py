@@ -4,6 +4,8 @@ from pydantic import ValidationError
 
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
+from apps.events.models import StaticTriggerType
+from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SafetyLayer
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
@@ -84,6 +86,7 @@ class TopicBot:
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
+                enqueue_static_triggers.delay(self.session.id, StaticTriggerType.HUMAN_SAFETY_LAYER_TRIGGERED)
                 notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
@@ -92,6 +95,7 @@ class TopicBot:
         # ai safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_ai_messages() and not safety_bot.is_safe(response):
+                enqueue_static_triggers.delay(self.session.id, StaticTriggerType.BOT_SAFETY_LAYER_TRIGGERED)
                 return self._get_safe_response(safety_bot.safety_layer)
 
         return response
