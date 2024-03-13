@@ -64,7 +64,6 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
             trigger = trigger_form.save(experiment_id=experiment_id)
             return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
-        # Instantiate the forms with instance data for GET requests
         action_form = EventActionForm(instance=trigger.action)
         trigger_form = trigger_form_class(instance=trigger)
 
@@ -73,3 +72,21 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         "trigger_form": trigger_form,
     }
     return render(request, "events/manage_event.html", context)
+
+
+def delete_static_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _delete_event_view("static", request, team_slug, experiment_id, trigger_id)
+
+
+def delete_timeout_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _delete_event_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
+    model_class = {
+        "static": StaticTrigger,
+        "timeout": TimeoutTrigger,
+    }[trigger_type]
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+    trigger.delete()
+    return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))

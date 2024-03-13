@@ -9,20 +9,29 @@ from apps.utils.time import seconds_to_human
 
 class ActionsColumn(tables.Column):
     def render(self, value, record):
-        if record["type"] == "__timeout__":
-            url_name = "experiments:events:timeout_event_edit"
-        else:
-            url_name = "experiments:events:static_event_edit"
-
+        trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
         edit_url = reverse(
-            url_name,
+            f"experiments:events:{trigger_type}_event_edit",
             kwargs={
                 "trigger_id": record["id"],
                 "experiment_id": record["experiment_id"],
                 "team_slug": record["team_slug"],
             },
         )
-        return format_html('<a class="btn btn-sm btn-outline btn-primary" href="{}">Edit</a>', edit_url)
+        delete_url = reverse(
+            f"experiments:events:{trigger_type}_event_delete",
+            kwargs={
+                "trigger_id": record["id"],
+                "experiment_id": record["experiment_id"],
+                "team_slug": record["team_slug"],
+            },
+        )
+        return format_html(
+            """<a class="btn btn-sm btn-outline btn-primary" href="{}">Edit</a>
+            <a class="btn btn-sm btn-outline btn-primary" href="{}">Delete</a>""",
+            edit_url,
+            delete_url,
+        )
 
 
 class EventsTable(tables.Table):
