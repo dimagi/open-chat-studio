@@ -10,6 +10,14 @@ from apps.utils.time import seconds_to_human
 class ActionsColumn(tables.Column):
     def render(self, value, record):
         trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
+        view_log_url = reverse(
+            f"experiments:events:{trigger_type}_logs_view",
+            kwargs={
+                "trigger_id": record["id"],
+                "experiment_id": record["experiment_id"],
+                "team_slug": record["team_slug"],
+            },
+        )
         edit_url = reverse(
             f"experiments:events:{trigger_type}_event_edit",
             kwargs={
@@ -27,8 +35,11 @@ class ActionsColumn(tables.Column):
             },
         )
         return format_html(
-            """<a class="btn btn-sm btn-outline btn-primary" href="{}">Edit</a>
+            """
+            <a class="btn btn-sm btn-outline btn-primary" href="{}">View Logs</a>
+            <a class="btn btn-sm btn-outline btn-primary" href="{}">Edit</a>
             <a class="btn btn-sm btn-outline btn-primary" href="{}">Delete</a>""",
+            view_log_url,
             edit_url,
             delete_url,
         )

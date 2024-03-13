@@ -3,7 +3,8 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
-from apps.events.models import StaticTrigger, TimeoutTrigger
+from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.utils.time import seconds_to_human
 
 
 def create_timeout_event_view(request, team_slug: str, experiment_id: str):
@@ -90,3 +91,33 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     trigger.delete()
     return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
+
+
+def static_logs_view(request, team_slug, experiment_id, trigger_id):
+    return _logs_view("static", request, team_slug, experiment_id, trigger_id)
+
+
+def timeout_logs_view(request, team_slug, experiment_id, trigger_id):
+    return _logs_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+def _logs_view(trigger_type, request, team_slug, experiment_id, trigger_id):
+    model_class = {
+        "static": StaticTrigger,
+        "timeout": TimeoutTrigger,
+    }[trigger_type]
+
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+    if trigger_type == "timeout":
+        trigger_text = f"No response for {seconds_to_human(trigger.delay)}"
+    else:
+        trigger_text = StaticTriggerType(trigger.type).label
+
+    context = {
+        "trigger_text": trigger_text,
+        "action_type": EventActionType(trigger.action.action_type).label,
+        "event_logs": trigger.event_logs.order_by("-created_at").all(),
+        "title": "Event logs",
+        "trigger": trigger,
+    }
+    return render(request, "events/view_logs.html", context)
