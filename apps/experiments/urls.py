@@ -43,7 +43,13 @@ urlpatterns = [
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:experiment_id>/start_session/", views.start_session, name="start_session"),
+    path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
+    path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
+    path(
+        "e/<int:experiment_id>/start_authed_web_session/",
+        views.start_authed_web_session,
+        name="start_authed_web_session",
+    ),
     path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
     path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
@@ -73,8 +79,8 @@ urlpatterns = [
     # public links
     path(
         "e/<slug:experiment_id>/s/<slug:session_id>/",
-        views.start_experiment_session,
-        name="start_experiment_session",
+        views.start_session_from_invite,
+        name="start_session_from_invite",
     ),
     path(
         "e/<slug:experiment_id>/s/<slug:session_id>/pre-survey/",
@@ -112,7 +118,7 @@ urlpatterns = [
         name="experiment_session_pagination_view",
     ),
     # public link
-    path("e/<slug:experiment_id>/start/", views.start_experiment, name="start_experiment"),
+    path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

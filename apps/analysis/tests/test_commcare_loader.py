@@ -1,6 +1,11 @@
+from contextlib import nullcontext as does_not_raise
 from unittest.mock import patch
 
+import pytest
+import tenacity
+
 from apps.analysis.core import PipelineContext, StepContext
+from apps.analysis.exceptions import StepError
 from apps.analysis.steps.forms import CommCareAppLoaderParamsForm, CommCareAppLoaderStaticConfigForm
 from apps.analysis.steps.loaders import CommCareAppLoader, CommCareAppLoaderParams
 from apps.service_providers.auth_service import CommCareAuthService
@@ -54,12 +59,12 @@ def test_commcare_dynamic_form_select():
     ]
     form = CommCareAppLoaderParamsForm(
         None,
-        {"select_app_id": "id2"},
+        {"selected_app_ids": ["id2", "id3"]},
         initial={"app_list": app_list, "cc_url": "https://www.commcarehq.org", "auth_provider_id": 1},
     )
-    assert form.is_valid()
+    assert form.is_valid(), form.errors
     assert form.get_params() == CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org", auth_provider_id=1, selected_apps=app_list[1:]
     )
 
 
@@ -71,22 +76,46 @@ def test_commcare_dynamic_form_manual_input():
     )
     assert form.is_valid()
     assert form.get_params() == CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org",
+        auth_provider_id=1,
+        selected_apps=[{"domain": "domain2", "app_id": "id2", "name": ""}],
     )
 
 
+@pytest.mark.parametrize(
+    ("responses", "error_expectation"),
+    [
+        pytest.param([{"json": {"app": "data"}}], does_not_raise(), id="normal"),
+        pytest.param([{"status_code": 429}, {"json": {"app": "data"}}], does_not_raise(), id="retry"),
+        pytest.param(
+            [{"status_code": 429, "headers": {"Retry-After": "0.01"}}, {"json": {"app": "data"}}],
+            does_not_raise(),
+            id="retry_with_header",
+        ),
+        pytest.param(
+            [{"status_code": 429}, {"status_code": 429}, {"status_code": 429}],
+            pytest.raises(StepError),
+            id="retry_failed",
+        ),
+        pytest.param([{"status_code": 500}], pytest.raises(StepError), id="http_error"),
+    ],
+)
 @patch("apps.analysis.steps.loaders._get_auth_service")
-def test_commcare_app_loader(get_auth_service, httpx_mock):
-    get_auth_service.return_value = CommCareAuthService(username="user", api_key="key")
+def test_commcare_app_loader(get_auth_service, httpx_mock, responses, error_expectation):
+    service = CommCareAuthService(username="user", api_key="key")
+    service.__dict__["_default_retry_wait"] = lambda: tenacity.wait_none()
+    get_auth_service.return_value = service
 
     params = CommCareAppLoaderParams(
-        cc_app_id="id2", cc_domain="domain2", cc_url="https://www.commcarehq.org", auth_provider_id=1
+        cc_url="https://www.commcarehq.org",
+        auth_provider_id=1,
+        selected_apps=[{"domain": "domain2", "app_id": "id2", "name": ""}],
     )
     loader = CommCareAppLoader(params=params)
 
-    httpx_mock.add_response(
-        url="https://www.commcarehq.org/a/domain2/api/v0.5/application/id2/?format=json",
-        json={"app": "data"},
-    )
+    expected_url = "https://www.commcarehq.org/a/domain2/api/v0.5/application/id2/?format=json"
+    for response in responses:
+        httpx_mock.add_response(url=expected_url, **response)
 
-    assert loader.invoke(StepContext.initial(), PipelineContext()).data == '{"app": "data"}'
+    with error_expectation:
+        assert loader.invoke(StepContext.initial(), PipelineContext())[0].data == {"app": "data"}

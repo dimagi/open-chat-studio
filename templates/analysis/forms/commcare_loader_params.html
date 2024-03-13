@@ -1,5 +1,41 @@
 {% load form_tags %}
-{% render_field form.select_app_id %}
-<div class="divider">OR</div>
-{% render_field form.domain %}
-{% render_field form.app_id %}
+<div x-data="selectAllData()">
+  <div class="form-control w-full">
+    <label class="label font-bold" for="">Application</label>
+    <label for="id_selected_app_ids_0" class="flex space-x-12">
+      <div class="mb-3">
+        {{ form.selected_app_ids }}
+      </div>
+      <div>
+        <input @click="toggleAllCheckboxes()" type="checkbox" class="checkbox"> Select All
+      </div>
+    </label>
+  </div>
+
+  <div class="divider">OR</div>
+  {% render_field form.domain %}
+  {% render_field form.app_id %}
+
+  <small class="form-text text-muted">
+    For details on the structure of the returned data see the
+    <a class="link" target="_blank" href="https://dimagi.atlassian.net/wiki/spaces/commcarepublic/pages/2143945824/Application+Structure+API">CommCare
+      Docs</a>
+  </small>
+</div>
+
+<script>
+  function selectAllData() {
+    return {
+      selectall: false,
+
+      toggleAllCheckboxes() {
+        this.selectall = !this.selectall
+
+        checkboxes = document.querySelectorAll('[name=selected_app_ids]');
+        [...checkboxes].map((el) => {
+          el.checked = this.selectall;
+        })
+      }
+    }
+  }
+</script>

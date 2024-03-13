@@ -6,7 +6,9 @@ from .consent import (  # noqa: F401
     EditConsentForm,
 )
 from .experiment import (  # noqa: F401
+    AddFileToExperiment,
     CreateExperiment,
+    DeleteFileFromExperiment,
     EditExperiment,
     ExperimentTableView,
     create_channel,
@@ -27,9 +29,9 @@ from .experiment import (  # noqa: F401
     poll_messages,
     send_invitation,
     single_experiment_home,
-    start_experiment,
-    start_experiment_session,
-    start_session,
+    start_authed_web_session,
+    start_session_from_invite,
+    start_session_public,
     update_delete_channel,
 )
 from .no_activity import (  # noqa: F401

@@ -2,11 +2,12 @@ from contextlib import nullcontext as does_not_raise
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, VoiceResponseBehaviours
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
@@ -23,6 +24,7 @@ def test_create_experiment_success(db, client, team_with_users):
     post_data = {
         "name": "some name",
         "description": "Some description",
+        "type": "llm",
         "prompt_text": "You are a helpful assistant",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
@@ -30,10 +32,11 @@ def test_create_experiment_success(db, client, team_with_users):
         "llm_provider": LlmProviderFactory(team=team_with_users).id,
         "llm": "gpt-3.5",
         "max_token_limit": 100,
+        "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
-    assert response.status_code == 302
+    assert response.status_code == 302, response.context.form.errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
 
@@ -60,6 +63,7 @@ def test_experiment_form_with_assistants(
         request,
         data={
             "name": "some name",
+            "type": "assistant" if with_assistant else "llm",
             "assistant": assistant.id if with_assistant else None,
             "prompt_text": "text" if with_prompt else None,
             "llm_provider": llm_provider.id if with_llm_provider else None,
@@ -67,6 +71,7 @@ def test_experiment_form_with_assistants(
             "temperature": 0.7,
             "max_token_limit": 10,
             "consent_form": ConsentFormFactory(team=team_with_users).id,
+            "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
         },
     )
     assert form.is_valid() == bool(not errors), form.errors
@@ -93,3 +98,12 @@ def test_prompt_variable_validation(source_material, prompt_str, expectation):
                 "prompt_text": prompt_str,
             }
         )
+
+
+@pytest.mark.django_db()
+def test_form_fields():
+    path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
+    form_html = path.read_text()
+    request = mock.Mock()
+    for field in ExperimentForm(request).fields:
+        assert field in form_html, f"{field} missing from 'experiment_form.html' template"

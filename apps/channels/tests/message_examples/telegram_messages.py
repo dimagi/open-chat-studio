@@ -5,7 +5,7 @@ from telebot import types
 from apps.channels.datamodels import TelegramMessage
 
 
-def text_message(chat_id: int, message_text: str = "Hi there") -> TelegramMessage:
+def text_message(chat_id: int = 123, message_text: str = "Hi there") -> TelegramMessage:
     message_data = {
         "update_id": 432101234,
         "message": {
@@ -34,7 +34,7 @@ def text_message(chat_id: int, message_text: str = "Hi there") -> TelegramMessag
     return TelegramMessage.parse(update)
 
 
-def photo_message(chat_id: int) -> TelegramMessage:
+def photo_message(chat_id: int = 123) -> TelegramMessage:
     message_data = {
         "update_id": 432101234,
         "message": {
@@ -58,6 +58,35 @@ def photo_message(chat_id: int) -> TelegramMessage:
                     "height": 67,
                 }
             ],
+        },
+    }
+    json_data = json.dumps(message_data)
+    update = types.Update.de_json(json_data)
+    return TelegramMessage.parse(update)
+
+
+def audio_message(chat_id: int = 123) -> TelegramMessage:
+    message_data = {
+        "update_id": 1223145,
+        "message": {
+            "message_id": 458,
+            "from": {
+                "id": chat_id,
+                "is_bot": False,
+                "first_name": "John",
+                "last_name": "Doe",
+                "username": "doezies",
+                "language_code": "en",
+            },
+            "chat": {"id": chat_id, "first_name": "John", "last_name": "Doe", "username": "doezies", "type": "private"},
+            "date": 1708608486,
+            "voice": {
+                "duration": 20,
+                "mime_type": "audio/ogg",
+                "file_id": "AALLmXXS-VZOOOPd9TVlEmjhb5IwL1RF563fQFAACjWm4UvmXVtBpakW1NAQ",
+                "file_unique_id": "AgADEB1puFI",
+                "file_size": 7276,
+            },
         },
     }
     json_data = json.dumps(message_data)

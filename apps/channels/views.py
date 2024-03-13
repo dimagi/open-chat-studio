@@ -30,8 +30,8 @@ def new_twilio_message(request):
 @csrf_exempt
 def new_turn_message(request, experiment_id: uuid):
     message_data = json.loads(request.body.decode("utf-8"))
-    if "statuses" in message_data:
-        # Ignore status updates
+    if "messages" not in message_data:
+        # Normal inbound messages should have a "messages" key, so ignore everything else
         return HttpResponse()
 
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)

@@ -100,13 +100,15 @@ class CommCareAppMeta(BaseModel):
     app_id: str
     name: str
 
+    def app_url(self, cc_url):
+        return f"{cc_url}/a/{self.domain}/api/v0.5/application/{self.app_id}/"
+
 
 class CommCareAppLoaderParams(Params):
     app_list: list[CommCareAppMeta] = None
     auth_provider_id: required(int) = None
     cc_url: required(str) = None
-    cc_domain: required(str) = None
-    cc_app_id: required(str) = None
+    selected_apps: required(list[CommCareAppMeta]) = None
 
     def get_dynamic_config_form_class(self):
         from .forms import CommCareAppLoaderParamsForm
@@ -119,15 +121,16 @@ class CommCareAppLoaderParams(Params):
         return CommCareAppLoaderStaticConfigForm
 
     @property
-    def api_url(self):
-        return f"{self.cc_url}/a/{self.cc_domain}/api/v0.5/application/{self.cc_app_id}/"
-
-    @property
     def api_params(self):
         return {"format": "json"}
 
     def get_auth_service(self) -> AuthService:
         return _get_auth_service(self.auth_provider_id)
+
+    def check(self):
+        super().check()
+        if not self.selected_apps:
+            raise StepError("No apps selected for loading")
 
 
 def _get_auth_service(auth_provider_id: int) -> AuthService:
@@ -144,14 +147,33 @@ class CommCareAppLoader(BaseLoader[str]):
     params = CommCareAppLoaderParams()
     output_type = str
 
-    def load(self, params: CommCareAppLoaderParams) -> StepContext[str]:
-        self.log.info(f"Loading app from CommCare: {params.cc_domain}:{params.cc_app_id}")
-        with params.get_auth_service().get_http_client() as client:
-            try:
-                response = client.get(params.api_url, params=params.api_params)
-                response.raise_for_status()
-            except httpx.HTTPError as exc:
-                raise StepError("Unable to load data from CommCare API", exc)
-            app_data = response.json()
+    def load(self, params: CommCareAppLoaderParams) -> list[StepContext[str]]:
+        self.log.info(f"Loading data from {len(params.selected_apps)} CommCare apps")
+        data = []
+        auth_service = params.get_auth_service()
+        with auth_service.get_http_client() as client:
+            for app_meta in params.selected_apps:
+                try:
+                    app_data = auth_service.call_with_retries(
+                        self._fetch_app_json, app_meta, params.cc_url, client, params.api_params
+                    )
+                    self.log.info(f"Loaded app {app_meta.name}")
+                    data.append(StepContext(app_data, name=app_meta.name))
+                except httpx.HTTPError as e:
+                    self.log.error(f"Error loading app {app_meta.name} ({app_meta.domain}:{app_meta.app_id}): {e}")
+        if not data:
+            raise StepError("Unable to load any data from CommCare")
+        return data
 
-        return StepContext(json.dumps(app_data))
+    def _fetch_app_json(self, app_meta: CommCareAppMeta, cc_url: str, http_client: httpx.Client, params: dict) -> dict:
+        self.log.debug(f"Loading app from CommCare: {app_meta.name} ({app_meta.domain}:{app_meta.app_id})")
+        try:
+            response = http_client.get(app_meta.app_url(cc_url), params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                retry_after = exc.response.headers.get("Retry-After")
+                retry_msg = f"retrying after {retry_after} seconds" if retry_after else "retrying"
+                self.log.warning(f"Received 429 response, {retry_msg}")
+            raise
+        return response.json()

@@ -55,35 +55,51 @@ class RunStatusContext:
 @contextmanager
 def run_context(run, bubble_errors=True):
     """Context manager to create the pipeline context and manage run status."""
-    log_handler = RunLogHandler(run)
+    log_handler_factory = LogHandlerFactory(run)
     params = run.group.params
     params["llm_model"] = run.group.analysis.llm_model
-    pipeline_context = PipelineContext(run, log_handler=log_handler, params=params, create_resources=True)
+    pipeline_context = PipelineContext(
+        run, log_handler_factory=log_handler_factory, params=params, create_resources=True
+    )
 
     with RunStatusContext(run, bubble_errors=bubble_errors):
         yield pipeline_context
 
 
 class RunLogHandler(logging.Handler):
-    def __init__(self, run):
-        super().__init__(level=logging.DEBUG)
+    def __init__(self, run, step_id: str):
         self.run = run
-        self.logs = []
+        self.step_id = step_id
+        super().__init__(level=logging.DEBUG)
 
     def emit(self, record: logging.LogRecord):
-        self.logs.append(
+        name = record.name.removesuffix(f"_{self.step_id}")
+        self.save_log(
             {
                 "level": record.levelname,
                 "message": record.getMessage(),
-                "logger": record.name,
+                "logger": name,
                 "timestamp": datetime.utcnow().isoformat(timespec="milliseconds"),
             }
         )
-        self.flush_db()
 
-    def flush_db(self):
-        self.run.log = {"entries": self.logs}
+    def save_log(self, log):
+        self.run.refresh_from_db(fields=["log"])
+        logs = self.run.log.get("entries", [])
+        # TODO: this is very inefficient - make it better
+        self.run.log = {"entries": logs + [log]}
         self.run.save(update_fields=["log"])
+
+    def __hash__(self):
+        return hash(self.step_id)
+
+
+class LogHandlerFactory:
+    def __init__(self, run):
+        self.run = run
+
+    def __call__(self, step_id):
+        return RunLogHandler(self.run, step_id)
 
 
 @shared_task

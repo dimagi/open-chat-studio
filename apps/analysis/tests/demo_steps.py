@@ -71,3 +71,20 @@ class TokenizeStr(BaseStep[str, str]):
     def run(self, params: Params, context: StepContext[str]) -> list[StepContext[str]]:
         words = context.get_data().split()
         return [StepContext(word, name="token") for word in words]
+
+
+class SplitLines(BaseStep[str, str]):
+    input_type = str
+    output_type = str
+
+    def run(self, params: Params, context: StepContext[str]) -> list[StepContext[str]]:
+        lines = context.get_data().splitlines()
+        return [StepContext(line, name=f"line {i}") for i, line in enumerate(lines)]
+
+
+class Reverse(BaseStep[str, str]):
+    input_type = str
+    output_type = str
+
+    def run(self, params: Params, context: StepContext[str]) -> StepContext[str]:
+        return StepContext(context.get_data()[::-1], name="reversed")

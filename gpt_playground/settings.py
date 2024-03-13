@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
+import warnings
 from pathlib import Path
 
 import environ
@@ -198,7 +199,7 @@ else:
 ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
-ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False
@@ -211,7 +212,7 @@ ACCOUNT_FORMS = {
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
-ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="none")
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="mandatory")
 
 ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
@@ -271,7 +272,18 @@ AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 if AWS_ACCESS_KEY_ID:
     AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
     AWS_S3_REGION = env("AWS_S3_REGION", default=None)
-    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="ocs-whatsapp-voice")
+    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default="")
+    if not WHATSAPP_S3_AUDIO_BUCKET:
+        # try legacy env var
+        # remove this after 2024/05/01
+        WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="")
+        if WHATSAPP_S3_AUDIO_BUCKET:
+            warnings.warn(
+                "WHATSAPP_AWS_AUDIO_BUCKET is deprecated, please use WHATSAPP_S3_AUDIO_BUCKET instead",
+                DeprecationWarning,
+            )
+        else:
+            WHATSAPP_S3_AUDIO_BUCKET = "ocs-whatsapp-voice"
 
     USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
     if USE_S3_STORAGE:
@@ -398,6 +410,7 @@ if SENTRY_DSN:
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
+        send_default_pii=True,  # include user details in events
         integrations=[
             DjangoIntegration(),
             CeleryIntegration(),

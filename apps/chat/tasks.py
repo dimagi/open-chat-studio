@@ -1,21 +1,20 @@
 import logging
-from datetime import datetime, timedelta
 from uuid import UUID
 
-import pytz
 from celery.app import shared_task
 from django.conf import settings
 from django.core.cache import cache
 from django.core.mail import send_mail
-from django.db.models import F, OuterRef, Subquery
+from django.db.models import Count, F, Q, functions
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
@@ -105,39 +104,35 @@ def _get_sessions_to_ping():
     4. The last message in a session was from a bot and was created more than <user defined> minutes ago
     """
 
-    UTC = pytz.timezone("UTC")
-    now = datetime.now().astimezone(UTC)
-    experiment_sessions_to_ping: list[ExperimentSession] = []
-
-    subquery = ChatMessage.objects.filter(chat=OuterRef("pk"), message_type=ChatMessageType.HUMAN).values("chat_id")
-    chats = (
-        Chat.objects.filter(pk__in=Subquery(subquery))
-        .exclude(experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
-        .exclude(experiment_session__experiment__no_activity_config=None)
-        .exclude(
-            experiment_session__no_activity_ping_count__gte=F(
-                "experiment_session__experiment__no_activity_config__max_pings"
-            )
-        )
-        .select_related(
-            "experiment_session",
-            "experiment_session__experiment",
-            "experiment_session__experiment__no_activity_config",
-        )
-        .all()
+    chats_with_human_msgs = (
+        ChatMessage.objects.annotate(human_msgs=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)))
+        .filter(human_msgs__gt=0)
+        .values("chat_id")
     )
 
-    for chat in chats:
-        latest_message = ChatMessage.objects.filter(chat=chat).order_by("-created_at").first()
-        if latest_message and latest_message.message_type == ChatMessageType.AI:
-            experiment_session: ExperimentSession = chat.experiment_session
-            no_activity_config = experiment_session.experiment.no_activity_config
-            message_created_at = latest_message.created_at.astimezone(UTC)
-            max_time_elapsed = message_created_at < now - timedelta(minutes=no_activity_config.ping_after)
-            if max_time_elapsed:
-                experiment_sessions_to_ping.append(experiment_session)
+    max_pings = F("chat__experiment_session__experiment__no_activity_config__max_pings")
+    last_messages = (
+        ChatMessage.objects.filter(chat_id__in=chats_with_human_msgs)
+        .exclude(chat__experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
+        .exclude(chat__experiment_session__experiment__no_activity_config=None)
+        .exclude(chat__experiment_session__no_activity_ping_count__gte=max_pings)
+        .order_by("chat_id", "-created_at")
+        .distinct("chat_id")
+    )
 
-    return experiment_sessions_to_ping
+    ping_after = MakeInterval("secs", F("chat__experiment_session__experiment__no_activity_config__ping_after"))
+    matches = (
+        ChatMessage.objects.filter(id__in=last_messages)
+        .filter(message_type=ChatMessageType.AI, created_at__lt=functions.Now() - ping_after)
+        .select_related(
+            "chat__experiment_session",
+            "chat__experiment_session__experiment_channel",
+            "chat__experiment_session__experiment",
+            "chat__experiment_session__experiment__no_activity_config",
+        )
+    )
+
+    return [chat_msg.chat.experiment_session for chat_msg in matches]
 
 
 def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:

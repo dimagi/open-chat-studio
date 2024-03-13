@@ -7,6 +7,8 @@ from typing import Annotated, Any
 
 import openai
 import pydantic
+from jinja2 import TemplateSyntaxError
+from jinja2.sandbox import SandboxedEnvironment
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts import PromptTemplate
 from openai.types import FileObject
@@ -277,3 +279,43 @@ def log_tool_call(step, call):
         case "function":
             step.log.debug(f"\nCall:\n{call.function.name} ({call.function.arguments})")
             step.log.debug(f"\nOutput:\n{call.function.output}")
+
+
+class JinjaTemplateParams(core.Params):
+    template: required(str) = None
+
+    def get_static_config_form_class(self) -> type[ParamsForm]:
+        from .forms import JinjaTemplateParamsForm
+
+        return JinjaTemplateParamsForm
+
+    def get_dynamic_config_form_class(self) -> type[ParamsForm]:
+        from .forms import JinjaTemplateParamsForm
+
+        return JinjaTemplateParamsForm
+
+    @model_validator(mode="after")
+    def check_prompt_inputs(self) -> "JinjaTemplateParams":
+        if self.template:
+            try:
+                SandboxedEnvironment().parse(self.template)
+            except TemplateSyntaxError as e:
+                raise ValueError(f"Invalid template: {e}")
+        return self
+
+
+class JinjaTemplateStep(core.BaseStep[Any, str]):
+    """Pass the incoming data to the Jinja template and return the result."""
+
+    params = JinjaTemplateParams()
+    input_type = Any
+    output_type = str
+
+    def run(self, params: JinjaTemplateParams, context: StepContext[Any]) -> StepContext[str]:
+        try:
+            template = SandboxedEnvironment().from_string(params.template)
+            result = template.render(data=context.get_data())
+            self.log.debug(f"Rendered template: {result}")
+        except Exception as e:
+            raise StepError(f"Error rendering template: {e}")
+        return StepContext(result, name=f"template: {context.name}")

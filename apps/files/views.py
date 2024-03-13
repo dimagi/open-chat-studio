@@ -4,7 +4,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.forms import modelform_factory
 from django.http import FileResponse, Http404, HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.decorators import method_decorator
 from django.views import View
 
@@ -15,11 +15,21 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 class FileView(LoginAndTeamRequiredMixin, View):
     @method_decorator(permission_required("files.view_file"))
     def get(self, request, team_slug: str, pk: int):
+        def _not_found():
+            referrer = request.GET.get("from")
+            if referrer and referrer.startswith("/"):
+                messages.error(request, "Unable to read file contents.")
+                return redirect(referrer)
+            raise Http404()
+
         file = get_object_or_404(File, id=pk, team=request.team)
+        if not file.file:
+            return _not_found()
+
         try:
             return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
         except FileNotFoundError:
-            raise Http404()
+            return _not_found()
 
 
 class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -36,7 +46,7 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             except Exception as e:
                 return self.get_error_response(e)
             return self.get_success_response(file)
-        return HttpResponse(status=400)
+        return self.get_error_response(form.errors.as_text())
 
     def get_success_response(self, file):
         return render(

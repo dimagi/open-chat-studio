@@ -76,7 +76,7 @@ class SourceMaterial(BaseTeamModel):
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
     objects = SafetyLayerObjectManager()
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
         choices=ChatMessageType.safety_layer_choices,
@@ -104,24 +104,14 @@ class Survey(BaseTeamModel):
     A survey.
     """
 
-    name = models.CharField(max_length=50)
-    url = models.URLField(
-        help_text=(
-            "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
-            "include the participant, session and experiment session ids in the url."
-        ),
-        max_length=500,
-    )
+    name = models.CharField(max_length=128)
+    url = models.URLField(max_length=500)
     confirmation_text = models.TextField(
         null=False,
         default=(
-            "Before starting the experiment, we ask that you complete a short survey. Please click on the "
-            "survey link, fill it out, and, when you have finished, respond with '1' to let us know that"
-            "you've completed it. Survey link: {survey_link}"
-        ),
-        help_text=(
-            "Use this text to ask the user to complete the survey. The {survey_link} will contain the "
-            "link to the survey"
+            "Please complete the following survey by clicking on the survey link."
+            " When you have finished, respond with '1' to let us know that you've completed it."
+            " Survey link: {survey_link}"
         ),
     )
 
@@ -147,7 +137,7 @@ class ConsentForm(BaseTeamModel):
     """
 
     objects = ConsentFormObjectManager()
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     consent_text = models.TextField(help_text="Custom markdown text")
     capture_identifier = models.BooleanField(default=True)
     identifier_label = models.CharField(max_length=200, default="Email Address")
@@ -197,7 +187,7 @@ class SyntheticVoice(BaseModel):
     )
 
     name = models.CharField(
-        max_length=64, help_text="The name of the synthetic voice, as per the documentation of the service"
+        max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
     neural = models.BooleanField(default=False, help_text="Indicates whether this voice is a neural voice")
     language = models.CharField(null=False, blank=False, max_length=64, help_text="The language this voice is for")
@@ -231,7 +221,7 @@ class NoActivityMessageConfig(BaseTeamModel):
 
     objects = NoActivityMessageConfigObjectManager()
     message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=128)
     max_pings = models.IntegerField()
     ping_after = models.IntegerField(help_text="The amount of minutes after which to ping the user. Minimum 1.")
 
@@ -240,6 +230,12 @@ class NoActivityMessageConfig(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+
+class VoiceResponseBehaviours(models.TextChoices):
+    ALWAYS = "always", gettext("Always")
+    RECIPROCAL = "reciprocal", gettext("Reciprocal")
+    NEVER = "never", gettext("Never")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -251,12 +247,12 @@ class Experiment(BaseTeamModel):
 
     objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
-    llm = models.CharField(max_length=20, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
+    llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.SET_NULL,
@@ -348,6 +344,13 @@ class Experiment(BaseTeamModel):
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
+    voice_response_behaviour = models.CharField(
+        max_length=10,
+        choices=VoiceResponseBehaviours.choices,
+        default=VoiceResponseBehaviours.RECIPROCAL,
+        help_text="This tells the bot when to reply with voice messages",
+    )
+    files = models.ManyToManyField("files.File", blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -416,7 +419,7 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=20)
+    llm = models.CharField(max_length=255)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
@@ -462,7 +465,8 @@ class ExperimentSession(BaseTeamModel):
     def get_invite_url(self) -> str:
         return absolute_url(
             reverse(
-                "experiments:start_experiment_session", args=[self.team.slug, self.experiment.public_id, self.public_id]
+                "experiments:start_session_from_invite",
+                args=[self.team.slug, self.experiment.public_id, self.public_id],
             )
         )
 

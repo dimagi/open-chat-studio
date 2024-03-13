@@ -30,6 +30,9 @@ class TeamSignupForm(SignupForm):
         else:
             del self.fields["terms_agreement"]
 
+        if "email" in kwargs.get("initial", {}):
+            self.fields["email"].widget.attrs = {"readonly": "readonly"}
+
     def clean(self):
         cleaned_data = super().clean()
         if not self.errors:
@@ -68,8 +71,8 @@ class TeamSignupForm(SignupForm):
             if invite.is_accepted:
                 raise forms.ValidationError(
                     _(
-                        "It looks like that invitation link has expired. "
-                        "Please request a new invitation or sign in to continue."
+                        "The invitation has already been accepted. "
+                        "Please sign in to continue or request a new invitation."
                     )
                 )
 
@@ -111,8 +114,11 @@ class InvitationForm(forms.ModelForm):
 
     def clean_email(self):
         email = self.cleaned_data["email"]
+        if Membership.objects.filter(team=self.team, user__email__iexact=email).exists():
+            raise ValidationError(_("A user with that email is already a member of this team."))
+
         # confirm no other pending invitations for this email
-        if Invitation.objects.filter(team=self.team, email=email, is_accepted=False):
+        if Invitation.objects.filter(team=self.team, email__iexact=email, is_accepted=False).exists():
             raise ValidationError(
                 _(
                     'There is already a pending invitation for {}. You can resend it by clicking "Resend Invitation".'
@@ -124,9 +130,15 @@ class InvitationForm(forms.ModelForm):
     class Meta:
         model = Invitation
         fields = ("email", "groups")
+        widgets = {
+            "groups": forms.CheckboxSelectMultiple(),
+        }
 
 
 class MembershipForm(forms.ModelForm):
     class Meta:
         model = Membership
         fields = ("groups",)
+        widgets = {
+            "groups": forms.CheckboxSelectMultiple(),
+        }

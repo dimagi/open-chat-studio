@@ -3,7 +3,7 @@ from apps.analysis.steps.parsers import WhatsappParser
 
 from .core import ParamsForm, Pipeline
 from .steps.filters import TimeseriesFilter
-from .steps.processors import AssistantStep, LlmCompletionStep
+from .steps.processors import AssistantStep, JinjaTemplateStep, LlmCompletionStep
 from .steps.splitters import TimeseriesSplitter
 
 TEXT_DATA_PIPE = "text_data"
@@ -21,8 +21,8 @@ class PiplineDefinition:
         self.description = description
         self.steps = steps
 
-    def build(self):
-        steps = [step() for step in self.steps]
+    def build(self, id_prefix: str):
+        steps = [step(step_id=f"{id_prefix}:{i}") for i, step in enumerate(self.steps)]
         return Pipeline(steps)
 
     def __str__(self):
@@ -40,9 +40,10 @@ SOURCE_PIPELINES = {
     COMMCARE_APP_PIPE: PiplineDefinition(
         [
             CommCareAppLoader,
+            JinjaTemplateStep,
         ],
         "CommCare Application",
-        "Load data from a CommCare application API.",
+        "Load data from a CommCare application API and format it with a Jinja template.",
     ),
     FILTERED_WHATSAPP_DATA_PIPE: PiplineDefinition(
         [
@@ -90,7 +91,7 @@ def get_source_pipeline_options() -> list[tuple[str, str]]:
 
 
 def get_source_pipeline(name: str) -> Pipeline:
-    return SOURCE_PIPELINES[name].build()
+    return SOURCE_PIPELINES[name].build("source")
 
 
 def get_data_pipeline_options() -> list[tuple[str, str]]:
@@ -98,28 +99,30 @@ def get_data_pipeline_options() -> list[tuple[str, str]]:
 
 
 def get_data_pipeline(name: str) -> Pipeline:
-    return PIPELINES[name].build()
+    return PIPELINES[name].build("data")
 
 
 def get_static_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
     forms_by_step = {step.name: step.params.get_static_config_form_class() for step in pipeline.steps}
-    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+    return dict((step_id, form_class) for step_id, form_class in forms_by_step.items() if form_class)
 
 
 def get_dynamic_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
     forms_by_step = {step.name: step.params.get_dynamic_config_form_class() for step in pipeline.steps}
-    return dict((name, form_class) for name, form_class in forms_by_step.items() if form_class)
+    return dict((step_id, form_class) for step_id, form_class in forms_by_step.items() if form_class)
 
 
 def get_static_forms_for_analysis(analysis):
+    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_static_param_forms(get_source_pipeline(analysis.source)),
+        **get_static_param_forms(source_pipeline),
         **get_static_param_forms(get_data_pipeline(analysis.pipeline)),
     }
 
 
 def get_dynamic_forms_for_analysis(analysis):
+    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_dynamic_param_forms(get_source_pipeline(analysis.source)),
+        **get_dynamic_param_forms(source_pipeline),
         **get_dynamic_param_forms(get_data_pipeline(analysis.pipeline)),
     }

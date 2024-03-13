@@ -1,5 +1,8 @@
 from django import forms
 from django.core import validators
+from django.utils.translation import gettext_lazy
+
+from apps.experiments.models import Survey
 
 
 class ConsentForm(forms.Form):
@@ -25,8 +28,31 @@ class ConsentForm(forms.Form):
             del self.fields["identifier"]
 
 
-class SurveyForm(forms.Form):
+class SurveyCompletedForm(forms.Form):
     completed = forms.BooleanField(required=True, label="I have completed the survey.")
+
+
+class SurveyForm(forms.ModelForm):
+    class Meta:
+        model = Survey
+        fields = ["name", "url", "confirmation_text"]
+        labels = {
+            "confirmation_text": "User Message",
+        }
+        help_texts = {
+            "url": gettext_lazy(
+                "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
+                "include the participant, session and experiment session ids in the url."
+            ),
+            "confirmation_text": gettext_lazy(
+                "The message that will be displayed to the participant to initiate the survey."
+                " Use the <code>{survey_link}</code> tag to place the survey link in the text.<br/>"
+                "If you want to use this survey in a web channel you can omit the <code>{survey_link}</code> tag"
+                " as the link will be displayed below the text.<br/>"
+                "If you want to use this survey in a non-web channel you should instruct the user"
+                " to respond with '1' to indicate that they have completed the survey."
+            ),
+        }
 
 
 class ExperimentInvitationForm(forms.Form):

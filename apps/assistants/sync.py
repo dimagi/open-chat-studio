@@ -169,8 +169,8 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
     builtin_tools = dict(get_assistant_tool_options())
     kwargs = {
         "assistant_id": assistant.id,
-        "name": assistant.name,
-        "instructions": assistant.instructions,
+        "name": assistant.name or "Untitled Assistant",
+        "instructions": assistant.instructions or "",
         "builtin_tools": [tool.type for tool in assistant.tools if tool.type in builtin_tools],
         # What if the model isn't one of the ones configured for the LLM Provider?
         "llm_model": assistant.model,

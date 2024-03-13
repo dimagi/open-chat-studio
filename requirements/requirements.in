@@ -22,6 +22,7 @@ httpx
 openai
 pandas
 sentry-sdk
+tenacity
 whitenoise[brotli]
 langchain
 langchain-openai
@@ -41,3 +42,4 @@ tiktoken
 fbmessenger
 django-field-audit>=1.2.7
 turn-python>=0.2.0
+jinja2

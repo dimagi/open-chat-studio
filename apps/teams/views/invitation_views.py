@@ -51,6 +51,15 @@ def accept_invitation(request, invitation_id):
 
 
 class SignupAfterInvite(SignupView):
+    def get(self, request, *args, **kwargs):
+        if self.invitation.is_accepted:
+            messages.warning(
+                self.request,
+                _("The invitation has already been accepted. Please sign in to continue or request a new invitation."),
+            )
+            return redirect("web:home")
+        return super().get(request, *args, **kwargs)
+
     def is_open(self):
         """Allow signups from invitations even if public signups are closed."""
         return True
@@ -60,12 +69,7 @@ class SignupAfterInvite(SignupView):
         from ..models import Invitation
 
         invitation_id = self.kwargs["invitation_id"]
-
-        invitation = get_object_or_404(Invitation, id=invitation_id)
-        if invitation.is_accepted:
-            messages.error(self.request, _("Sorry, it looks like that invitation link has expired."))
-            return redirect("web:home")
-        return invitation
+        return get_object_or_404(Invitation, id=invitation_id)
 
     def get_initial(self):
         initial = super().get_initial()

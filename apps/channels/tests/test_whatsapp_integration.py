@@ -1,14 +1,17 @@
 import json
 from io import BytesIO
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from django.urls import reverse
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.service_providers.models import MessagingProviderType
+from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -81,7 +84,7 @@ class TestTwilio:
         message_type,
     ):
         """Test that the twilio integration can use the WhatsappChannel implementation"""
-        synthesize_voice_mock.return_value = (BytesIO(b"123"), 10)
+        synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
         ):
@@ -99,7 +102,7 @@ class TestTwilio:
 class TestTurnio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
-        [(turnio_messages.text_message(), "text"), (turnio_messages.audio_message(), "voice")],
+        [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "voice")],
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
@@ -111,7 +114,7 @@ class TestTurnio:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
 
-    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.audio_message()])
+    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.voice_message()])
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
@@ -142,3 +145,12 @@ class TestTurnio:
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
+        url = reverse("channels:new_turn_message", kwargs={"experiment_id": str(uuid4())})
+        response = client.post(url, data=message, content_type="application/json")
+        response.status_code == 200
+        handle_turn_message_task.assert_not_called()

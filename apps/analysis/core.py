@@ -1,11 +1,14 @@
 import dataclasses
 import logging
+import uuid
 from abc import abstractmethod
+from collections.abc import Callable
 from functools import cached_property
 from typing import Annotated, Any, ClassVar, Generic, Protocol, TypeVar, _AnnotatedAlias
 
 from django import forms
 from pydantic import BaseModel
+from sentry_sdk.integrations.logging import ignore_logger
 
 from apps.service_providers.llm_service import LlmService
 from apps.teams.models import Team
@@ -49,7 +52,7 @@ class PipelineContext:
     """Context for a pipeline. This is passed to each step before it is run."""
 
     run: AnalysisRun = None
-    log_handler: logging.Handler = None
+    log_handler_factory: Callable[[str], logging.Handler] = None
     params: dict = dataclasses.field(default_factory=dict)
     create_resources: bool = False
 
@@ -130,10 +133,24 @@ class Pipeline:
 
     def run(self, pipeline_context: PipelineContext, initial_context: StepContext) -> StepContext | list[StepContext]:
         self.context_chain.append(initial_context)
+        unique_id = uuid.uuid4().hex
+        log = _create_logger("pipeline", unique_id)
+        if pipeline_context.log_handler_factory:
+            log.addHandler(pipeline_context.log_handler_factory(unique_id))
+
+        def _run_step(step, context):
+            if isinstance(context, list):
+                log.info("Running step %s %s times", step.name, len(context))
+                ret = []
+                for i, ctx in enumerate(context):
+                    ret.append(_run_step(step, ctx))
+                log.info("Step %s complete", step.name)
+                return ret
+            else:
+                return step.invoke(context, pipeline_context)
+
         for step in self.steps:
-            # TODO: handle splitting the pipeline if step returns list
-            assert not isinstance(self.context_chain[-1], list), "Pipeline splitting not yet implemented"
-            out_context = step.invoke(self.context_chain[-1], pipeline_context)
+            out_context = _run_step(step, self.context_chain[-1])
             self.context_chain.append(out_context)
             if pipeline_context.is_cancelled:
                 return self.context_chain[-1]
@@ -236,16 +253,16 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     output_type: PipeOut
     params: Params = NoParams()
     pipeline_context: PipelineContext | None = None
+    name: str = None
+    id: str = None
 
-    def __init__(self, params: Params = None):
+    def __init__(self, step_id=None, params: Params = None):
         self.params = params or self.params
-        self.log = logging.getLogger(self.name)
-        self.log.propagate = False
-        self.log.setLevel(logging.DEBUG)
-
-    @property
-    def name(self):
-        return self.__class__.__name__
+        self.id = uuid.uuid4().hex
+        self.log = _create_logger(self.name, self.id)
+        self.name = self.__class__.__name__
+        if step_id:
+            self.name = f"{self.name}:{step_id}"
 
     @property
     def is_cancelled(self):
@@ -254,8 +271,10 @@ class BaseStep(Generic[PipeIn, PipeOut]):
     def _initialize(self, pipeline_context: PipelineContext):
         self.pipeline_context = pipeline_context
         self.params = self.params.merge(self.pipeline_context.params, self.pipeline_context.params.get(self.name, {}))
-        if self.pipeline_context.log_handler:
-            self.log.addHandler(self.pipeline_context.log_handler)
+        self.id = uuid.uuid4().hex
+        self.log = _create_logger(self.name, self.id)
+        if self.pipeline_context.log_handler_factory:
+            self.log.addHandler(self.pipeline_context.log_handler_factory(self.id))
 
     def invoke(
         self, context: StepContext[PipeIn], pipeline_context: PipelineContext
@@ -274,8 +293,8 @@ class BaseStep(Generic[PipeIn, PipeOut]):
             return result
         finally:
             self.log.info(f"Step {self.name} complete")
-            if self.pipeline_context.log_handler:
-                self.log.removeHandler(self.pipeline_context.log_handler)
+            if self.pipeline_context.log_handler_factory:
+                self.log.removeHandler(self.pipeline_context.log_handler_factory(self.id))
 
     def run(self, params: Params, context: StepContext[PipeIn]) -> StepContext[PipeOut] | list[StepContext[PipeOut]]:
         """Run the step and return the output data and metadata."""
@@ -294,3 +313,12 @@ class BaseStep(Generic[PipeIn, PipeOut]):
         """
 
         return self.pipeline_context.create_resource(data, name, serialize, metadata)
+
+
+def _create_logger(name, unique_id):
+    log_name = f"{name}_{unique_id}"
+    log = logging.getLogger(log_name)
+    log.propagate = False
+    log.setLevel(logging.DEBUG)
+    ignore_logger(log_name)
+    return log
