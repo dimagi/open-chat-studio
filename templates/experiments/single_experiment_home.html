@@ -2,6 +2,8 @@
 {% load team_tags %}
 {% load form_tags %}
 {% block breadcrumbs %}
+  {% load waffle_tags %}
+
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
@@ -167,6 +169,9 @@
               <th>Started</th>
               <th>Last Message</th>
               <th>Actions</th>
+              {% flag "chat_annotations" %}
+                <th>Tags</th>
+              {% endflag %}
             </tr>
           </thead>
           <tbody>
@@ -180,6 +185,13 @@
                     Session Details
                   </a>
                 </td>
+                {% flag "chat_annotations" %}
+                  <td class="w-1/4 overflow-x-auto">
+                    {% for tag in session.chat.tags.all %}
+                      <span class="h-auto badge badge-neutral mb-1">{{ tag.name }}</span>
+                    {% endfor %}
+                  </td>
+                {% endflag %}
               </tr>
             {% endfor %}
           </tbody>
