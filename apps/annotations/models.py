@@ -13,6 +13,7 @@ class Tag(TagBase, BaseTeamModel):
         verbose_name = _("Tag")
         verbose_name_plural = _("Tags")
         unique_together = ("team", "name")
+        ordering = ["name"]
 
 
 class CustomTaggedItem(TaggedItem, BaseTeamModel):
