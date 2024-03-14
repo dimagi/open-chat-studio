@@ -7,6 +7,10 @@
           <dd class="text-sm col-span-2">{{ detail }}</dd>
         </div>
       {% endfor %}
+      <div class="py-3 grid grid-cols-3">
+        <dt class="text-sm font-medium leading-6">Tags</dt>
+        <dd class="text-sm col-span-2"> {% include "generic/tag_multiselect.html" with object_id=experiment_session.id tag_data=chat_tags %} </dd>
+      </div>
     </dl>
   </div>
 </div>
