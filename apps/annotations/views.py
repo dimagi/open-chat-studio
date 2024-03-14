@@ -9,6 +9,7 @@ from django_tables2 import SingleTableView
 from apps.annotations.forms import TagForm
 from apps.annotations.models import Tag
 from apps.annotations.tables import TagTable
+from apps.chat.models import Chat
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -76,3 +77,21 @@ class TagTableView(SingleTableView):
 
     def get_queryset(self):
         return Tag.objects.filter(team=self.request.team)
+
+
+class UnlinkTag(LoginAndTeamRequiredMixin, View):
+    # TODO: Update to accept a model content type to allow for generic models
+    def post(self, request, object_id: int):
+        tag_name = request.POST["tag_name"]
+        chat = get_object_or_404(Chat, id=object_id)
+        chat.tags.remove(tag_name)
+        return HttpResponse()
+
+
+class LinkTag(LoginAndTeamRequiredMixin, View):
+    # TODO: Update to accept a model content type to allow for generic models
+    def post(self, request, object_id: int):
+        tag_name = request.POST["tag_name"]
+        chat = get_object_or_404(Chat, id=object_id)
+        chat.add_tags(tag_name, added_by=request.user)
+        return HttpResponse()
