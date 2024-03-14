@@ -1,8 +1,8 @@
 <div x-data="dropdown()" x-init="loadOptions()">
   <input name="values" type="hidden" x-bind:value="selectedValues()">
 
-  <div id="linkTagDiv" data-url="{% url 'annotations:link_tag' object_id=object_id %}"></div>
-  <div id="unlinkTagDiv" data-url="{% url 'annotations:unlink_tag' object_id=object_id %}"></div>
+  <div id="linkTagDiv" data-url="{% url 'annotations:link_tag' object_id=object_info.id %}"></div>
+  <div id="unlinkTagDiv" data-url="{% url 'annotations:unlink_tag' object_id=object_info.id %}"></div>
 
   <div class="inline-block relative w-fit">
     <div class="flex flex-col items-center relative">
@@ -56,6 +56,7 @@
   </div>
 </div>
 {{ tag_data|json_script:"tagData" }}
+{{ object_info|json_script:"objectInfo" }}
 <script>
   function dropdown() {
     return {
@@ -65,6 +66,7 @@
       selectedTagNames: [],
       linkUrl: document.getElementById("linkTagDiv").getAttribute("data-url"),
       unlinkUrl: document.getElementById("unlinkTagDiv").getAttribute("data-url"),
+      objectInfo: JSON.parse(document.getElementById("objectInfo").textContent),
       options: [],
       selected: [],
       show: false,
@@ -72,15 +74,16 @@
       close() { this.show = false },
       isOpen() { return this.show === true },
       select(index, event) {
+        let postData = {swap: 'none', values: {"tag_name": this.options[index].text, "object_info": this.objectInfo}}
         if (!this.options[index].selected) {
           this.options[index].selected = true;
           this.options[index].element = event.target;
           this.selected.push(index);
-          htmx.ajax('POST', this.linkUrl, {swap: 'none', values: {"tag_name": this.options[index].text}})
+          htmx.ajax('POST', this.linkUrl, postData)
         } else {
           this.selected.splice(this.selected.lastIndexOf(index), 1);
           this.options[index].selected = false;
-          htmx.ajax('POST', this.unlinkUrl, {swap: 'none', values: {"tag_name": this.options[index].text}})
+          htmx.ajax('POST', this.unlinkUrl, postData)
         }
       },
       remove(index, option) {

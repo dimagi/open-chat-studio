@@ -1,4 +1,7 @@
+import json
+
 from django.contrib import messages
+from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -89,9 +92,10 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View):
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View):
-    # TODO: Update to accept a model content type to allow for generic models
     def post(self, request, object_id: int):
         tag_name = request.POST["tag_name"]
-        chat = get_object_or_404(Chat, id=object_id)
-        chat.add_tags(tag_name, added_by=request.user)
+        object_info = json.loads(request.POST["object_info"])
+        content_type = ContentType.objects.get(app_label=object_info["app"], model=object_info["model_name"])
+        object = content_type.get_object_for_this_type(id=object_id)
+        object.add_tags(tag_name, added_by=request.user)
         return HttpResponse()

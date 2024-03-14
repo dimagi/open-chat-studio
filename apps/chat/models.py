@@ -27,6 +27,10 @@ class Chat(BaseTeamModel):
     metadata = models.JSONField(default=dict)
     tags = TaggableManager(through=CustomTaggedItem)
 
+    @property
+    def object_info(self):
+        return {"id": self.id, "app": self._meta.app_label, "model_name": self._meta.model_name}
+
     def add_tags(self, tags: list[str], added_by: CustomUser):
         self.tags.add(tags, through_defaults={"team": self.team, "user": added_by})
 
