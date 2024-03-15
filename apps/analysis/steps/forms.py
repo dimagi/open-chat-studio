@@ -8,6 +8,7 @@ from django.utils.encoding import smart_bytes
 
 from apps.analysis.core import Params, ParamsForm
 from apps.analysis.models import Resource, ResourceType
+from apps.experiments.models import Experiment
 from apps.service_providers.models import AuthProvider
 
 
@@ -345,3 +346,28 @@ class JinjaTemplateParamsForm(ParamsForm):
             return JinjaTemplateParams(template=self.cleaned_data["template"])
         except ValueError as e:
             raise forms.ValidationError(repr(e))
+
+
+class ExperimentLoaderConfigForm(ParamsForm):
+    form_name = "Experiment Loader Configuration"
+    template_name = "analysis/forms/basic.html"
+    experiment = forms.ModelChoiceField(label="Experiment to engage with", queryset=None, required=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["experiment"].queryset = _get_experiment_queryset(self.request)
+
+    def reformat_initial(self, initial):
+        initial["experiment"] = initial.get("experiment_id", None)
+        return initial
+
+    def get_params(self):
+        from .loaders import ExperimentLoaderParams
+
+        return ExperimentLoaderParams(
+            experiment_id=self.cleaned_data["experiment"].id,
+        )
+
+
+def _get_experiment_queryset(request):
+    return Experiment.objects.filter(team=request.team)

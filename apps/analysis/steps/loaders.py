@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from apps.analysis.core import BaseStep, Params, PipeOut, StepContext, required
 from apps.analysis.exceptions import StepError
 from apps.analysis.models import Resource, ResourceType
+from apps.experiments.models import Experiment
 from apps.service_providers.auth_service import AuthService
 from apps.service_providers.models import AuthProvider
 
@@ -177,3 +178,41 @@ class CommCareAppLoader(BaseLoader[str]):
                 self.log.warning(f"Received 429 response, {retry_msg}")
             raise
         return response.json()
+
+
+class ExperimentLoaderParams(Params):
+    experiment_id: required(int) = None
+
+    def get_dynamic_config_form_class(self):
+        from .forms import ExperimentLoaderConfigForm
+
+        return ExperimentLoaderConfigForm
+
+    def get_static_config_form_class(self):
+        from .forms import ExperimentLoaderConfigForm
+
+        return ExperimentLoaderConfigForm
+
+    def get_experiment(self) -> Experiment:
+        return _get_experiment(self.experiment_id)
+
+
+class ExperimentLoader(BaseLoader[str]):
+    """Load data from an existing experiment."""
+
+    params = ExperimentLoaderParams()
+    output_type = str
+
+    def load(self, params: ExperimentLoaderParams) -> list[StepContext[str]]:
+        experiment = params.get_experiment()
+        self.log.info(f"Attempting to distract the '{experiment.name}' chatbot")
+        data = experiment.prompt_text
+        return StepContext(data, name="text")
+
+
+def _get_experiment(experiment_id: int) -> Experiment:
+    try:
+        experiment = Experiment.objects.get(id=experiment_id)
+    except Experiment.DoesNotExist:
+        raise StepError("Unable to load the configured experiment")
+    return experiment

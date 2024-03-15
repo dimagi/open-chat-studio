@@ -21,6 +21,34 @@
     @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
   }
 
+  /* TODO: Move this somewhere else? */
+  .card-with-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; /* Adjust based on your card's design */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 20px solid transparent; /* Adjust size of the arrow */
+    border-right: 20px solid transparent; /* Adjust size of the arrow */
+    border-top: 20px solid oklch(var(--b1)); /* Color should match the card's background */
+  }
+  /* This doesn't work with the dark: tailwind thing */
+  .card-with-arrow-dark::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; /* Adjust based on your card's design */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 20px solid transparent; /* Adjust size of the arrow */
+    border-right: 20px solid transparent; /* Adjust size of the arrow */
+    border-top: 20px solid oklch(var(--n)); /* Color should match the card's background */
+  }
+
+
 }
 
 /* subscriptions */

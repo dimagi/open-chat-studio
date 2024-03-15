@@ -6,6 +6,8 @@ app_name = "analysis"
 
 urlpatterns = [
     path("", views.analysis_home, name="home"),
+    path("get_step_types/", views.get_step_types, name="get_step_types"),
+    path("get_step_form/<str:step_type>/", views.get_step_form, name="get_step_form"),
     path("new/", views.CreateAnalysisPipeline.as_view(), name="new"),
     path("<int:pk>/", views.analysis_details, name="details"),
     path("<int:pk>/configure/", views.analysis_configure, name="configure"),

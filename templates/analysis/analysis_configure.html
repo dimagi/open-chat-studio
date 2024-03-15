@@ -1,5 +1,7 @@
 {% extends 'web/app/app_base.html' %}
+{% load static %}
 {% load form_tags %}
+{% load string_filters %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
@@ -10,49 +12,177 @@
   </div>
 {% endblock %}
 {% block app %}
-  <div class="app-card max-w-5xl mx-auto">
-    <div class="flex">
-      <div class="flex-1">
-        <h1 class="pg-title">Configure Analysis Static Parameters</h1>
+  <form method="post" action="{% url 'analysis:configure' request.team.slug analysis.id %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="container mx-auto p-4" x-data="pipelineEditor()">
+      <div class="form-control w-full mb-4">
+        <label class="label font-bold" for="id_name">Name</label>
+        <input class="input input-bordered w-full" type="text" name="name" maxlength="255" required="" id="id_name" value="{{ analysis.name }}">
       </div>
-      <div class="justify-self-end">
-        <div class="join">
-          <div class="tooltip" data-tip="Edit">
-            <a class="btn btn-sm btn-primary join-item"
-               href="{% url 'analysis:edit' team.slug analysis.id %}">
-              <i class="fa-solid fa-pencil"></i>
-            </a>
-          </div>
-          <div class="tooltip" data-tip="Delete">
-            <a class="btn btn-sm btn-primary join-item rounded-r-full"
-               href="{% url 'analysis:delete' team.slug analysis.id %}">
-              <i class="fa-solid fa-trash"></i>
-            </a>
-          </div>
+      <div class="flex justify-between mb-4">
+        <div class="flex gap-4">
+          <select class="select select-bordered" x-model="selectedStepType">
+            {% for stepType in step_types %}
+              <option value="{{ stepType.id }}">{{ stepType.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="button" class="btn btn-primary" @click="addStep()">Add Step</button>
         </div>
+        <button type="submit" class="btn btn-success">Save Pipeline</button>
       </div>
+      <div id="steps-container" class="flex flex-col gap-4">
+        <template x-for="(step, index) in steps" :key="index">
+          <div class="step-form" :data-step-type="step.step_type">
+            <div :class="{
+                         'card card-bordered bg-base-100 shadow-xl mb-5 relative': true,
+                         'card-with-arrow dark:card-with-arrow-dark': index < steps.length - 1
+                         }">
+
+              <div class="card-body">
+                <!-- Flex container for title and actions -->
+                <div class="flex justify-between items-center">
+                  <h2 class="card-title" x-text="`Step ${index}: ${step.step_type}`"></h2>
+                  <div class="card-actions">
+                    <button class="btn btn-square btn-sm" @click.prevent="removeStep(index)">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="ml-4 mt-2">
+                  <template x-if="step.non_field_errors">
+                    <div x-html="step.non_field_errors"></div>
+                  </template>
+                  <div x-html="step.as_p"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+
     </div>
-    <h1 class="pg-subtitle">Analysis: {{ analysis.name }}</h1>
-    <div role="tablist" class="tabs tabs-bordered">
-      <a role="tab" class="tab" href="{% url "analysis:edit" request.team.slug analysis.id %}">1. Setup</a>
-      <a role="tab" class="tab tab-active !border-primary !cursor-default">2. Configure</a>
-    </div>
-    <form method="post" class="mb-2 mt-4" enctype="multipart/form-data">
-      {% csrf_token %}
-      {% for form in param_forms.values %}
-        {% if not forloop.first %}
-          <div class="divider divider-info"></div>
-        {% endif %}
-        <h2 class="pg-subtitle">{{ form.form_name }}</h2>
-        <div class="ml-4 mt-2">
-          {{ form.non_field_errors }}
-          {{ form }}
-        </div>
-        {% if not forloop.last %}
-          <div class="divider divider-info"></div>
-        {% endif %}
-      {% endfor %}
-      <input type="submit" class="btn btn-primary mt-2" value="Save">
-    </form>
-  </div>
+  </form>
+
+  {{ initial_steps|json_script:"initialStepsArray" }}
+  {% with first_step_type=step_types|first %}
+
+    <script>
+      function pipelineEditor() {
+        return {
+          selectedStepType: '{{ first_step_type.id }}',
+          steps: [],
+          formCache: {}, // Cache for HTML form snippets
+          formData: {},
+          init() {
+            this.steps = JSON.parse(document.getElementById('initialStepsArray').textContent);
+            this.steps.forEach(step => {
+              step.as_p = this.addReactivity(step.as_p);
+            });
+          },
+          addReactivity(html) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+
+          // Update ids and for attributes inside this step to include the stepNumber
+            const formElements = tempDiv.querySelectorAll('input, textarea, select, label');
+            formElements.forEach(elem => {
+            // Generate a unique ID for each element
+              const uniqueID = 'form_' + Math.random().toString(36).substr(2, 9);
+
+            // Assign element's current value to formData using the uniqueID
+              this.formData[uniqueID] = elem.value;
+
+            // Use x-model for binding
+              elem.setAttribute('x-model', `formData['${uniqueID}']`);
+
+            // Clear the value from the element to ensure it's loaded from formData
+              if (elem.tagName.toLowerCase() === 'input' || elem.tagName.toLowerCase() === 'textarea') {
+                elem.value = '';
+              } else if (elem.tagName.toLowerCase() === 'select') {
+                elem.selectedIndex = -1; // Reset select to a 'no selection' state
+              }
+            });
+
+            return tempDiv.innerHTML;
+          },
+          addStep() {
+            const stepType = this.selectedStepType;
+            if (this.formCache[stepType]) {
+              this.insertStep(this.formCache[stepType], stepType);
+              return;
+            }
+
+            // Not in the cache, so let's go fetching.
+            const url = `{% url 'analysis:get_step_form' request.team.slug 'DUMMY' %}`.replace('DUMMY', stepType);
+            fetch(url, {
+              method: 'GET',
+            })
+              .then(response => response.text())
+              .then(html => {
+                this.formCache[stepType] = html; // Cache the fetched HTML
+                this.insertStep(html, stepType);
+              });
+          },
+          insertStep(html, stepType) {
+            const newStepID = `${stepType}-${this.steps.length}`;
+            const newStep = {
+              "step_type": stepType,
+              "step_id": newStepID,
+              "form_prefix": newStepID,
+              "non_field_errors": [],
+              "as_p": this.addReactivity(this.rewriteIDs(html,stepType,newStepID))
+            }
+            this.steps.push(newStep); // Add the step to the steps array
+          },
+          rewriteIDs(html, stepType, stepID) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+
+          // Update ids and for attributes inside this step to include the stepNumber
+            const elementsWithIds = tempDiv.querySelectorAll('input, textarea, select, label');
+            elementsWithIds.forEach(elem => {
+              // We are assuming that elem.id starts with "id_" because it's coming from Django forms
+              if (elem.id && elem.id.startsWith('id_')) {
+                let prevElemID = elem.id.substring(3);
+
+                // If we've already rewritten the name on this one, trim it out
+                // would be in the form 'id_LlmCompletionStep-2-prompt'
+                if(prevElemID.includes(stepType)) {
+                  const parts = prevElemID.split('-');
+                  prevElemID = parts[parts.length-1];
+                }
+
+                const newId = `id_${stepID}-${prevElemID}`;
+                // Update the 'for' attribute of labels directly associated with this element
+                const label = tempDiv.querySelector(`label[for="${elem.getAttribute('id')}"]`);
+                if (label) {
+                  label.setAttribute('for', newId);
+                }
+
+                // Save it at the end
+                elem.id = newId;
+                elem.name = elem.id.substring(3);
+              }
+            });
+
+            return tempDiv.innerHTML;
+          },
+          removeStep(index) {
+            this.steps.splice(index, 1); // Remove the step at the specified index
+            this.steps = this.steps.map((step, newIndex) => {
+                // Recreate each step to update their step_id and as_p properties
+              const newStepID = `${step.step_type}-${newIndex}`;
+              return {
+                ...step,
+                "step_id": newStepID,
+                "form_prefix": newStepID,
+                "as_p": this.rewriteIDs(step.as_p, step.step_type, newStepID)
+              };
+            });
+          },
+        }
+      }
+    </script>
+  {% endwith %}
 {% endblock %}
