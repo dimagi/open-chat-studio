@@ -5,15 +5,13 @@ from django.conf import settings
 from django.db import models
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
-from taggit.managers import TaggableManager
 
-from apps.annotations.models import CustomTaggedItem
+from apps.annotations.models import BaseTaggedModel
 from apps.teams.models import BaseTeamModel
-from apps.users.models import CustomUser
 from apps.utils.models import BaseModel
 
 
-class Chat(BaseTeamModel):
+class Chat(BaseTeamModel, BaseTaggedModel):
     """
     A chat instance.
     """
@@ -25,14 +23,6 @@ class Chat(BaseTeamModel):
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
     metadata = models.JSONField(default=dict)
-    tags = TaggableManager(through=CustomTaggedItem)
-
-    @property
-    def object_info(self):
-        return {"id": self.id, "app": self._meta.app_label, "model_name": self._meta.model_name}
-
-    def add_tags(self, tags: list[str], added_by: CustomUser):
-        self.tags.add(tags, through_defaults={"team": self.team, "user": added_by})
 
     def get_metadata(self, key: MetadataKeys):
         return self.metadata.get(key, None)

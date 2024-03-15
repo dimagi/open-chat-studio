@@ -12,7 +12,6 @@ from django_tables2 import SingleTableView
 from apps.annotations.forms import TagForm
 from apps.annotations.models import Tag
 from apps.annotations.tables import TagTable
-from apps.chat.models import Chat
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -84,18 +83,22 @@ class TagTableView(SingleTableView):
 
 class UnlinkTag(LoginAndTeamRequiredMixin, View):
     # TODO: Update to accept a model content type to allow for generic models
-    def post(self, request, object_id: int):
+    def post(self, request):
+        object_info = json.loads(request.POST["object_info"])
+        object_id = object_info["id"]
         tag_name = request.POST["tag_name"]
-        chat = get_object_or_404(Chat, id=object_id)
-        chat.tags.remove(tag_name)
+        content_type = ContentType.objects.get(app_label=object_info["app"], model=object_info["model_name"])
+        obj = content_type.get_object_for_this_type(id=object_id)
+        obj.tags.remove(tag_name)
         return HttpResponse()
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View):
-    def post(self, request, object_id: int):
-        tag_name = request.POST["tag_name"]
+    def post(self, request):
         object_info = json.loads(request.POST["object_info"])
+        object_id = object_info["id"]
+        tag_name = request.POST["tag_name"]
         content_type = ContentType.objects.get(app_label=object_info["app"], model=object_info["model_name"])
-        object = content_type.get_object_for_this_type(id=object_id)
-        object.add_tags(tag_name, added_by=request.user)
+        obj = content_type.get_object_for_this_type(id=object_id)
+        obj.add_tags(tag_name, team=request.team, added_by=request.user)
         return HttpResponse()

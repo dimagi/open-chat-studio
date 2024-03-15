@@ -12,7 +12,9 @@
       {% flag "chat_annotations" %}
         <div class="py-3 grid grid-cols-3">
           <dt class="text-sm font-medium leading-6">Tags</dt>
-          <dd class="text-sm col-span-2"> {% include "generic/tag_multiselect.html" with tag_data=chat_tags object_info=experiment_session.chat.object_info%} </dd>
+          <dd class="col-span-2">
+            {% include "generic/tag_multiselect.html" with object_tags=experiment_session.chat.get_linked_tags object_info=experiment_session.chat.object_info %}
+          </dd>
         </div>
       {% endflag %}
     </dl>
