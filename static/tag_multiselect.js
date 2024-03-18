@@ -19,7 +19,7 @@ document.querySelectorAll('.tag-multiselect').forEach((el)=> {
   let objectInfo = el.getAttribute("data-info");
 
   new TomSelect(el, {
-    maxItems: 10,
+    maxItems: null,
     onItemAdd: addTag('onItemAdd', objectInfo),
     onItemRemove: removeTag('onItemRemove', objectInfo)
   });
