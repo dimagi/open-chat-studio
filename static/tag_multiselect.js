@@ -1,4 +1,3 @@
-{/* <script> */}
 let linkTagUrl = document.getElementById("linkTagUrl").getAttribute("data-url");
 let unlinkTagUrl = document.getElementById("unlinkTagUrl").getAttribute("data-url");
 
@@ -15,11 +14,7 @@ var removeTag = function(name, objectInfo) {
     htmx.ajax('POST', unlinkTagUrl, postData);
   };
 };
-var settings = {
-  maxItems: 10,
-  onItemAdd: addTag('onItemAdd'),
-  onItemRemove: removeTag('onItemRemove')
-};
+
 document.querySelectorAll('.tag-multiselect').forEach((el)=> {
   let objectInfo = el.getAttribute("data-info");
 
@@ -29,5 +24,3 @@ document.querySelectorAll('.tag-multiselect').forEach((el)=> {
     onItemRemove: removeTag('onItemRemove', objectInfo)
   });
 });
-
-{/* </script> */}

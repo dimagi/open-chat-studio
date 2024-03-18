@@ -31,8 +31,10 @@
               </td>
               <td class="px-3 py-4 text-sm text-gray-500">{{ message.content|render_markdown }}</td>
               {% flag "chat_annotations" %}
-                <td scope="col" class="w-1/4 overflow-x-auto">
-                  {% include "generic/tag_multiselect.html" with object_tags=message.get_linked_tags object_info=message.object_info %}
+                <td scope="col" class="w-1/4 overflow-y-visible">
+                  <div class="my-2 mr-2">
+                    {% include "generic/tag_multiselect.html" with object_tags=message.get_linked_tags object_info=message.object_info %}
+                  </div>
                 </td>
               {% endflag %}
             </tr>
