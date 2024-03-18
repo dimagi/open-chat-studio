@@ -61,7 +61,7 @@ class ChatMessageType(models.TextChoices):
         )
 
 
-class ChatMessage(BaseModel):
+class ChatMessage(BaseModel, BaseTaggedModel):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
