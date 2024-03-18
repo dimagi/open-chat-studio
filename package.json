@@ -10,7 +10,8 @@
     "dev-watch": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
     "type-check-watch": "npm run type-check -- --watch",
-    "eslint": "eslint assets/"
+    "lint": "eslint assets/",
+    "prepare": "husky"
   },
   "author": "",
   "homepage": "http://example.com/",
@@ -32,6 +33,7 @@
     "css-loader": "^6.8.1",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.1",
+    "husky": "^9.0.11",
     "mini-css-extract-plugin": "^2.7.6",
     "postcss": "^8.4.31",
     "postcss-import": "^15.1.0",
