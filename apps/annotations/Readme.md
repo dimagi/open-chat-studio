@@ -8,7 +8,7 @@
 
 ```html
 <script
-    id="tag-multiselect"
+    id="tag-multiselect"  (you must use this ID)
     src="{% static './tag_multiselect.js' %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
     data-unlinkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
