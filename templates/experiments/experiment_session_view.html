@@ -1,5 +1,7 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
+{% load static %}
+{% load waffle_tags %}
 
 {% block breadcrumbs %}
   {% if request.user.is_authenticated %}
@@ -43,4 +45,9 @@
       {% include "experiments/components/experiment_chat.html" %}
     </div>
   </div>
+  {% flag "chat_annotations" %}
+    <div id="linkTagUrl" data-url="{% url 'annotations:link_tag' %}"></div>
+    <div id="unlinkTagUrl" data-url="{% url 'annotations:unlink_tag' %}"></div>
+    <script src="{% static './tag_multiselect.js' %}"></script>
+  {% endflag %}
 {% endblock %}
