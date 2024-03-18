@@ -33,7 +33,15 @@ class BaseTaggedModel(models.Model):
 
     @property
     def object_info(self):
-        return {"id": self.id, "app": self._meta.app_label, "model_name": self._meta.model_name}
+        import json
+
+        return json.dumps(
+            {
+                "id": self.id,
+                "app": self._meta.app_label,
+                "model_name": self._meta.model_name,
+            }
+        )
 
     @property
     def get_linked_tags(self):
