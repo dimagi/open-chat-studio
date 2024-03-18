@@ -86,7 +86,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
         tag_name = request.POST["tag_name"]
-        content_type = ContentType.objects.get(app_label=object_info["app"], model=object_info["model_name"])
+        content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
         obj.tags.remove(tag_name)
         return HttpResponse()
@@ -97,7 +97,7 @@ class LinkTag(LoginAndTeamRequiredMixin, View):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
         tag_name = request.POST["tag_name"]
-        content_type = ContentType.objects.get(app_label=object_info["app"], model=object_info["model_name"])
+        content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
         obj.add_tags(tag_name, team=request.team, added_by=request.user)
         return HttpResponse()
