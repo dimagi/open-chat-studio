@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
 from field_audit import audit_fields
 from taggit.managers import TaggableManager
-from taggit.models import TagBase, TaggedItem
+from taggit.models import GenericTaggedItemBase, TagBase
 
 from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
@@ -33,8 +33,23 @@ class Tag(TagBase, BaseTeamModel):
     "object_id",
     "content_type",
 )
-class CustomTaggedItem(TaggedItem, BaseTeamModel):
+class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
     user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items", on_delete=models.CASCADE)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["content_type", "object_id"],
+            )
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=("content_type", "object_id", "tag"),
+                name="content_type_object_id_tag_id_4bb97a8e_uniq",
+            )
+        ]
 
 
 class BaseTaggedModel(models.Model):
