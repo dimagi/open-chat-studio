@@ -22,8 +22,8 @@ class TagHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "tags",
             "title": "Tags",
-            "new_object_url": reverse("experiments:tag_new", args=[team_slug]),
-            "table_url": reverse("experiments:tag_table", args=[team_slug]),
+            "new_object_url": reverse("annotations:tag_new", args=[team_slug]),
+            "table_url": reverse("annotations:tag_table", args=[team_slug]),
         }
 
 

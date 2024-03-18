@@ -4,7 +4,7 @@ from .models import CustomTaggedItem, Tag
 
 
 @admin.register(Tag)
-class ChatAdmin(admin.ModelAdmin):
+class TagAdmin(admin.ModelAdmin):
     list_display = ("name", "team", "created_at", "updated_at")
     search_fields = ("name",)
 

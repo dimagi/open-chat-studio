@@ -11,8 +11,8 @@ class TagTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                actions.edit_action(url_name="experiments:tag_edit"),
-                actions.delete_action(url_name="experiments:tag_delete"),
+                actions.edit_action(url_name="annotations:tag_edit"),
+                actions.delete_action(url_name="annotations:tag_delete"),
             ]
         },
     )
