@@ -1,5 +1,6 @@
-let linkTagUrl = document.getElementById("linkTagUrl").getAttribute("data-url");
-let unlinkTagUrl = document.getElementById("unlinkTagUrl").getAttribute("data-url");
+var urlData = document.getElementById('tag-multiselect');
+const linkTagUrl = urlData.getAttribute("data-linkTagUrl");
+const unlinkTagUrl = urlData.getAttribute("data-unlinkTagUrl");
 
 var addTag = function(name, objectInfo) {
   return function() {

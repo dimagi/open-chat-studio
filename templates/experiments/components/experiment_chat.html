@@ -36,7 +36,7 @@
                 {% flag "chat_annotations" %}
                   <td scope="col" class="w-1/4 overflow-y-visible">
                     <div class="my-2 mr-2">
-                      {% include "generic/tag_multiselect.html" with object_tags=message.get_linked_tags object_info=message.object_info %}
+                      {% include "generic/tag_multiselect.html" with object=message %}
                     </div>
                   </td>
                 {% endflag %}
