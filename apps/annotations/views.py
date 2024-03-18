@@ -2,7 +2,6 @@ import json
 
 from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -11,7 +10,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.forms import TagForm
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import Tag
 from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -65,10 +64,8 @@ class EditTag(UpdateView):
 
 
 class DeleteTag(LoginAndTeamRequiredMixin, View):
-    @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         tag = get_object_or_404(Tag, id=pk, team=request.team)
-        CustomTaggedItem.objects.filter(team__slug=team_slug, tag__slug=tag.slug).delete()
         tag.delete()
         messages.success(request, "Tag Deleted")
         return HttpResponse()
