@@ -8,7 +8,7 @@ module.exports = {
     'site-tailwind': './assets/site-tailwind.js',  // required for tailwindcss styles
     site: './assets/javascript/site.js',  // global site javascript
     app: './assets/javascript/app.js',  // logged-in javascript
-    'pipeline': './assets/javascript/apps/pipeline.js',
+    'pipeline': './assets/javascript/apps/pipeline.tsx',
   },
   output: {
     path: path.resolve(__dirname, './static'),

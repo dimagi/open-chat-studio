@@ -1,7 +1,7 @@
 import React from "react";
 
 
-const PipelineApplication = function (props) {
+const PipelineApplication = function () {
   return (
     <div>Hello</div>
   );

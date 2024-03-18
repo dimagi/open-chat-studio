@@ -4,7 +4,7 @@ import {createRoot} from "react-dom/client";
 import PipelineApplication from "./pipeline/App";
 
 
-export function renderPipeline(containerId) {
-  const domContainer = document.querySelector(containerId);
+export function renderPipeline(containerId: string) {
+  const domContainer = document.querySelector(containerId)!;
   createRoot(domContainer).render(<PipelineApplication />);
 }
