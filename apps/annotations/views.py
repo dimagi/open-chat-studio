@@ -42,7 +42,7 @@ class CreateTag(CreateView):
 
     def form_valid(self, form):
         form.instance.team = self.request.team
-        form.instance.owner = self.request.user
+        form.instance.created_by = self.request.user
         return super().form_valid(form)
 
 

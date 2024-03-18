@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
+from field_audit import audit_fields
 from taggit.managers import TaggableManager
 from taggit.models import TagBase, TaggedItem
 
@@ -8,8 +9,15 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
 
 
+@audit_fields(
+    "name",
+    "slug",
+    "created_by",
+    "team",
+)
 class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
+    created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
 
     class Meta:
         verbose_name = _("Tag")
@@ -18,6 +26,13 @@ class Tag(TagBase, BaseTeamModel):
         ordering = ["name"]
 
 
+@audit_fields(
+    "user",
+    "team",
+    "tag",
+    "object_id",
+    "content_type",
+)
 class CustomTaggedItem(TaggedItem, BaseTeamModel):
     user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
 
