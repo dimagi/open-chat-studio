@@ -12,7 +12,10 @@ class TagTable(tables.Table):
         extra_context={
             "actions": [
                 actions.edit_action(url_name="annotations:tag_edit"),
-                actions.delete_action(url_name="annotations:tag_delete"),
+                actions.delete_action(
+                    url_name="annotations:tag_delete",
+                    confirm_message="Continuing with this action will remove this tag from any tagged entity",
+                ),
             ]
         },
     )
