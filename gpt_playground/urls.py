@@ -38,6 +38,7 @@ team_urlpatterns = [
     path("analysis/", include("apps.analysis.urls")),
     path("assistants/", include("apps.assistants.urls")),
     path("files/", include("apps.files.urls")),
+    path("annotations/", include("apps.annotations.urls", namespace="annotations")),
 ]
 
 urlpatterns = [
@@ -62,5 +63,4 @@ urlpatterns = [
     # hijack urls for impersonation
     path("hijack/", include("hijack.urls", namespace="hijack")),
     path("channels/", include("apps.channels.urls", namespace="channels")),
-    path("annotations/", include("apps.annotations.urls", namespace="annotations")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

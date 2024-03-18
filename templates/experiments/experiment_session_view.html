@@ -46,8 +46,8 @@
     </div>
   </div>
   {% flag "chat_annotations" %}
-    <div id="linkTagUrl" data-url="{% url 'annotations:link_tag' %}"></div>
-    <div id="unlinkTagUrl" data-url="{% url 'annotations:unlink_tag' %}"></div>
+    <div id="linkTagUrl" data-url="{% url 'annotations:link_tag' request.team.slug %}"></div>
+    <div id="unlinkTagUrl" data-url="{% url 'annotations:unlink_tag' request.team.slug %}"></div>
     <script src="{% static './tag_multiselect.js' %}"></script>
   {% endflag %}
 {% endblock %}

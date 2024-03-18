@@ -38,7 +38,7 @@ class CreateTag(CreateView):
     }
 
     def get_success_url(self):
-        return reverse("experiments:tag_home", args=[self.request.team.slug])
+        return reverse("annotations:tag_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -60,7 +60,7 @@ class EditTag(UpdateView):
         return Tag.objects.filter(team=self.request.team)
 
     def get_success_url(self):
-        return reverse("experiments:tag_home", args=[self.request.team.slug])
+        return reverse("annotations:tag_home", args=[self.request.team.slug])
 
 
 class DeleteTag(LoginAndTeamRequiredMixin, View):
@@ -83,7 +83,7 @@ class TagTableView(SingleTableView):
 
 class UnlinkTag(LoginAndTeamRequiredMixin, View):
     # TODO: Update to accept a model content type to allow for generic models
-    def post(self, request):
+    def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
         tag_name = request.POST["tag_name"]
@@ -94,7 +94,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View):
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View):
-    def post(self, request):
+    def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
         tag_name = request.POST["tag_name"]

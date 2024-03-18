@@ -44,7 +44,7 @@
         </a>
       </li>
       <li>
-        <a href="{% url 'experiments:tag_home' request.team.slug %}"
+        <a href="{% url 'annotations:tag_home' request.team.slug %}"
            {% if active_tab == 'tags' %}class="active"{% endif %}>
           <i class="fa fa-solid fa-tags"></i>
           {% translate "Manage Tags" %}
