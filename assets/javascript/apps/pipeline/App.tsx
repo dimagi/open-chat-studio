@@ -1,10 +1,8 @@
 import React from "react";
-
+import Flow from "./Flow";
 
 const PipelineApplication = function () {
-  return (
-    <div>Hello</div>
-  );
+  return <Flow />;
 };
 
 
