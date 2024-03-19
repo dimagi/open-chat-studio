@@ -66,7 +66,10 @@ class EventsTable(tables.Table):
 
     class Meta:
         orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "id": lambda record: f"record-{record['type']}-{record['id']}",
+        }
         fields = (
             "type",
             "action_type",

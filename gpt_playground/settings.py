@@ -473,7 +473,7 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 # text-neutral text-error (pipeline run table styles here for tailwind build)
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": "border-b border-gray-200 hover:bg-gray-100",
-    "id": lambda record: f"record-{record.id}" if hasattr(record, "id") else "",
+    "id": lambda record: f"record-{record.id}",
 }
 
 # This is only used for development purposes
