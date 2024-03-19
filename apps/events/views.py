@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
-from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.utils.time import seconds_to_human
 
 
@@ -108,11 +108,11 @@ def _logs_view(trigger_type, request, team_slug, experiment_id, trigger_id):
     if trigger_type == "timeout":
         trigger_text = f"No response for {seconds_to_human(trigger.delay)}"
     else:
-        trigger_text = StaticTriggerType(trigger.type).label
+        trigger_text = trigger.get_type_display()
 
     context = {
         "trigger_text": trigger_text,
-        "action_type": EventActionType(trigger.action.action_type).label,
+        "action_type": trigger.action.get_action_type_display(),
         "event_logs": trigger.event_logs.order_by("-created_at").all(),
         "title": "Event logs",
         "trigger": trigger,
