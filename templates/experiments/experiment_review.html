@@ -1,5 +1,18 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
+{% load static %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script
+    id="tag-multiselect"  (you must use this ID)
+    src="{% static './tag_multiselect.js' %}"
+    data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
+    data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
+  >
+  </script>
+{% endblock %}
+
 {% block body %}
   <div class="app-card max-w-5xl mx-auto">
     <h1 class="pg-title">Experiment Review</h1>
