@@ -18,16 +18,13 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         action_form = EventActionForm(request.POST)
-        if action_form.is_valid():
+        trigger_form = trigger_form_class(request.POST)
+        if action_form.is_valid() and trigger_form.is_valid():
             saved_action = action_form.save(experiment_id=experiment_id)
-            trigger_form = trigger_form_class(request.POST)
-            if trigger_form.is_valid():
-                trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
-                trigger.action = saved_action
-                trigger.save()
-                return HttpResponseRedirect(
-                    reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
-                )
+            trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
+            trigger.action = saved_action
+            trigger.save()
+            return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
         action_form = EventActionForm()
         trigger_form = trigger_form_class()
