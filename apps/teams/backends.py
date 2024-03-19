@@ -150,6 +150,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("channels", ALL),
+            AppPermSetDef("annotations", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
         ],
     ),
@@ -157,6 +158,7 @@ GROUPS = [
         CHAT_VIEWER_GROUP,
         [
             AppPermSetDef("chat", [VIEW]),
+            AppPermSetDef("annotations", [VIEW]),
         ],
     ),
     GroupDef(

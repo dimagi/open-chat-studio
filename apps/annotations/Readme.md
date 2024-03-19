@@ -4,6 +4,9 @@
 ```
 {% include "generic/tag_multiselect.html" with object_tags=object_variable %}
 ```
+
+Be sure to pass the available tags as a template variable called `available_tags`.
+
 ### Load the script
 
 ```html
@@ -11,7 +14,7 @@
     id="tag-multiselect"  (you must use this ID)
     src="{% static './tag_multiselect.js' %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
-    data-unlinkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
+    data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
     >
 </script>
 ```
