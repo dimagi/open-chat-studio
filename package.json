@@ -10,8 +10,19 @@
     "dev-watch": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
     "type-check-watch": "npm run type-check -- --watch",
-    "lint": "eslint assets/",
+    "lint": "eslint . --fix",
     "prepare": "husky"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "assets/javascript/**/*.{js,jsx,ts,tsx}": [
+      "npm run lint",
+      "npm run type-check"
+    ]
   },
   "author": "",
   "homepage": "http://example.com/",
@@ -34,6 +45,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.1",
     "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
     "mini-css-extract-plugin": "^2.7.6",
     "postcss": "^8.4.31",
     "postcss-import": "^15.1.0",
