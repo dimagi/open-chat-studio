@@ -48,11 +48,13 @@
   background: #f2f2f2;
   color: #303030;
   border: 0 solid #d0d0d0;
+  border-radius: 15px;
 }
 .ts-wrapper.multi .ts-control > div.active {
-  background: #e8e8e8;
+  background: #a7a4a4;
   color: #303030;
   border: 0 solid #cacaca;
+  border-radius: 15px;
 }
 .ts-wrapper.multi.disabled .ts-control > div, .ts-wrapper.multi.disabled .ts-control > div.active {
   color: #7d7d7d;
