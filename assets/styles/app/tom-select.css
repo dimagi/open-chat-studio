@@ -11,7 +11,12 @@
  * ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  *
+ * Modifications:
+ *   19 March 2024: Updated `.ts-wrapper.multi .ts-control > div.active` and `.ts-wrapper.multi .ts-control > div`
+ *   to round the item borders and changed the background color.
  */
+
+
  .ts-control {
   border: 1px solid #d0d0d0;
   padding: 8px 8px;
