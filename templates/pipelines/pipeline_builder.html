@@ -13,7 +13,7 @@
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
-      SiteJS.pipeline.renderPipeline("#pipelineBuilder");
+      SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", 1);
     }
     )
   </script>

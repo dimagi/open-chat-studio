@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "jsx": "react",
-    "module": "es6",
+    "module": "esnext",
+    "target": "es2015",
+    "jsx": "react-jsx",
     "moduleResolution": "node",
     "allowJs": true,
     "noEmit": true,
@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "strict": true,
     "strictNullChecks": true
-  },
+  }
 }
