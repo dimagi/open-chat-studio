@@ -1,5 +1,12 @@
 import React, {useCallback, useEffect} from 'react';
-import ReactFlow, {Background, BackgroundVariant, Controls, FitViewOptions, NodeTypes} from 'reactflow';
+import ReactFlow, {
+  Background,
+  BackgroundVariant,
+  Controls,
+  FitViewOptions,
+  NodeDragHandler,
+  NodeTypes, OnMove
+} from 'reactflow';
 
 import {PipelineNode} from './PipelineNode';
 
@@ -29,13 +36,14 @@ export default function Pipeline() {
   const setReactFlowInstance = usePipelineStore((state) => state.setReactFlowInstance);
   const currentPipelineId = usePipelineManagerStore((state) => state.currentPipelineId);
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
+  const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
 
   useEffect(() => {
     if (reactFlowInstance) {
       resetFlow({
         nodes: currentPipeline?.data?.nodes ?? [],
         edges: currentPipeline?.data?.edges ?? [],
-        viewport: { zoom: 1, x: 0, y: 0 },
+        viewport: currentPipeline?.data?.viewport ?? { zoom: 1, x: 0, y: 0 },
       });
     }
   }, [currentPipelineId, reactFlowInstance]);
@@ -73,6 +81,15 @@ export default function Pipeline() {
     [getNodeId, setNodes, addNode]
   );
 
+  const onNodeDragStop: NodeDragHandler = useCallback(() => {
+    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
+  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
+
+  const onMoveEnd: OnMove = useCallback(() => {
+    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
+  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
+
+
   return (
     <div style={{height: '80vh'}}>
       <ReactFlow
@@ -81,12 +98,13 @@ export default function Pipeline() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        fitView
         fitViewOptions={fitViewOptions}
         nodeTypes={nodeTypes}
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onMoveEnd={onMoveEnd}
+        onNodeDragStop={onNodeDragStop}
         minZoom={0.01}
         maxZoom={8}
       >
