@@ -14,6 +14,7 @@ repos:
       - id: djhtml
         files: templates/.*\.html$
       - id: djcss
+        exclude: mode_modules/.*|assets/.*
       - id: djjs
         exclude: mode_modules/.*|assets/.*
   - repo: https://github.com/pre-commit/mirrors-eslint
