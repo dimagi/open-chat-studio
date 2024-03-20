@@ -2,6 +2,8 @@ import {addEdge, applyEdgeChanges, applyNodeChanges, Edge, EdgeChange, Node, Nod
 import {create} from "zustand";
 import {PipelineStoreType} from "../types/pipelineStore";
 import usePipelineManagerStore from "./pipelineManagerStore";
+import {getNodeId} from "../utils";
+import { cloneDeep } from "lodash";
 
 const usePipelineStore = create<PipelineStoreType>((set, get) => ({
   nodes: [],
@@ -101,6 +103,47 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
         newEdges,
         get().reactFlowInstance?.getViewport() ?? {x: 0, y: 0, zoom: 1}
       );
+  },
+  addNode: (node, position) => {
+    let minimumX = Infinity;
+    let minimumY = Infinity;
+    let newNodes: Node[] = get().nodes;
+
+    if (node.position.y < minimumY) {
+      minimumY = node.position.y;
+    }
+    if (node.position.x < minimumX) {
+      minimumX = node.position.x;
+    }
+
+    const insidePosition = position.paneX
+      ? {x: position.paneX + position.x, y: position.paneY! + position.y}
+      : get().reactFlowInstance!.screenToFlowPosition({
+        x: position.x,
+        y: position.y,
+      });
+
+    const newId = getNodeId(node.data.type);
+
+    // Create a new node object
+    const newNode = {
+      id: newId,
+      // type: "genericNode",
+      position: {
+        x: insidePosition.x + node.position!.x - minimumX,
+        y: insidePosition.y + node.position!.y - minimumY,
+      },
+      data: {
+        ...cloneDeep(node.data),
+        id: newId,
+      },
+    };
+
+    // Add the new node to the list of nodes in state
+    newNodes = newNodes
+      .map((node) => ({...node, selected: false}))
+      .concat({...newNode, selected: false});
+    get().setNodes(newNodes);
   },
   resetFlow: ({ nodes, edges, viewport }) => {
     set({
