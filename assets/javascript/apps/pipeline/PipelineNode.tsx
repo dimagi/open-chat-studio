@@ -14,7 +14,7 @@ export function PipelineNode({id, data, selected}: NodeProps<NodeData>) {
   const [value, setValue] = useState(data?.value ?? 0)
   const setNodes = usePipelineStore((state) => state.setNodes);
 
-  useEffect(() => {nodeName
+  useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === id) {
