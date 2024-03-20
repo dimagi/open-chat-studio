@@ -99,5 +99,5 @@ class LinkTag(LoginAndTeamRequiredMixin, View):
         tag_name = request.POST["tag_name"]
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
-        obj.add_tags(tag_name, team=request.team, added_by=request.user)
+        obj.add_tags([tag_name], team=request.team, added_by=request.user)
         return HttpResponse()
