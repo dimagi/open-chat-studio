@@ -383,6 +383,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
+            "available_tags": experiment.team.tag_set.all(),
+            "filter_tags_url": reverse(
+                "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
+            ),
         },
     )
 
