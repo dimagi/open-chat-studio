@@ -1,3 +1,5 @@
+{% load waffle_tags %}
+
 <div>
   <div class="pl-4">
     <dl class="divide-y divide-gray-100">
@@ -7,6 +9,14 @@
           <dd class="text-sm col-span-2">{{ detail }}</dd>
         </div>
       {% endfor %}
+      {% flag "chat_annotations" %}
+        <div class="py-3 grid grid-cols-3">
+          <dt class="text-sm font-medium leading-6">Tags</dt>
+          <dd class="col-span-2 mr-2">
+            {% include "generic/tag_multiselect.html" with object=experiment_session.chat %}
+          </dd>
+        </div>
+      {% endflag %}
     </dl>
   </div>
 </div>

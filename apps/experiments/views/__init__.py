@@ -1,3 +1,5 @@
+from apps.annotations.views import CreateTag, DeleteTag, EditTag, TagHome, TagTableView  # noqa: F401
+
 from .consent import (  # noqa: F401
     ConsentFormHome,
     ConsentFormTableView,

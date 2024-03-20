@@ -38,6 +38,7 @@ team_urlpatterns = [
     path("analysis/", include("apps.analysis.urls")),
     path("assistants/", include("apps.assistants.urls")),
     path("files/", include("apps.files.urls")),
+    path("annotations/", include("apps.annotations.urls", namespace="annotations")),
 ]
 
 urlpatterns = [

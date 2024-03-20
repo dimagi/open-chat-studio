@@ -26,6 +26,7 @@ from django_tables2 import SingleTableView
 from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
+from apps.annotations.models import Tag
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -867,6 +868,7 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
+
     return TemplateResponse(
         request,
         "experiments/experiment_session_view.html",
@@ -882,6 +884,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 (gettext("Experiment"), experiment.name),
                 (gettext("Platform"), session.get_platform_name),
             ],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
         },
     )
 
