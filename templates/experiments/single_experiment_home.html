@@ -155,61 +155,45 @@
   {% if perms.chat.view_chat %}
     <div class="app-card">
       <h2 class="pg-subtitle">All Chat Sessions</h2>
-      <div class="grid grid-flow-col auto-cols-max gap-x-2">
-        {% if perms.experiments.download_chats %}
-          <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
-            {% csrf_token %}
-            <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
-          </form>
-        {% endif %}
-        {% if perms.annotations.view_customtaggeditem %}
-          <div class="w-96 my-2">
-            <select id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
-              <option value="">Filter tags...</option>
-              {% for tag in available_tags %}
-                <option value="{{ tag.name }}">{{ tag.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        {% endif %}
+      <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
+        <div class="grid grid-flow-col auto-cols-max gap-x-2">
+          {% if perms.experiments.download_chats %}
+            <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+              {% csrf_token %}
+              <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+            </form>
+          {% endif %}
+          {% if perms.annotations.view_customtaggeditem %}
+            <div class="w-96 my-2">
+              <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
+                <option value="">Filter tags...</option>
+                {% for tag in available_tags %}
+                  <option value="{{ tag.name }}">{{ tag.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+        </div>
+        <div
+          id="sessions-table"
+          hx-trigger="load, tagFilter"
+          hx-target="this"
+          hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+          hx-swap="innerHTML"
+        ></div>
       </div>
-      <div
-        id="sessions-table"
-        hx-trigger="load, tagFilter"
-        hx-target="this"
-        hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id%}"
-        hx-swap="innerHTML"
-      ></div>
     </div>
   {% endif %}
 
   <script>
     let url = "{{ filter_tags_url|escapejs }}"
-    let tags = [];
-
-    function filterSessions() {
+    function filterSessions(tags) {
       htmx.ajax('GET', url, {target: "#sessions-table", swap: 'innerHTML', values: {"tags": tags.join("&")}});
     }
-
-    var addFilterTag = function(name) {
-      return function() {
-        tags.push(arguments[0]);
-        filterSessions();
-      };
-    };
-
-    var removeFilterTag = function(name) {
-      return function() {
-        tags.pop(arguments[0]);
-        filterSessions();
-      };
-    };
 
     let element = document.getElementById('tag-multiselect-filter');
     new TomSelect(element, {
       maxItems: null,
-      onItemAdd: addFilterTag('onItemAdd'),
-      onItemRemove: removeFilterTag('onItemRemove')
     });
   </script>
 {% endblock %}
