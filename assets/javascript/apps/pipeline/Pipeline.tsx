@@ -107,6 +107,7 @@ export default function Pipeline() {
         onNodeDragStop={onNodeDragStop}
         minZoom={0.01}
         maxZoom={8}
+        deleteKeyCode={[]}
       >
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         {/*<MiniMap position="bottom-right"/>*/}
