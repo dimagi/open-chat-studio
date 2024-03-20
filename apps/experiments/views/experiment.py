@@ -37,7 +37,7 @@ from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyCompletedForm
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
-from apps.experiments.tables import ExperimentTable
+from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -76,6 +76,24 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         search = self.request.GET.get("search")
         if search:
             query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+        return query_set
+
+
+class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = ExperimentSession
+    paginate_by = 25
+    table_class = ExperimentSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "annotations.view_customtaggeditem"
+
+    def get_queryset(self):
+        query_set = ExperimentSession.objects.filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        )
+        tags_query = self.request.GET.get("tags")
+        if tags_query:
+            tags = tags_query.split("&")
+            query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
 
 

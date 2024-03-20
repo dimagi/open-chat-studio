@@ -4,6 +4,7 @@ from django_tables2 import columns, tables
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
+    ExperimentSession,
     NoActivityMessageConfig,
     SafetyLayer,
     SourceMaterial,
@@ -154,3 +155,25 @@ class NoActivityMessageConfigTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No configs found."
+
+
+class ExperimentSessionsTable(tables.Table):
+    user = columns.Column(verbose_name="User")
+    started = columns.Column(accessor="created_at", verbose_name="Started")
+    last_message = columns.Column(accessor="updated_at", verbose_name="Last Message")
+    tags = columns.TemplateColumn(
+        verbose_name="Tags",
+        template_code="""
+            {% for tag in record.chat.tags.all %}
+                <span class="h-auto badge badge-neutral mb-1">{{ tag.name }}</span>
+            {% endfor %}
+        """,
+    )
+    actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
+
+    class Meta:
+        model = ExperimentSession
+        fields = []
+        row_attrs = {"class": "text-sm"}
+        orderable = False
+        empty_text = "No sessions yet!"
