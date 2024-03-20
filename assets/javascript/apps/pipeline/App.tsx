@@ -1,4 +1,5 @@
 import React, {useEffect} from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import Pipeline from "./Pipeline";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 
@@ -17,7 +18,9 @@ const App = function (props: { team_slug: string, pipelineId: number | undefined
   return isLoading ? (
     <div><span className="loading loading-spinner loading-sm p-3 ml-4"></span></div>
   ) : (
-    <Pipeline />
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <Pipeline />
+    </ErrorBoundary>
   );
 };
 
