@@ -2,37 +2,44 @@ import React from "react";
 import PanelGroup from "./PanelGroup";
 import Component from "./Component";
 
+const groupedComponents = [
+  {
+    "label": "Inputs", "components": [
+      {"label": "File", "type": "file"},
+    ]
+  },
+  {
+    "label": "Steps", "components": [
+      {"label": "LLM", "type": "llm"},
+    ]
+  }
+]
+
 
 export default function SidePanel() {
   function onDragStart(
     event: React.DragEvent<any>,
-    data: { type: string }
+    data: { type: string, label: string }
   ): void {
-    //start drag event
-    const crt = event.currentTarget.cloneNode(true);
-    crt.style.position = "absolute";
-    crt.style.top = "-500px";
-    crt.style.right = "-500px";
-    crt.classList.add("cursor-grabbing");
-    document.body.appendChild(crt);
-    event.dataTransfer.setDragImage(crt, 0, 0);
     event.dataTransfer.setData("nodedata", JSON.stringify(data));
   }
 
   return (
     <div className="join join-vertical w-full">
-      <PanelGroup name="Inputs">
-        <Component
-          label="File"
-          onDragStart={(event) =>
-            onDragStart(event, {
-              type: "file",
-            })
-          }/>
-      </PanelGroup>
-      <PanelGroup name="Steps">
-        <p>hello</p>
-      </PanelGroup>
+      {groupedComponents.map((group) => (
+        <PanelGroup name={group.label}>
+          {group.components.map((component) => (
+            <Component
+              label={component.label}
+              onDragStart={(event) =>
+                onDragStart(event, {
+                  label: component.label,
+                  type: component.type,
+                })
+              }/>
+          ))}
+        </PanelGroup>
+      ))}
     </div>
   )
 }
