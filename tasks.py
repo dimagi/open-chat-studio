@@ -101,6 +101,7 @@ def _run_with_confirm(c: Context, message, command, step=False):
     cprint(f"\n{message}", "green")
     if not step or _confirm("\tOK?", _exit=False):
         c.run(command, echo=True, pty=True)
+        return True
 
 
 def _check_node_version(c: Context):

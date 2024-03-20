@@ -18,6 +18,7 @@ ANALYSIS_ADMIN_GROUP = "Analysis Admin"
 ANALYSIS_USER_GROUP = "Analysis Users"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
+PIPELINE_ADMIN_GROUP = "Pipeline Admin"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
@@ -66,6 +67,7 @@ CONTENT_TYPES = {
         "syntheticvoice",
     ],
     "files": ["file"],
+    "pipelines": ["pipeline"],
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem"],
@@ -181,6 +183,12 @@ GROUPS = [
         [
             AppPermSetDef("assistants", ALL),
             AppPermSetDef("files", ALL),
+        ],
+    ),
+    GroupDef(
+        PIPELINE_ADMIN_GROUP,
+        [
+            AppPermSetDef("pipelines", ALL),
         ],
     ),
 ]

@@ -1,5 +1,6 @@
 // Import the necessary parts of the js-tiktoken library
-const { encodingForModel } = require('js-tiktoken');
+import {encodingForModel} from "js-tiktoken";
+
 
 // Get the encoding details for gpt-3.5-turbo and gpt-4
 const encoding = encodingForModel("gpt-3.5-turbo");

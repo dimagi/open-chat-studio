@@ -3,6 +3,8 @@ module.exports = {
     './apps/**/*.html',
     './assets/**/*.js',
     './assets/**/*.vue',
+    './assets/**/*.tsx',
+    './assets/**/*.jsx',
     './templates/**/*.html',
     './gpt_playground/settings.py',
   ],
