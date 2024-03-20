@@ -15,13 +15,14 @@ repos:
         files: templates/.*\.html$
       - id: djcss
       - id: djjs
-        exclude: mode_modules/.*
+        exclude: mode_modules/.*|assets/.*
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: 'v8.56.0'
     hooks:
       - id: eslint
         additional_dependencies:
           - eslint@8.57.0
+          - '@eslint/js@8.57.0'
           - eslint-plugin-react@7.34.1
           - typescript-eslint@7.2.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
