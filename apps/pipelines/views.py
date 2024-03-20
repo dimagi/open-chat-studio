@@ -26,7 +26,6 @@ def get_pipeline(request, team_slug: str, pk: int):
         pipeline = Pipeline.objects.get(pk=pk)
     except Pipeline.DoesNotExist:
         pipeline = Pipeline.objects.create(
-            id=pk,
-            team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
+            id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
         )
     return JsonResponse({"id": pipeline.id, "name": pipeline.name, "data": pipeline.data})
