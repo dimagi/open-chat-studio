@@ -163,11 +163,7 @@ class ExperimentSessionsTable(tables.Table):
     last_message = columns.Column(accessor="updated_at", verbose_name="Last Message")
     tags = columns.TemplateColumn(
         verbose_name="Tags",
-        template_code="""
-            {% for tag in record.chat.tags.all %}
-                <span class="h-auto badge badge-neutral mb-1">{{ tag.name }}</span>
-            {% endfor %}
-        """,
+        template_name="experiments/components/experiment_sessions_list_tags.html",
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
 
