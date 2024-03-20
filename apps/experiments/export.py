@@ -10,10 +10,14 @@ def _parse_tags(tags: list[Tag]) -> str:
     return ", ".join([t.name for t in tags])
 
 
-def experiment_to_message_export_rows(experiment: Experiment):
-    for session in experiment.sessions.prefetch_related(
+def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[str] = []):
+    queryset = experiment.sessions.prefetch_related(
         "chat", "chat__messages", "participant", "experiment_channel", "chat__tags", "chat__messages__tags"
-    ):
+    )
+    if filter_tags:
+        queryset = queryset.filter(chat__tags__name__in=filter_tags)
+
+    for session in queryset:
         for message in session.chat.messages.all():
             yield [
                 message.id,
@@ -34,7 +38,7 @@ def experiment_to_message_export_rows(experiment: Experiment):
             ]
 
 
-def experiment_to_csv(experiment: Experiment) -> io.StringIO:
+def experiment_to_csv(experiment: Experiment, tags: list[str] = []) -> io.StringIO:
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     writer.writerow(
@@ -56,6 +60,6 @@ def experiment_to_csv(experiment: Experiment) -> io.StringIO:
             "Message Tags",
         ]
     )
-    for row in experiment_to_message_export_rows(experiment):
+    for row in experiment_to_message_export_rows(experiment, filter_tags=tags):
         writer.writerow(row)
     return csv_in_memory

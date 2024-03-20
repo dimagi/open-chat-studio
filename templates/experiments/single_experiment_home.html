@@ -160,6 +160,7 @@
           {% if perms.experiments.download_chats %}
             <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
               {% csrf_token %}
+              <input name="tags" class="hidden" x-bind:value="tags" />
               <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
             </form>
           {% endif %}

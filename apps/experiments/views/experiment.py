@@ -708,9 +708,14 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    tags = request.POST["tags"]
+    if len(tags) > 0:
+        tags = tags.split(",")
+    else:
+        tags = []
 
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 
