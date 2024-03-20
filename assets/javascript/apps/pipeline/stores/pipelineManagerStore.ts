@@ -1,19 +1,17 @@
 import {Edge, Node, Viewport} from "reactflow";
 import {create} from "zustand";
-import {getPipelineFromDatabase, updatePipelineInDatabase,} from "../controllers/api";
 import {PipelineType} from "../types/pipeline";
 import {PipelineManagerStoreType} from "../types/pipelineManagerStore";
+import {apiClient} from "../api/api";
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
 
 const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => ({
-  currentTeam: "",
-  setTeam: (team: string) => set({currentTeam: team}),
   currentPipeline: undefined,
   currentPipelineId: undefined,
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
-    getPipelineFromDatabase(get().currentTeam, pipelineId).then((pipeline) => {
+    apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({isLoading: false});
@@ -42,7 +40,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
   },
   savePipeline: (pipeline: PipelineType) => {
     return new Promise<void>((resolve, reject) => {
-      updatePipelineInDatabase(get().currentTeam, get().currentPipelineId!, pipeline)
+      apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((updatedFlow) => {
           if (updatedFlow) {
             resolve();

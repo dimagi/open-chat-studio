@@ -2,8 +2,6 @@ import {Edge, Node, Viewport} from "reactflow";
 import {PipelineType} from "./pipeline";
 
 export type PipelineManagerStoreType = {
-  currentTeam: string;
-  setTeam: (team: string) => void;
   currentPipeline: PipelineType | undefined;
   currentPipelineId: number | undefined;
   loadPipeline: (pipelineId: number) => void;

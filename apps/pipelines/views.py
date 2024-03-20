@@ -15,7 +15,7 @@ def pipeline_builder(request, team_slug: str):
 def get_pipeline(request, team_slug: str, pk: int):
     if request.method == "POST":
         # Save the pipeline
-        print(request.POST)
+        print(request.body)
         return JsonResponse({"data": {"message": "Pipeline saved"}})
     return JsonResponse(
         {
