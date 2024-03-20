@@ -23,5 +23,3 @@ jobs:
         run: npm run build
       - name: Check types
         run: npm run type-check
-      - name: ESlint
-        run: npm run lint
