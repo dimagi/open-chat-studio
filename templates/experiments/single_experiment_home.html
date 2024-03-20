@@ -169,9 +169,9 @@
               <th>Started</th>
               <th>Last Message</th>
               <th>Actions</th>
-              {% flag "chat_annotations" %}
+              {% if perms.annotations.view_customtaggeditem %}
                 <th>Tags</th>
-              {% endflag %}
+              {% endif %}
             </tr>
           </thead>
           <tbody>
@@ -185,13 +185,13 @@
                     Session Details
                   </a>
                 </td>
-                {% flag "chat_annotations" %}
+                {% if perms.annotations.view_customtaggeditem %}
                   <td class="w-1/4 overflow-x-auto">
                     {% for tag in session.chat.tags.all %}
                       <span class="h-auto badge badge-neutral mb-1">{{ tag.name }}</span>
                     {% endfor %}
                   </td>
-                {% endflag %}
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>

@@ -42,16 +42,14 @@
     </div>
     <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment chat</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "experiments/components/experiment_chat.html" with taggible=True %}
+      {% include "experiments/components/experiment_chat.html" %}
     </div>
   </div>
-  {% flag "chat_annotations" %}
-    <script
-      id="tag-multiselect"
-      src="{% static './tag_multiselect.js' %}"
-      data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
-      data-unlinkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
-    >
-    </script>
-  {% endflag %}
+  <script
+    id="tag-multiselect"
+    src="{% static './tag_multiselect.js' %}"
+    data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
+    data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
+  >
+  </script>
 {% endblock %}

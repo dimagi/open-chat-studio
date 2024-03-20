@@ -43,7 +43,7 @@
           {% translate "No Activity Config" %}
         </a>
       </li>
-      {% flag "chat_annotations" %}
+      {% if perms.annotations.add_tag %}
         <li>
           <a href="{% url 'annotations:tag_home' request.team.slug %}"
              {% if active_tab == 'tags' %}class="active"{% endif %}>
@@ -51,7 +51,7 @@
             {% translate "Manage Tags" %}
           </a>
         </li>
-      {% endflag %}
+      {% endif %}
     </ul>
   </li>
   <li>

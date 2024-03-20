@@ -845,6 +845,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "survey_link": survey_link,
             "survey_text": survey_text,
             "form": form,
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
         },
     )
 
