@@ -6,11 +6,12 @@ from django.db import models
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
+from apps.annotations.models import BaseTaggedModel
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class Chat(BaseTeamModel):
+class Chat(BaseTeamModel, BaseTaggedModel):
     """
     A chat instance.
     """
@@ -60,7 +61,7 @@ class ChatMessageType(models.TextChoices):
         )
 
 
-class ChatMessage(BaseModel):
+class ChatMessage(BaseModel, BaseTaggedModel):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """

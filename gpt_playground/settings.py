@@ -69,6 +69,7 @@ THIRD_PARTY_APPS = [
     "django_celery_beat",
     "django_tables2",
     "field_audit",
+    "taggit",
 ]
 
 PROJECT_APPS = [
@@ -84,6 +85,7 @@ PROJECT_APPS = [
     "apps.generics",
     "apps.assistants",
     "apps.files",
+    "apps.annotations",
     "apps.pipelines",
 ]
 
@@ -481,3 +483,6 @@ SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 
 # Encryption
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
+
+# Taggit
+TAGGIT_CASE_INSENSITIVE = True

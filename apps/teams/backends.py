@@ -70,6 +70,7 @@ CONTENT_TYPES = {
     "pipelines": ["pipeline"],
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
+    "annotations": ["tag", "customtaggeditem"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -151,6 +152,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("channels", ALL),
+            AppPermSetDef("annotations", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
         ],
     ),
@@ -158,6 +160,7 @@ GROUPS = [
         CHAT_VIEWER_GROUP,
         [
             AppPermSetDef("chat", [VIEW]),
+            AppPermSetDef("annotations", [VIEW]),
         ],
     ),
     GroupDef(

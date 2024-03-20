@@ -1,5 +1,6 @@
 import factory
 
+from apps.chat.models import Chat
 from apps.experiments import models
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -65,9 +66,17 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     voice_provider = factory.SubFactory(VoiceProviderFactory)
 
 
+class ChatFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Chat
+
+    team = factory.SubFactory(TeamFactory)
+
+
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ExperimentSession
 
     experiment = factory.SubFactory(ExperimentFactory)
     team = factory.LazyAttribute(lambda obj: obj.experiment.team)
+    chat = factory.SubFactory(ChatFactory)

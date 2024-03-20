@@ -2,6 +2,8 @@
 {% load team_tags %}
 {% load form_tags %}
 {% block breadcrumbs %}
+  {% load waffle_tags %}
+
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
@@ -153,38 +155,46 @@
   {% if perms.chat.view_chat %}
     <div class="app-card">
       <h2 class="pg-subtitle">All Chat Sessions</h2>
-      {% if perms.experiments.download_chats %}
-        <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
-          {% csrf_token %}
-          <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
-        </form>
-      {% endif %}
-      <div class="overflow-x-auto">
-        <table class="pg-table">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Started</th>
-              <th>Last Message</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for session in experiment.sessions.all %}
-              <tr>
-                <td>{{ session.user|default:"-" }}</td>
-                <td>{{ session.created_at }}</td>
-                <td>{{ session.updated_at }}</td>
-                <td>
-                  <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}" class="link">
-                    Session Details
-                  </a>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
+        <div class="grid grid-flow-col auto-cols-max gap-x-2">
+          {% if perms.experiments.download_chats %}
+            <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+              {% csrf_token %}
+              <input name="tags" class="hidden" x-bind:value="tags" />
+              <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+            </form>
+          {% endif %}
+          {% if perms.annotations.view_customtaggeditem %}
+            <div class="w-96 my-2">
+              <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
+                <option value="">Filter tags...</option>
+                {% for tag in available_tags %}
+                  <option value="{{ tag.name }}">{{ tag.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+        </div>
+        <div
+          id="sessions-table"
+          hx-trigger="load, tagFilter"
+          hx-target="this"
+          hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+          hx-swap="innerHTML"
+        ></div>
       </div>
     </div>
   {% endif %}
+
+  <script>
+    let url = "{{ filter_tags_url|escapejs }}"
+    function filterSessions(tags) {
+      htmx.ajax('GET', url, {target: "#sessions-table", swap: 'innerHTML', values: {"tags": tags.join("&")}});
+    }
+
+    let element = document.getElementById('tag-multiselect-filter');
+    new TomSelect(element, {
+      maxItems: null,
+    });
+  </script>
 {% endblock %}
