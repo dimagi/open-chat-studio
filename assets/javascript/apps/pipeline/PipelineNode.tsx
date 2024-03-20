@@ -1,6 +1,7 @@
 import {Handle, Node, NodeProps, Position} from 'reactflow';
-import React, {useState} from "react";
+import React, {useEffect, useState} from "react";
 import {classNames} from "./utils";
+import usePipelineStore from "./stores/pipelineStore";
 
 type NodeData = {
   label: string,
@@ -9,8 +10,24 @@ type NodeData = {
 
 export type PipelineNode = Node<NodeData>;
 
-export function PipelineNode({data, selected}: NodeProps<NodeData>) {
+export function PipelineNode({id, data, selected}: NodeProps<NodeData>) {
   const [value, setValue] = useState(data?.value ?? 0)
+  const setNodes = usePipelineStore((state) => state.setNodes);
+
+  useEffect(() => {nodeName
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === id) {
+          node.data = {
+            ...node.data,
+            value: value,
+          };
+        }
+
+        return node;
+      })
+    );
+  }, [value, setNodes]);
 
   return (
     <div className={classNames(
