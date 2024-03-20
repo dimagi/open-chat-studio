@@ -21,8 +21,18 @@ def get_pipeline(request, team_slug: str, pk: int):
         {
             "data": {
                 "nodes": [
-                    {"id": "1", "position": {"x": 0, "y": 0}, "data": {"label": "1", "value": 123}, "type": "custom"},
-                    {"id": "2", "position": {"x": 0, "y": 100}, "data": {"label": "2"}},
+                    {
+                        "id": "1",
+                        "position": {"x": 0, "y": 0},
+                        "data": {"label": "1", "value": 123},
+                        "type": "pipelineNode",
+                    },
+                    {
+                        "id": "2",
+                        "position": {"x": 0, "y": 100},
+                        "data": {"label": "2", "value": 123},
+                        "type": "pipelineNode",
+                    },
                 ],
                 "edges": [{"id": "e1-2", "source": "1", "target": "2"}],
             }

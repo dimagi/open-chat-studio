@@ -128,7 +128,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     // Create a new node object
     const newNode = {
       id: newId,
-      // type: "genericNode",
+      type: "pipelineNode",
       position: {
         x: insidePosition.x + node.position!.x - minimumX,
         y: insidePosition.y + node.position!.y - minimumY,

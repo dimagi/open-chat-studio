@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect} from 'react';
 import ReactFlow, {Background, BackgroundVariant, Controls, FitViewOptions, NodeTypes} from 'reactflow';
 
-import {MyCustomNode} from './CustomNode';
+import {PipelineNode} from './PipelineNode';
 
 import 'reactflow/dist/style.css';
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
@@ -13,7 +13,7 @@ const fitViewOptions: FitViewOptions = {
 };
 
 const nodeTypes: NodeTypes = {
-  custom: MyCustomNode,
+  pipelineNode: PipelineNode,
 };
 
 export default function Pipeline() {
@@ -60,6 +60,7 @@ export default function Pipeline() {
 
         const newNode = {
           id: newId,
+          type: "pipelineNode",
           position: { x: 0, y: 0 },
           data: {
             ...data,
@@ -86,6 +87,8 @@ export default function Pipeline() {
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        minZoom={0.01}
+        maxZoom={8}
       >
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         {/*<MiniMap position="bottom-right"/>*/}

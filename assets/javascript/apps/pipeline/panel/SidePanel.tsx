@@ -27,9 +27,10 @@ export default function SidePanel() {
   return (
     <div className="join join-vertical w-full">
       {groupedComponents.map((group) => (
-        <PanelGroup name={group.label}>
+        <PanelGroup name={group.label} key={group.label}>
           {group.components.map((component) => (
             <Component
+              key={component.label + group.label}
               label={component.label}
               onDragStart={(event) =>
                 onDragStart(event, {
