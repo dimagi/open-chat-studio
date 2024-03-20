@@ -1,7 +1,9 @@
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 
+from apps.pipelines.flow import PipelineData
+from apps.pipelines.models import Pipeline
 from apps.teams.decorators import login_and_team_required
 
 
@@ -14,27 +16,17 @@ def pipeline_builder(request, team_slug: str):
 @csrf_exempt
 def get_pipeline(request, team_slug: str, pk: int):
     if request.method == "POST":
-        # Save the pipeline
-        print(request.body)
+        pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
+        data = PipelineData.model_validate_json(request.body)
+        pipeline.data = data.data.model_dump()
+        pipeline.save()
         return JsonResponse({"data": {"message": "Pipeline saved"}})
-    return JsonResponse(
-        {
-            "data": {
-                "nodes": [
-                    {
-                        "id": "1",
-                        "position": {"x": 0, "y": 0},
-                        "data": {"label": "1", "value": 123},
-                        "type": "pipelineNode",
-                    },
-                    {
-                        "id": "2",
-                        "position": {"x": 0, "y": 100},
-                        "data": {"label": "2", "value": 123},
-                        "type": "pipelineNode",
-                    },
-                ],
-                "edges": [{"id": "e1-2", "source": "1", "target": "2"}],
-            }
-        }
-    )
+
+    try:
+        pipeline = Pipeline.objects.get(pk=pk)
+    except Pipeline.DoesNotExist:
+        pipeline = Pipeline.objects.create(
+            id=pk,
+            team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
+        )
+    return JsonResponse({"id": pipeline.id, "name": pipeline.name, "data": pipeline.data})
