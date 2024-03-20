@@ -12,6 +12,7 @@ from .experiment import (  # noqa: F401
     CreateExperiment,
     DeleteFileFromExperiment,
     EditExperiment,
+    ExperimentSessionsTableView,
     ExperimentTableView,
     create_channel,
     delete_experiment,

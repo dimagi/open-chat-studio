@@ -37,7 +37,7 @@ from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyCompletedForm
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
-from apps.experiments.tables import ExperimentTable
+from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -76,6 +76,24 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         search = self.request.GET.get("search")
         if search:
             query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+        return query_set
+
+
+class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = ExperimentSession
+    paginate_by = 25
+    table_class = ExperimentSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "annotations.view_customtaggeditem"
+
+    def get_queryset(self):
+        query_set = ExperimentSession.objects.filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        )
+        tags_query = self.request.GET.get("tags")
+        if tags_query:
+            tags = tags_query.split("&")
+            query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
 
 
@@ -365,6 +383,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
+            "available_tags": experiment.team.tag_set.all(),
+            "filter_tags_url": reverse(
+                "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
+            ),
         },
     )
 
@@ -686,9 +708,11 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    tags = request.POST["tags"]
+    tags = tags.split(",") if tags else []
 
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 

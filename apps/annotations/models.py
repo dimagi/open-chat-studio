@@ -59,7 +59,8 @@ class BaseTaggedModel(models.Model):
     tags = TaggableManager(through=CustomTaggedItem)
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
-        self.tags.add(tags, through_defaults={"team": team, "user": added_by})
+        for tag in tags:
+            self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     @property
     def object_info(self):
