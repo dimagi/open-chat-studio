@@ -101,9 +101,9 @@ class TopicBot:
             print("========== safety bot response =========")
             print(f"passing input: {safety_layer.prompt_to_bot}")
             safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
-            print(f"got back: {safety_response.output}")
+            print(f"got back: {safety_response}")
             print("========== end safety bot response =========")
-            return safety_response.output
+            return safety_response
         else:
             no_answer = "Sorry, I can't answer that. Please try something else."
             return safety_layer.default_response_to_user or no_answer
