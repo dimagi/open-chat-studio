@@ -17,6 +17,7 @@ from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 
 USER_CONSENT_TEXT = "1"
@@ -181,6 +182,12 @@ class ChannelBase:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
+        try:
+            return self._new_user_message(message)
+        except GenerationCancelled:
+            return ""
+
+    def _new_user_message(self, message) -> str:
         self._add_message(message)
 
         if not self.is_message_type_supported():
