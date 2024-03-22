@@ -6,7 +6,6 @@ to use Django models.
 from __future__ import annotations
 
 import enum
-import logging
 from collections.abc import Iterable
 from typing import Any
 
@@ -17,10 +16,10 @@ from langchain.vectorstores.base import VectorStore
 from pgvector.django import CosineDistance, L2Distance, MaxInnerProduct
 from sentry_sdk import capture_exception
 
+from apps.experiments.models import Experiment
 from apps.teams.models import Team
 from apps.utils.chunked import chunked
 
-from ..experiments.models import Experiment
 from .const import META_EMBEDDING_ID, META_EXPERIMENT_ID, META_FILE_ID, META_SEARCH_SCORE
 from .models import Embedding
 
@@ -54,16 +53,12 @@ class PGVector(VectorStore):
         experiment: Experiment,
         embedding_function: Embeddings,
         distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
-        index_resource=None,
     ) -> None:
         self.experiment = experiment
         self.embedding_function = embedding_function
         self.distance_strategy = distance_strategy
-        self.index_resource = index_resource
-        self.logger = logging.getLogger(__name__)
 
     def delete_embeddings(self) -> None:
-        self.logger.debug("Trying to delete collection")
         self.experiment.embeddings.all().delete()
 
     def add_texts(self, texts: Iterable[str], metadatas: list[dict] | None = None, **kwargs) -> None:
@@ -89,14 +84,14 @@ class PGVector(VectorStore):
                 text = text.replace("\x00", "\uFFFD")
                 try:
                     Embedding.objects.create(
+                        team_id=self.experiment.team_id,
                         experiment=self.experiment,
                         embedding=embedding,
                         document=text,
                         metadata=metadata,
-                        resource=self.index_resource,
+                        file_id=metadata.pop(META_FILE_ID, None),
                     )
                 except Exception as e:
-                    # todo user-facing errors, for now they are swallowed
                     capture_exception(e)
 
     def similarity_search(
@@ -189,6 +184,7 @@ class PGVector(VectorStore):
         embedding: Embeddings,
         metadatas: list[dict] | None = None,
         experiment: Experiment = None,
+        distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
         **kwargs,
     ) -> PGVector:
         """
@@ -198,6 +194,7 @@ class PGVector(VectorStore):
         store = cls(
             experiment=experiment,
             embedding_function=embedding,
+            distance_strategy=distance_strategy,
         )
 
         store.add_texts(texts=texts, metadatas=metadatas)
@@ -247,7 +244,7 @@ def similarity_search_with_score_by_vector(
     distance_strategy: DistanceStrategy = DEFAULT_DISTANCE_STRATEGY,
     additional_filter: Q = None,
 ) -> list[tuple[Document, float]]:
-    query = Embedding.objects.filter(index__team=team, archived=False)
+    query = Embedding.objects.filter(experiment__team=team)
 
     query = query.annotate(distance=distance_strategy.value("embedding", embedding)).order_by("distance")
     if additional_filter:
