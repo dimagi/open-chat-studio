@@ -320,6 +320,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     send_text_to_user.assert_called()
 
 
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("message_func", "message_type"),
     [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
@@ -327,7 +328,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
 def test_user_query_extracted_for_pre_conversation_flow(
-    _get_llm_response, send_text_to_user_mock, message_func, message_type, db
+    _get_llm_response, send_text_to_user_mock, message_func, message_type
 ):
     """The user query need to be available during the pre-conversation flow. Simply looking at `message_text` for
     this is erroneous, since it will not be available when the user sends a voice message.
