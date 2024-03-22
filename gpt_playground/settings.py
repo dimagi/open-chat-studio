@@ -87,6 +87,7 @@ PROJECT_APPS = [
     "apps.files",
     "apps.annotations",
     "apps.pipelines",
+    "apps.vectordb",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
