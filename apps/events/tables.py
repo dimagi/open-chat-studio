@@ -1,7 +1,7 @@
 import django_tables2 as tables
 from django.conf import settings
+from django.template.loader import get_template
 from django.urls import reverse
-from django.utils.html import format_html
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.utils.time import seconds_to_human
@@ -34,14 +34,12 @@ class ActionsColumn(tables.Column):
                 "team_slug": record["team_slug"],
             },
         )
-        return format_html(
-            """
-            <a class="btn btn-sm btn-outline btn-primary" href="{}">View Logs</a>
-            <a class="btn btn-sm btn-outline btn-primary" href="{}">Edit</a>
-            <a class="btn btn-sm btn-outline btn-primary" href="{}">Delete</a>""",
-            view_log_url,
-            edit_url,
-            delete_url,
+        return get_template("events/events_actions_column_buttons.html").render(
+            {
+                "view_log_url": view_log_url,
+                "edit_url": edit_url,
+                "delete_url": delete_url,
+            }
         )
 
 
