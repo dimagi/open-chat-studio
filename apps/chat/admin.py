@@ -23,7 +23,7 @@ class ChatAdmin(admin.ModelAdmin):
 class ChatMessageAdmin(admin.ModelAdmin):
     list_display = ("chat", "team", "message_type", "content", "created_at", "updated_at")
     search_fields = (
-        "chat_id",
+        "chat__id",
         "content",
     )
     list_filter = (

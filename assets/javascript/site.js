@@ -5,3 +5,4 @@ import './htmx';
 import './alpine';
 import './sweetalert2';
 import './tiktoken';
+import './tom-select';

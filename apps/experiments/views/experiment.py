@@ -26,6 +26,7 @@ from django_tables2 import SingleTableView
 from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
+from apps.annotations.models import Tag
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -48,14 +49,8 @@ from apps.experiments.forms import (
     SurveyCompletedForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import (
-    Experiment,
-    ExperimentSession,
-    Participant,
-    SessionStatus,
-    SyntheticVoice,
-)
-from apps.experiments.tables import ExperimentTable
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
+from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -94,6 +89,24 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         search = self.request.GET.get("search")
         if search:
             query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+        return query_set
+
+
+class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = ExperimentSession
+    paginate_by = 25
+    table_class = ExperimentSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "annotations.view_customtaggeditem"
+
+    def get_queryset(self):
+        query_set = ExperimentSession.objects.filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        )
+        tags_query = self.request.GET.get("tags")
+        if tags_query:
+            tags = tags_query.split("&")
+            query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
 
 
@@ -383,6 +396,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
+            "available_tags": experiment.team.tag_set.all(),
+            "filter_tags_url": reverse(
+                "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
+            ),
             **_get_events_context(experiment, team_slug),
         },
     )
@@ -725,9 +742,11 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 def download_experiment_chats(request, team_slug: str, experiment_id: str):
     # todo: this could be made more efficient and should be async, but just shipping something for now
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    tags = request.POST["tags"]
+    tags = tags.split(",") if tags else []
 
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 
@@ -883,6 +902,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "survey_link": survey_link,
             "survey_text": survey_text,
             "form": form,
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
         },
     )
 
@@ -906,6 +926,7 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
+
     return TemplateResponse(
         request,
         "experiments/experiment_session_view.html",
@@ -921,6 +942,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 (gettext("Experiment"), experiment.name),
                 (gettext("Platform"), session.get_platform_name),
             ],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
         },
     )
 

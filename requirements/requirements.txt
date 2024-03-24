@@ -29,7 +29,9 @@ anyio==3.7.1
 asgiref==3.7.2
     # via django
 async-timeout==4.0.3
-    # via aiohttp
+    # via
+    #   aiohttp
+    #   redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -114,6 +116,7 @@ django==4.2.7
     #   django-redis
     #   django-storages
     #   django-tables2
+    #   django-taggit
     #   django-timezone-field
     #   django-waffle
     #   djangorestframework
@@ -145,6 +148,8 @@ django-redis==5.4.0
 django-storages[s3]==1.14.2
     # via -r requirements/requirements.in
 django-tables2==2.6.0
+    # via -r requirements/requirements.in
+django-taggit==5.0.1
     # via -r requirements/requirements.in
 django-timezone-field==6.0.1
     # via django-celery-beat
@@ -285,7 +290,6 @@ pygments==2.16.1
 pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
-    #   pyjwt
     #   twilio
 pypng==0.20220715.0
     # via qrcode
@@ -393,9 +397,7 @@ turn-python==0.2.0
 twilio==8.10.1
     # via -r requirements/requirements.in
 typer[all]==0.9.0
-    # via
-    #   taskbadger
-    #   typer
+    # via taskbadger
 typing-extensions==4.8.0
     # via
     #   anthropic

@@ -104,12 +104,8 @@ class TopicBot:
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
-            print("========== safety bot response =========")
-            print(f"passing input: {safety_layer.prompt_to_bot}")
             safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
-            print(f"got back: {safety_response.output}")
-            print("========== end safety bot response =========")
-            return safety_response.output
+            return safety_response
         else:
             no_answer = "Sorry, I can't answer that. Please try something else."
             return safety_layer.default_response_to_user or no_answer
@@ -135,11 +131,7 @@ class SafetyBot:
         return response
 
     def is_safe(self, input_str: str) -> bool:
-        print("========== safety bot analysis =========")
-        print(f"input: {input_str}")
         result = self._call_predict(input_str)
-        print(f"response: {result}")
-        print("========== end safety bot analysis =========")
         if result.strip().lower().startswith("safe"):
             return True
         elif result.strip().lower().startswith("unsafe"):

@@ -1,4 +1,4 @@
-exclude: ^static/.*|assets/.*|/migrations/.*|\.min\.js$|\.min\.css$|\.css\.map$|\.min\.js$|\.js\.map$|\.svg$
+exclude: ^static/.*|/migrations/.*|\.min\.js$|\.min\.css$|\.css\.map$|\.min\.js$|\.js\.map$|\.svg$
 default_language_version:
   python: python3.11
 repos:
@@ -11,8 +11,21 @@ repos:
   - repo: https://github.com/rtts/djhtml
     rev: '3.0.6'
     hooks:
-    - id: djhtml
-      files: templates/.*\.html$
-    - id: djcss
-    - id: djjs
-      exclude: mode_modules/.*
+      - id: djhtml
+        files: templates/.*\.html$
+      - id: djcss
+        exclude: mode_modules/.*|assets/.*
+      - id: djjs
+        exclude: mode_modules/.*|assets/.*
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: 'v8.56.0'
+    hooks:
+      - id: eslint
+        additional_dependencies:
+          - eslint@8.57.0
+          - '@eslint/js@8.57.0'
+          - eslint-plugin-react@7.34.1
+          - typescript-eslint@7.2.0
+        files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
+        types: [ file ]
+        args: [ --fix ]

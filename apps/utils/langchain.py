@@ -16,7 +16,7 @@ from apps.service_providers.llm_service import LlmService
 class FakeLlm(FakeListChatModel):
     """Extension of the FakeListChatModel that allows mocking of the token counts."""
 
-    token_counts: list
+    token_counts: list = []
     token_i: int = 0
     calls: list = []
 

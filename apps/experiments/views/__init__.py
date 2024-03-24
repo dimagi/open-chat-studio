@@ -1,3 +1,5 @@
+from apps.annotations.views import CreateTag, DeleteTag, EditTag, TagHome, TagTableView  # noqa: F401
+
 from .consent import (  # noqa: F401
     ConsentFormHome,
     ConsentFormTableView,
@@ -10,6 +12,7 @@ from .experiment import (  # noqa: F401
     CreateExperiment,
     DeleteFileFromExperiment,
     EditExperiment,
+    ExperimentSessionsTableView,
     ExperimentTableView,
     create_channel,
     delete_experiment,

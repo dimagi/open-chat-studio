@@ -17,6 +17,8 @@ from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
+INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
+
 log = logging.getLogger("ocs.bots")
 
 
@@ -115,23 +117,53 @@ def compress_chat_history(
     """
     history = chat.get_langchain_messages_until_summary()
     if max_token_limit <= 0 or not history:
+        log.info("Skipping chat history compression")
         return history
 
     current_token_count = llm.get_num_tokens_from_messages(history)
     if current_token_count <= max_token_limit:
+        log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
         return history
 
     log.debug(
-        "Compressing chat history to be less than %s tokens long. Current length: %s",
+        "Compressing chat history: current length %s > max %s",
         max_token_limit,
         current_token_count,
     )
+
+    history, last_message, summary = compress_chat_history_from_messages(
+        llm, history, keep_history_len, max_token_limit
+    )
+    ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+    return [SystemMessage(content=summary)] + history
+
+
+def compress_chat_history_from_messages(llm, history, keep_history_len: int, max_token_limit: int):
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
 
-    while llm.get_num_tokens_from_messages(history) > max_token_limit:
-        pruned_memory.append(history.pop(0))
+    summary_tokens = (
+        llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+        if summary
+        else INITIAL_SUMMARY_TOKENS_ESTIMATE
+    )
+    history_tokens = llm.get_num_tokens_from_messages(history)
+    first_pass_done = False  # ensure we do at least one loop
+    while not first_pass_done or (history and history_tokens + summary_tokens > max_token_limit):
+        first_pass_done = True
+        while history and history_tokens + summary_tokens > max_token_limit:
+            pruned_memory.append(history.pop(0))
+            history_tokens = llm.get_num_tokens_from_messages(history)
 
-    summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
-    ChatMessage.objects.filter(id=history[0].additional_kwargs["id"]).update(summary=summary)
-    return [SystemMessage(content=summary)] + history
+        summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
+        summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+
+    log.info(
+        "Compressed chat history to %s tokens (%s summary + %s history)",
+        history_tokens + summary_tokens,
+        summary_tokens,
+        history_tokens,
+    )
+
+    last_message = history[0] if history else pruned_memory[-1]
+    return history, last_message, summary

@@ -1,4 +1,5 @@
 {% load chat_tags %}
+{% load waffle_tags %}
 
 <div class="flow-root">
   <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -9,6 +10,9 @@
             <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold">#</th>
             <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Details</th>
             <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Message Text</th>
+            {% if perms.annotations.add_customtaggeditem %}
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Tags</th>
+            {% endif %}
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200">
@@ -26,6 +30,13 @@
                 </div>
               </td>
               <td class="px-3 py-4 text-sm text-gray-500">{{ message.content|render_markdown }}</td>
+              {% if perms.annotations.add_customtaggeditem %}
+                <td scope="col" class="w-1/4 overflow-y-visible">
+                  <div class="my-2 mr-2">
+                    {% include "generic/tag_multiselect.html" with object=message %}
+                  </div>
+                </td>
+              {% endif %}
             </tr>
           {% endfor %}
         </tbody>
