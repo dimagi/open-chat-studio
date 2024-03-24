@@ -1,16 +1,22 @@
+from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
 from apps.events.models import StaticTrigger, TimeoutTrigger
+from apps.teams.decorators import login_and_team_required
 from apps.utils.time import seconds_to_human
 
 
+@login_and_team_required
+@permission_required("events.add_timeouttrigger")
 def create_timeout_event_view(request, team_slug: str, experiment_id: str):
     return _create_event_view(TimeoutTriggerForm, request, team_slug, experiment_id)
 
 
+@login_and_team_required
+@permission_required("events.add_statictrigger")
 def create_static_event_view(request, team_slug: str, experiment_id: str):
     return _create_event_view(StaticTriggerForm, request, team_slug, experiment_id)
 
@@ -35,10 +41,14 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
     return render(request, "events/manage_event.html", context)
 
 
+@login_and_team_required
+@permission_required("events.change_statictrigger")
 def edit_static_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _edit_event_view("static", request, team_slug, experiment_id, trigger_id)
 
 
+@login_and_team_required
+@permission_required("events.change_timeouttrigger")
 def edit_timeout_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _edit_event_view("timeout", request, team_slug, experiment_id, trigger_id)
 
@@ -72,10 +82,14 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
     return render(request, "events/manage_event.html", context)
 
 
+@login_and_team_required
+@permission_required("events.delete_statictrigger")
 def delete_static_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _delete_event_view("static", request, team_slug, experiment_id, trigger_id)
 
 
+@login_and_team_required
+@permission_required("events.delete_timeouttrigger")
 def delete_timeout_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _delete_event_view("timeout", request, team_slug, experiment_id, trigger_id)
 
@@ -90,10 +104,14 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
     return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
 
 
+@login_and_team_required
+@permission_required("events.view_eventlog")
 def static_logs_view(request, team_slug, experiment_id, trigger_id):
     return _logs_view("static", request, team_slug, experiment_id, trigger_id)
 
 
+@login_and_team_required
+@permission_required("events.view_eventlog")
 def timeout_logs_view(request, team_slug, experiment_id, trigger_id):
     return _logs_view("timeout", request, team_slug, experiment_id, trigger_id)
 
