@@ -30,11 +30,24 @@ from apps.annotations.models import Tag
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import (
+    StaticTrigger,
+    StaticTriggerType,
+    TimeoutTrigger,
+)
+from apps.events.tables import (
+    EventsTable,
+)
+from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.decorators import experiment_session_view, set_session_access_cookie, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
-from apps.experiments.forms import ConsentForm, ExperimentInvitationForm, SurveyCompletedForm
+from apps.experiments.forms import (
+    ConsentForm,
+    ExperimentInvitationForm,
+    SurveyCompletedForm,
+)
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
@@ -387,8 +400,28 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "filter_tags_url": reverse(
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
+            **_get_events_context(experiment, team_slug),
         },
     )
+
+
+def _get_events_context(experiment: Experiment, team_slug: str):
+    combined_events = []
+    static_events = (
+        StaticTrigger.objects.filter(experiment=experiment)
+        .values("id", "experiment_id", "type", "action__action_type", "action__params")
+        .all()
+    )
+    timeout_events = (
+        TimeoutTrigger.objects.filter(experiment=experiment)
+        .values("id", "experiment_id", "delay", "action__action_type", "action__params", "total_num_triggers")
+        .all()
+    )
+    for event in static_events:
+        combined_events.append({**event, "team_slug": team_slug})
+    for event in timeout_events:
+        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
 
 
 @login_and_team_required
@@ -488,6 +521,7 @@ def _start_experiment_session(
         external_chat_id=external_chat_id,
         experiment_channel=experiment_channel,
     )
+    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
 
@@ -834,9 +868,8 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
 @require_POST
 def end_experiment(request, team_slug: str, experiment_id: str, session_id: str):
     experiment_session = request.experiment_session
-    experiment_session.ended_at = timezone.now()
-    experiment_session.status = SessionStatus.PENDING_REVIEW
-    experiment_session.save()
+    experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
+    experiment_session.end(commit=True)
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 

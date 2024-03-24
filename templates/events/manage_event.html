@@ -1,0 +1,33 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block app %}
+    <div class="app-card max-w-5xl mx-auto">
+        <div class="flex">
+            <div class="flex-1">
+                <h1 class="pg-title">{{ title }}</h1>
+            </div>
+            <div class="justify-self-end">
+                {% block title_bar_end %}
+                {% endblock title_bar_end %}
+            </div>
+        </div>
+        <div>
+            {% block pre_form %}
+            {% endblock pre_form %}
+            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}>
+                {% csrf_token %}
+                {% block form %}
+                    <h1 class="pg-title">Event Details</h1>
+                    {% render_form_fields trigger_form %}
+                    {% render_form_fields action_form %}
+                    {{ form.non_field_errors }}
+                {% endblock form %}
+                {% block form_actions %}
+                    <input type="submit" class="pg-button-primary mt-2" value="Save">
+                {% endblock %}
+            </form>
+            {% block post_form %}
+            {% endblock post_form %}
+        </div>
+    </div>
+{% endblock %}

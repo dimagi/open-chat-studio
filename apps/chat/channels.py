@@ -6,7 +6,6 @@ from typing import ClassVar
 
 import requests
 from django.conf import settings
-from django.utils import timezone
 from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
@@ -16,6 +15,8 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import StaticTriggerType
+from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -200,6 +201,7 @@ class ChannelBase:
                 # is ACTIVE
                 self.experiment_session.update_status(SessionStatus.ACTIVE)
 
+        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
         response = self._handle_supported_message()
         return response
 
@@ -404,8 +406,7 @@ class ChannelBase:
 
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""
-        self.experiment_session.ended_at = timezone.now()
-        self.experiment_session.save()
+        self.experiment_session.end()
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
