@@ -180,10 +180,12 @@ class SyntheticVoice(BaseModel):
 
     AWS = "AWS"
     Azure = "Azure"
+    OpenAI = "OpenAI"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
+        ("OpenAI", OpenAI),
     )
 
     name = models.CharField(
