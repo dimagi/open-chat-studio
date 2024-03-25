@@ -94,6 +94,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
     service = {
         VoiceProviderType.aws: SyntheticVoice.AWS,
         VoiceProviderType.azure: SyntheticVoice.Azure,
+        VoiceProviderType.openai: SyntheticVoice.OpenAI,
     }[provider_type]
     voice = SyntheticVoice(
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
@@ -105,3 +106,35 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
     object.__setattr__(speech_service, "_synthesize_voice", mock_synthesize)
     speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1
+
+
+def test_openai_voice_provider(team_with_users):
+    _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.openai,
+        data={
+            "openai_api_key": "test_key",
+            "openai_api_base": "https://openai.com",
+            "openai_organization": "test_organization",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "config_key",
+    [
+        "openai_api_key",
+    ],
+)
+def test_openai_voice_provider_error(config_key):
+    """Test that any missing param causes failure"""
+    form = VoiceProviderType.openai.form_cls(
+        data={
+            "openai_api_key": "test_key",
+            "openai_api_base": "https://openai.com",
+            "openai_organization": "test_organization",
+        }
+    )
+    assert form.is_valid()
+    form.cleaned_data.pop(config_key)
+    _test_voice_provider_error(VoiceProviderType.openai, data=form.cleaned_data)
