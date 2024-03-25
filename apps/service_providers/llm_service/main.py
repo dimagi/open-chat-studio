@@ -57,12 +57,12 @@ class OpenAILlmService(LlmService):
             openai_organization=self.openai_organization,
         )
 
-    # def transcribe_audio(self, audio: BytesIO) -> str:
-    #     transcript = self.get_raw_client().audio.transcriptions.create(
-    #         model="whisper-1",
-    #         file=audio,
-    #     )
-    #     return transcript.text
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self.get_raw_client().audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
 
     def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
         from langchain_community.callbacks import OpenAICallbackHandler
