@@ -45,6 +45,10 @@
       {% include "experiments/components/experiment_chat.html" %}
     </div>
   </div>
+{% endblock %}
+
+{% block page_js %}
+  {{ block.super  }}
   <script
     id="tag-multiselect"
     src="{% static './tag_multiselect.js' %}"
