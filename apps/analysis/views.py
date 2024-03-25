@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -11,7 +11,8 @@ from django_tables2 import SingleTableView
 
 from apps.analysis.forms import AnalysisForm
 from apps.analysis.models import Analysis, Resource, RunGroup, RunStatus
-from apps.analysis.pipelines import get_dynamic_forms_for_analysis, get_static_forms_for_analysis
+from apps.analysis.pipelines import get_dynamic_forms_for_analysis
+from apps.analysis.steps.forms import ExperimentLoaderConfigForm, LlmCompletionStepParamsForm, ResourceLoaderParamsForm
 from apps.analysis.tables import AnalysisTable, RunGroupTable
 from apps.analysis.tasks import run_analysis
 from apps.analysis.utils import merge_raw_params
@@ -50,36 +51,109 @@ def analysis_details(request, team_slug: str, pk: int):
     )
 
 
+# Define this elsewhere
+VALID_STEPS = [
+    {"id": "ResourceLoaderStep", "name": "Resource Loader", "form_class": ResourceLoaderParamsForm},
+    {
+        "id": "ExperimentLoaderStep",
+        "name": "Experiment Loader",
+        "form_class": ExperimentLoaderConfigForm,
+    },
+    {
+        "id": "LlmCompletionStep",
+        "name": "LLM Completion",
+        "form_class": LlmCompletionStepParamsForm,
+    },
+]
+
+
 @login_and_team_required
-@permission_required("analysis.change_analysis", raise_exception=True)
+@permission_required("analysis.add_analysis", raise_exception=True)
+def get_step_types(request, team_slug: str):
+    # Map through VALID_STEPS to return only id and name
+    step_types = [{"id": step["id"], "name": step["name"]} for step in VALID_STEPS]
+    return JsonResponse(step_types, safe=False)
+
+
+@login_and_team_required
+@permission_required("analysis.add_analysis", raise_exception=True)
+def get_step_form(request, team_slug: str, step_type: str):
+    # Find the step in VALID_STEPS based on the supplied id and instantiate its form
+    step = next((step for step in VALID_STEPS if step["id"] == step_type), None)
+    if step is not None:
+        form = step["form_class"](request)  # Instantiate the form class
+        return render(request, "analysis/step_form.html", {"form": form})
+    else:
+        return JsonResponse({"error": "Invalid step type"}, status=404)
+
+
+@login_and_team_required
+@permission_required("analysis.add_analysis", raise_exception=True)
 def analysis_configure(request, team_slug: str, pk: int):
     analysis = get_object_or_404(Analysis, id=pk, team=request.team)
-    param_forms = get_static_forms_for_analysis(analysis)
+
     if request.method == "POST":
-        forms = {
-            step_id: form(request, prefix=step_id, data=request.POST, files=request.FILES)
-            for step_id, form in param_forms.items()
-        }
+        print(request.POST)
+        forms = build_forms_from_request(request)
         if all(form.is_valid() for form in forms.values()):
             step_params = {step_id: form.save().model_dump(exclude_defaults=True) for step_id, form in forms.items()}
             analysis.config = step_params
             analysis.save()
             return redirect("analysis:details", team_slug=team_slug, pk=pk)
+        # If forms are not valid, they already contain the errors and will be passed to the template
     else:
         initial = analysis.config or {}
-        forms = {
-            step_id: form(request, prefix=step_id, initial=initial.get(step_id, {}))
-            for step_id, form in param_forms.items()
-        }
+        forms = build_forms_from_initial(request, initial)
 
-    return render(
+    steps = [
+        {
+            "step_type": step_id.rsplit("-", 1)[0],
+            "step_id": step_id,
+            "form_prefix": form.prefix,
+            "non_field_errors": form.non_field_errors(),
+            "as_p": form.as_p(),
+        }
+        for step_id, form in forms.items()
+    ]
+    return TemplateResponse(
         request,
         "analysis/analysis_configure.html",
         {
             "analysis": analysis,
-            "param_forms": forms,
+            "initial_steps": steps,
+            "step_types": [{"id": step["id"], "name": step["name"]} for step in VALID_STEPS],
         },
     )
+
+
+def build_forms_from_initial(request, initial):
+    forms = {}
+    for step_id, step_data in initial.items():
+        # step ID is in the format 'ExperimentLoaderStep-0'
+        step_type = step_id.split("-", 1)[0]
+        for valid_step in VALID_STEPS:
+            if valid_step["id"] == step_type:
+                form_class = valid_step["form_class"]
+                forms[step_id] = form_class(request, initial=initial.get(step_id, {}), prefix=step_id)
+                break
+
+    # I'm not sure why but the DB isn't maintiang key order, so we have to re-sort
+    return {key: forms[key] for key in sorted(forms.keys(), key=lambda k: int(k.rsplit("-", 1)[1]))}
+
+
+def build_forms_from_request(request):
+    forms = {}
+    # Assuming the step_id is the prefix, e.g., "ExperimentLoad-0-fieldname"
+    for key in request.POST.keys():
+        if "-" in key:
+            prefix = key.rsplit("-", 1)[0]  # Extract prefix from the first part of the field name
+            step_type = key.split("-", 1)[0]  # Extract step type from prefix
+            for valid_step in VALID_STEPS:
+                if valid_step["id"] == step_type and prefix not in forms:
+                    form_class = valid_step["form_class"]
+                    forms[prefix] = form_class(request, data=request.POST, files=request.FILES, prefix=prefix)
+                    break
+    return forms
 
 
 class RunGroupTableView(SingleTableView, PermissionRequiredMixin):
@@ -180,7 +254,9 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
     initial = analysis.config or {}
     if request.method == "POST":
         forms = {
-            step_name: form(request, data=request.POST, files=request.FILES, initial=initial.get(step_name, {}))
+            step_name: form(
+                request, prefix=step_name, data=request.POST, files=request.FILES, initial=initial.get(step_name, {})
+            )
             for step_name, form in param_forms.items()
         }
         if all(form.is_valid() for form in forms.values()):
@@ -203,7 +279,8 @@ def create_analysis_run(request, team_slug: str, pk: int, run_id: int = None):
             run = get_object_or_404(RunGroup, id=run_id, team=request.team)
             initial = merge_raw_params(initial, run.params)
         forms = {
-            step_name: form(request, initial=initial.get(step_name, {})) for step_name, form in param_forms.items()
+            step_name: form(request, prefix=step_name, initial=initial.get(step_name, {}))
+            for step_name, form in param_forms.items()
         }
     return render(
         request,

@@ -113,16 +113,14 @@ def get_dynamic_param_forms(pipeline) -> dict[str, type[ParamsForm]]:
 
 
 def get_static_forms_for_analysis(analysis):
-    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_static_param_forms(source_pipeline),
+        **get_static_param_forms(get_source_pipeline(analysis.source)),
         **get_static_param_forms(get_data_pipeline(analysis.pipeline)),
     }
 
 
 def get_dynamic_forms_for_analysis(analysis):
-    source_pipeline = get_source_pipeline(analysis.source)
     return {
-        **get_dynamic_param_forms(source_pipeline),
+        **get_dynamic_param_forms(get_source_pipeline(analysis.source)),
         **get_dynamic_param_forms(get_data_pipeline(analysis.pipeline)),
     }
