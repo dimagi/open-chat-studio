@@ -44,3 +44,4 @@ django-field-audit>=1.2.7
 turn-python>=0.2.0
 jinja2
 django-taggit
+pgvector
