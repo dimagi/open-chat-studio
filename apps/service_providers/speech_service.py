@@ -7,6 +7,7 @@ from typing import ClassVar
 import azure.cognitiveservices.speech as speechsdk
 import boto3
 import pydantic
+from openai import OpenAI
 from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
@@ -147,3 +148,30 @@ class AzureSpeechService(SpeechService):
                 if cancellation_details.error_details:
                     msg += f". Error details: {cancellation_details.error_details}"
             raise AudioSynthesizeException(msg)
+
+
+class OpenAISpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAI
+    supports_transcription: ClassVar[bool] = False
+    openai_api_key: str
+    openai_api_base: str = None
+    openai_organization: str = None
+
+    @property
+    def _client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        """
+        Calls OpenAI to convert the text to speech using the synthetic_voice
+        """
+        response = self._client.audio.speech.create(model="tts-1", voice=synthetic_voice.name, input=text)
+        audio_data = response.read()
+
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        # TODO
+        pass
