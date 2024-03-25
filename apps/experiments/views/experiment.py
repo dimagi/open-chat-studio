@@ -594,7 +594,9 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    progress = Progress(AsyncResult(task_id))
+    progress = Progress(AsyncResult(task_id)).get_info()
+    # don't render empty messages
+    skip_render = progress["complete"] and progress["success"] and not progress["result"]
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -602,7 +604,8 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
             "experiment": experiment,
             "session": session,
             "task_id": task_id,
-            "progress": progress.get_info(),
+            "progress": progress,
+            "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
         },
     )
