@@ -94,7 +94,7 @@ class ChannelBase:
         self.experiment_channel = experiment_channel if experiment_channel else experiment_session.experiment_channel
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
-
+        self._user_query = None
         self.initialize()
 
     @abstractmethod
@@ -173,8 +173,18 @@ class ChannelBase:
             experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
+    @property
+    def user_query(self):
+        """Returns the user query, extracted from whatever (supported) message type was used to convey the
+        message
+        """
+        if not self._user_query:
+            self._user_query = self._extract_user_query()
+        return self._user_query
+
     def _add_message(self, message):
         """Adds the message to the handler in order to extract session information"""
+        self._user_query = None
         self.message = message
         self._ensure_sessions_exists()
 
@@ -219,7 +229,7 @@ class ChannelBase:
         (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
         """
         # We manually add the message to the history here, since this doesn't follow the normal flow
-        self._add_message_to_history(self.message_text, ChatMessageType.HUMAN)
+        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN)
 
         if self.experiment_session.status == SessionStatus.SETUP:
             self._chat_initiated()
@@ -277,7 +287,7 @@ class ChannelBase:
         ]
 
     def _user_gave_consent(self) -> bool:
-        return self.message_text.strip() == USER_CONSENT_TEXT
+        return self.user_query.strip() == USER_CONSENT_TEXT
 
     def _extract_user_query(self) -> str:
         if self.message_content_type == MESSAGE_TYPES.VOICE:
@@ -301,8 +311,7 @@ class ChannelBase:
         send_message_func(bot_message)
 
     def _handle_supported_message(self):
-        user_query = self._extract_user_query()
-        response = self._get_llm_response(user_query)
+        response = self._get_llm_response(self.user_query)
         self._send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -421,7 +430,7 @@ class ChannelBase:
         )
 
     def _is_reset_conversation_request(self):
-        return self.message_text == ExperimentChannel.RESET_COMMAND
+        return self.user_query == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
         return self.message_content_type is not None and self.message_content_type in self.supported_message_types
