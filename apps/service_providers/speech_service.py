@@ -152,7 +152,7 @@ class AzureSpeechService(SpeechService):
 
 class OpenAISpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAI
-    supports_transcription: ClassVar[bool] = False
+    supports_transcription: ClassVar[bool] = True
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
@@ -173,5 +173,8 @@ class OpenAISpeechService(SpeechService):
         return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
 
     def transcribe_audio(self, audio: BytesIO) -> str:
-        # TODO
-        pass
+        transcript = self._client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
