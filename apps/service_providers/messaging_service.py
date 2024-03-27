@@ -37,7 +37,7 @@ class MessagingService(pydantic.BaseModel):
 
 class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
-    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
@@ -58,10 +58,7 @@ class TwilioService(MessagingService):
             config=Config(signature_version="s3v4"),
         )
 
-    def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
-        self.client.messages.create(from_=f"whatsapp:{from_number}", body=message, to=f"whatsapp:{to_number}")
-
-    def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number):
+    def _upload_audio_file(self, synthetic_voice: SynthesizedAudio):
         file_path = f"{uuid.uuid4()}.mp3"
         audio_bytes = synthetic_voice.get_audio_bytes(format="mp3")
         self.s3_client.upload_fileobj(
@@ -76,7 +73,7 @@ class TwilioService(MessagingService):
                 "ContentType": "audio/mpeg",
             },
         )
-        public_url = self.s3_client.generate_presigned_url(
+        return self.s3_client.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": settings.WHATSAPP_S3_AUDIO_BUCKET,
@@ -84,12 +81,29 @@ class TwilioService(MessagingService):
             },
             ExpiresIn=360,
         )
+
+    def send_whatsapp_text_message(self, message: str, from_number: str, to_number):
+        self.client.messages.create(from_=f"whatsapp:{from_number}", body=message, to=f"whatsapp:{to_number}")
+
+    def send_whatsapp_voice_message(self, synthetic_voice: SynthesizedAudio, from_number: str, to_number):
+        public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=f"whatsapp:{from_number}", to=f"whatsapp:{to_number}", media_url=[public_url])
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
-        ogg_audio = BytesIO(requests.get(message.media_url, auth=auth).content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+        response = requests.get(message.media_url, auth=auth)
+        # Example header: {'Content-Type': 'audio/ogg'}
+        content_type = response.headers["Content-Type"].split("/")[1]
+        return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
+
+    # TODO: send_whatsapp_text_message should be send_text_message
+    def send_messenger_text_message(self, message: str, from_: str, to: str):
+        self.client.messages.create(from_=f"messenger:{from_}", body=message, to=f"messenger:{to}")
+
+    # TODO: send_messenger_voice_message should be send_voice_message
+    def send_messenger_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str):
+        public_url = self._upload_audio_file(synthetic_voice)
+        self.client.messages.create(from_=f"messenger:{from_}", to=f"messenger:{to}", media_url=[public_url])
 
 
 class TurnIOService(MessagingService):
