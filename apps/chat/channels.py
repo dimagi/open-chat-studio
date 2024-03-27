@@ -10,7 +10,7 @@ from telebot import TeleBot
 from telebot.util import smart_split
 
 from apps.channels import audio
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -524,7 +524,9 @@ class WhatsappChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
+        self.messaging_service.send_text_message(
+            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -550,7 +552,9 @@ class WhatsappChannel(ChannelBase):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.experiment_session.external_chat_id
-        self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
+        self.messaging_service.send_text_message(
+            bot_message, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
@@ -564,8 +568,8 @@ class WhatsappChannel(ChannelBase):
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_voice_message(
-            synthetic_voice, from_number=from_number, to_number=to_number
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
 
@@ -575,7 +579,7 @@ class FacebookMessengerChannel(ChannelBase):
 
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_messenger_text_message(text, from_=from_, to=self.chat_id)
+        self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -599,7 +603,9 @@ class FacebookMessengerChannel(ChannelBase):
     def new_bot_message(self, bot_message: str):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
         from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_messenger_text_message(bot_message, from_=from_, to=self.chat_id)
+        self.messaging_service.send_text_message(
+            bot_message, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+        )
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
@@ -612,4 +618,6 @@ class FacebookMessengerChannel(ChannelBase):
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_ = self.experiment_channel.extra_data["page_id"]
-        self.messaging_service.send_messenger_voice_message(synthetic_voice, from_=from_, to=self.chat_id)
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+        )

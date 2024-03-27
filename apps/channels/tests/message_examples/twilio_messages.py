@@ -1,6 +1,8 @@
 import json
 
-prefixes = {"whatsapp": "whatsapp", "facebook": "messenger"}
+from apps.service_providers.messaging_service import TwilioService
+
+prefixes = TwilioService.TWILIO_CHANNEL_PREFIXES
 
 
 def text_message(platform: str = "whatsapp"):

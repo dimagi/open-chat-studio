@@ -73,12 +73,12 @@ class TestTwilio:
     )
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_twilio_uses_whatsapp_channel_implementation(
         self,
         get_llm_response_mock,
-        send_whatsapp_text_message,
+        send_text_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
         incoming_message,
@@ -95,7 +95,7 @@ class TestTwilio:
             handle_twilio_message(message_data=incoming_message)
 
             if message_type == "text":
-                send_whatsapp_text_message.assert_called()
+                send_text_message.assert_called()
             # elif message_type == "audio": TODO: Figure out why this is not passing in the github workflows
             #     s3_client_mock.generate_presigned_url.assert_called()
 
@@ -117,12 +117,12 @@ class TestTurnio:
 
     @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.voice_message()])
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
+    @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_turnio_whatsapp_channel_implementation(
         self,
         _get_llm_response,
-        send_whatsapp_text_message,
+        send_text_message,
         get_voice_transcript_mock,
         db,
         turnio_whatsapp_channel,
@@ -132,7 +132,7 @@ class TestTurnio:
         _get_llm_response.return_value = "Hi"
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        send_whatsapp_text_message.assert_called()
+        send_text_message.assert_called()
 
     @patch("apps.chat.channels.ChannelBase._handle_supported_message")
     @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")
