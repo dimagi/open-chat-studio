@@ -29,7 +29,7 @@ def turnio_whatsapp_channel(turn_io_provider):
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
-        extra_data={"number": "+14155238886"},
+        extra_data={"number": "14155238886"},
     )
 
 
@@ -46,7 +46,7 @@ def _twilio_whatsapp_channel(twilio_provider):
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=twilio_provider,
         experiment__team=twilio_provider.team,
-        extra_data={"number": "+14155238886"},
+        extra_data={"number": "14155238886"},
     )
 
 
@@ -57,6 +57,7 @@ class TestTwilio:
     )
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
+        assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
         assert whatsapp_message.chat_id == whatsapp_message.from_
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
