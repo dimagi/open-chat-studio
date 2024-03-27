@@ -36,7 +36,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 def handle_twilio_message(self, message_data: str):
     message = TwilioMessage.parse(json.loads(message_data))
     experiment_channel = ExperimentChannel.objects.filter(
-        extra_data__contains={"number": message.to_number}, messaging_provider__type=MessagingProviderType.twilio
+        extra_data__contains={"number": message.to}, messaging_provider__type=MessagingProviderType.twilio
     ).first()
     if not experiment_channel:
         return

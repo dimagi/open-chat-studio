@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
 
@@ -46,20 +47,16 @@ class TelegramMessage(BaseModel):
 
 class TwilioMessage(BaseModel):
     """
-    A wrapper class for user messages coming from the whatsapp
+    A wrapper class for user messages coming from the twilio
     """
 
-    from_number: str
-    to_number: str
+    from_: str
+    to: str
     body: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
-
-    @field_validator("to_number", "from_number", mode="before")
-    @classmethod
-    def strip_prefix(cls, value):
-        return value.split("whatsapp:")[1]
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -67,12 +64,12 @@ class TwilioMessage(BaseModel):
         if not value:
             # Normal test messages doesn't have a content type
             return MESSAGE_TYPES.TEXT
-        if value and value == "audio/ogg":
+        if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
 
     @property
     def chat_id(self) -> str:
-        return self.from_number
+        return self.from_
 
     @property
     def message_text(self) -> str:
@@ -80,14 +77,17 @@ class TwilioMessage(BaseModel):
 
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
+        prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
+        prefix = message_data["From"].split(":")[0]
         content_type = message_data.get("MediaContentType0")
         return TwilioMessage(
-            from_number=message_data["From"],
-            to_number=message_data["To"],
+            from_=message_data["From"].split(f"{prefix}:")[1],
+            to=message_data["To"].split(f"{prefix}:")[1],
             body=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
+            platform=prefix_channel_map[prefix],
         )
 
 
