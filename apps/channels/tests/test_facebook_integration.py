@@ -1,93 +1,87 @@
+import json
+from io import BytesIO
 from unittest.mock import patch
 
-from django.test import TestCase
-from django.urls import reverse
+import pytest
 
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.tasks import handle_facebook_message
+from apps.channels.datamodels import TwilioMessage
+from apps.channels.models import ChannelPlatform
+from apps.channels.tasks import handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.experiments.models import ConsentForm, Experiment
-from apps.service_providers.models import LlmProvider
-from apps.teams.models import Team
-from apps.users.models import CustomUser
+from apps.service_providers.models import MessagingProviderType
+from apps.service_providers.speech_service import SynthesizedAudio
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
-from .message_examples import facebook_messages
+from .message_examples import twilio_messages
 
 
-class FacebookChannelTest(TestCase):
-    def setUp(self):
-        super().setUp()
-        self.page_id = "12345"
-        self.page_access_token = "678910"
-        self.team = Team.objects.create(name="test-team", slug="test-team")
-        self.user = CustomUser.objects.create_user(username="testuser")
-        self.experiment = Experiment.objects.create(
-            team=self.team,
-            owner=self.user,
-            name="TestExperiment",
-            description="test",
-            prompt_text="You are a helpful assistant",
-            consent_form=ConsentForm.get_default(self.team),
-            llm_provider=LlmProvider.objects.create(
-                name="test",
-                type="openai",
-                team=self.team,
-                config={
-                    "openai_api_key": "123123123",
-                },
-            ),
-        )
-        self.facebook_details = {
-            "page_id": self.page_id,
-            "page_access_token": self.page_access_token,
-            "verify_token": "123456789",
-        }
-        self.experiment_channel = ExperimentChannel.objects.create(
-            name="TestChannel",
-            experiment=self.experiment,
-            extra_data=self.facebook_details,
-            platform=ChannelPlatform.FACEBOOK,
-        )
+@pytest.fixture()
+def _twilio_whatsapp_channel(twilio_provider):
+    ExperimentChannelFactory(
+        platform=ChannelPlatform.FACEBOOK,
+        messaging_provider=twilio_provider,
+        experiment__team=twilio_provider.team,
+        extra_data={"page_id": "14155238886"},
+    )
 
-    def test_facebook_get_request_success(self):
-        """Tests Facebook's get request that verifies the server"""
-        url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
-        verify_token = self.facebook_details["verify_token"]
-        query_string = f"?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token={verify_token}"
-        response = self.client.get(f"{url}{query_string}")
-        assert response.status_code == 200
-        assert response.content == verify_token.encode("utf-8")
 
-    def test_facebook_get_request_fails(self):
-        """Tests Facebook's get request that verifies the server"""
-        url = reverse("channels:new_facebook_message", kwargs={"team_slug": self.team.slug})
-        query_string = "?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=rubbish"
-        response = self.client.get(f"{url}{query_string}")
-        assert response.status_code == 403
+@pytest.fixture()
+def twilio_provider(db):
+    return MessagingProviderFactory(
+        name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
+    )
 
-    @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
-    def test_incoming_text_message(self, new_user_message):
-        """Verify that a FacebookMessage object is being built correctly for text messages"""
-        message = facebook_messages.text_message(self.page_id, message="Hi there")
-        handle_facebook_message(team_slug=self.team.slug, message_data=message)
-        called_args, called_kwargs = new_user_message.call_args
-        facebook_message = called_args[0]
-        assert facebook_message.page_id == self.page_id
-        assert facebook_message.message_text == "Hi there"
-        assert facebook_message.content_type == MESSAGE_TYPES.TEXT
-        assert facebook_message.user_id == "6785984231"
-        assert facebook_message.media_url is None
 
-    @patch("apps.channels.tasks.FacebookMessengerChannel.new_user_message")
-    def test_incoming_voice_message(self, new_user_message):
-        """Verify that a FacebookMessage object is being built correctly for voice messages"""
-        media_url = "https://example.com/my-audio"
-        message = facebook_messages.audio_message(self.page_id, attachment_url=media_url)
-        handle_facebook_message(team_slug=self.team.slug, message_data=message)
-        called_args, called_kwargs = new_user_message.call_args
-        facebook_message = called_args[0]
-        assert facebook_message.page_id == self.page_id
-        assert facebook_message.message_text == ""
-        assert facebook_message.content_type == MESSAGE_TYPES.VOICE
-        assert facebook_message.user_id == "6785984231"
-        assert facebook_message.media_url == media_url
+class TestTwilio:
+    @pytest.mark.parametrize(
+        ("message", "message_type"),
+        [
+            (twilio_messages.text_message(platform="facebook"), "text"),
+            (twilio_messages.audio_message(platform="facebook"), "voice"),
+        ],
+    )
+    def test_parse_messages(self, message, message_type):
+        whatsapp_message = TwilioMessage.parse(json.loads(message))
+        assert whatsapp_message.platform == ChannelPlatform.FACEBOOK
+        assert whatsapp_message.chat_id == whatsapp_message.from_
+        if message_type == "text":
+            assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
+            assert whatsapp_message.media_url is None
+        else:
+            assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
+            assert whatsapp_message.media_url == "http://example.com/media"
+
+    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
+    @pytest.mark.parametrize(
+        ("incoming_message", "message_type"),
+        [
+            (twilio_messages.text_message(platform="facebook"), "text"),
+            (twilio_messages.audio_message(platform="facebook"), "audio"),
+        ],
+    )
+    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
+    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_messenger_text_message")
+    @patch("apps.chat.channels.FacebookMessengerChannel._get_llm_response")
+    def test_twilio_uses_facebook_channel_implementation(
+        self,
+        get_llm_response_mock,
+        send_messenger_text_message,
+        get_voice_transcript_mock,
+        synthesize_voice_mock,
+        incoming_message,
+        message_type,
+    ):
+        """Test that the twilio integration can use the WhatsappChannel implementation"""
+        synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
+        with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
+            "apps.service_providers.messaging_service.TwilioService.client"
+        ):
+            get_llm_response_mock.return_value = "Hi"
+            get_voice_transcript_mock.return_value = "Hi"
+
+            handle_twilio_message(message_data=incoming_message)
+
+            if message_type == "text":
+                send_messenger_text_message.assert_called()
