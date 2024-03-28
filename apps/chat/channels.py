@@ -252,7 +252,8 @@ class ChannelBase:
         self.experiment_session.update_status(SessionStatus.ACTIVE)
         # This is technically the start of the conversation
         if self.experiment.seed_message:
-            self._send_message_as_bot(self.experiment.seed_message)
+            bot_response = self._generate_response_for_user(self.experiment.seed_message)
+            self.send_text_to_user(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -442,7 +443,12 @@ class ChannelBase:
             message_type=ChatMessageType.SYSTEM,
             content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
         )
-        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
+        return self._generate_response_for_user(
+            UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
+        )
+
+    def _generate_response_for_user(self, prompt: str) -> str:
+        """Generates a response based on the `prompt`."""
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
