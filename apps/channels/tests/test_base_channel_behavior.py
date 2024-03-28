@@ -167,14 +167,18 @@ def _simulate_user_message(channel_instance, user_message: str):
         channel_instance.new_user_message(user_message)
 
 
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
+def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, generate_response_for_user):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the pre concersation flow. The following needs to happen:
     - The user must give consent
     - The user must indicate that they filled out the survey
     """
+    bot_response_to_seed_message = "Hi user"
+    generate_response_for_user.return_value = bot_response_to_seed_message
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
     pre_survey = experiment.pre_survey
@@ -218,12 +222,15 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
+    generate_response_for_user.assert_called()
+    assert send_text_to_user_mock.call_args[0][0] == bot_response_to_seed_message
 
 
+@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TopicBot")
 @patch("apps.channels.models._set_telegram_webhook")
-def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user, db):
+def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user):
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
@@ -238,11 +245,12 @@ def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, 
     assert channel.message.content_type_unparsed == "photo"
 
 
+@pytest.mark.django_db()
 @patch("apps.chat.channels.ChannelBase._unsupported_message_type_response")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.channels.models._set_telegram_webhook")
 def test_unsupported_message_type_triggers_bot_response(
-    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response, db
+    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response
 ):
     bot_response = "Nope, not suppoerted laddy"
     _unsupported_message_type_response.return_value = bot_response
