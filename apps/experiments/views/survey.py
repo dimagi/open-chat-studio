@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -19,6 +20,7 @@ class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "survey",
             "title": "Survey",
+            "info_link": settings.DOCUMENTATION_LINKS["survey"],
             "new_object_url": reverse("experiments:survey_new", args=[team_slug]),
             "table_url": reverse("experiments:survey_table", args=[team_slug]),
         }

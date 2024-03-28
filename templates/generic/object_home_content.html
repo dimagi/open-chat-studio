@@ -2,7 +2,12 @@
 <div class="app-card">
   <div class="grid grid-cols-6">
     <div class="col-span-5">
-      <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
+      <div class="flex">
+        <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
+        {% if info_link %}
+          <a class="mx-2 text-xs text-neutral-500" href="{{ info_link }}" target="_blank">Learn more <i class="text-xs fas fa-link"></i></a>
+        {% endif %}
+      </div>
       <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
     {% if allow_new|default:True or actions %}
