@@ -1,4 +1,8 @@
 ## Usage
+### Adding tags to your model
+To add tagging ability to your model, simply add the `BaseTaggedModelMixin` to your model. This will add a `tags`
+field and provide helper methods to manage these tags.
+
 ### Include the `tag_multiselect.html` template in your template:
 
 ```

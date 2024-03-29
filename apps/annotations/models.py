@@ -52,7 +52,9 @@ class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
         ]
 
 
-class BaseTaggedModel(models.Model):
+class BaseTaggedModelMixin(models.Model):
+    """Models supporting `tags` should use this mixin"""
+
     class Meta:
         abstract = True
 
