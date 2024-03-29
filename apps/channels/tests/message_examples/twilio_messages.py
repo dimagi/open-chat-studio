@@ -37,32 +37,34 @@ def _audio_message(message: str):
 
 
 class Whatsapp:
+    to = "whatsapp:+14155238886"
+    from_ = "whatsapp:+27456897512"
+
     @staticmethod
     def text_message():
-        return _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
+        return _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
 
     @staticmethod
     def image_message():
-        message = _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
-        return _image_message(message)
+        return _image_message(Whatsapp.text_message())
 
     @staticmethod
     def audio_message():
-        message = _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
-        return _audio_message(message)
+        return _audio_message(Whatsapp.text_message())
 
 
 class Messenger:
+    to = "messenger:14155238886"
+    from_ = "messenger:27456897512"
+
     @staticmethod
     def text_message():
-        return _text_message(to="messenger:14155238886", from_="messenger:27456897512")
+        return _text_message(to=Messenger.to, from_=Messenger.from_)
 
     @staticmethod
     def image_message():
-        message = _text_message(to="messenger:14155238886", from_="messenger:27456897512")
-        return _image_message(message)
+        return _image_message(Messenger.text_message())
 
     @staticmethod
     def audio_message():
-        message = _text_message(to="messenger:14155238886", from_="messenger:27456897512")
-        return _audio_message(message)
+        return _audio_message(Messenger.text_message())
