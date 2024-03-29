@@ -29,7 +29,7 @@ def turnio_whatsapp_channel(turn_io_provider):
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
-        extra_data={"number": "14155238886"},
+        extra_data={"number": "+14155238886"},
     )
 
 
@@ -46,14 +46,14 @@ def _twilio_whatsapp_channel(twilio_provider):
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=twilio_provider,
         experiment__team=twilio_provider.team,
-        extra_data={"number": "14155238886"},
+        extra_data={"number": "+14155238886"},
     )
 
 
 class TestTwilio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
-        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "voice")],
+        [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
@@ -69,7 +69,7 @@ class TestTwilio:
     @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
-        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "audio")],
+        [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")

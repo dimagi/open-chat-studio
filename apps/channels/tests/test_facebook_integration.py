@@ -37,8 +37,8 @@ class TestTwilio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
         [
-            (twilio_messages.text_message(platform="facebook"), "text"),
-            (twilio_messages.audio_message(platform="facebook"), "voice"),
+            (twilio_messages.Messenger.text_message(), "text"),
+            (twilio_messages.Messenger.audio_message(), "voice"),
         ],
     )
     def test_parse_messages(self, message, message_type):
@@ -56,8 +56,8 @@ class TestTwilio:
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
         [
-            (twilio_messages.text_message(platform="facebook"), "text"),
-            (twilio_messages.audio_message(platform="facebook"), "audio"),
+            (twilio_messages.Messenger.text_message(), "text"),
+            (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")

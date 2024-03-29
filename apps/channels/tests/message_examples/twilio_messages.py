@@ -1,11 +1,7 @@
 import json
 
-from apps.service_providers.messaging_service import TwilioService
 
-prefixes = TwilioService.TWILIO_CHANNEL_PREFIXES
-
-
-def text_message(platform: str = "whatsapp"):
+def _text_message(to: str, from_: str):
     return json.dumps(
         {
             "SmsMessageSid": "DDDDDDDDDDDDDdd",
@@ -15,28 +11,58 @@ def text_message(platform: str = "whatsapp"):
             "WaId": "27456897512",
             "SmsStatus": "received",
             "Body": "Dobroye utro",
-            "To": f"{prefixes[platform]}:14155238886",
+            "To": to,
             "NumSegments": "1",
             "ReferralNumMedia": "0",
             "MessageSid": "BBBBBBBBBB",
             "AccountSid": "AAAAAAAAAAAAA",
-            "From": f"{prefixes[platform]}:27456897512",
+            "From": from_,
             "ApiVersion": "2010-04-01",
         }
     )
 
 
-def image_message(platform: str = "whatsapp"):
-    message = text_message(platform)
+def _image_message(message: str):
     message_dict = json.loads(message)
     message_dict["MediaContentType0"] = "image/png"
     message_dict["MediaUrl0"] = "http://example.com/media"
     return json.dumps(message_dict)
 
 
-def audio_message(platform: str = "whatsapp"):
-    message = text_message(platform)
+def _audio_message(message: str):
     message_dict = json.loads(message)
     message_dict["MediaContentType0"] = "audio/ogg"
     message_dict["MediaUrl0"] = "http://example.com/media"
     return json.dumps(message_dict)
+
+
+class Whatsapp:
+    @staticmethod
+    def text_message():
+        return _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
+
+    @staticmethod
+    def image_message():
+        message = _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
+        return _image_message(message)
+
+    @staticmethod
+    def audio_message():
+        message = _text_message(to="whatsapp:+14155238886", from_="whatsapp:+27456897512")
+        return _audio_message(message)
+
+
+class Messenger:
+    @staticmethod
+    def text_message():
+        return _text_message(to="messenger:14155238886", from_="messenger:27456897512")
+
+    @staticmethod
+    def image_message():
+        message = _text_message(to="messenger:14155238886", from_="messenger:27456897512")
+        return _image_message(message)
+
+    @staticmethod
+    def audio_message():
+        message = _text_message(to="messenger:14155238886", from_="messenger:27456897512")
+        return _audio_message(message)
