@@ -4,14 +4,17 @@
             <tbody>
                 {% for user_comment in message.get_user_comments %}
                     <tr>
-                        <td>
+                        <td class="w-1/4">
+                            {{ user_comment.created_at }}
+                        </td>
+                        <td class="w-1/6">
                             {{ user_comment.user.username }}
                         </td>
                         <td>
                             {{ user_comment.comment }}
                         </td>
-                        {% if request.user == user_comment.user %}
-                            <td>
+                        <td class="w-1/6">
+                            {% if request.user == user_comment.user %}
                                 <form
                                     class="p-2"
                                     hx-post="{% url 'annotations:unlink_comment' request.team.slug %}"
@@ -29,8 +32,8 @@
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </form>
-                            </td>
-                        {% endif %}
+                            {% endif %}
+                        </td>
                     </tr>
                 {% endfor %}
             </tbody>
