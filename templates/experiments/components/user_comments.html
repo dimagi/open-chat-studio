@@ -1,0 +1,72 @@
+<div id="comments-{{ message.id }}">
+    <div class="flex flex-col divide-y divide-gray-100">
+        <table class="pg-table min-w-full divide-y divide-gray-300" >
+            <tbody>
+                {% for user_comment in message.get_user_comments %}
+                    <tr>
+                        <td>
+                            {{ user_comment.user.username }}
+                        </td>
+                        <td>
+                            {{ user_comment.comment }}
+                        </td>
+                        {% if request.user == user_comment.user %}
+                            <td>
+                                <form
+                                    class="p-2"
+                                    hx-post="{% url 'annotations:unlink_comment' request.team.slug %}"
+                                    hx-swap="outerHTML"
+                                    hx-indicator="#message-submit"
+                                    hx-target="#comments-{{ message.id }}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="object_info" value="{{ message.object_info }}">
+                                    <input type="hidden" name="comment_id" value="{{ user_comment.id }}">
+                                    <button
+                                        type="submit"
+                                        id="message-submit"
+                                        class="ml-2 btn btn-sm"
+                                    >
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="grid grid-flow-col grid-cols-6 py-2">
+            <div class="col-span-1 flex items-center justify-center">{{ request.user.username }}</div>
+            <div class="col-span-5">
+                <form
+                    class="w-full p-2"
+                    hx-post="{% url 'annotations:link_comment' request.team.slug %}"
+                    hx-swap="outerHTML"
+                    hx-indicator="#message-submit"
+                    hx-target="#comments-{{ message.id }}">
+                    {% csrf_token %}
+                    <div class="flex items-center w-10 h-1/4" x-data="{commentInput: ''}">
+                        <input
+                            class="input input-bordered w-full placeholder-text-sm"
+                            name="comment"
+                            type="text"
+                            placeholder="Add new comment..."
+                            aria-label="comment"
+                            x-model="commentInput"
+                        >
+                        <input type="hidden" name="object_info" value="{{ message.object_info }}">
+                        <button
+                            type="submit"
+                            id="message-submit"
+                            class="ml-2 btn btn-sm"
+                            x-bind:disabled="commentInput.length === 0"
+                        >
+                            Add comment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
