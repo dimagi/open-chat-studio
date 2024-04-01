@@ -1,4 +1,4 @@
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
@@ -95,3 +95,15 @@ class UserComment(BaseTeamModel):
     @staticmethod
     def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment":
         UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
+
+
+class UserCommentsMixin(models.Model):
+    comments = GenericRelation(UserComment)
+
+    class Meta:
+        abstract = True
+        ordering = ["created_at"]
+
+    @property
+    def get_user_comments(self) -> UserComment:
+        return self.comments.all()
