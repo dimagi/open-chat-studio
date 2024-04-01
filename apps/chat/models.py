@@ -11,7 +11,7 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class Chat(BaseTeamModel, TaggedModelMixin):
+class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     """
     A chat instance.
     """
