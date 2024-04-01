@@ -1,5 +1,6 @@
 import json
 
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -8,7 +9,9 @@ from apps.annotations.models import UserComment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class LinkComment(LoginAndTeamRequiredMixin, View):
+class LinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.add_usercomment"
+
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
@@ -20,7 +23,9 @@ class LinkComment(LoginAndTeamRequiredMixin, View):
         return render(request, "experiments/components/user_comments.html", context={"message": chat_message})
 
 
-class UnlinkComment(LoginAndTeamRequiredMixin, View):
+class UnlinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.delete_usercomment"
+
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
