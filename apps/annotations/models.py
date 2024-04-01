@@ -1,4 +1,6 @@
-from django.db import models
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
 from field_audit import audit_fields
@@ -80,3 +82,16 @@ class BaseTaggedModelMixin(models.Model):
     def get_linked_tags(self):
         # return [{"user": item.user.username, "tag": item.tag.name} for item in self.tagged_items.all()]
         return [item.tag.name for item in self.tagged_items.all()]
+
+
+class UserComment(BaseTeamModel):
+    user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    comment = models.TextField(blank=True)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    @transaction.atomic()
+    @staticmethod
+    def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment":
+        UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
