@@ -12,6 +12,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Case, Count, IntegerField, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -31,6 +32,7 @@ from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import (
+    EventLogStatusChoices,
     StaticTrigger,
     StaticTriggerType,
     TimeoutTrigger,
@@ -409,12 +411,30 @@ def _get_events_context(experiment: Experiment, team_slug: str):
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
-        .values("id", "experiment_id", "type", "action__action_type", "action__params")
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count")
         .all()
     )
     timeout_events = (
         TimeoutTrigger.objects.filter(experiment=experiment)
-        .values("id", "experiment_id", "delay", "action__action_type", "action__params", "total_num_triggers")
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "delay",
+            "action__action_type",
+            "action__params",
+            "total_num_triggers",
+            "failure_count",
+        )
         .all()
     )
     for event in static_events:

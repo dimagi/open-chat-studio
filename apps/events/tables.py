@@ -48,6 +48,7 @@ class EventsTable(tables.Table):
     action_type = tables.Column(accessor="action__action_type", verbose_name="Then...")
     action_params = tables.JSONColumn(accessor="action__action_params", verbose_name="With these parameters...")
     total_num_triggers = tables.Column(accessor="total_num_triggers", verbose_name="Repeat")
+    error_count = tables.Column(accessor="failure_count", verbose_name="Error Count")
     actions = ActionsColumn(empty_values=())
 
     def render_type(self, value, record):
