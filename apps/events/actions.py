@@ -5,18 +5,18 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 
 
-def log(session: ExperimentSession, params):
+def log(session: ExperimentSession, params) -> str:
     last_message = session.chat.messages.last()
     if last_message:
-        print(last_message.content)
         return last_message.content
 
 
-def end_conversation(session: ExperimentSession, params):
-    return session.end()
+def end_conversation(session: ExperimentSession, params) -> str:
+    session.end()
+    return "Session ended"
 
 
-def summarize_conversation(session: ExperimentSession, params):
+def summarize_conversation(session: ExperimentSession, params) -> str:
     try:
         prompt = params["prompt"]
     except KeyError:

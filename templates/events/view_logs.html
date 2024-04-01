@@ -24,6 +24,7 @@
                         <th>Status</th>
                         <th>Session</th>
                         <th>Chat Message</th>
+                        <th>Output</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -37,6 +38,7 @@
                                 </a>
                             </td>
                             <td>{{ event_log.chat_message.content }}</td>
+                            <td>{{ event_log.log }}</td>
                         </tr>
 
                     {% endfor %}
