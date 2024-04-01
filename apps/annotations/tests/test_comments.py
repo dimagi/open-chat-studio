@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from django.urls import reverse
 
@@ -49,3 +51,16 @@ def test_unlink_comment_view(chat, client):
     client.post(url, data=data)
 
     assert message.comments.count() == 0
+
+
+@pytest.mark.django_db()
+def test_422_when_entity_doesn_not_support_comments(chat, client):
+    team = chat.team
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    # The team model does not support comments, so let's use this model
+    data = {"comment": "testing", "object_info": json.dumps({"id": team.id, "app": "teams", "model_name": "team"})}
+    link_url = reverse("annotations:link_comment", kwargs={"team_slug": team.slug})
+    response = client.post(link_url, data=data)
+    assert response.status_code == 422

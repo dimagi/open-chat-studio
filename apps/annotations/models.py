@@ -96,7 +96,8 @@ class UserComment(BaseTeamModel):
     @transaction.atomic()
     @staticmethod
     def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment":
-        UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
+        if model._meta.get_field("comments"):
+            UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
 
 class UserCommentsMixin(models.Model, AnnotationMixin):
