@@ -54,18 +54,7 @@ class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
         ]
 
 
-class BaseTaggedModelMixin(models.Model):
-    """Models supporting `tags` should use this mixin"""
-
-    class Meta:
-        abstract = True
-
-    tags = TaggableManager(through=CustomTaggedItem)
-
-    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
-        for tag in tags:
-            self.tags.add(tag, through_defaults={"team": team, "user": added_by})
-
+class AnnotationMixin:
     @property
     def object_info(self):
         import json
@@ -77,6 +66,19 @@ class BaseTaggedModelMixin(models.Model):
                 "model_name": self._meta.model_name,
             }
         )
+
+
+class TaggedModelMixin(models.Model, AnnotationMixin):
+    """Models supporting `tags` should use this mixin"""
+
+    class Meta:
+        abstract = True
+
+    tags = TaggableManager(through=CustomTaggedItem)
+
+    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
+        for tag in tags:
+            self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     @property
     def get_linked_tags(self):
@@ -97,7 +99,7 @@ class UserComment(BaseTeamModel):
         UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
 
-class UserCommentsMixin(models.Model):
+class UserCommentsMixin(models.Model, AnnotationMixin):
     comments = GenericRelation(UserComment)
 
     class Meta:
