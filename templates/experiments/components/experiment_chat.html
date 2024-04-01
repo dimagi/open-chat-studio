@@ -50,7 +50,7 @@
                 x-show="commentsRow === {{ forloop.counter }}"
                 x-cloak>
                 <td colspan="100%" class="px-3 py-2 text-sm text-gray-500">
-                  {% include "experiments/components/user_comments.html" with message=message %}
+                  {% include "experiments/components/user_comments.html" with object=message %}
                 </td>
               </tr>
             {% endif %}

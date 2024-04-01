@@ -1,8 +1,8 @@
-<div id="comments-{{ message.id }}">
+<div id="comments-{{ object.id }}">
     <div class="flex flex-col divide-y divide-gray-100">
         <table class="pg-table min-w-full divide-y divide-gray-300" >
             <tbody>
-                {% for user_comment in message.get_user_comments %}
+                {% for user_comment in object.get_user_comments %}
                     <tr>
                         <td class="w-1/4">
                             {{ user_comment.created_at }}
@@ -19,14 +19,14 @@
                                     class="p-2"
                                     hx-post="{% url 'annotations:unlink_comment' request.team.slug %}"
                                     hx-swap="outerHTML"
-                                    hx-indicator="#message-submit"
-                                    hx-target="#comments-{{ message.id }}">
+                                    hx-indicator="#unlink-comment-submit"
+                                    hx-target="#comments-{{ object.id }}">
                                     {% csrf_token %}
-                                    <input type="hidden" name="object_info" value="{{ message.object_info }}">
+                                    <input type="hidden" name="object_info" value="{{ object.object_info }}">
                                     <input type="hidden" name="comment_id" value="{{ user_comment.id }}">
                                     <button
                                         type="submit"
-                                        id="message-submit"
+                                        id="unlink-comment-submit"
                                         class="ml-2 btn btn-sm"
                                     >
                                         <i class="fa-solid fa-trash"></i>
@@ -46,8 +46,8 @@
                     class="w-full p-2"
                     hx-post="{% url 'annotations:link_comment' request.team.slug %}"
                     hx-swap="outerHTML"
-                    hx-indicator="#message-submit"
-                    hx-target="#comments-{{ message.id }}">
+                    hx-indicator="#add-comment-submit"
+                    hx-target="#comments-{{ object.id }}">
                     {% csrf_token %}
                     <div class="flex items-center w-10 h-1/4" x-data="{commentInput: ''}">
                         <input
@@ -58,10 +58,10 @@
                             aria-label="comment"
                             x-model="commentInput"
                         >
-                        <input type="hidden" name="object_info" value="{{ message.object_info }}">
+                        <input type="hidden" name="object_info" value="{{ object.object_info }}">
                         <button
                             type="submit"
-                            id="message-submit"
+                            id="add-comment-submit"
                             class="ml-2 btn btn-sm"
                             x-bind:disabled="commentInput.length === 0"
                         >

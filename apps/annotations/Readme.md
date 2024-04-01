@@ -27,3 +27,7 @@ If you're going to be tagging mutiple objects on the same page (say, a chat and 
 
 ### Adding comments to your model
 Simply add the `UserCommentsMixin` to your model. This will add a `comments` field and provide some helper methods.
+in your template, add
+```
+{% include "experiments/components/user_comments.html" with object=<your-object> %}
+```
