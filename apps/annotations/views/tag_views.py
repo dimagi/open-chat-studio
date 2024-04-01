@@ -1,6 +1,7 @@
 import json
 
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -15,8 +16,9 @@ from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class TagHome(LoginAndTeamRequiredMixin, TemplateView):
+class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
+    permission_required = "annotations.view_tag"
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
@@ -27,7 +29,8 @@ class TagHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class CreateTag(CreateView):
+class CreateTag(CreateView, PermissionRequiredMixin):
+    permission_required = "annotations.add_tag"
     model = Tag
     form_class = TagForm
     template_name = "generic/object_form.html"
@@ -46,7 +49,8 @@ class CreateTag(CreateView):
         return super().form_valid(form)
 
 
-class EditTag(UpdateView):
+class EditTag(UpdateView, PermissionRequiredMixin):
+    permission_required = "annotations.change_tag"
     model = Tag
     form_class = TagForm
     template_name = "generic/object_form.html"
@@ -63,7 +67,9 @@ class EditTag(UpdateView):
         return reverse("annotations:tag_home", args=[self.request.team.slug])
 
 
-class DeleteTag(LoginAndTeamRequiredMixin, View):
+class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.delete_tag"
+
     def delete(self, request, team_slug: str, pk: int):
         tag = get_object_or_404(Tag, id=pk, team=request.team)
         tag.delete()
@@ -81,7 +87,9 @@ class TagTableView(SingleTableView):
         return Tag.objects.filter(team=self.request.team)
 
 
-class UnlinkTag(LoginAndTeamRequiredMixin, View):
+class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.delete_customtaggeditem"
+
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
@@ -92,7 +100,9 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View):
         return HttpResponse()
 
 
-class LinkTag(LoginAndTeamRequiredMixin, View):
+class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.add_customtaggeditem"
+
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
         object_id = object_info["id"]
