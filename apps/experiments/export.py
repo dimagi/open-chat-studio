@@ -10,7 +10,7 @@ def _parse_tags(tags: list[Tag]) -> str:
     return ", ".join([t.name for t in tags])
 
 
-def _parse_comments(user_comments: list[UserComment]) -> str:
+def _format_comments(user_comments: list[UserComment]) -> str:
     """Combine `user_comments` into a single string that looks like this:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
