@@ -158,9 +158,13 @@ class TimeoutTrigger(BaseModel):
         ).last()
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
-            self.add_event_log(session, last_human_message, EventLogStatusChoices.SUCCESS)
-        except Exception:
-            self.add_event_log(session, last_human_message, EventLogStatusChoices.FAILURE)
+            self.event_logs.create(
+                session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
+            )
+        except Exception as e:
+            self.event_logs.create(
+                session=session, chat_message=last_human_message, status=EventLogStatusChoices.FAILURE, log=str(e)
+            )
 
         if not self._has_triggers_left(session, last_human_message):
             from apps.events.tasks import enqueue_static_triggers
@@ -168,9 +172,6 @@ class TimeoutTrigger(BaseModel):
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
         return result
-
-    def add_event_log(self, session, message, status):
-        self.event_logs.create(session=session, chat_message=message, status=status)
 
     def _has_triggers_left(self, session, message):
         return (
