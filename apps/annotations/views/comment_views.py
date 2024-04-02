@@ -25,7 +25,7 @@ class LinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
                 target_object, comment=request.POST["comment"], added_by=request.user, team=request.team
             )
         except FieldDoesNotExist:
-            messages.error(request, "Unable to add comment to this entity")
+            messages.error(request, f"Unable to add comment to {content_type.model}")
             return HttpResponse("Unprocessable Entity", status=422)
         return render(request, "experiments/components/user_comments.html", context={"object": target_object})
 
