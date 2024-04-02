@@ -34,7 +34,7 @@ def test_link_comment_view(chat, client):
     message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Sqeezy")
     _link_comment_to_item(client, message=message, comment="this is a test")
     _link_comment_to_item(client, message=message, comment="this is a second test")
-    assert len(message.get_user_comments) == 2
+    assert len(message.get_user_comments()) == 2
     assert message.comments.first().comment == "this is a test"
     assert message.comments.last().comment == "this is a second test"
 
