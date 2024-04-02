@@ -25,7 +25,7 @@ def _link_comment_to_item(client, message: ChatMessage, comment: str):
     client.login(username=user.username, password="password")
 
     data = {"comment": comment, "object_info": message.object_info}
-    link_url = reverse("annotations:link_comment", kwargs={"team_slug": team.slug})
+    link_url = reverse("annotations:add_comment", kwargs={"team_slug": team.slug})
     client.post(link_url, data=data)
 
 
@@ -47,7 +47,7 @@ def test_unlink_comment_view(chat, client):
     assert user_comment.comment == "this is a test"
 
     data = {"comment_id": user_comment.id, "object_info": message.object_info}
-    url = reverse("annotations:unlink_comment", kwargs={"team_slug": chat.team.slug})
+    url = reverse("annotations:remove_comment", kwargs={"team_slug": chat.team.slug})
     client.post(url, data=data)
 
     assert message.comments.count() == 0
@@ -61,6 +61,6 @@ def test_422_when_entity_doesn_not_support_comments(chat, client):
 
     # The team model does not support comments, so let's use this model
     data = {"comment": "testing", "object_info": json.dumps({"id": team.id, "app": "teams", "model_name": "team"})}
-    link_url = reverse("annotations:link_comment", kwargs={"team_slug": team.slug})
+    link_url = reverse("annotations:add_comment", kwargs={"team_slug": team.slug})
     response = client.post(link_url, data=data)
     assert response.status_code == 422
