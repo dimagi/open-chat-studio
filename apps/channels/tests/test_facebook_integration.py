@@ -65,6 +65,7 @@ class TestTwilio:
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.channels.FacebookMessengerChannel._get_llm_response")
+    @patch.dict("os.environ", {"AWS_ACCESS_KEY_ID": "123"}, clear=True)
     def test_twilio_uses_facebook_channel_implementation(
         self,
         get_llm_response_mock,
