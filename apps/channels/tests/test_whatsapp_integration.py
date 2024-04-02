@@ -71,14 +71,17 @@ class TestTwilio:
         ("incoming_message", "message_type"),
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
+    @patch("apps.service_providers.messaging_service.settings.AWS_ACCESS_KEY_ID", "123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_twilio_uses_whatsapp_channel_implementation(
         self,
         get_llm_response_mock,
         send_text_message,
+        send_voice_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
         incoming_message,
@@ -96,8 +99,8 @@ class TestTwilio:
 
             if message_type == "text":
                 send_text_message.assert_called()
-            # elif message_type == "audio": TODO: Figure out why this is not passing in the github workflows
-            #     s3_client_mock.generate_presigned_url.assert_called()
+            elif message_type == "audio":
+                send_voice_message.assert_called()
 
 
 class TestTurnio:

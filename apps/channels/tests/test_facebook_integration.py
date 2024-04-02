@@ -60,6 +60,7 @@ class TestTwilio:
             (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
+    @patch("apps.service_providers.messaging_service.settings.AWS_ACCESS_KEY_ID", "123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
