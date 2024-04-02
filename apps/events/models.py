@@ -66,6 +66,10 @@ class StaticTrigger(BaseModel):
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
     event_logs = GenericRelation(EventLog)
 
+    @property
+    def trigger_type(self):
+        return "StaticTrigger"
+
     def fire(self, session):
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
@@ -87,6 +91,10 @@ class TimeoutTrigger(BaseModel):
         help_text="The number of times to trigger the action",
     )
     event_logs = GenericRelation(EventLog)
+
+    @property
+    def trigger_type(self):
+        return "TimeoutTrigger"
 
     def timed_out_sessions(self):
         """Finds all the timed out sessions where:

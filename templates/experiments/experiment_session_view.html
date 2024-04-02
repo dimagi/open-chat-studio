@@ -44,6 +44,14 @@
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "experiments/components/experiment_chat.html" %}
     </div>
+    {% if perms.events.view_eventlog %}
+      <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment Events</h3>
+      {% for event_trigger in event_triggers %}
+        <div class="max-w-5xl mt-4 border rounded-2xl">
+          {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
+        </div>
+      {% endfor %}
+    {% endif %}
   </div>
   <script
     id="tag-multiselect"
