@@ -308,7 +308,7 @@ class ChannelBase:
                 voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
             ):
                 send_message_func = self._reply_voice_message
-        print(f"DEBUG - inside _send_message_to_user: voice_config is {voice_config}")
+        print(f"DEBUG - inside _send_message_to_user: voice_config is {self.experiment.voice_response_behaviour}")
         print(f"DEBUG - inside _send_message_to_user: send_message_func is {send_message_func}")
         send_message_func(bot_message)
 
