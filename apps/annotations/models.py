@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
@@ -55,7 +57,7 @@ class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
 
 
 class AnnotationMixin:
-    @property
+    @cached_property
     def object_info(self):
         import json
 
@@ -99,6 +101,9 @@ class UserComment(BaseTeamModel):
         if model._meta.get_field("comments"):
             UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
+    def __str__(self):
+        return f'<{self.user.username}>: "{self.comment}"'
+
 
 class UserCommentsMixin(models.Model, AnnotationMixin):
     comments = GenericRelation(UserComment)
@@ -108,4 +113,4 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
         ordering = ["created_at"]
 
     def get_user_comments(self) -> UserComment:
-        return self.comments.all()
+        return self.comments.prefetch_related("user").all()

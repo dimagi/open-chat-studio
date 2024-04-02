@@ -11,16 +11,10 @@ def _parse_tags(tags: list[Tag]) -> str:
 
 
 def _parse_comments(user_comments: list[UserComment]) -> str:
-    """Parses `user_comments` into a single string that looks like this:
+    """Combine `user_comments` into a single string that looks like this:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
-    comment_str = ""
-    for idx, comment in enumerate(user_comments):
-        if idx > 0:
-            comment_str = f'{comment_str} | <{comment.user.username}>: "{comment.comment}"'
-        else:
-            comment_str = f'<{comment.user.username}>: "{comment.comment}"'
-    return comment_str
+    return " | ".join([str(comment) for comment in user_comments])
 
 
 def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[str] = []):
@@ -32,6 +26,7 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
         "chat__tags",
         "chat__messages__tags",
         "chat__messages__comments",
+        "chat__messages__comments__user",
     )
     if filter_tags:
         queryset = queryset.filter(chat__tags__name__in=filter_tags)
