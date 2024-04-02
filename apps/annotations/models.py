@@ -107,6 +107,5 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
         abstract = True
         ordering = ["created_at"]
 
-    @property
     def get_user_comments(self) -> UserComment:
         return self.comments.all()
