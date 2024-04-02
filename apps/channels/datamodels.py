@@ -80,9 +80,11 @@ class TwilioMessage(BaseModel):
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
         prefix = message_data["From"].split(":")[0]
         content_type = message_data.get("MediaContentType0")
+
+        prefix_to_remove = f"{prefix}:"
         return TwilioMessage(
-            from_=message_data["From"].split(f"{prefix}:")[1],
-            to=message_data["To"].split(f"{prefix}:")[1],
+            from_=message_data["From"].removeprefix(prefix_to_remove),
+            to=message_data["To"].removeprefix(prefix_to_remove),
             body=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),

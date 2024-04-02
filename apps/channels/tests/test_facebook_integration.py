@@ -1,6 +1,6 @@
 import json
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -77,11 +77,14 @@ class TestTwilio:
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         with patch("apps.service_providers.messaging_service.TwilioService.s3_client"), patch(
             "apps.service_providers.messaging_service.TwilioService.client"
-        ):
+        ) as twilio_client:
             get_llm_response_mock.return_value = "Hi"
             get_voice_transcript_mock.return_value = "Hi"
+            twilio_client.messages.create = Mock()
 
             handle_twilio_message(message_data=incoming_message)
 
             if message_type == "text":
                 send_text_message.assert_called()
+            elif message_type == "audio":
+                twilio_client.messages.create.assert_called()
