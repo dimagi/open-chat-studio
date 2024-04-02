@@ -60,12 +60,12 @@ class TestTwilio:
             (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
+    @patch("apps.service_providers.messaging_service.settings.AWS_ACCESS_KEY_ID", "123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.channels.FacebookMessengerChannel._get_llm_response")
-    @patch.dict("os.environ", {"AWS_ACCESS_KEY_ID": "123"}, clear=True)
     def test_twilio_uses_facebook_channel_implementation(
         self,
         get_llm_response_mock,
