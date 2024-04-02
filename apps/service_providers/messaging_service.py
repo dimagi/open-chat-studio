@@ -94,7 +94,6 @@ class TwilioService(MessagingService):
     def send_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         public_url = self._upload_audio_file(synthetic_voice)
-        breakpoint()
         self.client.messages.create(from_=f"{prefix}:{from_}", to=f"{prefix}:{to}", media_url=[public_url])
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:

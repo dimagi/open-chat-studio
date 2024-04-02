@@ -56,7 +56,7 @@ class TestTwilio:
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
         [
-            # (twilio_messages.Messenger.text_message(), "text"),
+            (twilio_messages.Messenger.text_message(), "text"),
             (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
