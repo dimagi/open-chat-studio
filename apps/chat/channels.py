@@ -306,7 +306,7 @@ class ChannelBase:
                 voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
             ):
                 send_message_func = self._reply_voice_message
-
+        print(f"DEBUG - inside _send_message_to_user: send_message_func is {send_message_func}")
         send_message_func(bot_message)
 
     def _handle_supported_message(self):
@@ -320,10 +320,13 @@ class ChannelBase:
         return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
+        print("DEBUG - inside _reply_voice_message")
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
+        print(f"DEBUG - _reply_voice_message -> speech_service: {speech_service}")
         try:
             synthetic_voice_audio = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            print(f"DEBUG - _reply_voice_message -> synthetic_voice_audio: {synthetic_voice_audio}")
             self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
             logging.exception(e)
@@ -617,6 +620,7 @@ class FacebookMessengerChannel(ChannelBase):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
+        print("DEBUG - inside send_voice_to_user")
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
