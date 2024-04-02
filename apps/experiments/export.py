@@ -5,7 +5,7 @@ from apps.annotations.models import Tag, UserComment
 from apps.experiments.models import Experiment
 
 
-def _parse_tags(tags: list[Tag]) -> str:
+def _format_tags(tags: list[Tag]) -> str:
     """Returns `tags` parsed into a single string in the format 'tag1, tag2, tag3'"""
     return ", ".join([t.name for t in tags])
 
@@ -41,15 +41,15 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
                 session.get_platform_name(),
                 message.chat.id,
                 str(message.chat.user),
-                _parse_tags(message.chat.tags.all()),
+                _format_tags(message.chat.tags.all()),
                 session.public_id,
                 session.llm,
                 experiment.public_id,
                 experiment.name,
                 session.participant.identifier if session.participant else None,
                 session.participant.public_id if session.participant else None,
-                _parse_tags(message.tags.all()),
-                _parse_comments(message.comments.all()),
+                _format_tags(message.tags.all()),
+                _format_comments(message.comments.all()),
             ]
 
 
