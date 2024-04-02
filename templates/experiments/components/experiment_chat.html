@@ -42,7 +42,9 @@
                 </td>
               {% endif %}
               {% if perms.annotations.add_usercomment %}
-                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><i class="fa-regular fa-comment"></i> {{message.get_user_comments|length}}</td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <i class="fa-regular fa-comment"></i> <span x-data="{commentCount: 0}" @{{ message.event_name }}.window="commentCount = $event.detail" x-text="commentCount"></span>
+                </td>
               {% endif %}
             </tr>
             {% if perms.annotations.add_usercomment %}
@@ -50,7 +52,7 @@
                 x-show="commentsRow === {{ forloop.counter }}"
                 x-cloak>
                 <td colspan="100%" class="px-3 py-2">
-                  {% include "experiments/components/user_comments.html" with object=message %}
+                  {% include "experiments/components/user_comments.html" with object=message object_name="message" %}
                 </td>
               </tr>
             {% endif %}

@@ -110,3 +110,8 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
     @property
     def get_user_comments(self) -> UserComment:
         return self.comments.order_by("created_at").all()
+
+    @property
+    def event_name(self) -> str:
+        """Returns the name of the browser event that contains the number of user comments on this object"""
+        return f"{self._meta.model_name}-{self.id}-comment-count"

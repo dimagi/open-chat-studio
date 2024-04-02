@@ -31,3 +31,17 @@ in your template, add
 ```
 {% include "experiments/components/user_comments.html" with object=<your-object> %}
 ```
+
+If you want to show the number of comments that your object has and have it update as you add or remove comments, you can use the following `span` implementation (based on AlpineJS) that listens to the `object.event_name` event that will be dispatched each time the `user_comments.html` page is initialized. These events are unique per object, so it wouldn't interfere with other events.
+
+```html
+<span x-data="{commentCount: 0}" @{{ your_object.event_name }}.window="commentCount = $event.detail" x-text="commentCount"></span>
+```
+
+#### Example
+```html
+<h1>
+    Comment count: <span x-data="{commentCount: 0}" @{{ your_object.event_name }}.window="commentCount = $event.detail" x-text="commentCount"></span>
+</h1>
+```
+

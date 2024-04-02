@@ -1,4 +1,4 @@
-<div id="comments-{{ object.id }}">
+<div id="comments-{{ object.id }}" x-init="$dispatch('{{ object.event_name }}', {{ object.get_user_comments|length }})">
     <div class="flex flex-col divide-y divide-gray-100 text-sm">
         <table class="pg-table min-w-full divide-y divide-gray-300" >
             <tbody>

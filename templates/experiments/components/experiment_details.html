@@ -20,7 +20,9 @@
       {% if perms.annotations.add_usercomment %}
         <div x-data="{showComments: false}">
           <div class="py-3 grid grid-cols-3 mb-2">
-            <dt class="text-sm font-medium leading-6">Comments ({{experiment_session.chat.get_user_comments|length}})</dt>
+            <dt class="text-sm font-medium leading-6">
+              Comments (<span x-data="{commentCount: 0}" @{{experiment_session.chat.event_name }}.window="commentCount = $event.detail" x-text="commentCount"></span>)
+            </dt>
             <dd class="col-span-2 mr-2 text-gray-500">
               <button class="btn btn-sm" @click="showComments = !showComments;">
                 <div x-show="!showComments">View comments</div>
