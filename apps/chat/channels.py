@@ -297,6 +297,8 @@ class ChannelBase:
     def _send_message_to_user(self, bot_message: str):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         send_message_func = self.send_text_to_user
+        print(f"DEBUG - self.voice_replies_supported is {self.voice_replies_supported}")
+        print(f"DEBUG - self.experiment.synthetic_voice is {self.experiment.synthetic_voice}")
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
@@ -306,6 +308,7 @@ class ChannelBase:
                 voice_config == VoiceResponseBehaviours.RECIPROCAL and self.message_content_type == MESSAGE_TYPES.VOICE
             ):
                 send_message_func = self._reply_voice_message
+        print(f"DEBUG - inside _send_message_to_user: voice_config is {voice_config}")
         print(f"DEBUG - inside _send_message_to_user: send_message_func is {send_message_func}")
         send_message_func(bot_message)
 
