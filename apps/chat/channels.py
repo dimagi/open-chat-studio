@@ -592,6 +592,9 @@ class FacebookMessengerChannel(ChannelBase):
 
     @property
     def voice_replies_supported(self) -> bool:
+        print(
+            f"\n\n\nbool(settings.AWS_ACCESS_KEY_ID): {bool(settings.AWS_ACCESS_KEY_ID)}\nself.messaging_service.voice_replies_supported: {self.messaging_service.voice_replies_supported}\n\n\n\n\n"  # noqa: E501
+        )
         return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
 
     @property
