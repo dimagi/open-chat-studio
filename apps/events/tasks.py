@@ -1,7 +1,11 @@
+import logging
+
 from celery.app import shared_task
 
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
@@ -27,7 +31,15 @@ def enqueue_timed_out_events():
     active_triggers = TimeoutTrigger.objects.all()
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
-            fire_trigger.delay(trigger.id, session.id)
+            if session.is_stale():
+                logger.warning(
+                    f"ExperimentChannel is pointing to experiment '{session.experiment_channel.experiment.name}'"
+                    "whereas the current experiment session points to experiment"
+                    f"'{session.experiment.name}'"
+                )
+                continue
+            else:
+                fire_trigger.delay(trigger.id, session.id)
 
 
 @shared_task
