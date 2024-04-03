@@ -15,7 +15,6 @@ from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import Team
-from apps.teams.utils import get_current_team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -55,15 +54,7 @@ class ChannelPlatform(models.TextChoices):
             case self.WHATSAPP:
                 return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
             case self.FACEBOOK:
-                team_slug = get_current_team().slug
-                webhook_url = absolute_url(
-                    reverse("channels:new_facebook_message", kwargs={"team_slug": team_slug}), is_secure=True
-                )
-                initial = kwargs.get("initial", {})
-                initial.setdefault("verify_token", str(uuid.uuid4()))
-                initial.setdefault("webook_url", webhook_url)
-                kwargs["initial"] = initial
-                return forms.FacebookChannelForm(*args, **kwargs)
+                return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
 
     @property
     def channel_identifier_key(self) -> str:
