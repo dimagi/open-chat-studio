@@ -7,8 +7,8 @@ from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
-from apps.channels.models import ExperimentChannel
-from apps.chat.channels import TelegramChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.channels import ChannelBase, TelegramChannel
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -354,3 +354,19 @@ def test_user_query_extracted_for_pre_conversation_flow(
                 _get_voice_transcript.assert_called()
             elif message_type == "text":
                 message_text_mock.assert_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("platform", [platform for platform, _ in ChannelPlatform.choices])
+def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provider):
+    """This test checks all channel types and makes sure that we can instantiate each one by calling
+    `ChannelBase.from_experiment_session`. For the sake of ease, we assume all platforms uses the Twilio
+    messenging provider.
+    """
+    experiment = ExperimentFactory()
+    experiment_channel = ExperimentChannelFactory(
+        messaging_provider=twilio_provider, experiment=experiment, platform=platform
+    )
+    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
+    channel = ChannelBase.from_experiment_session(session)
+    assert type(channel) in ChannelBase.__subclasses__()
