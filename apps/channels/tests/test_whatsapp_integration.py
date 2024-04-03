@@ -10,17 +10,10 @@ from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 from .message_examples import turnio_messages, twilio_messages
-
-
-@pytest.fixture()
-def turn_io_provider():
-    return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
 
 
 @pytest.fixture()
@@ -30,13 +23,6 @@ def turnio_whatsapp_channel(turn_io_provider):
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
         extra_data={"number": "+14155238886"},
-    )
-
-
-@pytest.fixture()
-def twilio_provider(db):
-    return MessagingProviderFactory(
-        name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
