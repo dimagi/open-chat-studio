@@ -10,9 +10,11 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import end_conversation, log, summarize_conversation
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.models import BaseModel
 
 ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation, "summarize": summarize_conversation}
+STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
 
 
 class EventActionType(models.TextChoices):
@@ -137,6 +139,7 @@ class TimeoutTrigger(BaseModel):
                 experiment=self.experiment,
                 ended_at=None,
             )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 log_count=Subquery(log_count_for_last_message),
@@ -149,7 +152,7 @@ class TimeoutTrigger(BaseModel):
                 Q(log_count__lt=self.total_num_triggers) | Q(log_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
         )
-        return sessions.all()
+        return sessions.select_related("experiment_channel", "experiment").all()
 
     def fire(self, session):
         last_human_message = ChatMessage.objects.filter(
