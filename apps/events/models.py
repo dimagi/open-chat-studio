@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -41,6 +42,7 @@ class EventLog(BaseModel):
         ChatMessage, on_delete=models.CASCADE, related_name="event_logs", null=True, blank=True
     )
     status = models.CharField(choices=EventLogStatusChoices.choices)
+    log = models.TextField(blank=True)
 
     class Meta:
         indexes = [
@@ -67,12 +69,11 @@ class StaticTrigger(BaseModel):
     def fire(self, session):
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
-            # TODO: handle message here.
-            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS)
+            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
-        except Exception:
-            # TODO: log exception reason in the event_log
-            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE)
+        except Exception as e:
+            logging.error(e)
+            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
 
 
 class TimeoutTrigger(BaseModel):

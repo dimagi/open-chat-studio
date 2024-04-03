@@ -1,4 +1,8 @@
 ## Usage
+### Adding tags to your model
+To add tagging ability to your model, simply add the `TaggedModelMixin` to your model. This will add a `tags`
+field and provide helper methods to manage these tags.
+
 ### Include the `tag_multiselect.html` template in your template:
 
 ```
@@ -20,3 +24,10 @@ Be sure to pass the available tags as a template variable called `available_tags
 ```
 
 If you're going to be tagging mutiple objects on the same page (say, a chat and chat messages), you'll have to load the script in the template that is the parent of both object templates. For example, `experiment_session_view.html` includes both `experiment_details.html` (the chat) and `experiment_chat.html` (chat messages), so that makes `experiment_session_view.html` the "parent" template of both of these object templates.
+
+### Adding comments to your model
+Simply add the `UserCommentsMixin` to your model. This will add a `comments` field and provide some helper methods.
+in your template, add
+```
+{% include "experiments/components/user_comments.html" with object=<your-object> %}
+```
