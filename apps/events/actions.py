@@ -29,3 +29,19 @@ def summarize_conversation(session: ExperimentSession, params) -> str:
     )
 
     return summary
+
+
+def send_message_to_bot(session: ExperimentSession, params) -> str:
+    from apps.chat.tasks import bot_prompt_for_user, try_send_message
+
+    try:
+        message = params["message_to_bot"]
+    except KeyError:
+        message = "The user hasn't responded, please prompt them again."
+
+    ping_message = bot_prompt_for_user(session, prompt_instruction=message)
+    try_send_message(experiment_session=session, message=ping_message)
+
+    last_message = session.chat.messages.last()
+    if last_message:
+        return last_message.content

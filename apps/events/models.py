@@ -8,19 +8,25 @@ from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import end_conversation, log, summarize_conversation
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.events.actions import end_conversation, log, send_message_to_bot, summarize_conversation
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.models import BaseModel
 
-ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation, "summarize": summarize_conversation}
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
+
+ACTION_FUNCTIONS = {
+    "end_conversation": end_conversation,
+    "log": log,
+    "send_message_to_bot": send_message_to_bot,
+    "summarize": summarize_conversation,
+}
 
 
 class EventActionType(models.TextChoices):
     LOG = ("log", "Log the last message")
     END_CONVERSATION = ("end_conversation", "End the conversation")
     SUMMARIZE = ("summarize", "Summarize the conversation")
+    SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Send a message to the bot")
 
 
 class EventAction(BaseModel):
