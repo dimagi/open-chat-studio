@@ -9,10 +9,8 @@ from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import end_conversation, log, send_message_to_bot, summarize_conversation
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
-
-STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
 
 ACTION_FUNCTIONS = {
     "end_conversation": end_conversation,
@@ -26,7 +24,7 @@ class EventActionType(models.TextChoices):
     LOG = ("log", "Log the last message")
     END_CONVERSATION = ("end_conversation", "End the conversation")
     SUMMARIZE = ("summarize", "Summarize the conversation")
-    SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Send a message to the bot")
+    SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
 
 
 class EventAction(BaseModel):
@@ -109,6 +107,7 @@ class TimeoutTrigger(BaseModel):
         - The last human message was sent at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
+        from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 
         trigger_time = timezone.now() - timedelta(seconds=self.delay)
 

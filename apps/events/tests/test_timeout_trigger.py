@@ -241,7 +241,7 @@ def test_new_human_message_resets_count(session):
         (SessionStatus.UNKNOWN, False),
     },
 )
-def test_not_triggered_complete_chats(status, matches, session):
+def test_not_triggered_for_complete_chats(status, matches, session):
     session.status = status
     session.save()
     timeout_trigger = TimeoutTrigger.objects.create(
