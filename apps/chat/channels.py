@@ -259,7 +259,7 @@ class ChannelBase:
         # This is technically the start of the conversation
         if self.experiment.seed_message:
             bot_response = self._generate_response_for_user(self.experiment.seed_message)
-            self.send_text_to_user(bot_response)
+            self.new_bot_message(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -269,18 +269,17 @@ class ChannelBase:
     def _ask_user_for_consent(self):
         consent_text = self.experiment.consent_form.consent_text
         confirmation_text = self.experiment.consent_form.confirmation_text
-        self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+        bot_message = f"{consent_text}\n\n{confirmation_text}"
+        self._add_message_to_history(bot_message, ChatMessageType.AI)
+        self.new_bot_message(bot_message)
 
     def _ask_user_to_take_survey(self):
         # TODO: Survey needs a participant. For external channels we can use the chat_id as the identifier I think
         pre_survey_link = self.experiment_session.get_pre_survey_link()
         confirmation_text = self.experiment.pre_survey.confirmation_text
-        self._send_message_as_bot(confirmation_text.format(survey_link=pre_survey_link))
-
-    def _send_message_as_bot(self, message: str):
-        """Send a message to the user as the bot and adds it to the chat history"""
-        self._add_message_to_history(message, ChatMessageType.AI)
-        self.send_text_to_user(message)
+        bot_message = confirmation_text.format(survey_link=pre_survey_link)
+        self._add_message_to_history(bot_message, ChatMessageType.AI)
+        self.new_bot_message(bot_message)
 
     def _should_handle_pre_conversation_requirements(self):
         """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
