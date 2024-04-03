@@ -1,0 +1,48 @@
+{% load seconds_to_human %}
+<div class="app-card">
+    <div class="overflow-x-auto">
+        If <strong>
+            {% if trigger.trigger_type == "TimeoutTrigger" %}
+                no response for {{ trigger.delay|seconds_to_human }}
+            {% else %}
+                {{ trigger.get_type_display|lower }}
+            {% endif %}
+        </strong>
+        then <strong>{{ trigger.action.get_action_type_display|lower }}</strong>.
+    </div>
+</div>
+<div class="app-card">
+    <div class="overflow-x-auto">
+        <table class="pg-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Chat Message</th>
+                    <th>Output</th>
+                    {% if include_session %}
+                        <th>Session</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for event_log in event_logs %}
+                    <tr>
+                        <td>{{ event_log.created_at }}</td>
+                        <td>{{ event_log.status|title }}</td>
+                        <td>{{ event_log.chat_message.content }}</td>
+                        <td>{{ event_log.log }}</td>
+                        {% if include_session %}
+                            <td>
+                                <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug trigger.experiment.public_id event_log.session.public_id %}" class="link">
+                                    Session Details
+                                </a>
+                            </td>
+                        {% endif %}
+                    </tr>
+
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

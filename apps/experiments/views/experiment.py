@@ -966,6 +966,13 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 (gettext("Platform"), session.get_platform_name),
             ],
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
+            "event_triggers": [
+                {
+                    "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
+                    "trigger": trigger,
+                }
+                for trigger in experiment.event_triggers
+            ],
         },
     )
 

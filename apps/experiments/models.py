@@ -362,6 +362,10 @@ class Experiment(BaseTeamModel):
     def __str__(self):
         return self.name
 
+    @property
+    def event_triggers(self):
+        return [*self.timeout_triggers.all(), *self.static_triggers.all()]
+
     def get_chat_model(self):
         service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)

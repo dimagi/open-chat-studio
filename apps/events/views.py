@@ -6,7 +6,6 @@ from django.urls import reverse
 from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.teams.decorators import login_and_team_required
-from apps.utils.time import seconds_to_human
 
 
 @login_and_team_required
@@ -107,32 +106,22 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def static_logs_view(request, team_slug, experiment_id, trigger_id):
-    return _logs_view("static", request, team_slug, experiment_id, trigger_id)
+    trigger = get_object_or_404(StaticTrigger, id=trigger_id, experiment_id=experiment_id)
+    context = _get_event_logs_context(trigger)
+    return render(request, "events/view_logs.html", context)
 
 
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def timeout_logs_view(request, team_slug, experiment_id, trigger_id):
-    return _logs_view("timeout", request, team_slug, experiment_id, trigger_id)
+    trigger = get_object_or_404(TimeoutTrigger, id=trigger_id, experiment_id=experiment_id)
+    context = _get_event_logs_context(trigger)
+    return render(request, "events/view_logs.html", context)
 
 
-def _logs_view(trigger_type, request, team_slug, experiment_id, trigger_id):
-    model_class = {
-        "static": StaticTrigger,
-        "timeout": TimeoutTrigger,
-    }[trigger_type]
-
-    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
-    if trigger_type == "timeout":
-        trigger_text = f"No response for {seconds_to_human(trigger.delay)}"
-    else:
-        trigger_text = trigger.get_type_display()
-
-    context = {
-        "trigger_text": trigger_text,
-        "action_type": trigger.action.get_action_type_display(),
+def _get_event_logs_context(trigger):
+    return {
         "event_logs": trigger.event_logs.order_by("-created_at").all(),
         "title": "Event logs",
         "trigger": trigger,
     }
-    return render(request, "events/view_logs.html", context)

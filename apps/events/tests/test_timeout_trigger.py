@@ -113,11 +113,11 @@ def test_trigger_count_reached(session):
         total_num_triggers=2,
         delay=10 * 60,
     )
-    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.SUCCESS)
+    timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.SUCCESS)
     assert len(timeout_trigger.timed_out_sessions()) == 1
-    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.FAILURE)
+    timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.FAILURE)
     assert len(timeout_trigger.timed_out_sessions()) == 1
-    timeout_trigger.add_event_log(session, message, EventLogStatusChoices.SUCCESS)
+    timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.SUCCESS)
     assert len(timeout_trigger.timed_out_sessions()) == 0
 
     # A new message 14 minutes ago will trigger a timeout again
