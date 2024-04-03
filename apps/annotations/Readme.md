@@ -31,3 +31,20 @@ in your template, add
 ```
 {% include "experiments/components/user_comments.html" with object=<your-object> %}
 ```
+
+If you want to show the number of comments that your object has and have it update as you add or remove comments, you can following this example's code:
+
+```html
+<h1>
+    Comment count: <span id="{{ object.comment_count_element_id }}">{{ object.get_user_comments|length }}</span>
+</h1>
+```
+
+The initial count comes from `object.get_user_comments|length`. Whenever a comment is added or removed, a new template is being rendered for that comment section. Part of that template is this:
+
+```html
+{% if update_count|default:False %}
+    <span id="{{ object.comment_count_element_id }}" hx-swap-oob="true">{{ object.get_user_comments|length }}</span>
+{% endif %}
+```
+`update_count` will be true, which means that the element with `id="{{ object.comment_count_element_id }}"` will be replaced by the new count.

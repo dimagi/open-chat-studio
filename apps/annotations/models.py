@@ -118,3 +118,8 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
 
     def get_user_comments(self) -> UserComment:
         return self.comments.prefetch_related("user").all()
+
+    @property
+    def comment_count_element_id(self) -> str:
+        """Returns the id of the element that contains the number of user comments on this object"""
+        return f"{self._meta.model_name}-{self.id}-comment-count"

@@ -1,17 +1,19 @@
+{% if update_count|default:False %}
+    <span id="{{ object.comment_count_element_id }}" hx-swap-oob="true">{{ object.get_user_comments|length }}</span>
+{% endif %}
 <div id="comments-{{ object.id }}">
-    <div class="flex flex-col divide-y divide-gray-100">
+    <div class="flex flex-col divide-y divide-gray-100 text-sm">
         <table class="pg-table min-w-full divide-y divide-gray-300" >
             <tbody>
                 {% for user_comment in object.get_user_comments %}
                     <tr>
-                        <td class="w-1/4">
-                            {{ user_comment.created_at }}
-                        </td>
-                        <td class="w-1/6">
-                            {{ user_comment.user.username }}
-                        </td>
                         <td>
-                            {{ user_comment.comment }}
+                            <div class="text-gray-500">
+                                <span class="font-bold">{{ user_comment.user.username }}</span> <span class="font-light">{{ user_comment.created_at.date }}</span>
+                            </div>
+                            <div class="text-gray-300 whitespace-pre-line">
+                                {{ user_comment.comment }}
+                            </div>
                         </td>
                         <td class="w-1/6">
                             {% if request.user == user_comment.user %}
@@ -39,37 +41,34 @@
             </tbody>
         </table>
 
-        <div class="grid grid-flow-col grid-cols-6 py-2">
-            <div class="col-span-1 flex items-center justify-center">{{ request.user.username }}</div>
-            <div class="col-span-5">
-                <form
-                    class="w-full p-2"
-                    hx-post="{% url 'annotations:add_comment' request.team.slug %}"
-                    hx-swap="outerHTML"
-                    hx-indicator="#add-comment-submit"
-                    hx-target="#comments-{{ object.id }}">
-                    {% csrf_token %}
-                    <div class="flex items-center w-10 h-1/4" x-data="{commentInput: ''}">
-                        <input
-                            class="input input-bordered w-full placeholder-text-sm"
-                            name="comment"
-                            type="text"
-                            placeholder="Add new comment..."
-                            aria-label="comment"
-                            x-model="commentInput"
-                        >
-                        <input type="hidden" name="object_info" value="{{ object.object_info }}">
-                        <button
-                            type="submit"
-                            id="add-comment-submit"
-                            class="ml-2 btn btn-sm"
-                            x-bind:disabled="commentInput.length === 0"
-                        >
-                            Add comment
-                        </button>
-                    </div>
-                </form>
-            </div>
+        <div class="py-2">
+            <form
+                class="w-full p-2"
+                hx-post="{% url 'annotations:add_comment' request.team.slug %}"
+                hx-swap="outerHTML"
+                hx-indicator="#add-comment-submit"
+                hx-target="#comments-{{ object.id }}">
+                {% csrf_token %}
+                <div class="flex items-center w-full h-1/4" x-data="{commentInput: ''}">
+                    <textarea
+                        class="w-full textarea textarea-bordered rounded-md"
+                        name="comment"
+                        type="text"
+                        placeholder="Add new comment..."
+                        aria-label="comment"
+                        x-model="commentInput"></textarea>
+
+                    <input type="hidden" name="object_info" value="{{ object.object_info }}">
+                    <button
+                        type="submit"
+                        id="add-comment-submit"
+                        class="ml-2 btn btn-sm"
+                        x-bind:disabled="commentInput.length === 0"
+                    >
+                        Add comment
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

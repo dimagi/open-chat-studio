@@ -27,7 +27,11 @@ class LinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         except FieldDoesNotExist:
             messages.error(request, f"Unable to add comment to {content_type.model}")
             return HttpResponse("Unprocessable Entity", status=422)
-        return render(request, "experiments/components/user_comments.html", context={"object": target_object})
+        return render(
+            request,
+            "experiments/components/user_comments.html",
+            context={"object": target_object, "update_count": True},
+        )
 
 
 class UnlinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -39,4 +43,8 @@ class UnlinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         target_object = content_type.get_object_for_this_type(id=object_id)
         UserComment.objects.get(id=request.POST["comment_id"], team__slug=team_slug).delete()
-        return render(request, "experiments/components/user_comments.html", context={"object": target_object})
+        return render(
+            request,
+            "experiments/components/user_comments.html",
+            context={"object": target_object, "update_count": True},
+        )
