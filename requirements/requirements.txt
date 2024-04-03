@@ -29,9 +29,7 @@ anyio==3.7.1
 asgiref==3.7.2
     # via django
 async-timeout==4.0.3
-    # via
-    #   aiohttp
-    #   redis
+    # via aiohttp
 attrs==23.1.0
     # via
     #   aiohttp
@@ -319,7 +317,7 @@ pyyaml==6.0.1
     #   langchain-core
 qrcode==7.4.2
     # via django-allauth-2fa
-redis==5.0.1
+redis==5.0.3
     # via
     #   celery
     #   django-redis
