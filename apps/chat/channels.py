@@ -594,13 +594,6 @@ class FacebookMessengerChannel(ChannelBase):
     def message_text(self):
         return self.message.message_text
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(
-            bot_message, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
-        )
-
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
