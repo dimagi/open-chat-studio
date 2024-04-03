@@ -85,6 +85,7 @@ PROJECT_APPS = [
     "apps.generics",
     "apps.assistants",
     "apps.files",
+    "apps.events",
     "apps.annotations",
     "apps.pipelines",
     "apps.vectordb",

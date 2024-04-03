@@ -6,6 +6,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -490,6 +491,29 @@ class ExperimentSession(BaseTeamModel):
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
 
-    def update_status(self, new_status: SessionStatus):
+    def update_status(self, new_status: SessionStatus, commit: bool = True):
         self.status = new_status
-        self.save()
+        if commit:
+            self.save()
+
+    def end(self, commit: bool = True, propagate: bool = True):
+        """
+        Ends this experiment session
+
+        Args:
+            commit: Whether to save the model after setting the ended_at value
+            propagate: Whether to enqueue any static event triggers defined for this experiment_session
+        Raises:
+            ValueError: If propagate is True but commit is not.
+        """
+
+        if propagate and not commit:
+            raise ValueError("Commit must be True when propagate is True")
+        self.ended_at = timezone.now()
+        if commit:
+            self.save()
+        if commit and propagate:
+            from apps.events.models import StaticTriggerType
+            from apps.events.tasks import enqueue_static_triggers
+
+            enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)

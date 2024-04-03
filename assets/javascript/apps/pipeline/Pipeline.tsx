@@ -3,7 +3,7 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  FitViewOptions,
+  FitViewOptions, MarkerType,
   NodeDragHandler,
   NodeTypes, OnMove
 } from 'reactflow';
@@ -43,7 +43,7 @@ export default function Pipeline() {
       resetFlow({
         nodes: currentPipeline?.data?.nodes ?? [],
         edges: currentPipeline?.data?.edges ?? [],
-        viewport: currentPipeline?.data?.viewport ?? { zoom: 1, x: 0, y: 0 },
+        viewport: currentPipeline?.data?.viewport ?? {zoom: 1, x: 0, y: 0},
       });
     }
   }, [currentPipelineId, reactFlowInstance]);
@@ -61,7 +61,7 @@ export default function Pipeline() {
     (event: React.DragEvent) => {
       event.preventDefault();
       if (event.dataTransfer.types.some((types) => types === "nodedata")) {
-         const data: { type: string } = JSON.parse(
+        const data: { type: string } = JSON.parse(
           event.dataTransfer.getData("nodedata")
         );
         const newId = getNodeId(data.type);
@@ -69,13 +69,13 @@ export default function Pipeline() {
         const newNode = {
           id: newId,
           type: "pipelineNode",
-          position: { x: 0, y: 0 },
+          position: {x: 0, y: 0},
           data: {
             ...data,
             id: newId,
           },
         };
-        addNode(newNode,{ x: event.clientX, y: event.clientY });
+        addNode(newNode, {x: event.clientX, y: event.clientY});
       }
     },
     [getNodeId, setNodes, addNode]
@@ -90,6 +90,11 @@ export default function Pipeline() {
   }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
 
 
+  const defaultEdgeOptions = {
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+    },
+  };
   return (
     <div style={{height: '80vh'}}>
       <ReactFlow
@@ -108,6 +113,7 @@ export default function Pipeline() {
         minZoom={0.01}
         maxZoom={8}
         deleteKeyCode={[]}
+        defaultEdgeOptions={defaultEdgeOptions}
       >
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         {/*<MiniMap position="bottom-right"/>*/}

@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from apps.generics.urls import make_crud_urls
 
@@ -71,6 +71,8 @@ urlpatterns = [
         views.poll_messages,
         name="poll_messages",
     ),
+    # events
+    path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
     path("e/<slug:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
     path("e/<slug:experiment_id>/invitations/send/<slug:session_id>/", views.send_invitation, name="send_invitation"),

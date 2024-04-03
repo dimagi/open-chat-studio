@@ -7,10 +7,8 @@ export default function Page() {
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
         <div className="h-full w-full">
-          <div className="h-full w-full">
-            <div id="react-flow-id" className="h-full w-full">
-              <Pipeline/>
-            </div>
+          <div id="react-flow-id" className="h-full w-full">
+            <Pipeline/>
           </div>
         </div>
       </div>
