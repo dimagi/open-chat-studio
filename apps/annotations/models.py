@@ -3,6 +3,7 @@ from functools import cached_property
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
 from field_audit import audit_fields
@@ -28,6 +29,9 @@ class Tag(TagBase, BaseTeamModel):
         verbose_name_plural = _("Tags")
         unique_together = ("team", "name")
         ordering = ["name"]
+
+    def get_absolute_url(self):
+        return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
 
 
 @audit_fields(
