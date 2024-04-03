@@ -6,18 +6,18 @@ from typing import ClassVar
 
 import requests
 from django.conf import settings
-from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
 
 from apps.channels import audio
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 
 USER_CONSENT_TEXT = "1"
@@ -192,6 +192,12 @@ class ChannelBase:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
+        try:
+            return self._new_user_message(message)
+        except GenerationCancelled:
+            return ""
+
+    def _new_user_message(self, message) -> str:
         self._add_message(message)
 
         if not self.is_message_type_supported():
@@ -525,7 +531,9 @@ class WhatsappChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
+        self.messaging_service.send_text_message(
+            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -551,7 +559,9 @@ class WhatsappChannel(ChannelBase):
         """Handles a message coming from the bot. Call this to send bot messages to the user"""
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.experiment_session.external_chat_id
-        self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
+        self.messaging_service.send_text_message(
+            bot_message, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
@@ -565,21 +575,29 @@ class WhatsappChannel(ChannelBase):
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_voice_message(
-            synthetic_voice, from_number=from_number, to_number=to_number
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
 
-class FacebookMessengerChannel(ChannelBase, BaseMessenger):
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-
+class FacebookMessengerChannel(ChannelBase):
     def initialize(self):
-        page_access_token = self.experiment_channel.extra_data["page_access_token"]
-        self.client = MessengerClient(page_access_token, api_version=18.0)
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
+    def send_text_to_user(self, text: str):
+        from_ = self.experiment_channel.extra_data.get("page_id")
+        self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
 
     def get_chat_id_from_message(self, message):
-        return message.user_id
+        return message.chat_id
+
+    @property
+    def voice_replies_supported(self) -> bool:
+        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+
+    @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
 
     @property
     def message_content_type(self):
@@ -589,19 +607,24 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     def message_text(self):
         return self.message.message_text
 
-    def send_text_to_user(self, text: str):
-        typing_off = sender_actions.SenderAction(sender_action="typing_off")
-        self.client.send_action(typing_off.to_dict(), recipient_id=self.chat_id)
-        self.client.send({"text": text}, recipient_id=self.chat_id, messaging_type="RESPONSE")
-
-    def submit_input_to_llm(self):
-        typing_on = sender_actions.SenderAction(sender_action="typing_on")
-        self.client.send_action(typing_on.to_dict(), recipient_id=self.chat_id)
+    def new_bot_message(self, bot_message: str):
+        """Handles a message coming from the bot. Call this to send bot messages to the user"""
+        from_ = self.experiment_channel.extra_data.get("page_id")
+        self.messaging_service.send_text_message(
+            bot_message, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+        )
 
     def get_message_audio(self) -> BytesIO:
-        raw_data = requests.get(self.message.media_url).content
-        mp4_audio = BytesIO(raw_data)
-        return audio.convert_audio(mp4_audio, target_format="wav", source_format="mp4")
+        return self.messaging_service.get_message_audio(message=self.message)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
+
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+        """
+        Uploads the synthesized voice to AWS and send the public link to twilio
+        """
+        from_ = self.experiment_channel.extra_data["page_id"]
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+        )

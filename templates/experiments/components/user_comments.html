@@ -16,7 +16,7 @@
                             {% if request.user == user_comment.user %}
                                 <form
                                     class="p-2"
-                                    hx-post="{% url 'annotations:unlink_comment' request.team.slug %}"
+                                    hx-post="{% url 'annotations:remove_comment' request.team.slug %}"
                                     hx-swap="outerHTML"
                                     hx-indicator="#unlink-comment-submit"
                                     hx-target="#comments-{{ object.id }}">
@@ -41,7 +41,7 @@
         <div class="py-2">
             <form
                 class="w-full p-2"
-                hx-post="{% url 'annotations:link_comment' request.team.slug %}"
+                hx-post="{% url 'annotations:add_comment' request.team.slug %}"
                 hx-swap="outerHTML"
                 hx-indicator="#add-comment-submit"
                 hx-target="#comments-{{ object.id }}">

@@ -5,22 +5,16 @@ from apps.annotations.models import Tag, UserComment
 from apps.experiments.models import Experiment
 
 
-def _parse_tags(tags: list[Tag]) -> str:
+def _format_tags(tags: list[Tag]) -> str:
     """Returns `tags` parsed into a single string in the format 'tag1, tag2, tag3'"""
     return ", ".join([t.name for t in tags])
 
 
-def _parse_comments(user_comments: list[UserComment]) -> str:
-    """Parses `user_comments` into a single string that looks like this:
+def _format_comments(user_comments: list[UserComment]) -> str:
+    """Combine `user_comments` into a single string that looks like this:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
-    comment_str = ""
-    for idx, comment in enumerate(user_comments):
-        if idx > 0:
-            comment_str = f'{comment_str} | <{comment.user.username}>: "{comment.comment}"'
-        else:
-            comment_str = f'<{comment.user.username}>: "{comment.comment}"'
-    return comment_str
+    return " | ".join([str(comment) for comment in user_comments])
 
 
 def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[str] = []):
@@ -32,6 +26,7 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
         "chat__tags",
         "chat__messages__tags",
         "chat__messages__comments",
+        "chat__messages__comments__user",
     )
     if filter_tags:
         queryset = queryset.filter(chat__tags__name__in=filter_tags)
@@ -46,16 +41,16 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
                 session.get_platform_name(),
                 message.chat.id,
                 str(message.chat.user),
-                _parse_tags(message.chat.tags.all()),
-                _parse_comments(message.chat.comments.all()),
+                _format_tags(message.chat.tags.all()),
+                _format_comments(message.chat.comments.all()),
                 session.public_id,
                 session.llm,
                 experiment.public_id,
                 experiment.name,
                 session.participant.identifier if session.participant else None,
                 session.participant.public_id if session.participant else None,
-                _parse_tags(message.tags.all()),
-                _parse_comments(message.comments.all()),
+                _format_tags(message.tags.all()),
+                _format_comments(message.comments.all()),
             ]
 
 
