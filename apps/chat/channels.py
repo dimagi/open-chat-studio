@@ -103,6 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
+        if self.experiment_session and self.experiment_session.external_chat_id:
+            return self.experiment_session.external_chat_id
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -137,11 +139,6 @@ class ChannelBase:
         pass
 
     @abstractmethod
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        raise NotImplementedError()
-
-    @abstractmethod
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
@@ -156,6 +153,10 @@ class ChannelBase:
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
+    def new_bot_message(self, bot_message: str):
+        """Handles a message coming from the bot. Call this to send bot messages to the user"""
+        self._send_message_to_user(bot_message)
+
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
         """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
@@ -167,6 +168,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = WebChannel
         elif platform == "whatsapp":
             PlatformMessageHandlerClass = WhatsappChannel
+        elif platform == "facebook":
+            PlatformMessageHandlerClass = FacebookMessengerChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
@@ -393,6 +396,7 @@ class ChannelBase:
             # so we don't create channel_sessions for them.
             return
 
+        # We override `self.experiment_session`, since we must always use the latest (or "active") session
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
@@ -505,10 +509,6 @@ class TelegramChannel(ChannelBase):
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        self.telegram_bot.send_message(chat_id=self.experiment_session.external_chat_id, text=bot_message)
-
     # Callbacks
 
     def submit_input_to_llm(self):
@@ -555,14 +555,6 @@ class WhatsappChannel(ChannelBase):
     def message_text(self):
         return self.message.message_text
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.experiment_session.external_chat_id
-        self.messaging_service.send_text_message(
-            bot_message, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
-        )
-
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
@@ -606,13 +598,6 @@ class FacebookMessengerChannel(ChannelBase):
     @property
     def message_text(self):
         return self.message.message_text
-
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(
-            bot_message, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
-        )
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)

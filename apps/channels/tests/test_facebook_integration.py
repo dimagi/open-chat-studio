@@ -3,15 +3,14 @@ from io import BytesIO
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 from .message_examples import twilio_messages
 
@@ -23,13 +22,6 @@ def _twilio_whatsapp_channel(twilio_provider):
         messaging_provider=twilio_provider,
         experiment__team=twilio_provider.team,
         extra_data={"page_id": "14155238886"},
-    )
-
-
-@pytest.fixture()
-def twilio_provider(db):
-    return MessagingProviderFactory(
-        name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
@@ -60,7 +52,7 @@ class TestTwilio:
             (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
-    @patch("apps.service_providers.messaging_service.settings.AWS_ACCESS_KEY_ID", "123")
+    @override_settings(AWS_ACCESS_KEY_ID="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
