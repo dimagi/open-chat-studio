@@ -373,6 +373,18 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
 
 
 @pytest.mark.django_db()
+def test_missing_channel_raises_error(twilio_provider):
+    experiment = ExperimentFactory()
+    experiment_channel = ExperimentChannelFactory(
+        messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
+    )
+    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
+    session.experiment_channel.platform = "snail_mail"
+    with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
+        ChannelBase.from_experiment_session(session)
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("message_type", "response_behaviour"),
     [("text", VoiceResponseBehaviours.NEVER), ("voice", VoiceResponseBehaviours.ALWAYS)],
