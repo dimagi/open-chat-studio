@@ -1,4 +1,7 @@
-<div id="comments-{{ object.id }}" x-init="$dispatch('{{ object.event_name }}', {{ object.get_user_comments|length }})">
+{% if update_count|default:False %}
+    <span id="{{ object.comment_count_element_id }}" hx-swap-oob="true">{{ object.get_user_comments|length }}</span>
+{% endif %}
+<div id="comments-{{ object.id }}">
     <div class="flex flex-col divide-y divide-gray-100 text-sm">
         <table class="pg-table min-w-full divide-y divide-gray-300" >
             <tbody>

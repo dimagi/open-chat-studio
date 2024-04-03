@@ -116,6 +116,6 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
         return self.comments.prefetch_related("user").all()
 
     @property
-    def event_name(self) -> str:
-        """Returns the name of the browser event that contains the number of user comments on this object"""
+    def comment_count_element_id(self) -> str:
+        """Returns the id of the element that contains the number of user comments on this object"""
         return f"{self._meta.model_name}-{self.id}-comment-count"
