@@ -146,8 +146,8 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
 def _try_send_message(experiment_session: ExperimentSession, message: str):
     """Tries to send a message to the experiment session"""
     try:
-        handler = ChannelBase.from_experiment_session(experiment_session)
-        handler.new_bot_message(message)
+        channel = ChannelBase.from_experiment_session(experiment_session)
+        channel.new_bot_message(message)
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
 
