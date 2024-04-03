@@ -103,6 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
+        if self.experiment_session and self.experiment_session.external_chat_id:
+            return self.experiment_session.external_chat_id
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -394,6 +396,7 @@ class ChannelBase:
             # so we don't create channel_sessions for them.
             return
 
+        # We override `self.experiment_session`, since we must always use the latest (or "active") session
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
