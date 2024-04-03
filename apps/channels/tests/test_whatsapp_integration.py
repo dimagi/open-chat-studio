@@ -4,6 +4,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
@@ -57,7 +58,7 @@ class TestTwilio:
         ("incoming_message", "message_type"),
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
-    @patch("apps.service_providers.messaging_service.settings.AWS_ACCESS_KEY_ID", "123")
+    @override_settings(AWS_ACCESS_KEY_ID="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
