@@ -370,3 +370,30 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     session = ExperimentSessionFactory(experiment_channel=experiment_channel)
     channel = ChannelBase.from_experiment_session(session)
     assert type(channel) in ChannelBase.__subclasses__()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_type", "response_behaviour"),
+    [("text", VoiceResponseBehaviours.NEVER), ("voice", VoiceResponseBehaviours.ALWAYS)],
+)
+@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+def test_new_bot_message(send_text_to_user, _reply_voice_messagem, message_type, response_behaviour, telegram_channel):
+    """A simple test to make sure that when we call `channel_instance.new_bot_message`, the correct message format
+    will be used
+    """
+
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = response_behaviour
+    experiment.save()
+    bot_message = "Hi user"
+
+    telegram_channel.new_bot_message(bot_message)
+
+    if message_type == "text":
+        send_text_to_user.assert_called()
+        assert send_text_to_user.call_args[0][0] == bot_message
+    else:
+        _reply_voice_messagem.assert_called()
+        assert _reply_voice_messagem.call_args[0][0] == bot_message
