@@ -138,11 +138,6 @@ class ChannelBase:
         pass
 
     @abstractmethod
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        raise NotImplementedError()
-
-    @abstractmethod
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
@@ -156,6 +151,10 @@ class ChannelBase:
     def submit_input_to_llm(self):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
+
+    def new_bot_message(self, bot_message: str):
+        """Handles a message coming from the bot. Call this to send bot messages to the user"""
+        self._send_message_to_user(bot_message)
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
@@ -506,10 +505,6 @@ class TelegramChannel(ChannelBase):
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        self.telegram_bot.send_message(chat_id=self.experiment_session.external_chat_id, text=bot_message)
-
     # Callbacks
 
     def submit_input_to_llm(self):
@@ -553,12 +548,6 @@ class WhatsappChannel(ChannelBase):
     @property
     def message_text(self):
         return self.message.message_text
-
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.experiment_session.external_chat_id
-        self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
