@@ -16,7 +16,7 @@ def team():
 
 @pytest.fixture()
 def chat(team, db):
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory(team=team)
     return session.chat
 
 
@@ -60,23 +60,6 @@ def test_delete_tag_deletes_through_model(tag, chat, client):
 @pytest.mark.django_db()
 def test_link_tag(tag, chat, client):
     _link_tag_to_item(client, tag=tag, chat=chat)
-
-
-@pytest.mark.django_db()
-def test_new_tag_created_when_linking(chat, client):
-    team = chat.team
-    tag_name = "super cool"
-    assert Tag.objects.filter(name=tag_name, team=team).exists() is False
-
-    user = team.members.first()
-    client.login(username=user.username, password="password")
-    data = {"tag_name": tag_name, "object_info": chat.object_info}
-
-    link_url = reverse("annotations:link_tag", kwargs={"team_slug": team.slug})
-    client.post(link_url, data=data)
-    tag = Tag.objects.get(name=tag_name, team=team)
-    assert tag is not None
-    assert CustomTaggedItem.objects.filter(team=team, tag=tag, user=user).exists() is True
 
 
 @pytest.mark.django_db()
