@@ -12,7 +12,7 @@ from telebot.util import smart_split
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
-from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
+from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -350,12 +350,15 @@ class ChannelBase:
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         llm_service = self.experiment.get_llm_service()
-        if llm_service.supports_transcription:
-            return llm_service.transcribe_audio(audio)
-        elif self.experiment.voice_provider:
-            speech_service = self.experiment.voice_provider.get_speech_service()
-            if speech_service.supports_transcription:
-                return speech_service.transcribe_audio(audio)
+        try:
+            if llm_service.supports_transcription:
+                return llm_service.transcribe_audio(audio)
+            elif self.experiment.voice_provider:
+                speech_service = self.experiment.voice_provider.get_speech_service()
+                if speech_service.supports_transcription:
+                    return speech_service.transcribe_audio(audio)
+        except Exception as e:
+            raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
 
     def _get_llm_response(self, text: str) -> str:
         """

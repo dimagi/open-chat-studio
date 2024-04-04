@@ -11,7 +11,7 @@ from openai import OpenAI
 from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
-from apps.chat.exceptions import AudioSynthesizeException
+from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
 from apps.experiments.models import SyntheticVoice
 
 
@@ -37,10 +37,7 @@ class SpeechService(pydantic.BaseModel):
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         assert synthetic_voice.service == self._type
-        try:
-            return self._synthesize_voice(text, synthetic_voice)
-        except Exception as e:
-            raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
+        return self._synthesize_voice(text, synthetic_voice)
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
@@ -140,14 +137,14 @@ class AzureSpeechService(SpeechService):
             return result.text
         elif result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
-            raise AudioSynthesizeException(f"No speech could be recognized {reason}")
+            raise AudioTranscriptionException(f"No speech could be recognized {reason}")
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 if cancellation_details.error_details:
                     msg += f". Error details: {cancellation_details.error_details}"
-            raise AudioSynthesizeException(msg)
+            raise AudioTranscriptionException(msg)
 
 
 class OpenAISpeechService(SpeechService):

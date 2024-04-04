@@ -9,6 +9,11 @@ class AudioSynthesizeException(ChatException):
         super().__init__(message)
 
 
+class AudioTranscriptionException(ChatException):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 class MessageHandlerException(ChatException):
     def __init__(self, message):
         super().__init__(message)
