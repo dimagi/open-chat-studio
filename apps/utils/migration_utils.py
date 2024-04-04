@@ -24,13 +24,20 @@ def create_synthetic_voices_from_file(SyntheticVoiceModel, file_path: str):
     with open(file_path) as json_file:
         voice_data = json.load(json_file)
 
-    model_fields = [f.name for f in SyntheticVoiceModel._meta.get_fields()]
-
     voices_created = 0
     service = voice_data["service"]
-    for voice_data in voice_data["voices"]:
-        voice_data = {**voice_data, "service": service}
-        voice_fields = {key: value for key, value in voice_data.items() if key in model_fields}
+    for voice in voice_data["voices"]:
+        fields = {
+            "name": voice["name"],
+            "language": voice["language"],
+            "gender": voice["gender"],
+            "neural": voice["neural"],
+            "language_code": voice["language_code"],
+            "service": service,
+        }
+
+        model_fields = [f.name for f in SyntheticVoiceModel._meta.get_fields()]
+        voice_fields = {key: value for key, value in fields.items() if key in model_fields}
         _, created = SyntheticVoiceModel.objects.update_or_create(**voice_fields)
 
         if created:
