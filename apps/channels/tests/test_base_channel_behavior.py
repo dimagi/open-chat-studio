@@ -7,8 +7,8 @@ from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
-from apps.channels.models import ExperimentChannel
-from apps.chat.channels import TelegramChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.channels import ChannelBase, TelegramChannel
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -167,14 +167,18 @@ def _simulate_user_message(channel_instance, user_message: str):
         channel_instance.new_user_message(user_message)
 
 
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
+def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, generate_response_for_user):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the pre concersation flow. The following needs to happen:
     - The user must give consent
     - The user must indicate that they filled out the survey
     """
+    bot_response_to_seed_message = "Hi user"
+    generate_response_for_user.return_value = bot_response_to_seed_message
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
     pre_survey = experiment.pre_survey
@@ -218,12 +222,15 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, db):
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.ACTIVE
+    generate_response_for_user.assert_called()
+    assert send_text_to_user_mock.call_args[0][0] == bot_response_to_seed_message
 
 
+@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TopicBot")
 @patch("apps.channels.models._set_telegram_webhook")
-def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user, db):
+def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user):
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
@@ -238,11 +245,12 @@ def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, 
     assert channel.message.content_type_unparsed == "photo"
 
 
+@pytest.mark.django_db()
 @patch("apps.chat.channels.ChannelBase._unsupported_message_type_response")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.channels.models._set_telegram_webhook")
 def test_unsupported_message_type_triggers_bot_response(
-    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response, db
+    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response
 ):
     bot_response = "Nope, not suppoerted laddy"
     _unsupported_message_type_response.return_value = bot_response
@@ -354,3 +362,58 @@ def test_user_query_extracted_for_pre_conversation_flow(
                 _get_voice_transcript.assert_called()
             elif message_type == "text":
                 message_text_mock.assert_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("platform", [platform for platform, _ in ChannelPlatform.choices])
+def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provider):
+    """This test checks all channel types and makes sure that we can instantiate each one by calling
+    `ChannelBase.from_experiment_session`. For the sake of ease, we assume all platforms uses the Twilio
+    messenging provider.
+    """
+    experiment = ExperimentFactory()
+    experiment_channel = ExperimentChannelFactory(
+        messaging_provider=twilio_provider, experiment=experiment, platform=platform
+    )
+    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
+    channel = ChannelBase.from_experiment_session(session)
+    assert type(channel) in ChannelBase.__subclasses__()
+
+
+@pytest.mark.django_db()
+def test_missing_channel_raises_error(twilio_provider):
+    experiment = ExperimentFactory()
+    experiment_channel = ExperimentChannelFactory(
+        messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
+    )
+    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
+    session.experiment_channel.platform = "snail_mail"
+    with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
+        ChannelBase.from_experiment_session(session)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_type", "response_behaviour"),
+    [("text", VoiceResponseBehaviours.NEVER), ("voice", VoiceResponseBehaviours.ALWAYS)],
+)
+@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+def test_new_bot_message(send_text_to_user, _reply_voice_messagem, message_type, response_behaviour, telegram_channel):
+    """A simple test to make sure that when we call `channel_instance.new_bot_message`, the correct message format
+    will be used
+    """
+
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = response_behaviour
+    experiment.save()
+    bot_message = "Hi user"
+
+    telegram_channel.new_bot_message(bot_message)
+
+    if message_type == "text":
+        send_text_to_user.assert_called()
+        assert send_text_to_user.call_args[0][0] == bot_message
+    else:
+        _reply_voice_messagem.assert_called()
+        assert _reply_voice_messagem.call_args[0][0] == bot_message

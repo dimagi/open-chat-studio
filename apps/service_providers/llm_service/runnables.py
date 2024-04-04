@@ -324,7 +324,7 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         run = assistant.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
         cancelling = run.status == "cancelling"
         while cancelling:
-            run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+            run = assistant.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             cancelling = run.status == "cancelling"
             if cancelling:
                 sleep(assistant.check_every_ms / 1000)

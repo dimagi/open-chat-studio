@@ -15,9 +15,13 @@
             {% endif %}
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
+        <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
           {% for message in experiment_session.get_messages_for_display %}
-            <tr>
+            <tr
+              class="cursor-pointer"
+              x-bind:class="commentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
+              x-on:click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
+            >
               <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">{{ forloop.counter }}</td>
               <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                 <div>
@@ -37,11 +41,24 @@
                   </div>
                 </td>
               {% endif %}
+              {% if perms.annotations.add_usercomment %}
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <i class="fa-regular fa-comment"></i> <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
+                </td>
+              {% endif %}
             </tr>
+            {% if perms.annotations.add_usercomment %}
+              <tr
+                x-show="commentsRow === {{ forloop.counter }}"
+                x-cloak>
+                <td colspan="100%" class="px-3 py-2">
+                  {% include "experiments/components/user_comments.html" with object=message %}
+                </td>
+              </tr>
+            {% endif %}
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-</div>
 </div>

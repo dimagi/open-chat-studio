@@ -6,18 +6,18 @@ from typing import ClassVar
 
 import requests
 from django.conf import settings
-from fbmessenger import BaseMessenger, MessengerClient, sender_actions
 from telebot import TeleBot
 from telebot.util import smart_split
 
 from apps.channels import audio
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 
 USER_CONSENT_TEXT = "1"
@@ -103,6 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
+        if self.experiment_session and self.experiment_session.external_chat_id:
+            return self.experiment_session.external_chat_id
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -137,11 +139,6 @@ class ChannelBase:
         pass
 
     @abstractmethod
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        raise NotImplementedError()
-
-    @abstractmethod
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
@@ -156,6 +153,10 @@ class ChannelBase:
         """Callback indicating that the user input will now be given to the LLM"""
         pass
 
+    def new_bot_message(self, bot_message: str):
+        """Handles a message coming from the bot. Call this to send bot messages to the user"""
+        self._send_message_to_user(bot_message)
+
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
         """Given an `experiment_session` instance, returns the correct ChannelBase subclass to use"""
@@ -167,6 +168,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = WebChannel
         elif platform == "whatsapp":
             PlatformMessageHandlerClass = WhatsappChannel
+        elif platform == "facebook":
+            PlatformMessageHandlerClass = FacebookMessengerChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
@@ -192,6 +195,12 @@ class ChannelBase:
         """Handles the message coming from the user. Call this to send bot messages to the user.
         The `message` here will probably be some object, depending on the channel being used.
         """
+        try:
+            return self._new_user_message(message)
+        except GenerationCancelled:
+            return ""
+
+    def _new_user_message(self, message) -> str:
         self._add_message(message)
 
         if not self.is_message_type_supported():
@@ -252,7 +261,8 @@ class ChannelBase:
         self.experiment_session.update_status(SessionStatus.ACTIVE)
         # This is technically the start of the conversation
         if self.experiment.seed_message:
-            self._send_message_as_bot(self.experiment.seed_message)
+            bot_response = self._generate_response_for_user(self.experiment.seed_message)
+            self.new_bot_message(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -262,18 +272,17 @@ class ChannelBase:
     def _ask_user_for_consent(self):
         consent_text = self.experiment.consent_form.consent_text
         confirmation_text = self.experiment.consent_form.confirmation_text
-        self._send_message_as_bot(f"{consent_text}\n\n{confirmation_text}")
+        bot_message = f"{consent_text}\n\n{confirmation_text}"
+        self._add_message_to_history(bot_message, ChatMessageType.AI)
+        self.send_text_to_user(bot_message)
 
     def _ask_user_to_take_survey(self):
         # TODO: Survey needs a participant. For external channels we can use the chat_id as the identifier I think
         pre_survey_link = self.experiment_session.get_pre_survey_link()
         confirmation_text = self.experiment.pre_survey.confirmation_text
-        self._send_message_as_bot(confirmation_text.format(survey_link=pre_survey_link))
-
-    def _send_message_as_bot(self, message: str):
-        """Send a message to the user as the bot and adds it to the chat history"""
-        self._add_message_to_history(message, ChatMessageType.AI)
-        self.send_text_to_user(message)
+        bot_message = confirmation_text.format(survey_link=pre_survey_link)
+        self._add_message_to_history(bot_message, ChatMessageType.AI)
+        self.send_text_to_user(bot_message)
 
     def _should_handle_pre_conversation_requirements(self):
         """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
@@ -387,6 +396,7 @@ class ChannelBase:
             # so we don't create channel_sessions for them.
             return
 
+        # We override `self.experiment_session`, since we must always use the latest (or "active") session
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
@@ -442,7 +452,12 @@ class ChannelBase:
             message_type=ChatMessageType.SYSTEM,
             content=f"The user sent an unsupported message type: {self.message.content_type_unparsed}",
         )
-        prompt = UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
+        return self._generate_response_for_user(
+            UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
+        )
+
+    def _generate_response_for_user(self, prompt: str) -> str:
+        """Generates a response based on the `prompt`."""
         topic_bot = TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
@@ -499,10 +514,6 @@ class TelegramChannel(ChannelBase):
         ogg_audio = BytesIO(requests.get(file_url).content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        self.telegram_bot.send_message(chat_id=self.experiment_session.external_chat_id, text=bot_message)
-
     # Callbacks
 
     def submit_input_to_llm(self):
@@ -525,7 +536,9 @@ class WhatsappChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_text_message(text, from_number=from_number, to_number=to_number)
+        self.messaging_service.send_text_message(
+            text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+        )
 
     def get_chat_id_from_message(self, message):
         return message.chat_id
@@ -547,12 +560,6 @@ class WhatsappChannel(ChannelBase):
     def message_text(self):
         return self.message.message_text
 
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.experiment_session.external_chat_id
-        self.messaging_service.send_whatsapp_text_message(bot_message, from_number=from_number, to_number=to_number)
-
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
@@ -565,21 +572,29 @@ class WhatsappChannel(ChannelBase):
         """
         from_number = self.experiment_channel.extra_data["number"]
         to_number = self.chat_id
-        self.messaging_service.send_whatsapp_voice_message(
-            synthetic_voice, from_number=from_number, to_number=to_number
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
 
-class FacebookMessengerChannel(ChannelBase, BaseMessenger):
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-
+class FacebookMessengerChannel(ChannelBase):
     def initialize(self):
-        page_access_token = self.experiment_channel.extra_data["page_access_token"]
-        self.client = MessengerClient(page_access_token, api_version=18.0)
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
+    def send_text_to_user(self, text: str):
+        from_ = self.experiment_channel.extra_data.get("page_id")
+        self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
 
     def get_chat_id_from_message(self, message):
-        return message.user_id
+        return message.chat_id
+
+    @property
+    def voice_replies_supported(self) -> bool:
+        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+
+    @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
 
     @property
     def message_content_type(self):
@@ -589,19 +604,17 @@ class FacebookMessengerChannel(ChannelBase, BaseMessenger):
     def message_text(self):
         return self.message.message_text
 
-    def send_text_to_user(self, text: str):
-        typing_off = sender_actions.SenderAction(sender_action="typing_off")
-        self.client.send_action(typing_off.to_dict(), recipient_id=self.chat_id)
-        self.client.send({"text": text}, recipient_id=self.chat_id, messaging_type="RESPONSE")
-
-    def submit_input_to_llm(self):
-        typing_on = sender_actions.SenderAction(sender_action="typing_on")
-        self.client.send_action(typing_on.to_dict(), recipient_id=self.chat_id)
-
     def get_message_audio(self) -> BytesIO:
-        raw_data = requests.get(self.message.media_url).content
-        mp4_audio = BytesIO(raw_data)
-        return audio.convert_audio(mp4_audio, target_format="wav", source_format="mp4")
+        return self.messaging_service.get_message_audio(message=self.message)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
+
+    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
+        """
+        Uploads the synthesized voice to AWS and send the public link to twilio
+        """
+        from_ = self.experiment_channel.extra_data["page_id"]
+        self.messaging_service.send_voice_message(
+            synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+        )

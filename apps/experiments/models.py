@@ -72,6 +72,9 @@ class SourceMaterial(BaseTeamModel):
     def __str__(self):
         return self.topic
 
+    def get_absolute_url(self):
+        return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
+
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
@@ -97,6 +100,9 @@ class SafetyLayer(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
 class Survey(BaseTeamModel):
@@ -128,6 +134,9 @@ class Survey(BaseTeamModel):
             session_id=experiment_session.public_id,
             experiment_id=experiment_session.experiment.public_id,
         )
+
+    def get_absolute_url(self):
+        return reverse("experiments:survey_edit", args=[self.team.slug, self.id])
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
@@ -161,6 +170,9 @@ class ConsentForm(BaseTeamModel):
 
     def get_rendered_content(self):
         return markdown.markdown(self.consent_text)
+
+    def get_absolute_url(self):
+        return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
 
 
 class SyntheticVoice(BaseModel):
@@ -237,6 +249,9 @@ class NoActivityMessageConfig(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse("experiments:no_activity_edit", args=[self.team.slug, self.id])
 
 
 class VoiceResponseBehaviours(models.TextChoices):
@@ -368,6 +383,10 @@ class Experiment(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def event_triggers(self):
+        return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
     def get_chat_model(self):
         service = self.get_llm_service()

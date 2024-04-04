@@ -4,23 +4,17 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 from .message_examples import turnio_messages, twilio_messages
-
-
-@pytest.fixture()
-def turn_io_provider():
-    return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
 
 
 @pytest.fixture()
@@ -30,13 +24,6 @@ def turnio_whatsapp_channel(turn_io_provider):
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
         extra_data={"number": "+14155238886"},
-    )
-
-
-@pytest.fixture()
-def twilio_provider(db):
-    return MessagingProviderFactory(
-        name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
@@ -53,11 +40,12 @@ def _twilio_whatsapp_channel(twilio_provider):
 class TestTwilio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
-        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "voice")],
+        [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
-        assert whatsapp_message.chat_id == whatsapp_message.from_number
+        assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
+        assert whatsapp_message.chat_id == whatsapp_message.from_
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None
@@ -68,16 +56,19 @@ class TestTwilio:
     @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
-        [(twilio_messages.text_message(), "text"), (twilio_messages.audio_message(), "audio")],
+        [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
+    @override_settings(AWS_ACCESS_KEY_ID="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.messaging_service.TwilioService.send_whatsapp_text_message")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_twilio_uses_whatsapp_channel_implementation(
         self,
         get_llm_response_mock,
-        send_whatsapp_text_message,
+        send_text_message,
+        send_voice_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
         incoming_message,
@@ -94,9 +85,9 @@ class TestTwilio:
             handle_twilio_message(message_data=incoming_message)
 
             if message_type == "text":
-                send_whatsapp_text_message.assert_called()
-            # elif message_type == "audio": TODO: Figure out why this is not passing in the github workflows
-            #     s3_client_mock.generate_presigned_url.assert_called()
+                send_text_message.assert_called()
+            elif message_type == "audio":
+                send_voice_message.assert_called()
 
 
 class TestTurnio:
@@ -116,12 +107,12 @@ class TestTurnio:
 
     @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.voice_message()])
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
-    @patch("apps.service_providers.messaging_service.TurnIOService.send_whatsapp_text_message")
+    @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_turnio_whatsapp_channel_implementation(
         self,
         _get_llm_response,
-        send_whatsapp_text_message,
+        send_text_message,
         get_voice_transcript_mock,
         db,
         turnio_whatsapp_channel,
@@ -131,7 +122,7 @@ class TestTurnio:
         _get_llm_response.return_value = "Hi"
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        send_whatsapp_text_message.assert_called()
+        send_text_message.assert_called()
 
     @patch("apps.chat.channels.ChannelBase._handle_supported_message")
     @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")

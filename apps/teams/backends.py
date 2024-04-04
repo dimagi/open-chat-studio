@@ -73,7 +73,7 @@ CONTENT_TYPES = {
     "pipelines": ["pipeline"],
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
-    "annotations": ["tag", "customtaggeditem"],
+    "annotations": ["tag", "customtaggeditem", "usercomment"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

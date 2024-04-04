@@ -1,18 +1,32 @@
 import csv
 import io
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, UserComment
 from apps.experiments.models import Experiment
 
 
-def _parse_tags(tags: list[Tag]) -> str:
+def _format_tags(tags: list[Tag]) -> str:
     """Returns `tags` parsed into a single string in the format 'tag1, tag2, tag3'"""
     return ", ".join([t.name for t in tags])
 
 
+def _format_comments(user_comments: list[UserComment]) -> str:
+    """Combine `user_comments` into a single string that looks like this:
+    <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
+    """
+    return " | ".join([str(comment) for comment in user_comments])
+
+
 def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[str] = []):
     queryset = experiment.sessions.prefetch_related(
-        "chat", "chat__messages", "participant", "experiment_channel", "chat__tags", "chat__messages__tags"
+        "chat",
+        "chat__messages",
+        "participant",
+        "experiment_channel",
+        "chat__tags",
+        "chat__messages__tags",
+        "chat__messages__comments",
+        "chat__messages__comments__user",
     )
     if filter_tags:
         queryset = queryset.filter(chat__tags__name__in=filter_tags)
@@ -27,14 +41,16 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
                 session.get_platform_name(),
                 message.chat.id,
                 str(message.chat.user),
-                _parse_tags(message.chat.tags.all()),
+                _format_tags(message.chat.tags.all()),
+                _format_comments(message.chat.comments.all()),
                 session.public_id,
                 session.llm,
                 experiment.public_id,
                 experiment.name,
                 session.participant.identifier if session.participant else None,
                 session.participant.public_id if session.participant else None,
-                _parse_tags(message.tags.all()),
+                _format_tags(message.tags.all()),
+                _format_comments(message.comments.all()),
             ]
 
 
@@ -51,6 +67,7 @@ def experiment_to_csv(experiment: Experiment, tags: list[str] = []) -> io.String
             "Chat ID",
             "Chat User",
             "Chat Tags",
+            "Chat Comments",
             "Session ID",
             "Session LLM",
             "Experiment ID",
@@ -58,6 +75,7 @@ def experiment_to_csv(experiment: Experiment, tags: list[str] = []) -> io.String
             "Participant email",
             "Participant Public ID",
             "Message Tags",
+            "Message Comments",
         ]
     )
     for row in experiment_to_message_export_rows(experiment, filter_tags=tags):

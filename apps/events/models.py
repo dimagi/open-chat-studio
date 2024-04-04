@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -7,17 +8,23 @@ from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import end_conversation, log, summarize_conversation
+from apps.events.actions import end_conversation, log, send_message_to_bot, summarize_conversation
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.models import BaseModel
 
-ACTION_FUNCTIONS = {"log": log, "end_conversation": end_conversation, "summarize": summarize_conversation}
+ACTION_FUNCTIONS = {
+    "end_conversation": end_conversation,
+    "log": log,
+    "send_message_to_bot": send_message_to_bot,
+    "summarize": summarize_conversation,
+}
 
 
 class EventActionType(models.TextChoices):
     LOG = ("log", "Log the last message")
     END_CONVERSATION = ("end_conversation", "End the conversation")
     SUMMARIZE = ("summarize", "Summarize the conversation")
+    SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
 
 
 class EventAction(BaseModel):
@@ -41,6 +48,7 @@ class EventLog(BaseModel):
         ChatMessage, on_delete=models.CASCADE, related_name="event_logs", null=True, blank=True
     )
     status = models.CharField(choices=EventLogStatusChoices.choices)
+    log = models.TextField(blank=True)
 
     class Meta:
         indexes = [
@@ -64,15 +72,18 @@ class StaticTrigger(BaseModel):
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
     event_logs = GenericRelation(EventLog)
 
+    @property
+    def trigger_type(self):
+        return "StaticTrigger"
+
     def fire(self, session):
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
-            # TODO: handle message here.
-            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS)
+            self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
-        except Exception:
-            # TODO: log exception reason in the event_log
-            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE)
+        except Exception as e:
+            logging.error(e)
+            self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
 
 
 class TimeoutTrigger(BaseModel):
@@ -87,11 +98,16 @@ class TimeoutTrigger(BaseModel):
     )
     event_logs = GenericRelation(EventLog)
 
+    @property
+    def trigger_type(self):
+        return "TimeoutTrigger"
+
     def timed_out_sessions(self):
         """Finds all the timed out sessions where:
         - The last human message was sent at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
+        from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 
         trigger_time = timezone.now() - timedelta(seconds=self.delay)
 
@@ -128,6 +144,7 @@ class TimeoutTrigger(BaseModel):
                 experiment=self.experiment,
                 ended_at=None,
             )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 log_count=Subquery(log_count_for_last_message),
@@ -140,7 +157,7 @@ class TimeoutTrigger(BaseModel):
                 Q(log_count__lt=self.total_num_triggers) | Q(log_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
         )
-        return sessions.all()
+        return sessions.select_related("experiment_channel", "experiment").all()
 
     def fire(self, session):
         last_human_message = ChatMessage.objects.filter(
@@ -149,9 +166,13 @@ class TimeoutTrigger(BaseModel):
         ).last()
         try:
             result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
-            self.add_event_log(session, last_human_message, EventLogStatusChoices.SUCCESS)
-        except Exception:
-            self.add_event_log(session, last_human_message, EventLogStatusChoices.FAILURE)
+            self.event_logs.create(
+                session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
+            )
+        except Exception as e:
+            self.event_logs.create(
+                session=session, chat_message=last_human_message, status=EventLogStatusChoices.FAILURE, log=str(e)
+            )
 
         if not self._has_triggers_left(session, last_human_message):
             from apps.events.tasks import enqueue_static_triggers
@@ -159,9 +180,6 @@ class TimeoutTrigger(BaseModel):
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
         return result
-
-    def add_event_log(self, session, message, status):
-        self.event_logs.create(session=session, chat_message=message, status=status)
 
     def _has_triggers_left(self, session, message):
         return (

@@ -46,14 +46,14 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
 
             bot_message_to_user = message
             if is_bot_instruction:
-                bot_message_to_user = _bot_prompt_for_user(
+                bot_message_to_user = bot_prompt_for_user(
                     experiment_session=experiment_session, prompt_instruction=message
                 )
             else:
                 ChatMessage.objects.create(
                     chat=experiment_session.chat, message_type=ChatMessageType.AI, content=message
                 )
-            _try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
+            try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
         except Exception as exception:
             logger.exception(exception)
 
@@ -86,9 +86,9 @@ def _no_activity_pings():
                 f"'{experiment_session.experiment.name}'"
             )
             return
-        ping_message = _bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
+        ping_message = bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
-            _try_send_message(experiment_session=experiment_session, message=ping_message)
+            try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
             experiment_session.save(update_fields=["no_activity_ping_count"])
@@ -135,7 +135,7 @@ def _get_sessions_to_ping():
     return [chat_msg.chat.experiment_session for chat_msg in matches]
 
 
-def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
+def bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
     """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
     message. The response from the bot will be saved to the chat history.
     """
@@ -143,11 +143,11 @@ def _bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructi
     return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
 
 
-def _try_send_message(experiment_session: ExperimentSession, message: str):
+def try_send_message(experiment_session: ExperimentSession, message: str):
     """Tries to send a message to the experiment session"""
     try:
-        handler = ChannelBase.from_experiment_session(experiment_session)
-        handler.new_bot_message(message)
+        channel = ChannelBase.from_experiment_session(experiment_session)
+        channel.new_bot_message(message)
     except Exception as e:
         logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
 

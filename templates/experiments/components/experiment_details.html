@@ -17,6 +17,24 @@
           </dd>
         </div>
       {% endif %}
+      {% if perms.annotations.add_usercomment %}
+        <div x-data="{showComments: false}">
+          <div class="py-3 grid grid-cols-3 mb-2">
+            <dt class="text-sm font-medium leading-6">
+              Comments (<span id="{{ experiment_session.chat.comment_count_element_id }}">{{ experiment_session.chat.get_user_comments|length }}</span>)
+            </dt>
+            <dd class="col-span-2 mr-2 text-gray-500">
+              <button class="btn btn-sm" @click="showComments = !showComments;">
+                <div x-show="!showComments">View comments</div>
+                <div x-show="showComments" x-cloak>Hide comments</div>
+              </button>
+            </dd>
+          </div>
+          <div class="col-span-3 mr-2" x-cloak x-show="showComments">
+            {% include "experiments/components/user_comments.html" with object=experiment_session.chat %}
+          </div>
+        </div>
+      {% endif %}
     </dl>
   </div>
 </div>
