@@ -4,7 +4,7 @@ from django.db import migrations
 from apps.utils import migration_utils
 
 
-def drop_synthetic_voices(apps, schema_editor):
+def load_synthetic_voices(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")
     current_directory = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(current_directory, "preload_data/aws_voices.json")
@@ -20,5 +20,5 @@ class Migration(migrations.Migration):
         ("experiments", "0031_promptbuilderhistory"),
     ]
 
-    operations = [migrations.RunPython(drop_synthetic_voices, drop_synthetic_voices)]
+    operations = [migrations.RunPython(load_synthetic_voices, drop_synthetic_voices)]
 
