@@ -101,7 +101,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "annotations.add_customtaggeditem"
+    permission_required = ("annotations.add_customtaggeditem", "annotations.add_tag")
 
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
@@ -109,5 +109,8 @@ class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         tag_name = request.POST["tag_name"]
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
+        if not Tag.objects.filter(name=tag_name, team__slug=team_slug).exists():
+            obj.tags.create(team=request.team, name=tag_name, created_by=request.user)
+
         obj.add_tags([tag_name], team=request.team, added_by=request.user)
         return HttpResponse()

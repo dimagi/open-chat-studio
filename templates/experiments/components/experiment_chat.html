@@ -34,7 +34,7 @@
                 </div>
               </td>
               <td class="px-3 py-4 text-sm text-gray-500">{{ message.content|render_markdown }}</td>
-              {% if perms.annotations.add_customtaggeditem %}
+              {% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
                 <td scope="col" class="w-1/4 overflow-y-visible">
                   <div class="my-2 mr-2">
                     {% include "generic/tag_multiselect.html" with object=message %}

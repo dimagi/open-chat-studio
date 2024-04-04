@@ -1,6 +1,5 @@
 <div>
   <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple placeholder="Select a tag..." autocomplete="off">
-    <option value="">Select a tag...</option>
     {% for tag in available_tags %}
       <option value="{{ tag }}" {% if tag in object.get_linked_tags %}selected{% endif %}>{{ tag }}</option>
     {% endfor %}
