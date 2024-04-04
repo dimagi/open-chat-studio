@@ -19,7 +19,6 @@ Be sure to pass the available tags as a template variable called `available_tags
     src="{% static './tag_multiselect.js' %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
-    data-userCanCreate="{{ perms.annotations.add_tag|yesno:'true,false' }}"
     >
 </script>
 ```

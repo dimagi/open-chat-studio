@@ -1,7 +1,6 @@
 var urlData = document.getElementById('tag-multiselect');
 const linkTagUrl = urlData.getAttribute("data-linkTagUrl");
 const unlinkTagUrl = urlData.getAttribute("data-unlinkTagUrl");
-const userCanCreate = JSON.parse(urlData.getAttribute("data-userCanCreate"));
 
 let controlInstances = [];
 
@@ -28,7 +27,7 @@ document.querySelectorAll('.tag-multiselect').forEach((el)=> {
   let objectInfo = el.getAttribute("data-info");
   let control = new TomSelect(el, {
     maxItems: null,
-    create: userCanCreate,
+    create: true,
     onItemAdd: addTag('onItemAdd', objectInfo),
     onItemRemove: removeTag('onItemRemove', objectInfo)
   });
