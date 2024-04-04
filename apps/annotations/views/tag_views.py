@@ -101,7 +101,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "annotations.add_customtaggeditem"
+    permission_required = ("annotations.add_customtaggeditem", "annotations.add_tag")
 
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
