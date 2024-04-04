@@ -298,7 +298,7 @@ class Experiment(BaseTeamModel):
 
     source_material = models.ForeignKey(
         SourceMaterial,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         help_text="If provided, the source material will be given to every bot in the chain.",
@@ -310,10 +310,10 @@ class Experiment(BaseTeamModel):
         "and prompt the user with the initial response.",
     )
     pre_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.CASCADE
+        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.SET_NULL
     )
     post_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.CASCADE
+        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.SET_NULL
     )
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
