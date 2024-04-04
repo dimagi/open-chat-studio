@@ -1,3 +1,4 @@
+import logging
 import tempfile
 from contextlib import closing
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from pydub import AudioSegment
 from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
 from apps.experiments.models import SyntheticVoice
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,9 +40,20 @@ class SpeechService(pydantic.BaseModel):
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         assert synthetic_voice.service == self._type
-        return self._synthesize_voice(text, synthetic_voice)
+        try:
+            return self._synthesize_voice(text, synthetic_voice)
+        except Exception as e:
+            log.exception(e)
+            raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
 
     def transcribe_audio(self, audio: BytesIO) -> str:
+        try:
+            self._transcribe_audio(audio)
+        except Exception as e:
+            log.exception(e)
+            raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
     def _synthesize_voice(self, text, synthetic_voice) -> SynthesizedAudio:
@@ -121,7 +135,7 @@ class AzureSpeechService(SpeechService):
                         msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
 
-    def transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: BytesIO) -> str:
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
 
@@ -169,7 +183,7 @@ class OpenAISpeechService(SpeechService):
         duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
         return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
 
-    def transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self._client.audio.transcriptions.create(
             model="whisper-1",
             file=audio,
