@@ -358,6 +358,7 @@ class ChannelBase:
                 if speech_service.supports_transcription:
                     return speech_service.transcribe_audio(audio)
         except Exception as e:
+            logging.exception(e)
             raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
 
     def _get_llm_response(self, text: str) -> str:
