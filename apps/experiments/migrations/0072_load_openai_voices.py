@@ -2,30 +2,15 @@
 
 from django.db import migrations
 import os
-import json
+from apps.utils import migration_utils
+
 
 def load_synthetic_voices(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")
-    voice_data = {}
     current_directory = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(current_directory, "preload_data/openai_voices.json")
+    migration_utils.create_synthetic_voices_from_file(SyntheticVoice, file_path)
 
-    with open(file_path, "r") as json_file:
-        voice_data = json.load(json_file)["voices"]
-
-    voices_created = 0
-    for voice in voice_data:
-        _, created = SyntheticVoice.objects.get_or_create(
-            name=voice["name"],
-            language=voice["language"],
-            gender=voice["gender"],
-            neural=voice["neural"],
-            service=voice["service"],
-        )
-
-        if created:
-            voices_created += 1
-    print(f"{voices_created} synthetic voices were created")
 
 def drop_synthetic_voices(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")
