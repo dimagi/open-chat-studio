@@ -1,4 +1,4 @@
-<button @click.stop="" class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
+<button class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
         id="action-{{ action_id }}"
         title="{{ title }}"
         hx-{{ hx_method|lower }}="{% url url_name request.team.slug record.id %}"
