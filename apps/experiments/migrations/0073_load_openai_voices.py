@@ -20,7 +20,7 @@ def drop_synthetic_voices(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0071_alter_syntheticvoice_service'),
+        ('experiments', '0072_alter_syntheticvoice_service'),
     ]
 
     operations = [migrations.RunPython(load_synthetic_voices, drop_synthetic_voices)]
