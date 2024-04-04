@@ -27,11 +27,12 @@ def create_synthetic_voices_from_file(SyntheticVoiceModel, file_path: str):
     voices_created = 0
     service = voice_data["service"]
     for voice in voice_data["voices"]:
-        _, created = SyntheticVoiceModel.objects.get_or_create(
+        _, created = SyntheticVoiceModel.objects.update_or_create(
             name=voice["name"],
             language=voice["language"],
             gender=voice["gender"],
             neural=voice["neural"],
+            language_code=voice["language_code"],
             service=service,
         )
 
