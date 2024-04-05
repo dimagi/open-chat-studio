@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.template.loader import get_template
 from django_tables2 import columns, tables
 
 from apps.experiments.models import (
@@ -166,6 +167,10 @@ class ExperimentSessionsTable(tables.Table):
         template_name="experiments/components/experiment_sessions_list_tags.html",
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
+
+    def render_tags(self, record, bound_column):
+        template = get_template(bound_column.column.template_name)
+        return template.render({"tags": record.chat.tags.all()})
 
     class Meta:
         model = ExperimentSession

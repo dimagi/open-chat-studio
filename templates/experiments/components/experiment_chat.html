@@ -40,6 +40,10 @@
                     {% include "generic/tag_multiselect.html" with object=message %}
                   </div>
                 </td>
+              {% elif perms.annotations.view_customtaggeditem %}
+                <td scope="col" class="w-1/4 overflow-y-visible">
+                  {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.tags.all %}
+                </td>
               {% endif %}
               {% if perms.annotations.add_usercomment %}
                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
