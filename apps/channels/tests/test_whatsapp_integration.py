@@ -105,24 +105,37 @@ class TestTurnio:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
             assert message.content_type == MESSAGE_TYPES.VOICE
 
-    @pytest.mark.parametrize("incoming_message", [turnio_messages.text_message(), turnio_messages.voice_message()])
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("incoming_message", "message_type"),
+        [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "audio")],
+    )
+    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
     def test_turnio_whatsapp_channel_implementation(
         self,
         _get_llm_response,
         send_text_message,
+        send_voice_message,
         get_voice_transcript_mock,
-        db,
-        turnio_whatsapp_channel,
+        synthesize_voice_mock,
         incoming_message,
+        message_type,
+        turnio_whatsapp_channel,
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
+        synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         _get_llm_response.return_value = "Hi"
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        send_text_message.assert_called()
+        if message_type == "text":
+            send_text_message.assert_called()
+        elif message_type == "audio":
+            send_voice_message.assert_called()
 
     @patch("apps.chat.channels.ChannelBase._handle_supported_message")
     @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")

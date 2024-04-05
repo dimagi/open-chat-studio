@@ -1,3 +1,4 @@
+import logging
 import tempfile
 from contextlib import closing
 from dataclasses import dataclass
@@ -7,11 +8,14 @@ from typing import ClassVar
 import azure.cognitiveservices.speech as speechsdk
 import boto3
 import pydantic
+from openai import OpenAI
 from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
-from apps.chat.exceptions import AudioSynthesizeException
+from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
 from apps.experiments.models import SyntheticVoice
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,9 +43,17 @@ class SpeechService(pydantic.BaseModel):
         try:
             return self._synthesize_voice(text, synthetic_voice)
         except Exception as e:
+            log.exception(e)
             raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
 
     def transcribe_audio(self, audio: BytesIO) -> str:
+        try:
+            self._transcribe_audio(audio)
+        except Exception as e:
+            log.exception(e)
+            raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
     def _synthesize_voice(self, text, synthetic_voice) -> SynthesizedAudio:
@@ -123,7 +135,7 @@ class AzureSpeechService(SpeechService):
                         msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
 
-    def transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: BytesIO) -> str:
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
 
@@ -139,11 +151,41 @@ class AzureSpeechService(SpeechService):
             return result.text
         elif result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
-            raise AudioSynthesizeException(f"No speech could be recognized {reason}")
+            raise AudioTranscriptionException(f"No speech could be recognized {reason}")
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 if cancellation_details.error_details:
                     msg += f". Error details: {cancellation_details.error_details}"
-            raise AudioSynthesizeException(msg)
+            raise AudioTranscriptionException(msg)
+
+
+class OpenAISpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAI
+    supports_transcription: ClassVar[bool] = True
+    openai_api_key: str
+    openai_api_base: str = None
+    openai_organization: str = None
+
+    @property
+    def _client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        """
+        Calls OpenAI to convert the text to speech using the synthetic_voice
+        """
+        response = self._client.audio.speech.create(model="tts-1", voice=synthetic_voice.name, input=text)
+        audio_data = response.read()
+
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self._client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text

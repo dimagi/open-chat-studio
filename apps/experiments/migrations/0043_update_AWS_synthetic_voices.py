@@ -10,18 +10,19 @@ def load_language_code(apps, schema_editor):
     file_path = os.path.join(current_directory, "preload_data/aws_voices.json")
 
     with open(file_path, "r") as json_file:
-        voice_data = json.load(json_file)["voices"]
+        voice_data = json.load(json_file)
 
     voices_created = 0
     voices_edited = 0
-    for voice in voice_data:
+    service = voice_data["service"]
+    for voice in voice_data["voices"]:
         _, created = SyntheticVoice.objects.update_or_create(
             name=voice["name"],
             language=voice["language"],
             gender=voice["gender"],
             neural=voice["neural"],
             defaults={
-                "service": voice["service"],
+                "service": service,
                 "language_code": voice["language_code"],
             }
         )
@@ -32,6 +33,7 @@ def load_language_code(apps, schema_editor):
             voices_edited += 1
     print(f"{voices_created} synthetic voices were created")
     print(f"{voices_edited} synthetic voices were edited")
+
 
 def drop_language_code(apps, schema_editor):
     SyntheticVoice = apps.get_model("experiments", "SyntheticVoice")

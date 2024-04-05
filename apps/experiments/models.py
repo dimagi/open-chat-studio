@@ -192,10 +192,12 @@ class SyntheticVoice(BaseModel):
 
     AWS = "AWS"
     Azure = "Azure"
+    OpenAI = "OpenAI"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
+        ("OpenAI", OpenAI),
     )
 
     name = models.CharField(
@@ -224,7 +226,12 @@ class SyntheticVoice(BaseModel):
 
     def __str__(self):
         prefix = "*" if self.neural else ""
-        return f"{self.language}, {self.gender}: {prefix}{self.name}"
+        display_str = f"{prefix}{self.name}"
+        if self.gender:
+            display_str = f"{self.gender}: {display_str}"
+        if self.language:
+            display_str = f"{self.language}, {display_str}"
+        return display_str
 
 
 @audit_fields(*model_audit_fields.NO_ACTIVITY_CONFIG_FIELDS, audit_special_queryset_writes=True)

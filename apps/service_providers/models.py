@@ -116,6 +116,7 @@ class LlmProvider(BaseTeamModel):
 class VoiceProviderType(models.TextChoices):
     aws = "aws", _("AWS Polly")
     azure = "azure", _("Azure Text to Speech")
+    openai = "openai", _("OpenAI Text to Speech")
 
     @property
     def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
@@ -124,6 +125,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AWSVoiceConfigForm
             case VoiceProviderType.azure:
                 return forms.AzureVoiceConfigForm
+            case VoiceProviderType.openai:
+                return forms.OpenAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict):
@@ -133,6 +136,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.AWSSpeechService(**config)
                 case VoiceProviderType.azure:
                     return speech_service.AzureSpeechService(**config)
+                case VoiceProviderType.openai:
+                    return speech_service.OpenAISpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -156,7 +161,8 @@ class VoiceProvider(BaseTeamModel):
         return VoiceProviderType(self.type)
 
     def get_speech_service(self) -> speech_service.SpeechService:
-        return self.type_enum.get_speech_service(self.config)
+        config = {k: v for k, v in self.config.items() if v}
+        return self.type_enum.get_speech_service(config)
 
 
 class MessagingProviderType(models.TextChoices):
