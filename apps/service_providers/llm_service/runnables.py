@@ -175,6 +175,10 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
+    @property
+    def participant_details(self):
+        return self.experiment.participant_data.filter(participant=self.session.participant).first() or ""
+
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
@@ -209,6 +213,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(participant_details=RunnableLambda(lambda x: self.participant_details))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -231,6 +236,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         # when we implement this for anthropic
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(participant_details=RunnableLambda(lambda x: self.participant_details))
             | RunnableLambda(self.format_input)
             | create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
         )

@@ -43,6 +43,13 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_filter = ("team",)
 
 
+@admin.register(models.ParticipantData)
+class ParticipantData(admin.ModelAdmin):
+    list_display = ("participant", "content_type", "object_id")
+    readonly_fields = ("data",)
+    list_filter = ("participant",)
+
+
 @admin.register(models.Survey)
 class SurveyAdmin(admin.ModelAdmin):
     list_display = (
