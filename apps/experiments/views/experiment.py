@@ -6,6 +6,7 @@ import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -72,6 +73,7 @@ def experiments_home(request, team_slug: str):
         {
             "active_tab": "experiments",
             "title": "Experiments",
+            "info_link": settings.DOCUMENTATION_LINKS["experiment"],
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,

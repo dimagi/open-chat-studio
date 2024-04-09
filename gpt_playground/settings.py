@@ -491,3 +491,10 @@ CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
 # Taggit
 TAGGIT_CASE_INSENSITIVE = True
+
+# Documentation links
+DOCUMENTATION_LINKS = {
+    "consent": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305304/Consent+Forms+on+OCS",
+    "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
+    "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
+}
