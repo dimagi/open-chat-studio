@@ -2,12 +2,15 @@ import uuid
 
 import markdown
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
+from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -373,6 +376,7 @@ class Experiment(BaseTeamModel):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
+    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
 
     class Meta:
         ordering = ["name"]
@@ -417,6 +421,23 @@ class Participant(BaseTeamModel):
     class Meta:
         ordering = ["identifier"]
         unique_together = ("team", "identifier")
+
+
+class ParticipantData(BaseTeamModel):
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
+    data = encrypt(models.JSONField(default=dict))
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+        # A bot cannot have a link to multiple data entries for the same Participant
+        # Multiple bots can have a link to the same ParticipantData record
+        # A participant can have many participant data records
+        unique_together = ("participant", "content_type", "object_id")
 
 
 class SessionStatus(models.TextChoices):
