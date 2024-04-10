@@ -84,7 +84,7 @@ class OneOffReminderTool(CustomBaseTool):
 def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
     task_kwargs = json.dumps(
         {
-            "chat_ids": [experiment_session.external_chat_id],
+            "chat_ids": [experiment_session.participant.external_chat_id],
             "message": message,
             "is_bot_instruction": False,
             "experiment_public_id": str(experiment_session.experiment.public_id),

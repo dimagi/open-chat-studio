@@ -487,7 +487,7 @@ class ExperimentSession(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
-            self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
+            self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
 
         is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
         if is_web_channel and self.external_chat_id is None:

@@ -376,7 +376,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     user_sessions = ExperimentSession.objects.filter(
-        user=request.user,
+        participant__user=request.user,
         experiment=experiment,
     )
     channels = experiment.experimentchannel_set.exclude(platform="web").all()
@@ -575,7 +575,9 @@ def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, nam
 @login_and_team_required
 def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(ExperimentSession, user=request.user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(
+        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
+    )
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
@@ -593,7 +595,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
     result = get_response_for_webchat_task.delay(session.id, message_text)
     return TemplateResponse(
         request,
@@ -612,7 +614,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
@@ -636,7 +638,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     params = request.GET.dict()
     since_param = params.get("since")
     experiment_session = get_object_or_404(
-        ExperimentSession, user=user, experiment_id=experiment_id, id=session_id, team=request.team
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
     since = datetime.now().astimezone(pytz.timezone("UTC"))
@@ -790,7 +792,6 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    experiment_session.user = get_real_user_or_none(request.user)
     if experiment_session.experiment.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
         redirct_url_name = "experiments:experiment_pre_survey"

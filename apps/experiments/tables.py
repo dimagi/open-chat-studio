@@ -159,7 +159,7 @@ class NoActivityMessageConfigTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    user = columns.Column(verbose_name="User")
+    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
     started = columns.Column(accessor="created_at", verbose_name="Started")
     last_message = columns.Column(accessor="updated_at", verbose_name="Last Message")
     tags = columns.TemplateColumn(
