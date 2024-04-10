@@ -16,7 +16,7 @@ from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerExcepti
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -103,8 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
-        if self.experiment_session and self.experiment_session.external_chat_id:
-            return self.experiment_session.external_chat_id
+        if self.experiment_session and self.experiment_session.participant.external_chat_id:
+            return self.experiment_session.participant.external_chat_id
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -400,7 +400,7 @@ class ChannelBase:
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
-                external_chat_id=str(self.chat_id),
+                participant__external_chat_id=str(self.chat_id),
             )
             .order_by("-created_at")
             .first()
@@ -429,10 +429,19 @@ class ChannelBase:
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
+        """Creates a new experiment session. If one already exists, the participant will be transfered to the new
+        session
+        """
+        if not self.experiment_session:
+            participant = Participant.objects.create(
+                external_chat_id=self.chat_id, identifier=self.chat_id, team=self.experiment.team
+            )
+        else:
+            participant = self.experiment_session.participant
         self.experiment_session = ExperimentSession.objects.create(
             team=self.experiment.team,
             user=None,
-            participant=None,
+            participant=participant,
             experiment=self.experiment,
             llm=self.experiment.llm,
             external_chat_id=self.chat_id,
