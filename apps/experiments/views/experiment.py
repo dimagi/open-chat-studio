@@ -528,19 +528,32 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 def _start_experiment_session(
     experiment: Experiment,
     experiment_channel: ExperimentChannel,
-    user: CustomUser | None = None,
-    participant: Participant | None = None,
-    external_chat_id: str | None = None,
+    participant_user: CustomUser | None = None,
+    participant_identifier: str = "",
 ) -> ExperimentSession:
-    session = ExperimentSession.objects.create(
-        team=experiment.team,
-        user=user,
-        participant=participant,
-        experiment=experiment,
-        llm=experiment.llm,
-        external_chat_id=external_chat_id,
-        experiment_channel=experiment_channel,
-    )
+    with transaction.atomic():
+        session = ExperimentSession.objects.create(
+            team=experiment.team,
+            experiment=experiment,
+            llm=experiment.llm,
+            experiment_channel=experiment_channel,
+            status=SessionStatus.ACTIVE,
+        )
+
+        if not participant_identifier and not participant_user:
+            raise Exception("Either participant_identifier or participant_user must be specified!")
+
+        try:
+            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+        except Participant.DoesNotExist:
+            participant = Participant.objects.create(
+                user=participant_user,
+                external_chat_id=participant_identifier,
+                identifier=participant_identifier,
+                team=experiment.team,
+            )
+        session.participant = participant
+        session.save()
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
@@ -561,7 +574,12 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment_channel = _ensure_experiment_channel_exists(
         experiment=experiment, platform="web", name=f"{experiment.id}-web"
     )
-    session = _start_experiment_session(experiment, experiment_channel=experiment_channel, user=request.user)
+    session = _start_experiment_session(
+        experiment,
+        experiment_channel=experiment_channel,
+        participant_user=request.user,
+        participant_identifier=request.user.email,
+    )
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
@@ -677,19 +695,14 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         form = ConsentForm(consent, request.POST)
         if form.is_valid():
             # start anonymous experiment
-            participant = None
-            if form.cleaned_data.get("identifier"):
-                participant = Participant.objects.get_or_create(
-                    team=request.team, identifier=form.cleaned_data["identifier"]
-                )[0]
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
             )
             session = _start_experiment_session(
                 experiment,
-                user=get_real_user_or_none(request.user),
-                participant=participant,
                 experiment_channel=experiment_channel,
+                participant_user=get_real_user_or_none(request.user),
+                participant_identifier=form.cleaned_data.get("identifier", ""),
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
@@ -726,26 +739,32 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
-            participant = Participant.objects.get_or_create(
-                team=request.team, identifier=post_form.cleaned_data["email"]
-            )[0]
             if ExperimentSession.objects.filter(
                 team=request.team,
                 experiment=experiment,
-                participant=participant,
                 status__in=["setup", "pending"],
+                participant__external_chat_id=post_form.cleaned_data["email"],
             ).exists():
-                messages.info(request, f"{participant} already has a pending invitation.")
+                participant_email = post_form.cleaned_data["email"]
+                messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                session = ExperimentSession.objects.create(
-                    team=request.team,
-                    experiment=experiment,
-                    llm=experiment.llm,
-                    status="setup",
-                    participant=participant,
-                    experiment_channel=channel,
-                )
+                with transaction.atomic():
+                    channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
+                    # TODO: Use _start_experiment_session and pass in specific kwargs
+                    session = ExperimentSession.objects.create(
+                        team=request.team,
+                        experiment=experiment,
+                        llm=experiment.llm,
+                        status="setup",
+                        experiment_channel=channel,
+                    )
+                    participant, _ = Participant.objects.get_or_create(
+                        team=request.team,
+                        external_chat_id=post_form.cleaned_data["email"],
+                        identifier=post_form.cleaned_data["email"],
+                    )
+                    session.participant = participant
+                    session.save()
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
         else:
