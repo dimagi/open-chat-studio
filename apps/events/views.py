@@ -3,7 +3,11 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
-from apps.events.forms import EventActionForm, StaticTriggerForm, TimeoutTriggerForm
+from apps.events.forms import (
+    StaticTriggerForm,
+    TimeoutTriggerForm,
+    get_action_params_form,
+)
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.teams.decorators import login_and_team_required
 
@@ -22,7 +26,7 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
 
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
-        action_form = EventActionForm(request.POST)
+        action_form = get_action_params_form(request.POST)
         trigger_form = trigger_form_class(request.POST)
         if action_form.is_valid() and trigger_form.is_valid():
             saved_action = action_form.save(experiment_id=experiment_id)
@@ -31,7 +35,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
             trigger.save()
             return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
-        action_form = EventActionForm()
+        action_form = get_action_params_form()
         trigger_form = trigger_form_class()
     context = {
         "action_form": action_form,
@@ -63,7 +67,7 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     if request.method == "POST":
-        action_form = EventActionForm(request.POST, instance=trigger.action)
+        action_form = get_action_params_form(request.POST, instance=trigger.action)
         trigger_form = trigger_form_class(request.POST, instance=trigger)
 
         if action_form.is_valid() and trigger_form.is_valid():
@@ -71,12 +75,13 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
             trigger = trigger_form.save(experiment_id=experiment_id)
             return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
-        action_form = EventActionForm(instance=trigger.action)
+        action_form = get_action_params_form(instance=trigger.action)
         trigger_form = trigger_form_class(instance=trigger)
 
     context = {
         "action_form": action_form,
         "trigger_form": trigger_form,
+        "secondary_key": action_form.get_secondary_key(trigger.action),
     }
     return render(request, "events/manage_event.html", context)
 

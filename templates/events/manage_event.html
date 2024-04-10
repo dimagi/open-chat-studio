@@ -14,13 +14,20 @@
         <div>
             {% block pre_form %}
             {% endblock pre_form %}
-            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}>
+            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %} x-data="{ type: '{{ secondary_key }}' }">
                 {% csrf_token %}
                 {% block form %}
                     <h1 class="pg-title">Event Details</h1>
                     {% render_form_fields trigger_form %}
-                    {% render_form_fields action_form %}
-                    {{ form.non_field_errors }}
+                    {% render_form_fields action_form.primary %}
+                    {% for key, form in action_form.secondary.items %}
+                        <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
+                            {% render_form_fields form %}
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endfor %}
+                    {{ trigger_form.non_field_errors }}
+                    {{ action_form.primary.non_field_errors }}
                 {% endblock form %}
                 {% block form_actions %}
                     <input type="submit" class="pg-button-primary mt-2" value="Save">
