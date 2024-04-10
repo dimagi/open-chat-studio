@@ -555,7 +555,7 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If propagate is True but commit is not.
         """
-
+        self.update_status(SessionStatus.PENDING_REVIEW)
         if propagate and not commit:
             raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()
