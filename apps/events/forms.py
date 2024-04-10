@@ -1,4 +1,5 @@
 from django import forms
+from langchain.memory.prompt import SUMMARY_PROMPT
 
 from apps.generics.type_select_form import TypeSelectForm
 
@@ -6,11 +7,30 @@ from .models import EventAction, StaticTrigger, TimeoutTrigger
 
 
 class SummarizeConversationForm(forms.Form):
-    prompt = forms.CharField(widget=forms.TextInput, label="With the following prompt:", required=False)
+    prompt = forms.CharField(
+        widget=forms.Textarea, label="With the following prompt:", required=False, initial=SUMMARY_PROMPT.template
+    )
+
+    def clean_prompt(self):
+        data = self.cleaned_data["prompt"]
+        if not data:
+            return SUMMARY_PROMPT.template
+        return data
 
 
 class SendMessageToBotForm(forms.Form):
-    message_to_bot = forms.CharField(widget=forms.TextInput, label="With the following prompt:", required=False)
+    message_to_bot = forms.CharField(
+        widget=forms.Textarea,
+        label="With the following prompt:",
+        required=False,
+        initial="The user hasn't responded, please prompt them again.",
+    )
+
+    def clean_message_to_bot(self):
+        data = self.cleaned_data["message_to_bot"]
+        if not data:
+            return "The user hasn't responded, please prompt them again."
+        return data
 
 
 class EmptyForm(forms.Form):
