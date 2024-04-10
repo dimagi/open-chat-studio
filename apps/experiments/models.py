@@ -409,6 +409,8 @@ class Experiment(BaseTeamModel):
 class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    external_chat_id = models.CharField(null=True)  # noqa: DJ001
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
 
     @property
     def email(self):
@@ -420,7 +422,7 @@ class Participant(BaseTeamModel):
 
     class Meta:
         ordering = ["identifier"]
-        unique_together = ("team", "identifier")
+        unique_together = [("team", "identifier"), ("team", "external_chat_id")]
 
 
 class ParticipantData(BaseTeamModel):
