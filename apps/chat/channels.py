@@ -440,11 +440,9 @@ class ChannelBase:
             participant = self.experiment_session.participant
         self.experiment_session = ExperimentSession.objects.create(
             team=self.experiment.team,
-            user=None,
             participant=participant,
             experiment=self.experiment,
             llm=self.experiment.llm,
-            external_chat_id=self.chat_id,
             experiment_channel=self.experiment_channel,
         )
 

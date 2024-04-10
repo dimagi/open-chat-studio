@@ -75,13 +75,11 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "experiment",
         "team",
         "participant",
-        "user",
         "status",
         "created_at",
         "llm",
-        "external_chat_id",
     )
-    search_fields = ("public_id", "external_chat_id", "experiment__name", "participant__identifier")
+    search_fields = ("public_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
     readonly_fields = ("public_id",)
 

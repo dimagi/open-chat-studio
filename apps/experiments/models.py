@@ -459,7 +459,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+    # user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -473,7 +473,7 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
-    external_chat_id = models.CharField(null=False)
+    # external_chat_id = models.CharField(null=False)
     experiment_channel = models.ForeignKey(
         "channels.ExperimentChannel",
         on_delete=models.SET_NULL,
@@ -489,9 +489,6 @@ class ExperimentSession(BaseTeamModel):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
 
-        is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
-        if is_web_channel and self.external_chat_id is None:
-            self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:
