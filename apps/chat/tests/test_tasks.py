@@ -59,7 +59,7 @@ class TasksTest(TestCase):
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         experiment_session = _start_experiment_session(
-            experiment, external_chat_id=self.telegram_chat_id, experiment_channel=self.experiment_channel
+            experiment, experiment_channel=self.experiment_channel, participant_identifier=self.telegram_chat_id
         )
         experiment_session.status = session_status
         experiment_session.save()

@@ -10,7 +10,7 @@ import pytest
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase, TelegramChannel
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
@@ -42,7 +42,7 @@ def test_incoming_message_adds_channel_info(_get_llm_response, _send_text_to_use
     _simulate_user_message(telegram_channel, message)
 
     experiment_session = ExperimentSession.objects.filter(
-        experiment=telegram_channel.experiment, external_chat_id=chat_id
+        experiment=telegram_channel.experiment, participant__external_chat_id=chat_id
     ).get()
     assert experiment_session is not None
     assert experiment_session.experiment_channel is not None
@@ -55,7 +55,8 @@ def test_channel_added_for_experiment_session(_get_llm_response, _send_text_to_u
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
     _simulate_user_message(telegram_channel, message)
-    experiment_session = ExperimentSession.objects.filter(external_chat_id=chat_id).get()
+    participant = Participant.objects.get(external_chat_id=chat_id)
+    experiment_session = participant.experimentsession_set.first()
     assert experiment_session.experiment_channel is not None
 
 
@@ -75,7 +76,7 @@ def test_incoming_message_uses_existing_experiment_session(
 
     # Let's find the session it created
     experiment_sessions_count = ExperimentSession.objects.filter(
-        experiment=experiment, external_chat_id=chat_id
+        experiment=experiment, participant__external_chat_id=chat_id
     ).count()
     assert experiment_sessions_count == 1
 
@@ -87,7 +88,7 @@ def test_incoming_message_uses_existing_experiment_session(
 
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.filter(
-        experiment=experiment, external_chat_id=chat_id
+        experiment=experiment, participant__external_chat_id=chat_id
     ).count()
     assert experiment_sessions_count == 1
 
@@ -115,8 +116,10 @@ def test_different_sessions_created_for_different_users(_get_llm_response, teleg
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
 
-    assert ExperimentSession.objects.filter(external_chat_id=user_1_chat_id).exists()
-    assert ExperimentSession.objects.filter(external_chat_id=user_2_chat_id).exists()
+    assert ExperimentSession.objects.filter(participant__external_chat_id=user_1_chat_id).exists()
+    assert Participant.objects.get(external_chat_id=user_1_chat_id)
+    assert ExperimentSession.objects.filter(participant__external_chat_id=user_2_chat_id).exists()
+    assert Participant.objects.get(external_chat_id=user_2_chat_id)
 
 
 @pytest.mark.django_db()
@@ -132,7 +135,9 @@ def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, t
         chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
     )
     telegram_channel.new_user_message(reset_message)
-    sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).order_by("created_at").all()
+    sessions = (
+        ExperimentSession.objects.filter(participant__external_chat_id=telegram_chat_id).order_by("created_at").all()
+    )
     assert len(sessions) == 2
     new_session = sessions[0]
     old_session = sessions[1]
@@ -156,7 +161,7 @@ def test_reset_conversation_does_not_create_new_session(
     message2 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
     _simulate_user_message(telegram_channel, message2)
 
-    sessions = ExperimentSession.objects.filter(external_chat_id=telegram_chat_id).all()
+    sessions = ExperimentSession.objects.filter(participant__external_chat_id=telegram_chat_id).all()
     assert len(sessions) == 1
     # The reset command should not be saved in the history
     assert sessions[0].chat.get_langchain_messages() == []
