@@ -65,7 +65,7 @@ def verify_session_access_cookie(view):
     @wraps(view)
     def _inner(request, *args, **kwargs):
         if request.user.is_authenticated and (
-            request.experiment_session.user_id == request.user.id or request.user.has_perm("chat.view_chat")
+            request.experiment_session.participant.user_id == request.user.id or request.user.has_perm("chat.view_chat")
         ):
             return view(request, *args, **kwargs)
 
@@ -89,7 +89,7 @@ def _get_access_cookie_data(experiment_session):
         "experiment_id": str(experiment_session.experiment.public_id),
         "session_id": str(experiment_session.public_id),
         "participant_id": experiment_session.participant_id,
-        "user_id": experiment_session.user_id,
+        "user_id": experiment_session.participant.user_id,
     }
 
 
