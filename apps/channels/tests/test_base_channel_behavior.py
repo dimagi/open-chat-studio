@@ -124,6 +124,35 @@ def test_different_sessions_created_for_different_users(_get_llm_response, teleg
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+def test_different_participants_created_for_same_user_in_different_teams(_get_llm_response):
+    chat_id = 00000
+    user_message = telegram_messages.text_message(chat_id=chat_id)
+
+    experiment1 = ExperimentFactory()
+    exp_channel1 = ExperimentChannelFactory(experiment=experiment1)
+    channel1 = TelegramChannel(experiment_channel=exp_channel1)
+    channel1.telegram_bot = Mock()
+
+    experiment2 = ExperimentFactory()
+    exp_channel2 = ExperimentChannelFactory(experiment=experiment2)
+    channel2 = TelegramChannel(experiment_channel=exp_channel2)
+    channel2.telegram_bot = Mock()
+
+    assert experiment1.team != experiment2.team
+
+    _simulate_user_message(channel1, user_message)
+    _simulate_user_message(channel2, user_message)
+
+    experiment_sessions_count = ExperimentSession.objects.count()
+    assert experiment_sessions_count == 2
+    assert Participant.objects.count() == 2
+    participant1 = Participant.objects.get(team=experiment1.team, external_chat_id=chat_id)
+    participant2 = Participant.objects.get(team=experiment2.team, external_chat_id=chat_id)
+    assert participant1 != participant2
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, telegram_channel):
     """The reset command should create a new session when the user conversed with the bot"""
     telegram_chat_id = 00000
