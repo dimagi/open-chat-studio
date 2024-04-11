@@ -402,6 +402,12 @@ class Experiment(BaseTeamModel):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
+    def get_participant_data(self, participant: "Participant") -> "ParticipantData":
+        try:
+            return self.participant_data.get(participant=participant).data
+        except ParticipantData.DoesNotExist:
+            return None
+
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
