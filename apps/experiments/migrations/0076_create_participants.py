@@ -56,11 +56,6 @@ def _create_participants(apps, schema_editor):
                 print(f"Session {session.id} has a participant ({participant.id})")
                 if participant.external_chat_id is None:
                     print(f"Participant external_chat_id is None")
-                    # participant.external_chat_id will not be None if a participant had multiple sessions
-                    # Q: What if participant.external_chat_id != session.external_chat_id?
-                    # A: We don't care. For web chats, we don't use the external_chat_id. For other channels,
-                    # there wouldn't be participants, and even if there were, the external_chat_id is how we
-                    # identify them uniquely
                     participant.external_chat_id = participant.identifier
                     participant.save()
                 else:
