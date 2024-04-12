@@ -7,11 +7,13 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.experiments.models import Experiment, VoiceResponseBehaviours
-from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
+from apps.experiments.models import Experiment, ExperimentSession, Participant, VoiceResponseBehaviours
+from apps.experiments.views.experiment import ExperimentForm, _start_experiment_session, _validate_prompt_variables
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 def test_create_experiment_success(db, client, team_with_users):
@@ -107,3 +109,120 @@ def test_form_fields():
     request = mock.Mock()
     for field in ExperimentForm(request).fields:
         assert field in form_html, f"{field} missing from 'experiment_form.html' template"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("is_user", [False, True])
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_new_participant_created_on_session_start(_trigger_mock, is_user):
+    """For each new experiment session, a participant should be created and linked to the session"""
+    identifier = "someone@example.com"
+    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    channel = ExperimentChannelFactory(experiment=experiment)
+    user = None
+    if is_user:
+        user = experiment.team.members.first()
+        identifier = user.email
+
+    session = _start_experiment_session(
+        experiment,
+        experiment_channel=channel,
+        participant_user=user,
+        participant_identifier=identifier,
+    )
+
+    assert Participant.objects.filter(team=experiment.team, external_chat_id=identifier).count() == 1
+    assert ExperimentSession.objects.filter(team=experiment.team).count() == 1
+    assert session.participant.external_chat_id == identifier
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("is_user", [False, True])
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_participant_reused_within_team(_trigger_mock, is_user):
+    """Within a team, the same external chat id (or participant identifier) should result in the participant being
+    reused, and not result in a new participant being created
+    """
+    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    channel1 = ExperimentChannelFactory(experiment=experiment1)
+    team = experiment1.team
+    identifier = "someone@example.com"
+    user = None
+    if is_user:
+        user = team.members.first()
+        identifier = user.email
+
+    session = _start_experiment_session(
+        experiment1,
+        experiment_channel=channel1,
+        participant_user=user,
+        participant_identifier=identifier,
+    )
+
+    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert ExperimentSession.objects.filter(team=team).count() == 1
+    assert session.participant.external_chat_id == identifier
+
+    # user starts a second session in the same team
+    experiment2 = ExperimentFactory(team=team)
+    channel2 = ExperimentChannelFactory(experiment=experiment2)
+
+    session = _start_experiment_session(
+        experiment2,
+        experiment_channel=channel2,
+        participant_user=user,
+        participant_identifier=identifier,
+    )
+
+    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert ExperimentSession.objects.filter(team=team).count() == 2
+    assert session.participant.external_chat_id == identifier
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("is_user", [False, True])
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
+    """A new participant should be created for each team when a user uses the same identifier"""
+    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    channel1 = ExperimentChannelFactory(experiment=experiment1)
+    team = experiment1.team
+    identifier = "someone@example.com"
+    user = None
+    if is_user:
+        user = team.members.first()
+        identifier = user.email
+
+    session = _start_experiment_session(
+        experiment1,
+        experiment_channel=channel1,
+        participant_user=user,
+        participant_identifier=identifier,
+    )
+
+    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert ExperimentSession.objects.filter(team=team).count() == 1
+    assert session.participant.external_chat_id == identifier
+
+    # user starts a second session in another team
+    if is_user:
+        new_team = TeamWithUsersFactory(member__user=user)
+    else:
+        new_team = TeamWithUsersFactory()
+
+    experiment2 = ExperimentFactory(team=new_team)
+    channel2 = ExperimentChannelFactory(experiment=experiment2)
+
+    session = _start_experiment_session(
+        experiment2,
+        experiment_channel=channel2,
+        participant_user=user,
+        participant_identifier=identifier,
+    )
+
+    assert Participant.objects.filter(team=new_team, external_chat_id=identifier).count() == 1
+    assert ExperimentSession.objects.filter(team=new_team).count() == 1
+
+    # There should be two participants with external_chat_id = identifier accross all teams
+    assert Participant.objects.filter(external_chat_id=identifier).count() == 2
+    assert session.participant.external_chat_id == identifier
