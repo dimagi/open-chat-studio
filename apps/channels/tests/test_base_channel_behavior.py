@@ -115,11 +115,8 @@ def test_different_sessions_created_for_different_users(_get_llm_response, teleg
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
-
-    assert ExperimentSession.objects.filter(participant__external_chat_id=user_1_chat_id).exists()
-    assert Participant.objects.get(external_chat_id=user_1_chat_id)
-    assert ExperimentSession.objects.filter(participant__external_chat_id=user_2_chat_id).exists()
-    assert Participant.objects.get(external_chat_id=user_2_chat_id)
+    assert ExperimentSession.objects.for_chat_id(user_1_chat_id).exists()
+    assert ExperimentSession.objects.for_chat_id(user_2_chat_id).exists()
 
 
 @pytest.mark.django_db()
@@ -164,9 +161,7 @@ def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, t
         chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
     )
     telegram_channel.new_user_message(reset_message)
-    sessions = (
-        ExperimentSession.objects.filter(participant__external_chat_id=telegram_chat_id).order_by("created_at").all()
-    )
+    sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).order_by("created_at").all()
     assert len(sessions) == 2
     new_session = sessions[0]
     old_session = sessions[1]
@@ -190,7 +185,7 @@ def test_reset_conversation_does_not_create_new_session(
     message2 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
     _simulate_user_message(telegram_channel, message2)
 
-    sessions = ExperimentSession.objects.filter(participant__external_chat_id=telegram_chat_id).all()
+    sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).all()
     assert len(sessions) == 1
     # The reset command should not be saved in the history
     assert sessions[0].chat.get_langchain_messages() == []

@@ -459,11 +459,17 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
+class ExperimentSessionObjectManager(models.Manager):
+    def for_chat_id(self, chat_id: str) -> list["ExperimentSession"]:
+        return self.filter(participant__external_chat_id=chat_id)
+
+
 class ExperimentSession(BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
 
+    objects = ExperimentSessionObjectManager()
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     # user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)

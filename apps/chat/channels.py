@@ -433,7 +433,7 @@ class ChannelBase:
         session
         """
         if not self.experiment_session:
-            participant = Participant.objects.create(
+            participant, _ = Participant.objects.get_or_create(
                 external_chat_id=self.chat_id, identifier=self.chat_id, team=self.experiment.team
             )
         else:

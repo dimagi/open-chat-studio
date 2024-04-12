@@ -85,4 +85,4 @@ class Migration(migrations.Migration):
         ('experiments', '0075_alter_participant_unique_together_and_more'),
     ]
 
-    operations = [migrations.RunPython(_create_participants, migrations.RunPython.noop),]
+    operations = [migrations.RunPython(_create_participants, migrations.RunPython.noop, elidable=True),]

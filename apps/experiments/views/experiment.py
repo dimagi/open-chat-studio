@@ -528,21 +528,13 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 def _start_experiment_session(
     experiment: Experiment,
     experiment_channel: ExperimentChannel,
+    participant_identifier: str,
     participant_user: CustomUser | None = None,
-    participant_identifier: str = "",
 ) -> ExperimentSession:
+    if not participant_identifier and not participant_user:
+        raise ValueError("Either participant_identifier or participant_user must be specified!")
+
     with transaction.atomic():
-        session = ExperimentSession.objects.create(
-            team=experiment.team,
-            experiment=experiment,
-            llm=experiment.llm,
-            experiment_channel=experiment_channel,
-            status=SessionStatus.ACTIVE,
-        )
-
-        if not participant_identifier and not participant_user:
-            raise Exception("Either participant_identifier or participant_user must be specified!")
-
         try:
             participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
         except Participant.DoesNotExist:
@@ -552,8 +544,14 @@ def _start_experiment_session(
                 identifier=participant_identifier,
                 team=experiment.team,
             )
-        session.participant = participant
-        session.save()
+        session = ExperimentSession.objects.create(
+            team=experiment.team,
+            experiment=experiment,
+            llm=experiment.llm,
+            experiment_channel=experiment_channel,
+            status=SessionStatus.ACTIVE,
+            participant=participant,
+        )
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
@@ -751,20 +749,19 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 with transaction.atomic():
                     channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                     # TODO: Use _start_experiment_session and pass in specific kwargs
+                    participant, _ = Participant.objects.get_or_create(
+                        team=request.team,
+                        external_chat_id=post_form.cleaned_data["email"],
+                        identifier=post_form.cleaned_data["email"],
+                    )
                     session = ExperimentSession.objects.create(
                         team=request.team,
                         experiment=experiment,
                         llm=experiment.llm,
                         status="setup",
                         experiment_channel=channel,
+                        participant=participant,
                     )
-                    participant, _ = Participant.objects.get_or_create(
-                        team=request.team,
-                        external_chat_id=post_form.cleaned_data["email"],
-                        identifier=post_form.cleaned_data["email"],
-                    )
-                    session.participant = participant
-                    session.save()
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
         else:
