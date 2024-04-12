@@ -8,6 +8,12 @@ def _create_participants(apps, schema_editor):
     Participant = apps.get_model("experiments", "Participant")
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
 
+    # Let's first remove all orphan participants. These will cause issues during the next migration where we mark
+    # external_chat_id as not-nullable. I'm not sure how they came to be that way, but assuming it was a bug,
+    # which is why I prefer to remove them in a migration rather than manually removing them (to be friendly to
+    # 3rd parties hosting OCS that might also have this issue)
+    Participant.objects.filter(experimentsession__isnull=True).all().delete()
+
     for session in ExperimentSession.objects.all():
         if session.user:
             print(f"Session {session.id} has a user ({session.user.id})")
@@ -71,9 +77,6 @@ def _create_participants(apps, schema_editor):
                 )
                 session.participant = participant
                 session.save()
-
-    # Remove all orphan participants
-    Participant.objects.filter(experimentsession__isnull=True).all().delete()
 
 
 class Migration(migrations.Migration):
