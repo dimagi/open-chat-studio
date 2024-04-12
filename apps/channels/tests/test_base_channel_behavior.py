@@ -394,12 +394,18 @@ def test_missing_channel_raises_error(twilio_provider):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("message_type", "response_behaviour"),
-    [("text", VoiceResponseBehaviours.NEVER), ("voice", VoiceResponseBehaviours.ALWAYS)],
+    ("expected_message_type", "response_behaviour"),
+    [
+        ("text", VoiceResponseBehaviours.NEVER),
+        ("text", VoiceResponseBehaviours.RECIPROCAL),
+        ("voice", VoiceResponseBehaviours.ALWAYS),
+    ],
 )
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-def test_new_bot_message(send_text_to_user, _reply_voice_messagem, message_type, response_behaviour, telegram_channel):
+def test_new_bot_message(
+    send_text_to_user, _reply_voice_messagem, expected_message_type, response_behaviour, telegram_channel
+):
     """A simple test to make sure that when we call `channel_instance.new_bot_message`, the correct message format
     will be used
     """
@@ -411,7 +417,7 @@ def test_new_bot_message(send_text_to_user, _reply_voice_messagem, message_type,
 
     telegram_channel.new_bot_message(bot_message)
 
-    if message_type == "text":
+    if expected_message_type == "text":
         send_text_to_user.assert_called()
         assert send_text_to_user.call_args[0][0] == bot_message
     else:
