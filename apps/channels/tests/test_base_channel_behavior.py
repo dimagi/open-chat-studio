@@ -446,3 +446,39 @@ def test_new_bot_message(send_text_to_user, _reply_voice_messagem, message_type,
     else:
         _reply_voice_messagem.assert_called()
         assert _reply_voice_messagem.call_args[0][0] == bot_message
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.models._set_telegram_webhook")
+@patch("apps.chat.channels.TelegramChannel._get_llm_response")
+@patch("apps.chat.channels.TelegramChannel._send_message_to_user")
+def test_participant_reused_accross_experiments(_send_message_to_user, _get_llm_response, _set_telegram_webhook):
+    """A single participant should be linked to multiple sessions per team"""
+    _get_llm_response.return_value = "Hi human"
+    chat_id = 123
+
+    # User chats to experiment 1
+    experiment1 = ExperimentFactory()
+    team1 = experiment1.team
+    tele_channel1 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment1))
+    tele_channel1.telegram_bot = Mock()
+    tele_channel1.new_user_message(telegram_messages.text_message(chat_id=chat_id))
+
+    # User chats to experiment 2 that is in the same team
+    experiment2 = ExperimentFactory(team=team1)
+    tele_channel2 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment2))
+    tele_channel2.telegram_bot = Mock()
+    tele_channel2.new_user_message(telegram_messages.text_message(chat_id=chat_id))
+
+    # User chats to experiment 3 that is in a different team
+    experiment3 = ExperimentFactory()
+    team2 = experiment3.team
+    tele_channel3 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment3))
+    tele_channel3.telegram_bot = Mock()
+    tele_channel3.new_user_message(telegram_messages.text_message(chat_id=chat_id))
+
+    # There should be 1 participant with external_chat_id = chat_id per team
+    assert Participant.objects.filter(team=team1, external_chat_id=chat_id).count() == 1
+    assert Participant.objects.filter(team=team2, external_chat_id=chat_id).count() == 1
+    # but 2 participants accross all teams with external_chat_id = chat_id
+    assert Participant.objects.filter(external_chat_id=chat_id).count() == 2
