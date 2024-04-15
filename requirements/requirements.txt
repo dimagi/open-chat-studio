@@ -24,12 +24,13 @@ anyio==3.7.1
     # via
     #   anthropic
     #   httpcore
-    #   langchain-core
     #   openai
 asgiref==3.7.2
     # via django
 async-timeout==4.0.3
-    # via aiohttp
+    # via
+    #   aiohttp
+    #   redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -213,18 +214,21 @@ jsonschema-specifications==2023.7.1
     # via jsonschema
 kombu==5.3.3
     # via celery
-langchain==0.1.4
+langchain==0.1.16
     # via -r requirements/requirements.in
-langchain-community==0.0.15
+langchain-community==0.0.32
     # via langchain
-langchain-core==0.1.17
+langchain-core==0.1.42
     # via
     #   langchain
     #   langchain-community
     #   langchain-openai
-langchain-openai==0.0.5
+    #   langchain-text-splitters
+langchain-openai==0.1.3
     # via -r requirements/requirements.in
-langsmith==0.0.83
+langchain-text-splitters==0.0.1
+    # via langchain
+langsmith==0.1.47
     # via
     #   langchain
     #   langchain-community
@@ -249,7 +253,6 @@ numpy==1.26.2
     # via
     #   langchain
     #   langchain-community
-    #   langchain-openai
     #   pandas
 oauthlib==3.2.2
     # via requests-oauthlib
@@ -257,6 +260,8 @@ openai==1.12.0
     # via
     #   -r requirements/requirements.in
     #   langchain-openai
+orjson==3.10.0
+    # via langsmith
 packaging==23.2
     # via
     #   djangorestframework-api-key
@@ -335,7 +340,6 @@ requests==2.31.0
     #   huggingface-hub
     #   langchain
     #   langchain-community
-    #   langchain-core
     #   langsmith
     #   pytelegrambotapi
     #   requests-oauthlib
