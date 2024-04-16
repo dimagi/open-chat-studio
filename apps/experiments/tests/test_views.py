@@ -289,3 +289,26 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
 
     participant = Participant.objects.get(team=experiment.team, external_chat_id=email)
     assert participant.user is not None
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_user_email_used_for_participant_identifier(_trigger_mock, client):
+    """With the `capture_identifier` field enabled on the consent record, logged in users' consent form will
+    not contain the `identifier` field, so we pass it as initial data to the form. This test simulates a logged
+    in user submitting the consent form
+    """
+    experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=True)
+    assert Participant.objects.filter(team=experiment.team).count() == 0
+
+    user = experiment.team.members.first()
+    client.login(username=user.username, password="password")
+
+    post_data = {"consent_agreement": True, "experiment_id": str(experiment.id), "participant_id": ""}
+
+    url = reverse(
+        "experiments:start_session_public",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+    client.post(url, data=post_data)
+    assert Participant.objects.filter(team=experiment.team, external_chat_id=user.email).exists()
