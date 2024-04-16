@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from urllib.parse import quote
 
@@ -691,16 +692,21 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     consent = experiment.consent_form
     if request.method == "POST":
         form = ConsentForm(consent, request.POST)
+        user = get_real_user_or_none(request.user)
         if form.is_valid():
             # start anonymous experiment
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
             )
+            identifier = form.cleaned_data.get("identifier", None)
+            if identifier is None and consent.capture_identifier is False:
+                identifier = user.email if user else str(uuid.uuid4())
+
             session = _start_experiment_session(
                 experiment,
                 experiment_channel=experiment_channel,
-                participant_user=get_real_user_or_none(request.user),
-                participant_identifier=form.cleaned_data.get("identifier", ""),
+                participant_user=user,
+                participant_identifier=identifier,
             )
             return _record_consent_and_redirect(request, team_slug, session)
 

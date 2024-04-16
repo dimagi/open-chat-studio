@@ -139,6 +139,32 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
 @mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, client):
+    """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
+    the case where it's an external user, use a UUID as the identifier"""
+    experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=False)
+    assert Participant.objects.filter(team=experiment.team).count() == 0
+
+    user = None
+    if is_user:
+        user = experiment.team.members.first()
+        client.login(username=user.username, password="password")
+
+    post_data = {"identifier": "", "consent_agreement": True, "experiment_id": str(experiment.id), "participant_id": ""}
+
+    url = reverse(
+        "experiments:start_session_public",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+    client.post(url, data=post_data)
+    assert Participant.objects.filter(team=experiment.team).count() == 1
+    if is_user:
+        assert Participant.objects.filter(team=experiment.team, external_chat_id=user.email).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("is_user", [False, True])
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
 def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
