@@ -8,6 +8,7 @@ import pydantic
 import requests
 from botocore.client import Config
 from django.conf import settings
+from telebot.util import smart_split
 from turn import TurnClient
 from twilio.rest import Client
 
@@ -48,6 +49,7 @@ class TwilioService(MessagingService):
         ChannelPlatform.WHATSAPP: "whatsapp",
         ChannelPlatform.FACEBOOK: "messenger",
     }
+    MESSAGE_CHARACTER_LIMIT = 1600
 
     @property
     def client(self) -> Client:
@@ -89,7 +91,8 @@ class TwilioService(MessagingService):
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
-        self.client.messages.create(from_=f"{prefix}:{from_}", body=message, to=f"{prefix}:{to}")
+        for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
+            self.client.messages.create(from_=f"{prefix}:{from_}", body=message_text, to=f"{prefix}:{to}")
 
     def send_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
