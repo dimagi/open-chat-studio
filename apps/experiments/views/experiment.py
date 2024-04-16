@@ -535,6 +535,10 @@ def _start_experiment_session(
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
 
+    if participant_user and participant_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
+
     with transaction.atomic():
         try:
             participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
@@ -690,16 +694,17 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         raise Http404
 
     consent = experiment.consent_form
+    user = get_real_user_or_none(request.user)
     if request.method == "POST":
-        form = ConsentForm(consent, request.POST)
-        user = get_real_user_or_none(request.user)
+        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            # start anonymous experiment
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
             )
-            identifier = form.cleaned_data.get("identifier", None)
-            if identifier is None and consent.capture_identifier is False:
+            if consent.capture_identifier:
+                identifier = form.cleaned_data.get("identifier", None)
+            else:
+                # The identifier field will be disabled, so we must generate one
                 identifier = user.email if user else str(uuid.uuid4())
 
             session = _start_experiment_session(
@@ -715,6 +720,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
             consent,
             initial={
                 "experiment_id": experiment.id,
+                "identifier": user.email if user else None,
             },
         )
 

@@ -9,11 +9,12 @@ from waffle.testutils import override_flag
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, VoiceResponseBehaviours
 from apps.experiments.views.experiment import ExperimentForm, _start_experiment_session, _validate_prompt_variables
+from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
 
 def test_create_experiment_success(db, client, team_with_users):
@@ -252,3 +253,39 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     # There should be two participants with external_chat_id = identifier accross all teams
     assert Participant.objects.filter(external_chat_id=identifier).count() == 2
     assert session.participant.external_chat_id == identifier
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
+    """When a non platform user starts a session, a participant without a user is created. When they then sign up
+    and start another session, their participant user should be populated
+    """
+    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    assert Participant.objects.filter(team=experiment.team).count() == 0
+    email = "test@user.com"
+    post_data = {
+        "identifier": email,
+        "consent_agreement": True,
+        "experiment_id": str(experiment.id),
+        "participant_id": "",
+    }
+    url = reverse(
+        "experiments:start_session_public",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+
+    # Non platform user creates a session
+    client.post(url, data=post_data)
+    participant = Participant.objects.get(team=experiment.team, external_chat_id=email)
+    assert participant.user is None
+
+    # Let's create the user by creating another experiment
+    user = UserFactory(email=email)
+    add_user_to_team(experiment.team, user=user)
+    # Now the platform user creates a session
+    client.login(username=user.username, password="password")
+    client.post(url, data=post_data)
+
+    participant = Participant.objects.get(team=experiment.team, external_chat_id=email)
+    assert participant.user is not None
