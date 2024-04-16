@@ -26,6 +26,7 @@ tenacity
 whitenoise[brotli]
 langchain
 langchain-openai
+langchain-anthropic
 Markdown
 # unstructured  # langchain loaders
 # chromadb  # langchain queries

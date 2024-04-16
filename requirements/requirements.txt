@@ -18,8 +18,10 @@ amqp==5.2.0
     # via kombu
 annotated-types==0.6.0
     # via pydantic
-anthropic==0.10.0
-    # via -r requirements/requirements.in
+anthropic==0.25.2
+    # via
+    #   -r requirements/requirements.in
+    #   langchain-anthropic
 anyio==3.7.1
     # via
     #   anthropic
@@ -96,7 +98,9 @@ dataclasses-json==0.6.2
     #   langchain
     #   langchain-community
 defusedxml==0.7.1
-    # via python3-openid
+    # via
+    #   langchain-anthropic
+    #   python3-openid
 distro==1.8.0
     # via
     #   anthropic
@@ -216,11 +220,14 @@ kombu==5.3.3
     # via celery
 langchain==0.1.16
     # via -r requirements/requirements.in
+langchain-anthropic==0.1.8
+    # via -r requirements/requirements.in
 langchain-community==0.0.32
     # via langchain
 langchain-core==0.1.42
     # via
     #   langchain
+    #   langchain-anthropic
     #   langchain-community
     #   langchain-openai
     #   langchain-text-splitters
