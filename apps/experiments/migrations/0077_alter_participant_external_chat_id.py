@@ -15,4 +15,12 @@ class Migration(migrations.Migration):
             name='external_chat_id',
             field=models.CharField(),
         ),
+        migrations.RemoveField(
+            model_name='experimentsession',
+            name='external_chat_id',
+        ),
+        migrations.RemoveField(
+            model_name='experimentsession',
+            name='user',
+        ),
     ]
