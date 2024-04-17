@@ -49,7 +49,7 @@ class TwilioService(MessagingService):
         ChannelPlatform.WHATSAPP: "whatsapp",
         ChannelPlatform.FACEBOOK: "messenger",
     }
-    MESSAGE_CHARACTER_LIMIT = 1600
+    MESSAGE_CHARACTER_LIMIT: int = 1600
 
     @property
     def client(self) -> Client:
