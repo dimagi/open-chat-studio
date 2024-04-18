@@ -3,6 +3,7 @@
 from django.db import migrations, models
 import django.db.models.deletion
 import django_cryptography.fields
+from django.conf import settings
 
 
 class Migration(migrations.Migration):
@@ -11,6 +12,7 @@ class Migration(migrations.Migration):
         ('contenttypes', '0002_remove_content_type_name'),
         ('experiments', '0073_load_openai_voices'),
         ('contenttypes', '0002_remove_content_type_name'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
@@ -30,5 +32,23 @@ class Migration(migrations.Migration):
                 'indexes': [models.Index(fields=['content_type', 'object_id'], name='experiments_content_78f1ee_idx')],
                 'unique_together': {('participant', 'content_type', 'object_id')},
             },
+        ),
+        migrations.AlterUniqueTogether(
+            name='participant',
+            unique_together={('team', 'identifier')},
+        ),
+        migrations.AddField(
+            model_name='participant',
+            name='external_chat_id',
+            field=models.CharField(null=True),
+        ),
+        migrations.AddField(
+            model_name='participant',
+            name='user',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+        ),
+        migrations.AlterUniqueTogether(
+            name='participant',
+            unique_together={('team', 'identifier'), ('team', 'external_chat_id')},
         ),
     ]

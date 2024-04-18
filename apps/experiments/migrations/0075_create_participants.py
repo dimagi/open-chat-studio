@@ -82,7 +82,7 @@ def _create_participants(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0075_alter_participant_unique_together_and_more'),
+        ('experiments', '0074_participantdata_and_more'),
     ]
 
     operations = [migrations.RunPython(_create_participants, migrations.RunPython.noop, elidable=True),]
