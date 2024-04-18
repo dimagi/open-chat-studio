@@ -4,6 +4,7 @@ from urllib.parse import quote
 from django.conf import settings
 from django.db import models
 from django.utils.functional import classproperty
+from django.utils.translation import gettext_lazy as _
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
@@ -104,3 +105,45 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 },
             },
         }
+
+
+class TriggerEvent(models.TextChoices):
+    CONVERSATION_END = ("conversation_end", "The conversation ends")
+    CONVERSATION_START = ("conversation_start", "A new conversation is started")
+
+
+class TimePeriod(models.TextChoices):
+    HOURS = ("hours", "Hours")
+    DAYS = ("days", "Days")
+    WEEKS = ("weeks", "Weeks")
+    MONTHS = ("months", "Months")
+
+
+class ScheduledMessageConfig(BaseTeamModel):
+    name = models.CharField(max_length=64)
+    experiment = models.ForeignKey(
+        "experiments.Experiment", on_delete=models.CASCADE, related_name="scheduled_message_configs"
+    )
+    trigger_event = models.CharField(choices=TriggerEvent.choices, db_index=True, blank=False)
+    recurring = models.BooleanField()
+    time_period = models.CharField(choices=TimePeriod.choices)
+    frequency = models.IntegerField(default=1)
+    reptitions = models.IntegerField(default=0)
+    prompt_text = models.TextField()
+
+    def save(self, *args, **kwargs):
+        if self.recurring and self.reptitions == 0:
+            raise ValueError(_("Recurring schedules require `reptitions` to be larger than 0"))
+        if not self.recurring and self.reptitions > 0:
+            raise ValueError(_("Non recurring schedules cannot have `reptitions` larger than 0"))
+        return super().save(*args, **kwargs)
+
+
+class ScheduledMessage(BaseTeamModel):
+    schedule = models.ForeignKey(ScheduledMessageConfig, on_delete=models.CASCADE)
+    participant = models.ForeignKey(
+        "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
+    )
+    next_trigger_date = models.DateTimeField()
+    last_trigged_at = models.DateTimeField(null=True)
+    total_triggers = models.IntegerField(default=0)
