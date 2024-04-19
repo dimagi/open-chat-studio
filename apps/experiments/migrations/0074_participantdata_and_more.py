@@ -12,6 +12,7 @@ class Migration(migrations.Migration):
         ('contenttypes', '0002_remove_content_type_name'),
         ('experiments', '0073_load_openai_voices'),
         ('contenttypes', '0002_remove_content_type_name'),
+        ('teams', '0005_invitation_groups'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
