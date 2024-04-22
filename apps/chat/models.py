@@ -146,7 +146,7 @@ class ScheduledMessageConfig(BaseTeamModel):
 
 
 class ScheduledMessage(BaseTeamModel):
-    schedule = models.ForeignKey(ScheduledMessageConfig, on_delete=models.CASCADE)
+    schedule = models.ForeignKey(ScheduledMessageConfig, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )

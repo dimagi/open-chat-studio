@@ -469,6 +469,9 @@ class Participant(BaseTeamModel):
     def __str__(self):
         return self.identifier
 
+    def get_latest_session(self) -> "ExperimentSession":
+        return self.experimentsession_set.order_by("-created_at").first()
+
     class Meta:
         ordering = ["identifier"]
         unique_together = [("team", "identifier"), ("team", "external_chat_id")]
@@ -616,3 +619,11 @@ class ExperimentSession(BaseTeamModel):
             from apps.events.tasks import enqueue_static_triggers
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+
+    def send_bot_message(self, instruction_prompt: str, fail_silently=True):
+        """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
+        this session's history"""
+        from apps.chat.tasks import bot_prompt_for_user, try_send_message
+
+        bot_message = bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
+        try_send_message(self, message=bot_message, fail_silently=fail_silently)
