@@ -217,3 +217,104 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
             record
 
         assert sm.last_triggered_at is None
+
+
+def _assert_next_trigger_date(message: ScheduledMessage, expected_date: datetime):
+    message.refresh_from_db()
+    assert message.next_trigger_date == expected_date
+
+
+@pytest.mark.django_db()
+def test_schedule_config_update():
+    """Tests that a frequency update affects scheduled messages in the following way:
+    if last_triggered_at is None, set next_trigger_date as created_at + delta
+    if last_triggered_at is not None, set next_trigger_date as last_triggered_at + delta
+    """
+    session = ExperimentSessionFactory()
+    experiment = session.experiment
+    team = experiment.team
+    session2 = ExperimentSessionFactory(team=team, experiment=experiment)
+    schedule_conf = ScheduledMessageConfigFactory(
+        experiment=experiment,
+        team=team,
+        time_period=TimePeriod(TimePeriod.WEEKS),
+        frequency=1,
+        repetitions=4,
+    )
+
+    utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+    message1 = ScheduledMessage.objects.create(
+        participant=session.participant, team=session.team, schedule=schedule_conf
+    )
+    message2 = ScheduledMessage.objects.create(
+        participant=session2.participant,
+        team=session.team,
+        schedule=schedule_conf,
+        last_triggered_at=utc_now - relativedelta(days=5),
+    )
+
+    message1_prev_trigger_date = message1.next_trigger_date
+    message2_prev_trigger_date = message2.next_trigger_date
+
+    # Frequency update. Message1 should use its `created_at` as the baseline, message2 its `last_triggered_at`
+    new_frequency = 2
+    new_delta = relativedelta(**{schedule_conf.time_period: new_frequency})
+    schedule_conf.frequency = new_frequency
+    schedule_conf.save()
+
+    _assert_next_trigger_date(message1, message1.created_at + new_delta)
+    _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
+    assert message1.next_trigger_date > message1_prev_trigger_date
+    assert message2.next_trigger_date > message2_prev_trigger_date
+    message1_prev_trigger_date = message1.next_trigger_date
+    message2_prev_trigger_date = message2.next_trigger_date
+
+    # Time period update. Message1 should use its `created_at` as the baseline, message2 its `last_triggered_at`
+    new_period = TimePeriod.DAYS
+    schedule_conf.time_period = new_period
+    new_delta = relativedelta(**{new_period: schedule_conf.frequency})
+    schedule_conf.save()
+
+    _assert_next_trigger_date(message1, message1.created_at + new_delta)
+    _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
+    assert message1.next_trigger_date < message1_prev_trigger_date
+    assert message2.next_trigger_date < message2_prev_trigger_date
+
+
+@pytest.mark.django_db()
+def test_schedule_config_repetition_update():
+    """Tests that a repetition update affects scheduled messages in the following way:
+    if new_repetitions >= scheduled_message.total_triggers:
+        resolved = False
+    if new_repetitions < scheduled_message.total_triggers:
+        resolved = True
+
+    """
+    session = ExperimentSessionFactory()
+    experiment = session.experiment
+    team = experiment.team
+    schedule_conf = ScheduledMessageConfigFactory(
+        experiment=experiment,
+        team=team,
+        time_period=TimePeriod(TimePeriod.WEEKS),
+        frequency=1,
+        repetitions=4,
+    )
+
+    message = ScheduledMessage.objects.create(
+        participant=session.participant, team=session.team, schedule=schedule_conf, resolved=True, total_triggers=4
+    )
+
+    # Increasing repetitions should undo resolution
+    schedule_conf.repetitions += 1
+    schedule_conf.save()
+
+    message.refresh_from_db()
+    assert message.resolved is False
+
+    # Decreasing repetitions should affect only message 2
+    schedule_conf.repetitions -= 1
+    schedule_conf.save()
+
+    message.refresh_from_db()
+    assert message.resolved is True

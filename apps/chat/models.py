@@ -7,12 +7,14 @@ import pytz
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.db import models
+from django.db.models import Case, DateTimeField, F, When
 from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.teams.models import BaseTeamModel
+from apps.utils.django_db import MakeInterval
 from apps.utils.models import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -142,7 +144,41 @@ class ScheduledMessageConfig(BaseTeamModel):
             raise ValueError(_("Recurring schedules require `repetitions` to be larger than 0"))
         if not self.recurring and self.repetitions > 0:
             raise ValueError(_("Non recurring schedules cannot have `repetitions` larger than 0"))
+        if self.id:
+            self.update_scheduled_messages()
         return super().save(*args, **kwargs)
+
+    def update_scheduled_messages(self):
+        """
+        This method updates the scheduled_messages queryset by considering the following criteria:
+        - trigger_event and recurring: No effect. Users will not be able to change these at the moment
+
+        - Number of repetitions:
+            - If new repetitions are greater than total_triggers, mark resolved ones as unresolved.
+            - If new repetitions are less than total_triggers, mark unresolved ones as resolved.
+
+        - Frequency and time period (delta change):
+            - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
+            is used as the baseline for adding the new delta
+            - If the scheduled message's last_triggered_at field is not None (it has fired before), that field is
+            then used as the baseline for adding the new delta
+        """
+        (
+            self.scheduled_messages.annotate(
+                new_delta=MakeInterval(self.time_period, self.frequency),
+            ).update(
+                resolved=Case(
+                    When(total_triggers__lt=self.repetitions, then=False),
+                    When(total_triggers__gte=self.repetitions, then=True),
+                    output_field=models.BooleanField(),
+                ),
+                next_trigger_date=Case(
+                    When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
+                    When(last_triggered_at__isnull=False, then=F("last_triggered_at") + F("new_delta")),
+                    output_field=DateTimeField(),
+                ),
+            )
+        )
 
 
 class ScheduledMessage(BaseTeamModel):
