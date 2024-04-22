@@ -137,7 +137,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
         if self.cancelled:
             raise GenerationCancelled(result)
 
-        self._save_message_to_history(output, ChatMessageType.AI)
+        if config.get("configurable", {}).get("save_output_to_history", True):
+            self._save_message_to_history(output, ChatMessageType.AI)
         return result
 
     def _get_output_check_cancellation(self, input, config):
