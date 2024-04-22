@@ -445,6 +445,7 @@ class ChannelBase:
             llm=self.experiment.llm,
             experiment_channel=self.experiment_channel,
         )
+        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.CONVERSATION_START)
 
     def _is_reset_conversation_request(self):
         return self.user_query == ExperimentChannel.RESET_COMMAND
