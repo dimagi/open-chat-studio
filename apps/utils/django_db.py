@@ -11,7 +11,7 @@ class MakeInterval(models.Func):
     arg_joiner = " => "
 
     def __init__(self, unit, value):
-        assert unit in ("years", "months", "days", "hours", "mins", "secs")
+        assert unit in ("years", "months", "weeks", "days", "hours", "mins", "secs")
         expressions = (UnquotedValue(unit), value)
         super().__init__(*expressions, output_field=models.DateTimeField())
 

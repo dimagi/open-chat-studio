@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType, ScheduledMessage
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
@@ -199,4 +199,21 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
         recipient_list=experiment.safety_violation_notification_emails,
         fail_silently=False,
         html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
+    )
+
+
+def _get_messages_to_fire():
+    return ScheduledMessage.objects.filter(resolved=False, next_trigger_date__lte=functions.Now())
+
+
+def poll_scheduled_messages():
+    """Docstring here"""
+
+    messages = _get_messages_to_fire()
+    for message in messages:
+        message.safe_trigger()
+
+    # Hmm, reason about this update. Should it not be in the trigger method?
+    ScheduledMessage.objects.bulk_update(
+        messages, ["total_triggers", "resolved", "next_trigger_date", "last_triggered_at"]
     )
