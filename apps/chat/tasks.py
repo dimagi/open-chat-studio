@@ -209,6 +209,7 @@ def _get_messages_to_fire():
     return ScheduledMessage.objects.filter(resolved=False, next_trigger_date__lte=functions.Now())
 
 
+@shared_task()
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
