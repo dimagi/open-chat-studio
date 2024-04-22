@@ -19,7 +19,7 @@ def test_validation_error_raised(experiment):
         "name": "pesky reminder",
         "team": experiment.team,
         "experiment": experiment,
-        "trigger_event": TriggerEvent.CONVERSATION_START,
+        "trigger_event": TriggerEvent.PARTICIPANT_JOINED_EXPERIMENT,
         "recurring": True,
         "time_period": TimePeriod.WEEKS,
         "frequency": 2,
