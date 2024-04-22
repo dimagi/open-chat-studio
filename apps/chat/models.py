@@ -128,14 +128,14 @@ class ScheduledMessageConfig(BaseTeamModel):
     recurring = models.BooleanField()
     time_period = models.CharField(choices=TimePeriod.choices)
     frequency = models.IntegerField(default=1)
-    reptitions = models.IntegerField(default=0)
+    repetitions = models.IntegerField(default=0)
     prompt_text = models.TextField()
 
     def save(self, *args, **kwargs):
-        if self.recurring and self.reptitions == 0:
-            raise ValueError(_("Recurring schedules require `reptitions` to be larger than 0"))
-        if not self.recurring and self.reptitions > 0:
-            raise ValueError(_("Non recurring schedules cannot have `reptitions` larger than 0"))
+        if self.recurring and self.repetitions == 0:
+            raise ValueError(_("Recurring schedules require `repetitions` to be larger than 0"))
+        if not self.recurring and self.repetitions > 0:
+            raise ValueError(_("Non recurring schedules cannot have `repetitions` larger than 0"))
         return super().save(*args, **kwargs)
 
 
@@ -144,6 +144,35 @@ class ScheduledMessage(BaseTeamModel):
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
-    next_trigger_date = models.DateTimeField()
-    last_trigged_at = models.DateTimeField(null=True)
+    next_trigger_date = models.DateTimeField(null=True)
+    last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
+    resolved = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if not self.next_trigger_date:
+            delta = relativedelta(**{self.schedule.time_period: self.schedule.frequency})
+            utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+            self.next_trigger_date = utc_now + delta
+        super().save(*args, **kwargs)
+
+    def safe_trigger(self):
+        """This wraps a call to the _trigger method in a try-catch block"""
+        try:
+            self._trigger()
+        except Exception as e:
+            logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
+
+    def _trigger(self):
+        delta = relativedelta(**{self.schedule.time_period: self.schedule.frequency})
+        utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+
+        experiment_session = self.participant.get_latest_session()
+        experiment_session.send_bot_message(self.schedule.prompt_text, fail_silently=False)
+
+        self.last_triggered_at = utc_now
+        self.total_triggers += 1
+        if self.total_triggers >= self.schedule.repetitions:
+            self.resolved = True
+        else:
+            self.next_trigger_date = utc_now + delta
