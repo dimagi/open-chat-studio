@@ -209,7 +209,8 @@ def _get_messages_to_fire():
 
 
 def poll_scheduled_messages():
-    """Docstring here"""
+    """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
+    new trigger details for each message."""
 
     messages = _get_messages_to_fire()
     for message in messages:
