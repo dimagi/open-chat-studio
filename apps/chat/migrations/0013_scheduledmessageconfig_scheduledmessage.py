@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('name', models.CharField(max_length=64)),
-                ('trigger_event', models.CharField(choices=[('conversation_end', 'The conversation ends'), ('conversation_start', 'A new conversation is started')], db_index=True)),
+                ('trigger_event', models.CharField(choices=[('participant_joined', 'A new participant joined the experiment')], db_index=True)),
                 ('recurring', models.BooleanField()),
                 ('time_period', models.CharField(choices=[('hours', 'Hours'), ('days', 'Days'), ('weeks', 'Weeks'), ('months', 'Months')])),
                 ('frequency', models.IntegerField(default=1)),

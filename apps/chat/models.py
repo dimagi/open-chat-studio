@@ -116,8 +116,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
 
 class TriggerEvent(models.TextChoices):
-    CONVERSATION_END = ("conversation_end", "The conversation ends")
-    CONVERSATION_START = ("conversation_start", "A new conversation is started")
+    PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
 class TimePeriod(models.TextChoices):

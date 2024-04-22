@@ -11,7 +11,7 @@ class ScheduledMessageConfigFactory(factory.django.DjangoModelFactory):
     experiment = factory.SubFactory(ExperimentFactory)
     team = factory.LazyAttribute(lambda obj: obj.experiment.team)
     name = factory.Faker("name")
-    trigger_event = TriggerEvent.CONVERSATION_START
+    trigger_event = TriggerEvent.PARTICIPANT_JOINED_EXPERIMENT
     recurring = True
     time_period = TimePeriod.DAYS
     frequency = 1

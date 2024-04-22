@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 @shared_task
 def enqueue_static_triggers(session_id, trigger_type):
     session = ExperimentSession.objects.get(id=session_id)
+
     trigger_ids = StaticTrigger.objects.filter(experiment_id=session.experiment_id, type=trigger_type).values_list(
         "id", flat=True
     )

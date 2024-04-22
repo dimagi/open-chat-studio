@@ -407,6 +407,7 @@ class ChannelBase:
 
         if not self.experiment_session:
             self._create_new_experiment_session()
+            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         else:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()

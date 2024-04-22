@@ -64,6 +64,7 @@ class StaticTriggerType(models.TextChoices):
     CONVERSATION_START = ("conversation_start", "A new conversation is started")
     NEW_HUMAN_MESSAGE = ("new_human_message", "A new human message is received")
     NEW_BOT_MESSAGE = ("new_bot_message", "A new bot message is received")
+    PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
 class StaticTrigger(BaseModel):
