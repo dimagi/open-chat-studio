@@ -176,7 +176,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
     @property
-    def participant_details(self):
+    def participant_data(self):
         return self.experiment.get_participant_data(self.session.participant) or ""
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
@@ -213,7 +213,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_details=RunnableLambda(lambda x: self.participant_details))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -236,7 +236,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         # when we implement this for anthropic
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_details=RunnableLambda(lambda x: self.participant_details))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
             | RunnableLambda(self.format_input)
             | create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
         )
