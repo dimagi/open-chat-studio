@@ -39,6 +39,7 @@ def send_message_to_bot(session: ExperimentSession, params) -> str:
     except KeyError:
         message = "The user hasn't responded, please prompt them again."
 
+    # TODO: experiment_session.send_bot_message
     ping_message = bot_prompt_for_user(session, prompt_instruction=message)
     try_send_message(experiment_session=session, message=ping_message)
 

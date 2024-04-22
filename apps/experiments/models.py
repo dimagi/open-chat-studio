@@ -624,6 +624,7 @@ class ExperimentSession(BaseTeamModel):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
         this session's history"""
         from apps.chat.tasks import bot_prompt_for_user, try_send_message
+        # TODO: Move bot_prompt_for_user and try_send_message to better suited places
 
         bot_message = bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
         try_send_message(self, message=bot_message, fail_silently=fail_silently)

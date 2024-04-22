@@ -106,6 +106,7 @@ def _no_activity_pings():
             return
         ping_message = bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
+            # TODO: experiment_session.send_bot_message
             try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
