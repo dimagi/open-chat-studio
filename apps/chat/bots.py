@@ -6,7 +6,7 @@ from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SafetyLayer, Experiment
+from apps.experiments.models import ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
@@ -46,23 +46,18 @@ class TopicBot:
         self.input_tokens = 0
         self.output_tokens = 0
 
-        # maps keywords to experiment ids. you can imagine this being JSON-configurable or initializable
-        # by a data structure.
-        self.nested_experiments = {
-            "SPANISH": 1,
-            "FRENCH": 2,
-            "ENGLISH": 3,
-        }
-        self.nested_chains = {}
+        # maps keywords to child experiments.
+        self.child_experiment_routes = ExperimentRoute.objects.select_related("child").filter(parent=experiment).all()
+        self.child_chains = {}
+        self.default_child_chain = None
         self._initialize()
 
     def _initialize(self):
-        if self.nested_experiments:
-            for nested_experiment_keyword, nested_experiment_id in self.nested_experiments.items():
-                self.nested_chains[nested_experiment_keyword] = create_experiment_runnable(
-                    Experiment.objects.get(id=nested_experiment_id), self.session
-                )
-
+        for child_route in self.child_experiment_routes:
+            child_runnable = create_experiment_runnable(child_route.child, self.session)
+            self.child_chains[child_route.keyword.lower().strip()] = child_runnable
+            if child_route.is_default:
+                self.default_child_chain = child_runnable
 
         self.chain = create_experiment_runnable(self.session.experiment, self.session)
 
@@ -72,8 +67,8 @@ class TopicBot:
         ]
 
     def _call_predict(self, input_str, save_input_to_history=True):
-        if self.nested_experiments:
-            chain = self._get_chain(input_str)
+        if self.child_chains:
+            chain = self._get_child_chain(input_str)
         else:
             chain = self.chain
         result = chain.invoke(
@@ -90,7 +85,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_chain(self, input_str):
+    def _get_child_chain(self, input_str):
         result = self.chain.invoke(
             input_str,
             config={
@@ -100,7 +95,10 @@ class TopicBot:
                 }
             },
         )
-        return self.nested_chains[result.output]
+        try:
+            return self.child_chains[result.output.lower().strip()]
+        except KeyError:
+            return self.default_child_chain or self.child_chains.values()[0]
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
