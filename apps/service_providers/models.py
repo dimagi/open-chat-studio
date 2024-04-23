@@ -117,6 +117,7 @@ class VoiceProviderType(models.TextChoices):
     aws = "aws", _("AWS Polly")
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
+    openai_voice_engine = "openaivoiceengine", _("OpenAI VE Text to Speech")
 
     @property
     def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
@@ -127,6 +128,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AzureVoiceConfigForm
             case VoiceProviderType.openai:
                 return forms.OpenAIConfigForm
+            case VoiceProviderType.openai_voice_engine:
+                return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict):
@@ -138,6 +141,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.AzureSpeechService(**config)
                 case VoiceProviderType.openai:
                     return speech_service.OpenAISpeechService(**config)
+                case VoiceProviderType.openai_voice_engine:
+                    return speech_service.OpenAIVoiceEngineSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -149,6 +154,7 @@ class VoiceProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    files = models.ManyToManyField("files.File", blank=True)
 
     class Meta:
         ordering = ("type", "name")

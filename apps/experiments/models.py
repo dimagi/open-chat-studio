@@ -193,11 +193,13 @@ class SyntheticVoice(BaseModel):
     AWS = "AWS"
     Azure = "Azure"
     OpenAI = "OpenAI"
+    OpenAIVoiceEngine = "OpenAIVoiceEngine"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
+        ("OpenAIVoiceEngine", OpenAIVoiceEngine),
     )
 
     name = models.CharField(
@@ -213,7 +215,7 @@ class SyntheticVoice(BaseModel):
         null=False, blank=False, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
-        null=False, blank=False, choices=SERVICES, max_length=6, help_text="The service this voice is from"
+        null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
     )
 
     class Meta:
