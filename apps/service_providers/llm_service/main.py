@@ -7,6 +7,7 @@ from langchain.chat_models.base import BaseChatModel
 from langchain_community.chat_models import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseLanguageModel
+from langchain_openai import OpenAIEmbeddings
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
@@ -41,6 +42,14 @@ class OpenAILlmService(LlmService):
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
+
+    def get_openai_embeddings(self, model="text-embedding-3-small") -> OpenAIEmbeddings:
+        return OpenAIEmbeddings(
+            openai_api_key=self.openai_api_key,
+            openai_api_base=self.openai_api_base,
+            openai_organization=self.openai_organization,
+            model=model,
+        )
 
     def get_raw_client(self) -> OpenAI:
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)

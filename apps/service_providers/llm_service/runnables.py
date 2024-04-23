@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 import openai
 import pytz
+from langchain import hub
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
@@ -29,6 +30,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.vectordb.vectorstore import PGVector
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,10 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     if experiment.tools_enabled:
         return AgentExperimentRunnable(experiment=experiment, session=session)
-
+    if experiment.files.all():
+        print("***********RAG EXPERIMENT************")
+        return RagExperimentRunnable(experiment=experiment, session=session)
+    print("***********SIMPLE EXPERIMENT************")
     return SimpleExperimentRunnable(experiment=experiment, session=session)
 
 
@@ -214,6 +219,26 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             )
             | RunnableLambda(self.format_input)
             | self.prompt
+            | model
+            | StrOutputParser()
+        )
+
+
+class RagExperimentRunnable(ExperimentRunnable):
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+        def format_docs(docs):
+            return "\n\n".join(doc.page_content for doc in docs)
+
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        embeddings = self.experiment.get_llm_service().get_openai_embeddings()
+        retriever = PGVector(self.experiment, embeddings).as_retriever()
+        prompt = hub.pull("rlm/rag-prompt")
+        return (
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | RunnablePassthrough.assign(
+                history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
+            )
+            | prompt
             | model
             | StrOutputParser()
         )

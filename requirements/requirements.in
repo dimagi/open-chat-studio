@@ -45,3 +45,5 @@ turn-python>=0.2.0
 jinja2
 django-taggit
 pgvector
+PyMuPDF
+langchainhub

@@ -24,7 +24,10 @@ from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import BSHTMLLoader, PyMuPDFLoader, TextLoader
 from langchain_core.prompts import PromptTemplate
+from langchain_openai import OpenAIEmbeddings
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -61,6 +64,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.users.models import CustomUser
+from apps.vectordb.vectorstore import PGVector
 
 
 @login_and_team_required
@@ -361,7 +365,41 @@ class AddFileToExperiment(BaseAddFileHtmxView):
         experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         experiment.files.add(file)
+        file_path = experiment.files.all().last().file.path
+        splits = self.load_rag_file(file_path)
+        embeddings_model = OpenAIEmbeddings()
+        PGVector.from_texts(splits, embeddings_model, None, experiment)
         return file
+
+    def load_rag_file(self, file_path: str) -> list[str]:
+        """
+        Loads a text file of any supported type (PDF, TXT, HTML) into Langchain.
+
+        Args:
+            file_path (str): The path to the text file.
+
+        Returns:
+            str_splits: A list of strings from  Langchain Document objects
+            containing the loaded page_content.
+        """
+
+        # Automatically detect loader based on file extension if not provided
+        extension = file_path.split(".")[-1].lower()
+        if extension == "pdf":
+            loader = PyMuPDFLoader(file_path, extract_images=False)
+        elif extension in ("txt", "text"):
+            loader = TextLoader(file_path)
+        elif extension == "html":
+            loader = BSHTMLLoader(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {extension}")
+
+        # Load the text file using the appropriate loader
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        splits = text_splitter.split_documents(documents)
+        str_splits = [s.page_content for s in splits[0:10]]
+        return str_splits
 
     def get_delete_url(self, file):
         return reverse("experiments:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
