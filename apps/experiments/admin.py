@@ -62,6 +62,11 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
 
 
+@admin.register(models.ExperimentRoute)
+class ExperimentRouteAdmin(admin.ModelAdmin):
+    list_display = ("parent", "child", "keyword", "is_default")
+
+
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
     list_display = (
