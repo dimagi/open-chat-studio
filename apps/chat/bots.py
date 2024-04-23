@@ -95,6 +95,9 @@ class TopicBot:
                 }
             },
         )
+        self.input_tokens = self.input_tokens + result.prompt_tokens
+        self.output_tokens = self.output_tokens + result.completion_tokens
+
         try:
             return self.child_chains[result.output.lower().strip()]
         except KeyError:
