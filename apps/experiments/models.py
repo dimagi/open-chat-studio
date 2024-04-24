@@ -373,6 +373,9 @@ class Experiment(BaseTeamModel):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
+    children = models.ManyToManyField(
+        "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
+    )
 
     class Meta:
         ordering = ["name"]
@@ -400,6 +403,23 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+
+class ExperimentRoute(BaseTeamModel):
+    """
+    Through model for Experiment.children routes.
+    """
+
+    parent = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="child_links")
+    child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
+    keyword = models.SlugField(max_length=128)
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = (
+            ("parent", "child"),
+            ("parent", "keyword"),
+        )
 
 
 class Participant(BaseTeamModel):
