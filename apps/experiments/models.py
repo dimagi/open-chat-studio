@@ -212,7 +212,7 @@ class SyntheticVoice(BaseModel):
     )
 
     gender = models.CharField(
-        null=False, blank=False, choices=GENDERS, max_length=14, help_text="The gender of this voice"
+        null=False, blank=True, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
         null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"

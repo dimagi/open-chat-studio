@@ -12,6 +12,7 @@ from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
+from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel
 
@@ -177,17 +178,15 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         return self.type_enum.get_speech_service(config)
 
     def add_files(self, files):
-        # TODO: Delete files when object is deleted
         if self.type == VoiceProviderType.openai_voice_engine:
-            from apps.experiments.models import SyntheticVoice
-
             for file in files:
+                # TODO: Split file extention
                 SyntheticVoice.objects.create(
                     name=file.name,
                     neural=True,
                     language="",
                     language_code="",
-                    gender="male",  # TODO: Do not hardcode this
+                    gender="",
                     service=SyntheticVoice.OpenAIVoiceEngine,
                 )
                 self.files.add(file)
