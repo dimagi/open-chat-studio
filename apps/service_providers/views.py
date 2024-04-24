@@ -45,10 +45,13 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
     def get_form(self, data=None):
         return get_service_provider_config_form(self.provider_type, data=data, instance=self.get_object())
 
-    def form_valid(self, form):
+    def form_valid(self, form, file_formset):
         instance = form.save()
         instance.team = self.request.team
         instance.save()
+        if file_formset:
+            files = file_formset.save(self.request)
+            instance.add_files(files)
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)

@@ -5,12 +5,23 @@
   <div class="app-card max-w-5xl mx-auto">
     <h1 class="pg-title">{{ title }}</h1>
     <div>
-      <form method="post" class="my-2" x-data="{ type: '{{ secondary_key }}' }">
+      <form method="post" class="my-2" x-data="{ type: '{{ secondary_key }}' }" enctype="multipart/form-data">
         {% csrf_token %}
         {% render_form_fields form.primary %}
         {% for key, form in form.secondary.items %}
           <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
             {% render_form_fields form %}
+
+            {% if form.allow_file_upload %}
+              <hr class="my-4">
+              {% if not object.id %}
+                {% include "files/partials/file_formset.html" %}
+              {% else %}
+                {% with delete_url=object.remove_file_url upload_url=object.add_file_url %}
+                  {% include "files/partials/file_list.html" with files=object.files.all nested=True %}
+                {% endwith %}
+              {% endif %}
+            {% endif %}
           </div>
         {% endfor %}
         <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">

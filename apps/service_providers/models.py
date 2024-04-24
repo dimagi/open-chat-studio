@@ -30,6 +30,11 @@ class LlmProviderObjectManagerObjectManager(AuditingManager):
     pass
 
 
+class ProviderMixin:
+    def add_files(self, *args, **kwargs):
+        ...
+
+
 @dataclasses.dataclass
 class LlmProviderType:
     slug: str
@@ -85,7 +90,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class LlmProvider(BaseTeamModel):
+class LlmProvider(BaseTeamModel, ProviderMixin):
     objects = LlmProviderObjectManagerObjectManager()
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
@@ -149,7 +154,7 @@ class VoiceProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class VoiceProvider(BaseTeamModel):
+class VoiceProvider(BaseTeamModel, ProviderMixin):
     objects = VoiceProviderObjectManager()
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
     name = models.CharField(max_length=255)
@@ -169,6 +174,22 @@ class VoiceProvider(BaseTeamModel):
     def get_speech_service(self) -> speech_service.SpeechService:
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
+
+    def add_files(self, files):
+        # TODO: Delete files when object is deleted
+        if self.type == VoiceProviderType.openai_voice_engine:
+            from apps.experiments.models import SyntheticVoice
+
+            for file in files:
+                SyntheticVoice.objects.create(
+                    name=file.name,
+                    neural=True,
+                    language="",
+                    language_code="",
+                    gender="male",  # TODO: Do not hardcode this
+                    service=SyntheticVoice.OpenAIVoiceEngine,
+                )
+                self.files.add(file)
 
 
 class MessagingProviderType(models.TextChoices):
@@ -203,7 +224,7 @@ class MessagingProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class MessagingProvider(BaseTeamModel):
+class MessagingProvider(BaseTeamModel, ProviderMixin):
     objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
