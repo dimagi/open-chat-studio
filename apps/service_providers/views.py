@@ -44,7 +44,6 @@ class AddFileToProvider(BaseAddFileHtmxView):
     def form_valid(self, form):
         provider = ServiceProvider[self.kwargs["provider_type"]]
         provider = get_object_or_404(provider.model, team__slug=self.request.team.slug, pk=self.kwargs["pk"])
-        provider.validate_uploaded_files(uploaded_files=[f for _, f in form.files.items()])
         file = super().form_valid(form)
         provider.add_files([file])
         return file
@@ -94,7 +93,6 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         instance.team = self.request.team
         instance.save()
         if file_formset:
-            instance.validate_uploaded_files(uploaded_files=[f for _, f in file_formset.files.items()])
             files = file_formset.save(self.request)
             instance.add_files(files)
 

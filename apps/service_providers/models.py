@@ -2,7 +2,6 @@ import dataclasses
 from enum import Enum
 
 from django.contrib.postgres.fields import ArrayField
-from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
 from django.utils.functional import classproperty
@@ -14,6 +13,7 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
+from apps.files.models import File
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel
 
@@ -37,7 +37,7 @@ class ProviderMixin:
     def add_files(self, *args, **kwargs):
         ...
 
-    def validate_uploaded_files(self, *args, **kwargs):
+    def validate_uploaded_file_names(self, *args, **kwargs):
         ...
 
 
@@ -181,21 +181,22 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(self, config)
 
-    def validate_uploaded_files(self, uploaded_files: list[InMemoryUploadedFile]):
+    def validate_uploaded_file_names(self, uploaded_files: list[File]):
         """Validate file types. Raises UserServiceProviderConfigError for invalid file types"""
         if self.type == VoiceProviderType.openai_voice_engine:
             accepted_file_types = ["mp4", "mp3"]
-            invalid_extentions = []
+            invalid_extentions = set()
             for file in uploaded_files:
                 file_extention = file.name.split(".")[1]
                 if file_extention not in accepted_file_types:
-                    invalid_extentions.append(f".{file_extention}")
+                    invalid_extentions.add(f".{file_extention}")
             if invalid_extentions:
                 string = ", ".join(invalid_extentions)
                 raise UserServiceProviderConfigError(f"File extentions not supported: {string}")
 
     @transaction.atomic()
     def add_files(self, files):
+        self.validate_uploaded_file_names(files)
         if self.type == VoiceProviderType.openai_voice_engine:
             for file in files:
                 try:
