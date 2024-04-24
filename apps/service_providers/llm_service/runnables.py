@@ -54,9 +54,7 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     if experiment.tools_enabled:
         return AgentExperimentRunnable(experiment=experiment, session=session)
     if experiment.files.all():
-        print("***********RAG EXPERIMENT************")
         return RagExperimentRunnable(experiment=experiment, session=session)
-    print("***********SIMPLE EXPERIMENT************")
     return SimpleExperimentRunnable(experiment=experiment, session=session)
 
 
