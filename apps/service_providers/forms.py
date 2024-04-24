@@ -3,6 +3,8 @@ from django.utils.translation import gettext_lazy as _
 
 
 class ProviderTypeConfigForm(forms.Form):
+    allow_file_upload = False
+
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
@@ -54,6 +56,10 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             " one organization or want to use your default organization."
         ),
     )
+
+
+class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
+    allow_file_upload = True
 
 
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

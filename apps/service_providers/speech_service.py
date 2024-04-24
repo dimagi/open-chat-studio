@@ -189,3 +189,27 @@ class OpenAISpeechService(SpeechService):
             file=audio,
         )
         return transcript.text
+
+
+class OpenAIVoiceEngineSpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
+    supports_transcription: ClassVar[bool] = True
+    openai_api_key: str
+    openai_api_base: str = None
+    openai_organization: str = None
+
+    @property
+    def _client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        """
+        Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
+        """
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self._client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
