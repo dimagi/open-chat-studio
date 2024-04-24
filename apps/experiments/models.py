@@ -412,7 +412,7 @@ class ExperimentRoute(BaseTeamModel):
 
     parent = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="child_links")
     child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
-    keyword = models.CharField(max_length=128)
+    keyword = models.SlugField(max_length=128)
     is_default = models.BooleanField(default=False)
 
     class Meta:
