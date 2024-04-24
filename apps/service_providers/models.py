@@ -3,6 +3,7 @@ from enum import Enum
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.urls import reverse
 from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
@@ -11,7 +12,7 @@ from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
-from apps.service_providers import auth_service, model_audit_fields
+from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service
@@ -190,6 +191,22 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     service=SyntheticVoice.OpenAIVoiceEngine,
                 )
                 self.files.add(file)
+
+    def remove_file_url(self):
+        return reverse(
+            "service_providers:delete_file",
+            kwargs={"team_slug": self.team.slug, "provider_type": const.VOICE, "pk": self.id, "file_id": "000"},
+        )
+
+    def add_file_url(self):
+        return reverse(
+            "service_providers:add_file",
+            kwargs={
+                "team_slug": self.team.slug,
+                "provider_type": const.VOICE,
+                "pk": self.id,
+            },
+        )
 
 
 class MessagingProviderType(models.TextChoices):
