@@ -25,7 +25,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import BSHTMLLoader, PyMuPDFLoader, TextLoader
+from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import OpenAIEmbeddings
 from waffle import flag_is_active
@@ -389,8 +389,6 @@ class AddFileToExperiment(BaseAddFileHtmxView):
             loader = PyMuPDFLoader(file_path, extract_images=False)
         elif extension in ("txt", "text"):
             loader = TextLoader(file_path)
-        elif extension == "html":
-            loader = BSHTMLLoader(file_path)
         else:
             raise ValueError(f"Unsupported file type: {extension}")
 
