@@ -5,9 +5,11 @@ from django.shortcuts import get_object_or_404, resolve_url
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.experiments.models import SyntheticVoice
 from apps.files.views import BaseAddFileHtmxView
+from apps.service_providers.models import VoiceProviderType
 
 from ..generics.views import BaseTypeSelectFormView
 from .utils import ServiceProvider, get_service_provider_config_form
@@ -85,7 +87,14 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         return self.provider_type.model
 
     def get_form(self, data=None):
-        return get_service_provider_config_form(self.provider_type, data=data, instance=self.get_object())
+        forms_to_exclude = []
+        if not flag_is_active(self.request, "open_ai_voice_engine"):
+            forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
+
+        print(f"Should exclide {forms_to_exclude}")
+        return get_service_provider_config_form(
+            self.provider_type, data=data, instance=self.get_object(), exclude_forms=forms_to_exclude
+        )
 
     @transaction.atomic()
     def form_valid(self, form, file_formset):
