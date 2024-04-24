@@ -139,7 +139,7 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_speech_service(self, config: dict):
+    def get_speech_service(self, voice_provider: "VoiceProvider", config: dict):
         try:
             match self:
                 case VoiceProviderType.aws:
@@ -149,7 +149,7 @@ class VoiceProviderType(models.TextChoices):
                 case VoiceProviderType.openai:
                     return speech_service.OpenAISpeechService(**config)
                 case VoiceProviderType.openai_voice_engine:
-                    return speech_service.OpenAIVoiceEngineSpeechService(**config)
+                    return speech_service.OpenAIVoiceEngineSpeechService(voice_provider=voice_provider, **config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -175,7 +175,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 
     def get_speech_service(self) -> speech_service.SpeechService:
         config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.get_speech_service(config)
+        return self.type_enum.get_speech_service(self, config)
 
     def add_files(self, files):
         if self.type == VoiceProviderType.openai_voice_engine:

@@ -3,11 +3,12 @@ import tempfile
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
 import pydantic
+import requests
 from openai import OpenAI
 from pydub import AudioSegment
 
@@ -193,6 +194,7 @@ class OpenAISpeechService(SpeechService):
 
 class OpenAIVoiceEngineSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
+    voice_provider: Any = None
     supports_transcription: ClassVar[bool] = True
     openai_api_key: str
     openai_api_base: str = None
@@ -206,6 +208,28 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         """
         Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
         """
+        sample_audio = self.voice_provider.files.get(name=synthetic_voice.name)
+
+        url = "https://api.openai.com/v1/audio/synthesize"
+        headers = {"Authorization": f"Bearer {self.openai_api_key}"}
+
+        files = {"reference_audio": sample_audio.file}
+        data = {
+            "model": "tts-1",
+            "text": text,
+            "speed": "1.0",
+            "response_format": "mp3",
+        }
+        response = requests.post(url, headers=headers, data=data, files=files)
+
+        if response.status_code == 200:
+            audio_data = BytesIO(response.content)
+            audio_segment = AudioSegment.from_file(audio_data, format="mp3")
+            audio_data.seek(0)
+            return SynthesizedAudio(audio=audio_data, duration=audio_segment.duration_seconds, format="mp3")
+        else:
+            msg = f"Error synthesizing voice with OpenAI Voice Engine. Response status: {response.status_code}."
+            raise AudioSynthesizeException(msg)
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self._client.audio.transcriptions.create(
