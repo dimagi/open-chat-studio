@@ -1,9 +1,11 @@
 from django import views
+from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 
 from apps.files.forms import get_file_formset
 from apps.generics.type_select_form import TypeSelectForm
+from apps.service_providers.exceptions import UserServiceProviderConfigError
 
 
 class BaseTypeSelectFormView(views.View):
@@ -37,8 +39,11 @@ class BaseTypeSelectFormView(views.View):
             file_formset = get_file_formset(request)
 
         if form.is_valid() and (not file_formset or file_formset.is_valid()):
-            self.form_valid(form, file_formset)
-            return HttpResponseRedirect(self.get_success_url())
+            try:
+                self.form_valid(form, file_formset)
+                return HttpResponseRedirect(self.get_success_url())
+            except UserServiceProviderConfigError as error:
+                messages.error(request, error.message)
         return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
     def form_valid(self, form, file_formset):
