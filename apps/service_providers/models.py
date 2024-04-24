@@ -2,7 +2,7 @@ import dataclasses
 from enum import Enum
 
 from django.contrib.postgres.fields import ArrayField
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
@@ -206,6 +206,18 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 "pk": self.id,
             },
         )
+
+    @transaction.atomic()
+    def delete(self):
+        if self.type == VoiceProviderType.openai_voice_engine:
+            for file in self.files.all():
+                synthetic_voice = SyntheticVoice.objects.filter(
+                    service=SyntheticVoice.OpenAIVoiceEngine, name=file.name
+                ).first()
+                if synthetic_voice:
+                    synthetic_voice.delete()
+                file.delete()
+        return super().delete()
 
 
 class MessagingProviderType(models.TextChoices):
