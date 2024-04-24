@@ -1,10 +1,11 @@
 from unittest import mock
 
+import factory
 import pytest
 
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
-from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.exceptions import ServiceProviderConfigError, UserServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.files import FileFactory
@@ -112,7 +113,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data, supports_
     speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1
 
-    files = FileFactory.create_batch(3)
+    files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.mp3"))
     provider.add_files(files)
     expected_file_count = len(files) if supports_files else 0
     assert provider.files.count() == expected_file_count
@@ -152,7 +153,7 @@ def test_openai_voice_provider_error(config_key):
     _test_voice_provider_error(VoiceProviderType.openai, data=form.cleaned_data)
 
 
-def test_openai_voice_engine_voice_provider(team_with_users):
+def test_openai_ve_voice_provider(team_with_users):
     provider = _test_voice_provider(
         team_with_users,
         VoiceProviderType.openai_voice_engine,
@@ -165,6 +166,20 @@ def test_openai_voice_engine_voice_provider(team_with_users):
     )
     speech_service = provider.get_speech_service()
     assert speech_service.voice_provider is not None
+
+
+def test_openai_ve_provider_delete(team_with_users):
+    """Deleting the voice provider should remove all associated synthetic voices and files as well"""
+    provider = _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.openai_voice_engine,
+        data={
+            "openai_api_key": "test_key",
+            "openai_api_base": "https://openai.com",
+            "openai_organization": "test_organization",
+        },
+        supports_files=True,
+    )
 
     synthetic_voices = []
     files = []
@@ -185,13 +200,29 @@ def test_openai_voice_engine_voice_provider(team_with_users):
             file.refresh_from_db()
 
 
+def test_openai_ve_provider_fails_file_validation(team_with_users):
+    provider = _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.openai_voice_engine,
+        data={
+            "openai_api_key": "test_key",
+            "openai_api_base": "https://openai.com",
+            "openai_organization": "test_organization",
+        },
+        supports_files=True,
+    )
+    files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.docx"))
+    with pytest.raises(UserServiceProviderConfigError, match="File extentions not supported: .docx"):
+        provider.add_files(files)
+
+
 @pytest.mark.parametrize(
     "config_key",
     [
         "openai_api_key",
     ],
 )
-def test_openai_voice_engine_voice_provider_error(config_key):
+def test_openai_ve_voice_provider_error(config_key):
     """Test that any missing param causes failure"""
     form = VoiceProviderType.openai_voice_engine.form_cls(
         data={
