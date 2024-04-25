@@ -18,7 +18,7 @@
                 {% include "files/partials/file_formset.html" %}
               {% else %}
                 {% with delete_url=object.remove_file_url upload_url=object.add_file_url %}
-                  {% include "files/partials/file_list.html" with files=object.files.all nested=True %}
+                  {% include "files/partials/file_list.html" with files=object.get_files nested=True %}
                 {% endwith %}
               {% endif %}
             {% endif %}

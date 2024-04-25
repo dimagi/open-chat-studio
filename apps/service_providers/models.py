@@ -214,6 +214,16 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise UserServiceProviderConfigError(message)
 
+    def get_files(self):
+        """Return the files found on the synthetic voices that points to this instance"""
+        files = []
+        for voice in self.syntheticvoice_set.all():
+            # Since the File model uses a generic FK, we cannot simply do a .values_list on a VoiceProvider query,
+            # since VoiceProvider does not have a reverse relation to `File` like SyntheticVoice has
+            if voice.file:
+                files.append(voice.file)
+        return files
+
     def remove_file_url(self):
         return reverse(
             "service_providers:delete_file",
@@ -233,13 +243,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     @transaction.atomic()
     def delete(self):
         if self.type == VoiceProviderType.openai_voice_engine:
-            for file in self.files.all():
-                synthetic_voice = SyntheticVoice.objects.filter(
-                    service=SyntheticVoice.OpenAIVoiceEngine, name=file.name
-                ).first()
-                if synthetic_voice:
-                    synthetic_voice.delete()
-                file.delete()
+            files_to_delete = self.get_files()
+            [f.delete() for f in files_to_delete]
+            self.syntheticvoice_set.all().delete()
         return super().delete()
 
 
