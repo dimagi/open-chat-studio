@@ -20,7 +20,6 @@ def test_aws_voice_provider(team_with_users):
             "aws_secret_access_key": "test_secret",
             "aws_region": "test_region",
         },
-        supports_files=False,
     )
 
 
@@ -54,7 +53,6 @@ def test_azure_voice_provider(team_with_users):
             "azure_subscription_key": "test_key",
             "azure_region": "test_region",
         },
-        supports_files=False,
     )
 
 
@@ -83,10 +81,10 @@ def _test_voice_provider_error(provider_type: VoiceProviderType, data):
     assert not form.is_valid()
 
     with pytest.raises(ServiceProviderConfigError):
-        provider_type.get_speech_service(voice_provider=None, config=data)
+        provider_type.get_speech_service(config=data)
 
 
-def _test_voice_provider(team, provider_type: VoiceProviderType, data, supports_files: bool):
+def _test_voice_provider(team, provider_type: VoiceProviderType, data):
     form = provider_type.form_cls(data=data)
     assert form.is_valid()
     provider = VoiceProvider.objects.create(
@@ -112,11 +110,6 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data, supports_
     object.__setattr__(speech_service, "_synthesize_voice", mock_synthesize)
     speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1
-
-    files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.mp3"))
-    provider.add_files(files)
-    expected_file_count = len(files) if supports_files else 0
-    assert provider.files.count() == expected_file_count
     return provider
 
 
@@ -129,7 +122,6 @@ def test_openai_voice_provider(team_with_users):
             "openai_api_base": "https://openai.com",
             "openai_organization": "test_organization",
         },
-        supports_files=False,
     )
 
 
@@ -154,7 +146,7 @@ def test_openai_voice_provider_error(config_key):
 
 
 def test_openai_ve_voice_provider(team_with_users):
-    provider = _test_voice_provider(
+    _test_voice_provider(
         team_with_users,
         VoiceProviderType.openai_voice_engine,
         data={
@@ -162,10 +154,7 @@ def test_openai_ve_voice_provider(team_with_users):
             "openai_api_base": "https://openai.com",
             "openai_organization": "test_organization",
         },
-        supports_files=True,
     )
-    speech_service = provider.get_speech_service()
-    assert speech_service.voice_provider is not None
 
 
 def test_openai_ve_provider_delete(team_with_users):
@@ -178,15 +167,14 @@ def test_openai_ve_provider_delete(team_with_users):
             "openai_api_base": "https://openai.com",
             "openai_organization": "test_organization",
         },
-        supports_files=True,
     )
 
-    synthetic_voices = []
-    files = []
-    for file in provider.files.all():
-        files.append(file)
-        synthetic_voice = SyntheticVoice.objects.get(name=file.name)
-        synthetic_voices.append(synthetic_voice)
+    files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.mp3"))
+    provider.add_files(files)
+    synthetic_voices = provider.syntheticvoice_set.all()
+    files = [voice.file for voice in synthetic_voices]
+    assert len(synthetic_voices) == 3
+    assert len(files) == 3
 
     provider.delete()
     for voice in synthetic_voices:
@@ -209,7 +197,6 @@ def test_openai_ve_provider_fails_file_validation(team_with_users):
             "openai_api_base": "https://openai.com",
             "openai_organization": "test_organization",
         },
-        supports_files=True,
     )
     files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.docx"))
     with pytest.raises(UserServiceProviderConfigError, match="File extentions not supported: .docx"):
