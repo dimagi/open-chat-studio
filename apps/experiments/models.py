@@ -202,6 +202,7 @@ class SyntheticVoice(BaseModel):
         ("OpenAI", OpenAI),
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
     )
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
 
     name = models.CharField(
         max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
@@ -241,11 +242,11 @@ class SyntheticVoice(BaseModel):
         return display_str
 
     @staticmethod
-    def get_for_team(team: Team, exclude_services) -> list["SyntheticVoice"]:
+    def get_for_team(team: Team, exclude_services=None) -> list["SyntheticVoice"]:
         """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
         to this team. Any services specified by `exclude_services` will be excluded from the final result"""
         exclude_services = exclude_services or []
-        general_services = ~Q(service=SyntheticVoice.OpenAIVoiceEngine)
+        general_services = ~Q(service__in=SyntheticVoice.TEAM_SCOPED_SERVICES)
         team_services = Q(voice_provider__team=team)
         return SyntheticVoice.objects.filter(general_services | team_services, ~Q(service__in=exclude_services))
 
