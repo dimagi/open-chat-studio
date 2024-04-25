@@ -128,7 +128,7 @@ class VoiceProviderType(models.TextChoices):
     aws = "aws", _("AWS Polly")
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
-    openai_voice_engine = "openaivoiceengine", _("OpenAI VE Text to Speech")
+    openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
 
     @property
     def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
