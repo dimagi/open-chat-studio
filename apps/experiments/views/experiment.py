@@ -171,7 +171,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["assistant"].queryset = team.openaiassistant_set
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
-        ).distinct()
+        )
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
         self.fields["pre_survey"].queryset = team.survey_set
