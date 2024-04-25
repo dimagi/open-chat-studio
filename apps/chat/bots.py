@@ -6,7 +6,7 @@ from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SafetyLayer
+from apps.experiments.models import ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
@@ -43,13 +43,22 @@ class TopicBot:
         self.chat = session.chat
         self.session = session
         self.max_token_limit = experiment.max_token_limit
-
         self.input_tokens = 0
         self.output_tokens = 0
 
+        # maps keywords to child experiments.
+        self.child_experiment_routes = ExperimentRoute.objects.select_related("child").filter(parent=experiment).all()
+        self.child_chains = {}
+        self.default_child_chain = None
         self._initialize()
 
     def _initialize(self):
+        for child_route in self.child_experiment_routes:
+            child_runnable = create_experiment_runnable(child_route.child, self.session)
+            self.child_chains[child_route.keyword.lower().strip()] = child_runnable
+            if child_route.is_default:
+                self.default_child_chain = child_runnable
+
         self.chain = create_experiment_runnable(self.session.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
@@ -58,7 +67,11 @@ class TopicBot:
         ]
 
     def _call_predict(self, input_str, save_input_to_history=True):
-        result = self.chain.invoke(
+        if self.child_chains:
+            chain = self._get_child_chain(input_str)
+        else:
+            chain = self.chain
+        result = chain.invoke(
             input_str,
             config={
                 "configurable": {
@@ -71,6 +84,24 @@ class TopicBot:
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
+
+    def _get_child_chain(self, input_str):
+        result = self.chain.invoke(
+            input_str,
+            config={
+                "configurable": {
+                    "save_input_to_history": False,
+                    "save_output_to_history": False,
+                }
+            },
+        )
+        self.input_tokens = self.input_tokens + result.prompt_tokens
+        self.output_tokens = self.output_tokens + result.completion_tokens
+
+        try:
+            return self.child_chains[result.output.lower().strip()]
+        except KeyError:
+            return self.default_child_chain or self.child_chains.values()[0]
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
