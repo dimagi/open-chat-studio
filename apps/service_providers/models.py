@@ -214,6 +214,11 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise UserServiceProviderConfigError(message)
 
+    def remove_file(self, file_id: int):
+        synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
+        synthetic_voice.file.delete()
+        synthetic_voice.delete()
+
     def get_files(self):
         """Return the files found on the synthetic voices that points to this instance"""
         files = []

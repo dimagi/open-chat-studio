@@ -68,9 +68,7 @@ class AddFileToProvider(BaseAddFileHtmxView):
 def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: int):
     provider = ServiceProvider[provider_type]
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
-    synthetic_voice = service_config.syntheticvoice_set.get(file_id=file_id)
-    synthetic_voice.file.delete()
-    synthetic_voice.delete()
+    service_config.remove_file(file_id)
     return HttpResponse()
 
 
