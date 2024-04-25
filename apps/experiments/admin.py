@@ -103,8 +103,13 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
         "language",
         "get_gender",
         "neural",
+        "team",
     )
     list_filter = ("service", "language", "gender")
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.voice_provider.team.name if obj.voice_provider else ""
 
 
 @admin.register(models.NoActivityMessageConfig)
