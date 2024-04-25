@@ -103,7 +103,7 @@
           this.$watch('voiceProvider', () => {
             const providerType = voiceProviderTypes[this.voiceProvider];
             this.synthetic_voice_options = voiceOptions.filter(option => {
-              return option.type === providerType;
+              return option.type === providerType && (!option.provider_id || option.provider_id == this.voiceProvider);
             });
           });
 
