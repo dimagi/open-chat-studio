@@ -3,7 +3,7 @@ import tempfile
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
@@ -194,7 +194,6 @@ class OpenAISpeechService(SpeechService):
 
 class OpenAIVoiceEngineSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
-    voice_provider: Any = None
     supports_transcription: ClassVar[bool] = True
     openai_api_key: str
     openai_api_base: str = None
@@ -208,7 +207,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         """
         Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
         """
-        sample_audio = self.voice_provider.files.get(name=synthetic_voice.name)
+        sample_audio = synthetic_voice.file
 
         url = "https://api.openai.com/v1/audio/synthesize"
         headers = {"Authorization": f"Bearer {self.openai_api_key}"}

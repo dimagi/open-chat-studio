@@ -7,7 +7,6 @@ from django.views.decorators.http import require_http_methods
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
-from apps.experiments.models import SyntheticVoice
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.models import VoiceProviderType
 
@@ -69,11 +68,9 @@ class AddFileToProvider(BaseAddFileHtmxView):
 def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: int):
     provider = ServiceProvider[provider_type]
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
-    file = service_config.files.get(pk=file_id)
-    synthetic_voice = get_object_or_404(SyntheticVoice, name=file.name)
-
+    synthetic_voice = service_config.syntheticvoice_set.get(file_id=file_id)
+    synthetic_voice.file.delete()
     synthetic_voice.delete()
-    file.delete()
     return HttpResponse()
 
 
@@ -91,7 +88,6 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         if not flag_is_active(self.request, "open_ai_voice_engine"):
             forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
 
-        print(f"Should exclide {forms_to_exclude}")
         return get_service_provider_config_form(
             self.provider_type, data=data, instance=self.get_object(), exclude_forms=forms_to_exclude
         )

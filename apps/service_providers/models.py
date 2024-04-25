@@ -143,7 +143,7 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_speech_service(self, voice_provider: "VoiceProvider", config: dict):
+    def get_speech_service(self, config: dict):
         try:
             match self:
                 case VoiceProviderType.aws:
@@ -153,7 +153,7 @@ class VoiceProviderType(models.TextChoices):
                 case VoiceProviderType.openai:
                     return speech_service.OpenAISpeechService(**config)
                 case VoiceProviderType.openai_voice_engine:
-                    return speech_service.OpenAIVoiceEngineSpeechService(voice_provider=voice_provider, **config)
+                    return speech_service.OpenAIVoiceEngineSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -165,7 +165,6 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
-    files = models.ManyToManyField("files.File", blank=True)
 
     class Meta:
         ordering = ("type", "name")
@@ -179,7 +178,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 
     def get_speech_service(self) -> speech_service.SpeechService:
         config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.get_speech_service(self, config)
+        return self.type_enum.get_speech_service(config)
 
     def validate_uploaded_file_names(self, uploaded_files: list[File]):
         """Validate file types. Raises UserServiceProviderConfigError for invalid file types"""
@@ -201,7 +200,6 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             for file in files:
                 try:
                     # TODO: Split file extention
-                    # TODO: SyntheticVoice per team
                     SyntheticVoice.objects.create(
                         name=file.name,
                         neural=True,
@@ -209,8 +207,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                         language_code="",
                         gender="",
                         service=SyntheticVoice.OpenAIVoiceEngine,
+                        voice_provider=self,
+                        file=file,
                     )
-                    self.files.add(file)
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise UserServiceProviderConfigError(message)

@@ -217,10 +217,14 @@ class SyntheticVoice(BaseModel):
     service = models.CharField(
         null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
     )
+    voice_provider = models.ForeignKey(
+        "service_providers.VoiceProvider", verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True
+    )
+    file = models.ForeignKey("files.File", null=True, on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ["name"]
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
+        unique_together = ("name", "language_code", "language", "gender", "neural", "service", "voice_provider")
 
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work
