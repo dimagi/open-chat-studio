@@ -44,6 +44,14 @@ def push_assistant_to_openai(assistant: OpenAiAssistant):
     else:
         openai_assistant = client.beta.assistants.create(**_ocs_assistant_to_openai_kwargs(assistant))
         assistant.assistant_id = openai_assistant.id
+        try:
+            vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
+        except Exception:
+            pass
+        else:
+            resource = assistant.tool_resources.get(tool_type="file_search")
+            resource.extra["vector_store_id"] = vector_store_id
+            resource.save()
         assistant.save()
 
 
@@ -119,14 +127,16 @@ def sync_tool_resources(openai_assistant: Assistant, assistant: OpenAiAssistant)
 
     code_interpreter = openai_assistant.tool_resources.code_interpreter
     if code_interpreter and code_interpreter.file_ids:
-        ocs_code_interpreter, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="code_interpreter")
-        sync_tool_resource_files(code_interpreter.file_ids, ocs_code_interpreter)
+        ocs_code_interpreter, created = ToolResources.objects.get_or_create(
+            assistant=assistant, tool_type="code_interpreter"
+        )
+        sync_tool_resource_files_from_openai(code_interpreter.file_ids, ocs_code_interpreter)
     else:
         ToolResources.objects.filter(assistant=assistant, tool_type="code_interpreter").delete()
 
     file_search = openai_assistant.tool_resources.file_search
     if file_search and file_search.vector_store_ids:
-        ocs_file_search, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="file_search")
+        ocs_file_search, created = ToolResources.objects.get_or_create(assistant=assistant, tool_type="file_search")
         vector_store_id = file_search.vector_store_ids[0]
         if ocs_file_search.extra.get("vector_store_id") != vector_store_id:
             ocs_file_search.extra["vector_store_id"] = vector_store_id
@@ -139,19 +149,38 @@ def sync_tool_resources(openai_assistant: Assistant, assistant: OpenAiAssistant)
                 vector_store_id=vector_store_id  # there can only be one
             )
         )
-        sync_tool_resource_files(file_ids, ocs_file_search)
+        sync_tool_resource_files_from_openai(file_ids, ocs_file_search)
     else:
         ToolResources.objects.filter(assistant=assistant, tool_type="file_search").delete()
 
 
-def sync_tool_resource_files(file_ids, ocs_resource):
-    existing_files = {file.external_id: file for file in ocs_resource.files.all() if file.external_id}
+def sync_tool_resource_files_from_openai(file_ids, ocs_resource):
+    resource_files = ocs_resource.files.all()
+    unused_files = {file.id for file in resource_files}
+    existing_files = {file.external_id: file for file in resource_files if file.external_id}
     for file_id in file_ids:
         try:
-            existing_files.pop(file_id)
+            file = existing_files.pop(file_id)
+            unused_files.remove(file.id)
         except KeyError:
             ocs_resource.files.add(fetch_file_from_openai(ocs_resource.assistant, file_id))
-    File.objects.filter(id__in=[file.id for file in existing_files.values()]).delete()
+    File.objects.filter(id__in=unused_files).delete()
+
+
+def sync_vector_store_files_to_openai(assistant, vector_store_id, files_ids: list[str]):
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+    vector_store_files = (file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_id))
+    to_delete_remote = []
+    for file_id in vector_store_files:
+        try:
+            files_ids.remove(file_id)
+        except ValueError:
+            to_delete_remote.append(file_id)
+
+    for file_id in to_delete_remote:
+        client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
+
+    client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=files_ids)
 
 
 @wrap_openai_errors
@@ -177,22 +206,36 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
-    file_ids = []
-    for file in assistant.files.all():
-        if not file.external_id:
-            push_file_to_openai(assistant, file)
-        file_ids.append(file.external_id)
+    """Note: this has some side effects of syncing files and vector stores"""
 
-    return {
+    data = {
         "instructions": assistant.instructions,
         "name": assistant.name,
         "tools": assistant.formatted_tools,
         "model": assistant.llm_model,
-        "file_ids": file_ids,
+        "temperature": assistant.temperature,
+        "top_p": assistant.top_p,
         "metadata": {
             "ocs_assistant_id": assistant.id,
         },
+        "tool_resources": {},
     }
+
+    resources = {resource.tool_type: resource for resource in assistant.tool_resources.all()}
+    if "code_interpreter" in assistant.builtin_tools and (code_interpreter := resources.get("code_interpreter")):
+        file_ids = create_files_remote(assistant, code_interpreter.files.all())
+        data["tool_resources"]["code_interpreter"] = {"file_ids": file_ids}
+
+    if "file_search" in assistant.builtin_tools and (file_search := resources.get("file_search")):
+        file_ids = create_files_remote(assistant, file_search.files.all())
+        vector_store_id = file_search.extra.get("vector_store_id")
+        if vector_store_id:
+            sync_vector_store_files_to_openai(assistant, vector_store_id, file_ids)
+            data["tool_resources"]["file_search"] = {"vector_store_ids": [vector_store_id]}
+        else:
+            data["tool_resources"]["file_search"] = {"vector_stores": [{"file_ids": file_ids}]}
+
+    return data
 
 
 def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provider=None) -> dict:
@@ -212,3 +255,12 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
     if llm_provider:
         kwargs["llm_provider"] = llm_provider
     return kwargs
+
+
+def create_files_remote(assistant, files):
+    file_ids = []
+    for file in files:
+        if not file.external_id:
+            push_file_to_openai(assistant, file)
+        file_ids.append(file.external_id)
+    return file_ids
