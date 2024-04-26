@@ -206,13 +206,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 
     def get_files(self):
         """Return the files found on the synthetic voices that points to this instance"""
-        files = []
-        for voice in self.syntheticvoice_set.all():
-            # Since the File model uses a generic FK, we cannot simply do a .values_list on a VoiceProvider query,
-            # since VoiceProvider does not have a reverse relation to `File` like SyntheticVoice has
-            if voice.file:
-                files.append(voice.file)
-        return files
+        # Since the File model uses a generic FK, we cannot simply do a .values_list on a VoiceProvider query,
+        # since VoiceProvider does not have a reverse relation to `File` like SyntheticVoice has
+        return [sv.file for sv in self.syntheticvoice_set.filter(file__isnull=False).all()]
 
     def remove_file_url(self):
         return reverse(
