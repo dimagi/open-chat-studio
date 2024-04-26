@@ -6,7 +6,7 @@ from io import BytesIO
 import openai
 from openai.types.beta import Assistant
 
-from apps.assistants.models import OpenAiAssistant
+from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider
@@ -109,18 +109,48 @@ def sync_from_openai(assistant: OpenAiAssistant):
     for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
         setattr(assistant, key, value)
     assistant.save()
-    sync_files_from_openai(openai_assistant, assistant)
+    sync_tool_resources(openai_assistant, assistant)
 
 
 @wrap_openai_errors
-def sync_files_from_openai(openai_assistant: Assistant, assistant: OpenAiAssistant):
-    existing_files = {file.external_id: file for file in assistant.files.all() if file.external_id}
-    if openai_assistant.file_ids:
-        for file_id in openai_assistant.file_ids:
-            try:
-                existing_files.pop(file_id)
-            except KeyError:
-                assistant.files.add(fetch_file_from_openai(assistant, file_id))
+def sync_tool_resources(openai_assistant: Assistant, assistant: OpenAiAssistant):
+    if not openai_assistant.tool_resources:
+        return
+
+    code_interpreter = openai_assistant.tool_resources.code_interpreter
+    if code_interpreter and code_interpreter.file_ids:
+        ocs_code_interpreter, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="code_interpreter")
+        sync_tool_resource_files(code_interpreter.file_ids, ocs_code_interpreter)
+    else:
+        ToolResources.objects.filter(assistant=assistant, tool_type="code_interpreter").delete()
+
+    file_search = openai_assistant.tool_resources.file_search
+    if file_search and file_search.vector_store_ids:
+        ocs_file_search, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="file_search")
+        vector_store_id = file_search.vector_store_ids[0]
+        if ocs_file_search.extra.get("vector_store_id") != vector_store_id:
+            ocs_file_search.extra["vector_store_id"] = vector_store_id
+            ocs_file_search.save()
+
+        client = assistant.llm_provider.get_llm_service().get_raw_client()
+        file_ids = (
+            file.id
+            for file in client.beta.vector_stores.files.list(
+                vector_store_id=vector_store_id  # there can only be one
+            )
+        )
+        sync_tool_resource_files(file_ids, ocs_file_search)
+    else:
+        ToolResources.objects.filter(assistant=assistant, tool_type="file_search").delete()
+
+
+def sync_tool_resource_files(file_ids, ocs_resource):
+    existing_files = {file.external_id: file for file in ocs_resource.files.all() if file.external_id}
+    for file_id in file_ids:
+        try:
+            existing_files.pop(file_id)
+        except KeyError:
+            ocs_resource.files.add(fetch_file_from_openai(ocs_resource.assistant, file_id))
     File.objects.filter(id__in=[file.id for file in existing_files.values()]).delete()
 
 
@@ -130,7 +160,7 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     openai_assistant = client.beta.assistants.retrieve(assistant_id)
     kwargs = _openai_assistant_to_ocs_kwargs(openai_assistant, team=team, llm_provider=llm_provider)
     assistant = OpenAiAssistant.objects.create(**kwargs)
-    sync_files_from_openai(openai_assistant, assistant)
+    sync_tool_resources(openai_assistant, assistant)
     return assistant
 
 
@@ -174,6 +204,8 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
         "builtin_tools": [tool.type for tool in assistant.tools if tool.type in builtin_tools],
         # What if the model isn't one of the ones configured for the LLM Provider?
         "llm_model": assistant.model,
+        "temperature": assistant.temperature,
+        "top_p": assistant.top_p,
     }
     if team:
         kwargs["team"] = team

@@ -5,6 +5,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.teams.models import BaseTeamModel
+from apps.utils.models import BaseModel
 
 
 class OpenAiAssistantManager(AuditingManager):
@@ -24,6 +25,8 @@ class OpenAiAssistant(BaseTeamModel):
     assistant_id = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     instructions = models.TextField()
+    temperature = models.FloatField(default=1.0)
+    top_p = models.FloatField(default=1.0)
     builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
@@ -37,6 +40,7 @@ class OpenAiAssistant(BaseTeamModel):
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
+
     files = models.ManyToManyField("files.File", blank=True)
 
     objects = OpenAiAssistantManager()
@@ -53,3 +57,13 @@ class OpenAiAssistant(BaseTeamModel):
 
     def get_assistant(self):
         return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
+
+
+class ToolResources(BaseModel):
+    assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
+    tool_type = models.CharField(max_length=128)
+    files = models.ManyToManyField("files.File", blank=True)
+    extra = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Tool Resources for {self.assistant.name}: {self.tool_type}"
