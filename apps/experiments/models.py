@@ -43,6 +43,10 @@ class NoActivityMessageConfigObjectManager(AuditingManager):
     pass
 
 
+class SyntheticVoiceObjectManager(AuditingManager):
+    pass
+
+
 class PromptBuilderHistory(BaseTeamModel):
     """
     History entries for the prompt builder
@@ -176,6 +180,7 @@ class ConsentForm(BaseTeamModel):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
 
 
+@audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):
     """
     A synthetic voice as per the service documentation. This is used when synthesizing responses for an experiment
@@ -204,6 +209,7 @@ class SyntheticVoice(BaseModel):
     )
     TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
 
+    objects = SyntheticVoiceObjectManager()
     name = models.CharField(
         max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
