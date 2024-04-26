@@ -5,6 +5,18 @@ from apps.files.forms import BaseFileFormSet
 
 
 class ProviderTypeConfigForm(forms.Form):
+    """
+    Base class for provider type forms.
+
+    Attributes relating to file uploads:
+    allow_file_upload: If `True`, the user will be able to upload files when creating the provider. Please note
+        that you have to implement the `add_files` method on your provider when this is `True`; otherwise nothing
+        will happen. See `ProviderMixin` in `apps/service_providers/models.py`
+    file_formset_form: This form should be a subclass of `BaseFileFormSet`. This allows you to perform provider
+    specific file validation (like checking file extentions etc). If this is `None` and `allow_file_upload` is
+    `True`, then the `BaseFileFormSet` class will be used by default.
+    """
+
     allow_file_upload = False
     file_formset_form = None
 

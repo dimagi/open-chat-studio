@@ -36,9 +36,6 @@ class ProviderMixin:
     def add_files(self, *args, **kwargs):
         ...
 
-    def validate_uploaded_file_names(self, *args, **kwargs):
-        ...
-
 
 @dataclasses.dataclass
 class LlmProviderType:
