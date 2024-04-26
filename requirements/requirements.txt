@@ -30,9 +30,7 @@ anyio==3.7.1
 asgiref==3.7.2
     # via django
 async-timeout==4.0.3
-    # via
-    #   aiohttp
-    #   redis
+    # via aiohttp
 attrs==23.1.0
     # via
     #   aiohttp
@@ -263,7 +261,7 @@ numpy==1.26.2
     #   pandas
 oauthlib==3.2.2
     # via requests-oauthlib
-openai==1.12.0
+openai==1.23.6
     # via
     #   -r requirements/requirements.in
     #   langchain-openai
@@ -300,6 +298,7 @@ pygments==2.16.1
 pyjwt[crypto]==2.8.0
     # via
     #   django-allauth
+    #   pyjwt
     #   twilio
 pypng==0.20220715.0
     # via qrcode
@@ -406,7 +405,9 @@ turn-python==0.2.0
 twilio==8.10.1
     # via -r requirements/requirements.in
 typer[all]==0.9.0
-    # via taskbadger
+    # via
+    #   taskbadger
+    #   typer
 typing-extensions==4.8.0
     # via
     #   anthropic
