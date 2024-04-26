@@ -8,7 +8,7 @@ from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
-from field_audit.models import AuditAction, AuditingManager
+from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
@@ -212,7 +212,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     )
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-                    raise UserServiceProviderConfigError(message)
+                    raise ValidationError(message)
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
@@ -250,7 +250,6 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         if self.type == VoiceProviderType.openai_voice_engine:
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]
-            self.syntheticvoice_set.all().delete(audit_action=AuditAction.AUDIT)
         return super().delete()
 
 
