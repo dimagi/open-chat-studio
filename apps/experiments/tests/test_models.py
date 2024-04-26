@@ -46,15 +46,21 @@ class TestSyntheticVoice:
             voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.OpenAIVoiceEngine
         )
 
+        # If a voice form another team's service outisde of TEAM_SCOPED_SERVICES happens to have a provider, we
+        # should not match on that
+        voice3 = SyntheticVoiceFactory(voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.AWS)
+
         # Assert exclusivity
         voices_queryset = SyntheticVoice.get_for_team(team1)
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == all_services
         assert voice2 not in voices_queryset
+        assert voice3 not in voices_queryset
 
         voices_queryset = SyntheticVoice.get_for_team(team2)
         assert set(voices_queryset.values_list("service", flat=True)) == all_services
         assert voice1 not in voices_queryset
+        assert voice3 in voices_queryset
 
         # Although voice1 belongs to team1, if we exclude its service, it should not be returned
         voices_queryset = SyntheticVoice.get_for_team(team1, exclude_services=[SyntheticVoice.OpenAIVoiceEngine])
