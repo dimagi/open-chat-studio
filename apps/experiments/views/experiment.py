@@ -351,7 +351,7 @@ def _get_voice_provider_alpine_context(request):
                     "value": voice.id,
                     "text": str(voice),
                     "type": voice.service.lower(),
-                    "provider_id": voice.voice_provider.id if voice.voice_provider else None,
+                    "provider_id": voice.voice_provider_id,
                 }
                 for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
             ],
