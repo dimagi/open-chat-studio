@@ -70,8 +70,11 @@ def get_service_provider_config_form(
 
     excluded_choices = [form.value for form in exclude_forms]
     main_form = _get_main_form(provider, data=data.copy() if data else None, instance=instance)
-    filtered_choices = [choice for choice in main_form.fields["type"].choices if choice[0] not in excluded_choices]
-    main_form.fields["type"].choices = filtered_choices
+
+    filtered_choices = [
+        choice for choice in main_form.fields[provider.provider_type_field].choices if choice[0] not in excluded_choices
+    ]
+    main_form.fields[provider.provider_type_field].choices = filtered_choices
 
     return TypeSelectForm(
         primary=main_form,
