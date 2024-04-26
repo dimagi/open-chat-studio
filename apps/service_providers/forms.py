@@ -1,9 +1,12 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from apps.files.forms import BaseFileFormSet
+
 
 class ProviderTypeConfigForm(forms.Form):
     allow_file_upload = False
+    file_formset_form = None
 
     def save(self, instance):
         instance.config = self.cleaned_data
@@ -58,8 +61,24 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class OpenAIVoiceEngineFileFormset(BaseFileFormSet):
+    accepted_file_types = ["mp4", "mp3"]
+
+    def clean(self) -> None:
+        invalid_extentions = set()
+        for _key, in_memory_file in self.files.items():
+            file_extention = in_memory_file.name.split(".")[1]
+            if file_extention not in self.accepted_file_types:
+                invalid_extentions.add(f".{file_extention}")
+        if invalid_extentions:
+            string = ", ".join(invalid_extentions)
+            raise forms.ValidationError(f"File extentions not supported: {string}")
+        return super().clean()
+
+
 class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     allow_file_upload = True
+    file_formset_form = OpenAIVoiceEngineFileFormset
 
 
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

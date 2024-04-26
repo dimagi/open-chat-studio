@@ -5,7 +5,6 @@ from django.shortcuts import get_object_or_404, render
 
 from apps.files.forms import get_file_formset
 from apps.generics.type_select_form import TypeSelectForm
-from apps.service_providers.exceptions import UserServiceProviderConfigError
 
 
 class BaseTypeSelectFormView(views.View):
@@ -36,14 +35,16 @@ class BaseTypeSelectFormView(views.View):
 
         file_formset = None
         if request.FILES:
-            file_formset = get_file_formset(request)
+            secondary_form_key = form.primary[form.secondary_key_field].value()
+            secondary_form = form.secondary[secondary_form_key]
+            file_formset = get_file_formset(request, formset_cls=secondary_form.file_formset_form)
 
         if form.is_valid() and (not file_formset or file_formset.is_valid()):
-            try:
-                self.form_valid(form, file_formset)
-                return HttpResponseRedirect(self.get_success_url())
-            except UserServiceProviderConfigError as error:
-                messages.error(request, error.message)
+            self.form_valid(form, file_formset)
+            return HttpResponseRedirect(self.get_success_url())
+
+        if file_formset and not file_formset.is_valid():
+            messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
     def form_valid(self, form, file_formset):

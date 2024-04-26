@@ -5,7 +5,7 @@ import pytest
 
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
-from apps.service_providers.exceptions import ServiceProviderConfigError, UserServiceProviderConfigError
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.files import FileFactory
@@ -186,21 +186,6 @@ def test_openai_ve_provider_delete(team_with_users):
     for file in files:
         with pytest.raises(File.DoesNotExist):
             file.refresh_from_db()
-
-
-def test_openai_ve_provider_fails_file_validation(team_with_users):
-    provider = _test_voice_provider(
-        team_with_users,
-        VoiceProviderType.openai_voice_engine,
-        data={
-            "openai_api_key": "test_key",
-            "openai_api_base": "https://openai.com",
-            "openai_organization": "test_organization",
-        },
-    )
-    files = FileFactory.create_batch(3, name=factory.Sequence(lambda n: f"file_{n + 1}.docx"))
-    with pytest.raises(UserServiceProviderConfigError, match="File extentions not supported: .docx"):
-        provider.add_files(files)
 
 
 @pytest.mark.parametrize(
