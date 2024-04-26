@@ -252,7 +252,7 @@ class SyntheticVoice(BaseModel):
         """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
         to this team. Any services specified by `exclude_services` will be excluded from the final result"""
         exclude_services = exclude_services or []
-        general_services = ~Q(service__in=SyntheticVoice.TEAM_SCOPED_SERVICES)
+        general_services = ~Q(service__in=SyntheticVoice.TEAM_SCOPED_SERVICES, voice_provider__isnull=False)
         team_services = Q(voice_provider__team=team)
         return SyntheticVoice.objects.filter(general_services | team_services, ~Q(service__in=exclude_services))
 
