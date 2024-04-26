@@ -8,6 +8,7 @@ from typing import ClassVar
 import azure.cognitiveservices.speech as speechsdk
 import boto3
 import pydantic
+import requests
 from openai import OpenAI
 from pydub import AudioSegment
 
@@ -182,6 +183,52 @@ class OpenAISpeechService(SpeechService):
         audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
         duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
         return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+    def _transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self._client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
+
+
+class OpenAIVoiceEngineSpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
+    supports_transcription: ClassVar[bool] = True
+    openai_api_key: str
+    openai_api_base: str = None
+    openai_organization: str = None
+
+    @property
+    def _client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        """
+        Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
+        """
+        sample_audio = synthetic_voice.file
+
+        url = "https://api.openai.com/v1/audio/synthesize"
+        headers = {"Authorization": f"Bearer {self.openai_api_key}"}
+
+        files = {"reference_audio": sample_audio.file}
+        data = {
+            "model": "tts-1",
+            "text": text,
+            "speed": "1.0",
+            "response_format": "mp3",
+        }
+        response = requests.post(url, headers=headers, data=data, files=files)
+
+        if response.status_code == 200:
+            audio_data = BytesIO(response.content)
+            audio_segment = AudioSegment.from_file(audio_data, format="mp3")
+            audio_data.seek(0)
+            return SynthesizedAudio(audio=audio_data, duration=audio_segment.duration_seconds, format="mp3")
+        else:
+            msg = f"Error synthesizing voice with OpenAI Voice Engine. Response status: {response.status_code}."
+            raise AudioSynthesizeException(msg)
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self._client.audio.transcriptions.create(
