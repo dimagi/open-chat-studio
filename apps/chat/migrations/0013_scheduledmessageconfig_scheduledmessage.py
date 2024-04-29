@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('teams', '0005_invitation_groups'),
-        ('experiments', '0076_alter_participant_external_chat_id'),
+        ('experiments', '0078_alter_participant_external_chat_id'),
         ('chat', '0012_chat_tags_chatmessage_tags'),
     ]
 
