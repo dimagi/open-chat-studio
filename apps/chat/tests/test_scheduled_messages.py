@@ -3,8 +3,8 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
-import pytz
 from dateutil.relativedelta import relativedelta
+from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.chat.models import ScheduledMessage, ScheduledMessageConfig, TimePeriod, TriggerEvent
@@ -53,8 +53,7 @@ def test_create_scheduled_message_sets_start_date(send_bot_message, period):
             participant=session.participant, team=session.team, schedule=schedule_conf
         )
         delta = relativedelta(**{schedule_conf.time_period: schedule_conf.frequency})
-        utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
-        rel_delta = timedelta_to_relative_delta(message.next_trigger_date - utc_now)
+        rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
         assert rel_delta == delta
 
 
@@ -71,7 +70,7 @@ def test_get_messages_to_fire():
         repetitions=2,
     )
     with freeze_time("2024-04-01"), patch("apps.chat.tasks.functions.Now") as db_time:
-        utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+        utc_now = timezone.now()
         db_time.return_value = utc_now
 
         scheduled_message = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
@@ -103,7 +102,7 @@ def test_poll_scheduled_messages(send_bot_message, period):
     def step_time(frozen_time, db_time, timedelta):
         """Step time"""
         frozen_time.tick(delta=timedelta)
-        now = datetime.now().astimezone(pytz.timezone("UTC"))
+        now = timezone.now()
         db_time.return_value = now
         return now
 
@@ -140,7 +139,7 @@ def test_poll_scheduled_messages(send_bot_message, period):
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
     with freeze_time("2024-04-01") as frozen_time, patch("apps.chat.tasks.functions.Now") as db_time:
-        current_time = db_time.return_value = datetime.now().astimezone(pytz.timezone("UTC"))
+        current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
         # Set the DB time to now
 
@@ -203,7 +202,7 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
         sm = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
 
         # Let's put the DB time ahead of the scheduled message
-        utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+        utc_now = timezone.now()
         db_time.return_value = utc_now + relativedelta(days=1.1)
 
         pending_messages = _get_messages_to_fire()
@@ -240,7 +239,6 @@ def test_schedule_config_update():
         repetitions=4,
     )
 
-    utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
     message1 = ScheduledMessage.objects.create(
         participant=session.participant, team=session.team, schedule=schedule_conf
     )
@@ -248,7 +246,7 @@ def test_schedule_config_update():
         participant=session2.participant,
         team=session.team,
         schedule=schedule_conf,
-        last_triggered_at=utc_now - relativedelta(days=5),
+        last_triggered_at=timezone.now() - relativedelta(days=5),
     )
 
     message1_prev_trigger_date = message1.next_trigger_date

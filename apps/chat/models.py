@@ -1,13 +1,12 @@
 import logging
-from datetime import datetime
 from enum import StrEnum
 from urllib.parse import quote
 
-import pytz
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.db import models
 from django.db.models import Case, DateTimeField, F, When
+from django.utils import timezone
 from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from langchain.schema import BaseMessage, messages_from_dict
@@ -196,8 +195,7 @@ class ScheduledMessage(BaseTeamModel):
     def save(self, *args, **kwargs):
         if not self.next_trigger_date:
             delta = relativedelta(**{self.schedule.time_period: self.schedule.frequency})
-            utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
-            self.next_trigger_date = utc_now + delta
+            self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
 
     def safe_trigger(self):
@@ -209,7 +207,7 @@ class ScheduledMessage(BaseTeamModel):
 
     def _trigger(self):
         delta = relativedelta(**{self.schedule.time_period: self.schedule.frequency})
-        utc_now = datetime.now().astimezone(pytz.timezone("UTC"))
+        utc_now = timezone.now()
 
         experiment_session = self.participant.get_latest_session()
         experiment_session.send_bot_message(self.schedule.prompt_text, fail_silently=False)

@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime
 from urllib.parse import quote
 
-import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django import forms
@@ -684,7 +683,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
         ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
-    since = datetime.now().astimezone(pytz.timezone("UTC"))
+    since = timezone.now()
     if since_param and since_param != "null":
         try:
             since = datetime.fromisoformat(since_param)
