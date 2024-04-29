@@ -44,3 +44,4 @@ EXPERIMENT_CHANNEL_FIELDS = [
 ]
 
 NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after", "team"]
+SYNTHETIC_VOICE_FIELDS = ["name", "file", "voice_provider", "language", "gender", "language_code"]

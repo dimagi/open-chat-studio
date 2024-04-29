@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -18,6 +19,7 @@ class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "consent_forms",
             "title": "Consent Forms",
+            "info_link": settings.DOCUMENTATION_LINKS["consent"],
             "new_object_url": reverse("experiments:consent_new", args=[team_slug]),
             "table_url": reverse("experiments:consent_table", args=[team_slug]),
         }

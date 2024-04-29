@@ -60,16 +60,28 @@ class ServiceProvider(ServiceProviderType, Enum):
         return instance.config
 
 
-def get_service_provider_config_form(provider: ServiceProvider, data=None, instance=None) -> TypeSelectForm:
+def get_service_provider_config_form(
+    provider: ServiceProvider, exclude_forms: list, data=None, instance=None
+) -> TypeSelectForm:
     """Return the form for the service provider. This is a 'type select form' which will include the main form
     and the config form for the selected provider type.
     """
     initial_config = provider.get_form_initial(instance) if instance else None
+
+    excluded_choices = [form.value for form in exclude_forms]
+    main_form = _get_main_form(provider, data=data.copy() if data else None, instance=instance)
+
+    filtered_choices = [
+        choice for choice in main_form.fields[provider.provider_type_field].choices if choice[0] not in excluded_choices
+    ]
+    main_form.fields[provider.provider_type_field].choices = filtered_choices
+
     return TypeSelectForm(
-        primary=_get_main_form(provider, data=data.copy() if data else None, instance=instance),
+        primary=main_form,
         secondary={
             str(subtype): subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
             for subtype in provider.subtype
+            if subtype not in exclude_forms
         },
         secondary_key_field=provider.provider_type_field,
     )

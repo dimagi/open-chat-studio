@@ -69,6 +69,11 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
 
 
+@admin.register(models.ExperimentRoute)
+class ExperimentRouteAdmin(admin.ModelAdmin):
+    list_display = ("parent", "child", "keyword", "is_default")
+
+
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
     list_display = (
@@ -108,8 +113,13 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
         "language",
         "get_gender",
         "neural",
+        "team",
     )
     list_filter = ("service", "language", "gender")
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.voice_provider.team.name if obj.voice_provider else ""
 
 
 @admin.register(models.NoActivityMessageConfig)

@@ -1,13 +1,47 @@
 from django import forms
+from langchain.memory.prompt import SUMMARY_PROMPT
+
+from apps.generics.type_select_form import TypeSelectForm
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
+
+
+class SummarizeConversationForm(forms.Form):
+    prompt = forms.CharField(
+        widget=forms.Textarea, label="With the following prompt:", required=False, initial=SUMMARY_PROMPT.template
+    )
+
+    def clean_prompt(self):
+        data = self.cleaned_data["prompt"]
+        if not data:
+            return SUMMARY_PROMPT.template
+        return data
+
+
+class SendMessageToBotForm(forms.Form):
+    message_to_bot = forms.CharField(
+        widget=forms.Textarea,
+        label="With the following prompt:",
+        required=False,
+        initial="The user hasn't responded, please prompt them again.",
+    )
+
+    def clean_message_to_bot(self):
+        data = self.cleaned_data["message_to_bot"]
+        if not data:
+            return "The user hasn't responded, please prompt them again."
+        return data
+
+
+class EmptyForm(forms.Form):
+    pass
 
 
 class EventActionForm(forms.ModelForm):
     class Meta:
         model = EventAction
-        fields = ["action_type", "params"]
-        labels = {"action_type": "Then...", "params": "With the following parameters:"}
+        fields = ["action_type"]
+        labels = {"action_type": "Then..."}
 
     def save(self, commit=True, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
@@ -16,6 +50,27 @@ class EventActionForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class EventActionTypeSelectForm(TypeSelectForm):
+    def save(self, *args, **kwargs):
+        instance = self.primary.save(*args, **kwargs, commit=False)
+        instance.params = self.active_secondary().cleaned_data
+        instance.save()
+        return instance
+
+
+def get_action_params_form(data=None, instance=None):
+    return EventActionTypeSelectForm(
+        primary=EventActionForm(data=data, instance=instance),
+        secondary={
+            "log": EmptyForm(data=data, initial=instance.params if instance else None),
+            "send_message_to_bot": SendMessageToBotForm(data=data, initial=instance.params if instance else None),
+            "end_conversation": EmptyForm(data=data, initial=instance.params if instance else None),
+            "summarize": SummarizeConversationForm(data=data, initial=instance.params if instance else None),
+        },
+        secondary_key_field="action_type",
+    )
 
 
 class BaseTriggerForm(forms.ModelForm):

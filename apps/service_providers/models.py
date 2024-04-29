@@ -2,7 +2,8 @@ import dataclasses
 from enum import Enum
 
 from django.contrib.postgres.fields import ArrayField
-from django.db import models
+from django.db import IntegrityError, models, transaction
+from django.urls import reverse
 from django.utils.functional import classproperty
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
@@ -11,7 +12,8 @@ from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
-from apps.service_providers import auth_service, model_audit_fields
+from apps.experiments.models import SyntheticVoice
+from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service
@@ -28,6 +30,11 @@ class VoiceProviderObjectManager(AuditingManager):
 
 class LlmProviderObjectManagerObjectManager(AuditingManager):
     pass
+
+
+class ProviderMixin:
+    def add_files(self, *args, **kwargs):
+        ...
 
 
 @dataclasses.dataclass
@@ -85,7 +92,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class LlmProvider(BaseTeamModel):
+class LlmProvider(BaseTeamModel, ProviderMixin):
     objects = LlmProviderObjectManagerObjectManager()
     team = models.ForeignKey("teams.Team", on_delete=models.CASCADE)
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
@@ -117,6 +124,7 @@ class VoiceProviderType(models.TextChoices):
     aws = "aws", _("AWS Polly")
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
+    openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
 
     @property
     def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
@@ -127,6 +135,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.AzureVoiceConfigForm
             case VoiceProviderType.openai:
                 return forms.OpenAIConfigForm
+            case VoiceProviderType.openai_voice_engine:
+                return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict):
@@ -138,13 +148,15 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.AzureSpeechService(**config)
                 case VoiceProviderType.openai:
                     return speech_service.OpenAISpeechService(**config)
+                case VoiceProviderType.openai_voice_engine:
+                    return speech_service.OpenAIVoiceEngineSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
 
 
 @audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class VoiceProvider(BaseTeamModel):
+class VoiceProvider(BaseTeamModel, ProviderMixin):
     objects = VoiceProviderObjectManager()
     type = models.CharField(max_length=255, choices=VoiceProviderType.choices)
     name = models.CharField(max_length=255)
@@ -163,6 +175,60 @@ class VoiceProvider(BaseTeamModel):
     def get_speech_service(self) -> speech_service.SpeechService:
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
+
+    @transaction.atomic()
+    def add_files(self, files):
+        if self.type == VoiceProviderType.openai_voice_engine:
+            for file in files:
+                try:
+                    # TODO: Split file extention
+                    SyntheticVoice.objects.create(
+                        name=file.name,
+                        neural=True,
+                        language="",
+                        language_code="",
+                        gender="",
+                        service=SyntheticVoice.OpenAIVoiceEngine,
+                        voice_provider=self,
+                        file=file,
+                    )
+                except IntegrityError:
+                    message = f"Unable to upload '{file.name}' voice. This voice might already exist"
+                    raise ValidationError(message)
+
+    def remove_file(self, file_id: int):
+        synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
+        synthetic_voice.file.delete()
+        synthetic_voice.delete()
+
+    def get_files(self):
+        """Return the files found on the synthetic voices that points to this instance"""
+        # Since the File model uses a generic FK, we cannot simply do a .values_list on a VoiceProvider query,
+        # since VoiceProvider does not have a reverse relation to `File` like SyntheticVoice has
+        return [sv.file for sv in self.syntheticvoice_set.filter(file__isnull=False).all()]
+
+    def remove_file_url(self):
+        return reverse(
+            "service_providers:delete_file",
+            kwargs={"team_slug": self.team.slug, "provider_type": const.VOICE, "pk": self.id, "file_id": "000"},
+        )
+
+    def add_file_url(self):
+        return reverse(
+            "service_providers:add_file",
+            kwargs={
+                "team_slug": self.team.slug,
+                "provider_type": const.VOICE,
+                "pk": self.id,
+            },
+        )
+
+    @transaction.atomic()
+    def delete(self):
+        if self.type == VoiceProviderType.openai_voice_engine:
+            files_to_delete = self.get_files()
+            [f.delete() for f in files_to_delete]
+        return super().delete()
 
 
 class MessagingProviderType(models.TextChoices):
@@ -197,7 +263,7 @@ class MessagingProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class MessagingProvider(BaseTeamModel):
+class MessagingProvider(BaseTeamModel, ProviderMixin):
     objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)

@@ -167,7 +167,7 @@ def try_send_message(experiment_session: ExperimentSession, message: str):
         channel = ChannelBase.from_experiment_session(experiment_session)
         channel.new_bot_message(message)
     except Exception as e:
-        logging.error(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
+        logging.exception(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
 
 
 @shared_task

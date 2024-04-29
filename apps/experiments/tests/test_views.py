@@ -104,7 +104,8 @@ def test_prompt_variable_validation(source_material, prompt_str, expectation):
 
 
 @pytest.mark.django_db()
-def test_form_fields():
+@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team")
+def test_form_fields(_get_for_team_mock):
     path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
     form_html = path.read_text()
     request = mock.Mock()

@@ -7,6 +7,7 @@ import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -73,6 +74,7 @@ def experiments_home(request, team_slug: str):
         {
             "active_tab": "experiments",
             "title": "Experiments",
+            "info_link": settings.DOCUMENTATION_LINKS["experiment"],
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,
@@ -161,17 +163,23 @@ class ExperimentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.request = request
         team = request.team
+        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+        if flag_is_active(request, "open_ai_voice_engine"):
+            exclude_services = []
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
         self.fields["assistant"].queryset = team.openaiassistant_set
-        self.fields["voice_provider"].queryset = team.voiceprovider_set
+        self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
+            syntheticvoice__service__in=exclude_services
+        )
         self.fields["safety_layers"].queryset = team.safetylayer_set
         self.fields["source_material"].queryset = team.sourcematerial_set
         self.fields["pre_survey"].queryset = team.survey_set
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
         self.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
+        self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
@@ -331,14 +339,22 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
+    exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+    if flag_is_active(request, "open_ai_voice_engine"):
+        exclude_services = []
     return {
         "form_attrs": {"x-data": "experiment", "enctype": "multipart/form-data"},
         # map provider ID to provider type
         "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
         "synthetic_voice_options": sorted(
             [
-                {"value": voice.id, "text": str(voice), "type": voice.service.lower()}
-                for voice in SyntheticVoice.objects.all()
+                {
+                    "value": voice.id,
+                    "text": str(voice),
+                    "type": voice.service.lower(),
+                    "provider_id": voice.voice_provider_id,
+                }
+                for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
             ],
             key=lambda v: v["text"],
         ),

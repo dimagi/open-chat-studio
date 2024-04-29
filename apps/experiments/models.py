@@ -7,6 +7,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -16,7 +17,7 @@ from field_audit.models import AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -42,6 +43,10 @@ class ConsentFormObjectManager(AuditingManager):
 
 
 class NoActivityMessageConfigObjectManager(AuditingManager):
+    pass
+
+
+class SyntheticVoiceObjectManager(AuditingManager):
     pass
 
 
@@ -178,6 +183,7 @@ class ConsentForm(BaseTeamModel):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
 
 
+@audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):
     """
     A synthetic voice as per the service documentation. This is used when synthesizing responses for an experiment
@@ -196,13 +202,17 @@ class SyntheticVoice(BaseModel):
     AWS = "AWS"
     Azure = "Azure"
     OpenAI = "OpenAI"
+    OpenAIVoiceEngine = "OpenAIVoiceEngine"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
+        ("OpenAIVoiceEngine", OpenAIVoiceEngine),
     )
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
 
+    objects = SyntheticVoiceObjectManager()
     name = models.CharField(
         max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
@@ -213,15 +223,19 @@ class SyntheticVoice(BaseModel):
     )
 
     gender = models.CharField(
-        null=False, blank=False, choices=GENDERS, max_length=14, help_text="The gender of this voice"
+        null=False, blank=True, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
-        null=False, blank=False, choices=SERVICES, max_length=6, help_text="The service this voice is from"
+        null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
     )
+    voice_provider = models.ForeignKey(
+        "service_providers.VoiceProvider", verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True
+    )
+    file = models.ForeignKey("files.File", null=True, on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ["name"]
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
+        unique_together = ("name", "language_code", "language", "gender", "neural", "service", "voice_provider")
 
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work
@@ -235,6 +249,15 @@ class SyntheticVoice(BaseModel):
         if self.language:
             display_str = f"{self.language}, {display_str}"
         return display_str
+
+    @staticmethod
+    def get_for_team(team: Team, exclude_services=None) -> list["SyntheticVoice"]:
+        """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
+        to this team. Any services specified by `exclude_services` will be excluded from the final result"""
+        exclude_services = exclude_services or []
+        general_services = ~Q(service__in=SyntheticVoice.TEAM_SCOPED_SERVICES) & Q(voice_provider__isnull=True)
+        team_services = Q(voice_provider__team=team)
+        return SyntheticVoice.objects.filter(general_services | team_services, ~Q(service__in=exclude_services))
 
 
 @audit_fields(*model_audit_fields.NO_ACTIVITY_CONFIG_FIELDS, audit_special_queryset_writes=True)
@@ -377,6 +400,9 @@ class Experiment(BaseTeamModel):
     )
     files = models.ManyToManyField("files.File", blank=True)
     participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
+    children = models.ManyToManyField(
+        "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
+    )
 
     class Meta:
         ordering = ["name"]
@@ -410,6 +436,23 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+
+class ExperimentRoute(BaseTeamModel):
+    """
+    Through model for Experiment.children routes.
+    """
+
+    parent = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="child_links")
+    child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
+    keyword = models.SlugField(max_length=128)
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = (
+            ("parent", "child"),
+            ("parent", "keyword"),
+        )
 
 
 class Participant(BaseTeamModel):

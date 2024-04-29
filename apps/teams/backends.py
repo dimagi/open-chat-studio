@@ -60,6 +60,7 @@ CONTENT_TYPES = {
     "experiments": [
         "consentform",
         "experiment",
+        "experimentroute",
         "experimentsession",
         "noactivitymessageconfig",
         "participant",
