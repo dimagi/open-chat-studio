@@ -206,7 +206,7 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
 
 
 def _get_messages_to_fire():
-    return ScheduledMessage.objects.filter(resolved=False, next_trigger_date__lte=functions.Now())
+    return ScheduledMessage.objects.filter(is_complete=False, next_trigger_date__lte=functions.Now())
 
 
 @shared_task()
@@ -217,8 +217,3 @@ def poll_scheduled_messages():
     messages = _get_messages_to_fire()
     for message in messages:
         message.safe_trigger()
-
-    # Hmm, reason about this update. Should it not be in the trigger method?
-    ScheduledMessage.objects.bulk_update(
-        messages, ["total_triggers", "resolved", "next_trigger_date", "last_triggered_at"]
-    )

@@ -153,8 +153,8 @@ class ScheduledMessageConfig(BaseTeamModel):
         - trigger_event and recurring: No effect. Users will not be able to change these at the moment
 
         - Number of repetitions:
-            - If new repetitions are greater than total_triggers, mark resolved ones as unresolved.
-            - If new repetitions are less than total_triggers, mark unresolved ones as resolved.
+            - If new repetitions are greater than total_triggers, set is_complete to False.
+            - If new repetitions are less than total_triggers, set is_complete to True.
 
         - Frequency and time period (delta change):
             - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
@@ -166,7 +166,7 @@ class ScheduledMessageConfig(BaseTeamModel):
             self.scheduled_messages.annotate(
                 new_delta=MakeInterval(self.time_period, self.frequency),
             ).update(
-                resolved=Case(
+                is_complete=Case(
                     When(total_triggers__lt=self.repetitions, then=False),
                     When(total_triggers__gte=self.repetitions, then=True),
                     output_field=models.BooleanField(),
@@ -188,7 +188,10 @@ class ScheduledMessage(BaseTeamModel):
     next_trigger_date = models.DateTimeField(null=True)
     last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
-    resolved = models.BooleanField(default=False)
+    is_complete = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [models.Index(fields=["is_complete"])]
 
     def save(self, *args, **kwargs):
         if not self.next_trigger_date:
@@ -214,6 +217,8 @@ class ScheduledMessage(BaseTeamModel):
         self.last_triggered_at = utc_now
         self.total_triggers += 1
         if self.total_triggers >= self.schedule.repetitions:
-            self.resolved = True
+            self.is_complete = True
         else:
             self.next_trigger_date = utc_now + delta
+
+        self.save()

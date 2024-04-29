@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 import pytz
@@ -85,10 +85,10 @@ def test_get_messages_to_fire():
         assert len(pending_messages) == 1
         assert pending_messages[0] == scheduled_message
 
-        scheduled_message.resolved = True
+        scheduled_message.is_complete = True
         scheduled_message.save()
 
-        # Resolved messages should not be returned
+        # Completed messages should not be returned
         pending_messages = _get_messages_to_fire()
         assert len(pending_messages) == 0
 
@@ -111,7 +111,7 @@ def test_poll_scheduled_messages(send_bot_message, period):
         expected_next_trigger_date,
         expected_last_triggered_at,
         expected_total_triggers,
-        expected_resolved,
+        expected_is_complete,
         expect_next_trigger_date_changed=True,
     ):
         prev_next_trigger_date = scheduled_message.next_trigger_date
@@ -123,7 +123,7 @@ def test_poll_scheduled_messages(send_bot_message, period):
         assert scheduled_message.next_trigger_date == expected_next_trigger_date
         assert scheduled_message.last_triggered_at == expected_last_triggered_at
         assert scheduled_message.total_triggers == expected_total_triggers
-        assert scheduled_message.resolved == expected_resolved
+        assert scheduled_message.is_complete == expected_is_complete
 
     session = ExperimentSessionFactory()
     experiment = session.experiment
@@ -150,7 +150,7 @@ def test_poll_scheduled_messages(send_bot_message, period):
             expected_next_trigger_date=current_time + delta,
             expected_last_triggered_at=None,
             expected_total_triggers=0,
-            expected_resolved=False,
+            expected_is_complete=False,
             expect_next_trigger_date_changed=False,
         )
 
@@ -160,26 +160,24 @@ def test_poll_scheduled_messages(send_bot_message, period):
             expected_next_trigger_date=current_time + delta,
             expected_last_triggered_at=current_time,
             expected_total_triggers=1,
-            expected_resolved=False,
+            expected_is_complete=False,
         )
 
         current_time = step_time(frozen_time, db_time, step_delta)
         poll_scheduled_messages()
-        # Since the scheduled message is be resolved, the expected_next_trigger_date will not be updated
+        # Since the scheduled message is be completed, the expected_next_trigger_date will not be updated
         test_scheduled_message_attrs(
             # We subtract the offset here to account for it not being in the original `next_trigger_date`
             expected_next_trigger_date=current_time - relativedelta(seconds=seconds_offset),
             expected_last_triggered_at=current_time,
             expected_total_triggers=2,
-            expected_resolved=True,
+            expected_is_complete=True,
             expect_next_trigger_date_changed=False,
         )
 
         # We are done now, but let's make 110% sure that another message will not be triggered
         current_time = step_time(frozen_time, db_time, step_delta)
-        scheduled_message._trigger = Mock()
-        poll_scheduled_messages()
-        scheduled_message._trigger.assert_not_called()
+        assert len(_get_messages_to_fire()) == 0
 
 
 @pytest.mark.django_db()
@@ -213,8 +211,8 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
 
         poll_scheduled_messages()
         assert len(caplog.records) == 1
-        for record in caplog.records:
-            record
+        expected_msg = f"An error occured while trying to send scheduled messsage {sm.id}. Error: Oops"
+        assert caplog.records[0].msg == expected_msg
 
         assert sm.last_triggered_at is None
 
@@ -285,9 +283,9 @@ def test_schedule_config_update():
 def test_schedule_config_repetition_update():
     """Tests that a repetition update affects scheduled messages in the following way:
     if new_repetitions >= scheduled_message.total_triggers:
-        resolved = False
+        is_complete = False
     if new_repetitions < scheduled_message.total_triggers:
-        resolved = True
+        is_complete = True
 
     """
     session = ExperimentSessionFactory()
@@ -302,7 +300,7 @@ def test_schedule_config_repetition_update():
     )
 
     message = ScheduledMessage.objects.create(
-        participant=session.participant, team=session.team, schedule=schedule_conf, resolved=True, total_triggers=4
+        participant=session.participant, team=session.team, schedule=schedule_conf, is_complete=True, total_triggers=4
     )
 
     # Increasing repetitions should undo resolution
@@ -310,11 +308,11 @@ def test_schedule_config_repetition_update():
     schedule_conf.save()
 
     message.refresh_from_db()
-    assert message.resolved is False
+    assert message.is_complete is False
 
     # Decreasing repetitions should affect only message 2
     schedule_conf.repetitions -= 1
     schedule_conf.save()
 
     message.refresh_from_db()
-    assert message.resolved is True
+    assert message.is_complete is True
