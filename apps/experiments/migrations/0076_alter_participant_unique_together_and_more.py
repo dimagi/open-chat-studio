@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         ('teams', '0005_invitation_groups'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('contenttypes', '0002_remove_content_type_name'),
-        ('experiments', '0073_load_openai_voices'),
+        ('experiments', '0075_alter_syntheticvoice_unique_together_and_more'),
     ]
 
     operations = [
