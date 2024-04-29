@@ -62,8 +62,8 @@ def test_access_permitted_for_authenticated_user(client, session):
 @pytest.mark.django_db()
 def test_access_permitted_for_session_user(client, session):
     next_url = _start_session(client, session)
-    session.user = session.experiment.owner
-    session.save(update_fields=["user"])
+    session.participant.user = session.experiment.owner
+    session.participant.save(update_fields=["user"])
     client.login(username=session.experiment.owner.username, password="password")
     response = client.get(next_url)
     assert response.status_code == 200

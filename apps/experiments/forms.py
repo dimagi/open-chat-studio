@@ -21,7 +21,7 @@ class ConsentForm(forms.Form):
                 self.fields["identifier"].widget = forms.EmailInput()
                 self.fields["identifier"].validators = [validators.validate_email]
 
-            if self.initial.get("participant_id", None) and self.initial["identifier"]:
+            if self.initial.get("participant_id", None) or self.initial.get("identifier", None):
                 # don't allow participants to change their email
                 self.fields["identifier"].disabled = True
         else:

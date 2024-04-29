@@ -2,6 +2,8 @@ import uuid
 
 import markdown
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
@@ -9,6 +11,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
+from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -396,6 +399,7 @@ class Experiment(BaseTeamModel):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
+    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -424,6 +428,12 @@ class Experiment(BaseTeamModel):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
+    def get_participant_data(self, participant: "Participant") -> "ParticipantData":
+        try:
+            return self.participant_data.get(participant=participant).data
+        except ParticipantData.DoesNotExist:
+            return None
+
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
@@ -448,6 +458,8 @@ class ExperimentRoute(BaseTeamModel):
 class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    external_chat_id = models.CharField(null=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
 
     @property
     def email(self):
@@ -459,7 +471,24 @@ class Participant(BaseTeamModel):
 
     class Meta:
         ordering = ["identifier"]
-        unique_together = ("team", "identifier")
+        unique_together = [("team", "identifier"), ("team", "external_chat_id")]
+
+
+class ParticipantData(BaseTeamModel):
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
+    data = encrypt(models.JSONField(default=dict))
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+        # A bot cannot have a link to multiple data entries for the same Participant
+        # Multiple bots can have a link to the same ParticipantData record
+        # A participant can have many participant data records
+        unique_together = ("participant", "content_type", "object_id")
 
 
 class SessionStatus(models.TextChoices):
@@ -473,13 +502,18 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
+class ExperimentSessionObjectManager(models.Manager):
+    def for_chat_id(self, chat_id: str) -> list["ExperimentSession"]:
+        return self.filter(participant__external_chat_id=chat_id)
+
+
 class ExperimentSession(BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
 
+    objects = ExperimentSessionObjectManager()
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -493,7 +527,6 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
-    external_chat_id = models.CharField(null=False)
     experiment_channel = models.ForeignKey(
         "channels.ExperimentChannel",
         on_delete=models.SET_NULL,
@@ -507,11 +540,8 @@ class ExperimentSession(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
-            self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
+            self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
 
-        is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
-        if is_web_channel and self.external_chat_id is None:
-            self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:
@@ -575,7 +605,7 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If propagate is True but commit is not.
         """
-
+        self.update_status(SessionStatus.PENDING_REVIEW)
         if propagate and not commit:
             raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()

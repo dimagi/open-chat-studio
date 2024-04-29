@@ -12,7 +12,7 @@ class WebMessage(BaseModel):
     """
 
     message_text: str
-    chat_id: int
+    chat_id: str
 
     @property
     def content(self) -> str:

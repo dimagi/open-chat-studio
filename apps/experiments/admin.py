@@ -43,6 +43,13 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_filter = ("team",)
 
 
+@admin.register(models.ParticipantData)
+class ParticipantData(admin.ModelAdmin):
+    list_display = ("participant", "content_type", "object_id")
+    readonly_fields = ("data",)
+    list_filter = ("participant",)
+
+
 @admin.register(models.Survey)
 class SurveyAdmin(admin.ModelAdmin):
     list_display = (
@@ -73,13 +80,11 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "experiment",
         "team",
         "participant",
-        "user",
         "status",
         "created_at",
         "llm",
-        "external_chat_id",
     )
-    search_fields = ("public_id", "external_chat_id", "experiment__name", "participant__identifier")
+    search_fields = ("public_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
     readonly_fields = ("public_id",)
 

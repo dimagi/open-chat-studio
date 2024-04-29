@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from urllib.parse import quote
 
@@ -225,11 +226,11 @@ class ExperimentForm(forms.ModelForm):
 
 def _validate_prompt_variables(form_data):
     required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
-    available_variables = set()
+    available_variables = set(["participant_data"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
     missing_vars = required_variables - available_variables
-    known_vars = {"source_material"}
+    known_vars = {"source_material", "participant_data"}
     if missing_vars:
         errors = []
         unknown_vars = missing_vars - known_vars
@@ -392,7 +393,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     user_sessions = ExperimentSession.objects.filter(
-        user=request.user,
+        participant__user=request.user,
         experiment=experiment,
     )
     channels = experiment.experimentchannel_set.exclude(platform="web").all()
@@ -544,19 +545,38 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 def _start_experiment_session(
     experiment: Experiment,
     experiment_channel: ExperimentChannel,
-    user: CustomUser | None = None,
-    participant: Participant | None = None,
-    external_chat_id: str | None = None,
+    participant_identifier: str,
+    participant_user: CustomUser | None = None,
 ) -> ExperimentSession:
-    session = ExperimentSession.objects.create(
-        team=experiment.team,
-        user=user,
-        participant=participant,
-        experiment=experiment,
-        llm=experiment.llm,
-        external_chat_id=external_chat_id,
-        experiment_channel=experiment_channel,
-    )
+    if not participant_identifier and not participant_user:
+        raise ValueError("Either participant_identifier or participant_user must be specified!")
+
+    if participant_user and participant_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
+
+    with transaction.atomic():
+        try:
+            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+            if participant_user and participant.user is None:
+                # If a participant becomes a user, we must reconcile the user and participant
+                participant.user = participant_user
+                participant.save()
+        except Participant.DoesNotExist:
+            participant = Participant.objects.create(
+                user=participant_user,
+                external_chat_id=participant_identifier,
+                identifier=participant_identifier,
+                team=experiment.team,
+            )
+        session = ExperimentSession.objects.create(
+            team=experiment.team,
+            experiment=experiment,
+            llm=experiment.llm,
+            experiment_channel=experiment_channel,
+            status=SessionStatus.ACTIVE,
+            participant=participant,
+        )
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
@@ -577,7 +597,12 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment_channel = _ensure_experiment_channel_exists(
         experiment=experiment, platform="web", name=f"{experiment.id}-web"
     )
-    session = _start_experiment_session(experiment, experiment_channel=experiment_channel, user=request.user)
+    session = _start_experiment_session(
+        experiment,
+        experiment_channel=experiment_channel,
+        participant_user=request.user,
+        participant_identifier=request.user.email,
+    )
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
@@ -591,7 +616,9 @@ def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, nam
 @login_and_team_required
 def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(ExperimentSession, user=request.user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(
+        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
+    )
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
@@ -609,7 +636,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
     result = get_response_for_webchat_task.delay(session.id, message_text)
     return TemplateResponse(
         request,
@@ -628,7 +655,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
@@ -652,7 +679,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     params = request.GET.dict()
     since_param = params.get("since")
     experiment_session = get_object_or_404(
-        ExperimentSession, user=user, experiment_id=experiment_id, id=session_id, team=request.team
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
     since = datetime.now().astimezone(pytz.timezone("UTC"))
@@ -687,23 +714,24 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         raise Http404
 
     consent = experiment.consent_form
+    user = get_real_user_or_none(request.user)
     if request.method == "POST":
-        form = ConsentForm(consent, request.POST)
+        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            # start anonymous experiment
-            participant = None
-            if form.cleaned_data.get("identifier"):
-                participant = Participant.objects.get_or_create(
-                    team=request.team, identifier=form.cleaned_data["identifier"]
-                )[0]
             experiment_channel = _ensure_experiment_channel_exists(
                 experiment=experiment, platform="web", name=f"{experiment.id}-web"
             )
+            if consent.capture_identifier:
+                identifier = form.cleaned_data.get("identifier", None)
+            else:
+                # The identifier field will be disabled, so we must generate one
+                identifier = user.email if user else str(uuid.uuid4())
+
             session = _start_experiment_session(
                 experiment,
-                user=get_real_user_or_none(request.user),
-                participant=participant,
                 experiment_channel=experiment_channel,
+                participant_user=user,
+                participant_identifier=identifier,
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
@@ -712,6 +740,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
             consent,
             initial={
                 "experiment_id": experiment.id,
+                "identifier": user.email if user else None,
             },
         )
 
@@ -740,26 +769,31 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
-            participant = Participant.objects.get_or_create(
-                team=request.team, identifier=post_form.cleaned_data["email"]
-            )[0]
             if ExperimentSession.objects.filter(
                 team=request.team,
                 experiment=experiment,
-                participant=participant,
                 status__in=["setup", "pending"],
+                participant__external_chat_id=post_form.cleaned_data["email"],
             ).exists():
-                messages.info(request, f"{participant} already has a pending invitation.")
+                participant_email = post_form.cleaned_data["email"]
+                messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                session = ExperimentSession.objects.create(
-                    team=request.team,
-                    experiment=experiment,
-                    llm=experiment.llm,
-                    status="setup",
-                    participant=participant,
-                    experiment_channel=channel,
-                )
+                with transaction.atomic():
+                    channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
+                    # TODO: Use _start_experiment_session and pass in specific kwargs
+                    participant, _ = Participant.objects.get_or_create(
+                        team=request.team,
+                        external_chat_id=post_form.cleaned_data["email"],
+                        identifier=post_form.cleaned_data["email"],
+                    )
+                    session = ExperimentSession.objects.create(
+                        team=request.team,
+                        experiment=experiment,
+                        llm=experiment.llm,
+                        status="setup",
+                        experiment_channel=channel,
+                        participant=participant,
+                    )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
         else:
@@ -806,7 +840,6 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    experiment_session.user = get_real_user_or_none(request.user)
     if experiment_session.experiment.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
         redirct_url_name = "experiments:experiment_pre_survey"
