@@ -15,7 +15,7 @@ class ScheduledMessageConfigFactory(factory.django.DjangoModelFactory):
     recurring = True
     time_period = TimePeriod.DAYS
     frequency = 1
-    repititions = 5
+    repetitions = 5
     prompt_text = "Check in with the user"
 
 
