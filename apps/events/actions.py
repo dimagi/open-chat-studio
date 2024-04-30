@@ -5,20 +5,20 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 
 
-def log(session: ExperimentSession, params) -> str:
+def log(session: ExperimentSession, action) -> str:
     last_message = session.chat.messages.last()
     if last_message:
         return last_message.content
 
 
-def end_conversation(session: ExperimentSession, params) -> str:
+def end_conversation(session: ExperimentSession, action) -> str:
     session.end()
     return "Session ended"
 
 
-def summarize_conversation(session: ExperimentSession, params) -> str:
+def summarize_conversation(session: ExperimentSession, action) -> str:
     try:
-        prompt = params["prompt"]
+        prompt = action.params["prompt"]
     except KeyError:
         prompt = SUMMARY_PROMPT
     history = session.chat.get_langchain_messages_until_summary()
@@ -31,11 +31,18 @@ def summarize_conversation(session: ExperimentSession, params) -> str:
     return summary
 
 
-def send_message_to_bot(session: ExperimentSession, params) -> str:
+def schedule_trigger(session: ExperimentSession, action) -> str:
+    from apps.events.models import ScheduledMessage
+
+    ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=action)
+    return ""
+
+
+def send_message_to_bot(session: ExperimentSession, action) -> str:
     from apps.chat.tasks import bot_prompt_for_user, try_send_message
 
     try:
-        message = params["message_to_bot"]
+        message = action.params["message_to_bot"]
     except KeyError:
         message = "The user hasn't responded, please prompt them again."
 
