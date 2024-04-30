@@ -616,7 +616,3 @@ class ExperimentSession(BaseTeamModel):
             from apps.events.tasks import enqueue_static_triggers
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
-
-    def get_last_message_date(self):
-        last_message = self.chat.messages.order_by("-created_at").first()
-        return last_message.created_at if last_message else ""

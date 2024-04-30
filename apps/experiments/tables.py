@@ -161,15 +161,12 @@ class NoActivityMessageConfigTable(tables.Table):
 class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
     started = columns.Column(accessor="created_at", verbose_name="Started")
-    last_message = columns.Column(accessor="updated_at", verbose_name="Last Message")
+    last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message")
     tags = columns.TemplateColumn(
         verbose_name="Tags",
         template_name="experiments/components/experiment_sessions_list_tags.html",
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
-
-    def render_last_message(self, record):
-        return record.get_last_message_date()
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
