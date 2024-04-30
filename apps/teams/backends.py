@@ -55,8 +55,8 @@ CONTENT_TYPES = {
     "analysis": ["analysis", "rungroup", "analysisrun", "resource"],
     "assistants": ["openaiassistant"],
     "channels": ["experimentchannel"],
-    "chat": ["chat", "chatmessage", "scheduledmessage", "scheduledmessageconfig"],
-    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog"],
+    "chat": ["chat", "chatmessage"],
+    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
     "experiments": [
         "consentform",
         "experiment",
