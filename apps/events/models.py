@@ -4,12 +4,12 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import end_conversation, log, schedule_trigger, send_message_to_bot, summarize_conversation
+from apps.events import actions
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 ACTION_FUNCTIONS = {
-    "end_conversation": end_conversation,
-    "log": log,
-    "send_message_to_bot": send_message_to_bot,
-    "summarize": summarize_conversation,
-    "schedule_trigger": schedule_trigger,
+    "end_conversation": actions.EndConversationAction,
+    "log": actions.LogAction,
+    "send_message_to_bot": actions.SendMessageToBotAction,
+    "summarize": actions.SummarizeConversationAction,
+    "schedule_trigger": actions.ScheduleTriggerAction,
 }
 
 
@@ -37,6 +37,16 @@ class EventActionType(models.TextChoices):
 class EventAction(BaseModel):
     action_type = models.CharField(choices=EventActionType.choices)
     params = models.JSONField(blank=True, default=dict)
+
+    @transaction.atomic()
+    def save(self, *args, **kwargs):
+        if not self.id:
+            return super().save(*args, **kwargs)
+        else:
+            res = super().save(*args, **kwargs)
+            action = ACTION_FUNCTIONS[self.action_type]()
+            action.on_update(self)
+            return res
 
 
 class EventLogStatusChoices(models.TextChoices):
@@ -86,7 +96,7 @@ class StaticTrigger(BaseModel):
 
     def fire(self, session):
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action)
+            result = ACTION_FUNCTIONS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -173,7 +183,7 @@ class TimeoutTrigger(BaseModel):
             message_type=ChatMessageType.HUMAN,
         ).last()
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
+            result = ACTION_FUNCTIONS[self.action.action_type]().invoke(session, self.action.params)
             self.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -232,37 +242,37 @@ class TimePeriod(models.TextChoices):
 #             self.update_scheduled_messages()
 #         return super().save(*args, **kwargs)
 
-#     def update_scheduled_messages(self):
-#         """
-#         This method updates the scheduled_messages queryset by considering the following criteria:
-#         - trigger_event and recurring: No effect. Users will not be able to change these at the moment
+# def update_scheduled_messages(self):
+#     """
+#     This method updates the scheduled_messages queryset by considering the following criteria:
+#     - trigger_event and recurring: No effect. Users will not be able to change these at the moment
 
-#         - Number of repetitions:
-#             - If new repetitions are greater than total_triggers, set is_complete to False.
-#             - If new repetitions are less than total_triggers, set is_complete to True.
+#     - Number of repetitions:
+#         - If new repetitions are greater than total_triggers, set is_complete to False.
+#         - If new repetitions are less than total_triggers, set is_complete to True.
 
-#         - Frequency and time period (delta change):
-#             - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
-#             is used as the baseline for adding the new delta
-#             - If the scheduled message's last_triggered_at field is not None (it has fired before), that field is
-#             then used as the baseline for adding the new delta
-#         """
-#         (
-#             self.scheduled_messages.annotate(
-#                 new_delta=MakeInterval(self.time_period, self.frequency),
-#             ).update(
-#                 is_complete=Case(
-#                     When(total_triggers__lt=self.repetitions, then=False),
-#                     When(total_triggers__gte=self.repetitions, then=True),
-#                     output_field=models.BooleanField(),
-#                 ),
-#                 next_trigger_date=Case(
-#                     When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
-#                     When(last_triggered_at__isnull=False, then=F("last_triggered_at") + F("new_delta")),
-#                     output_field=DateTimeField(),
-#                 ),
-#             )
+#     - Frequency and time period (delta change):
+#         - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
+#         is used as the baseline for adding the new delta
+#         - If the scheduled message's last_triggered_at field is not None (it has fired before), that field is
+#         then used as the baseline for adding the new delta
+#     """
+#     (
+#         self.scheduled_messages.annotate(
+#             new_delta=MakeInterval(self.time_period, self.frequency),
+#         ).update(
+#             is_complete=Case(
+#                 When(total_triggers__lt=self.repetitions, then=False),
+#                 When(total_triggers__gte=self.repetitions, then=True),
+#                 output_field=models.BooleanField(),
+#             ),
+#             next_trigger_date=Case(
+#                 When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
+#                 When(last_triggered_at__isnull=False, then=F("last_triggered_at") + F("new_delta")),
+#                 output_field=DateTimeField(),
+#             ),
 #         )
+#     )
 
 
 class ScheduledMessage(BaseTeamModel):
