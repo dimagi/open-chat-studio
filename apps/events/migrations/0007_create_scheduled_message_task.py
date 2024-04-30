@@ -11,8 +11,8 @@ def create_periodic_task(apps, schema_editor):
         period="seconds",
     )
     PeriodicTask.objects.get_or_create(
-        name="chat.tasks.poll_scheduled_messages",
-        task="apps.chat.tasks.poll_scheduled_messages",
+        name="events.tasks.poll_scheduled_messages",
+        task="apps.events.tasks.poll_scheduled_messages",
         interval=schedule,
     )
 
