@@ -1,7 +1,11 @@
-import pytest
+from datetime import timedelta
 
+import pytest
+from freezegun import freeze_time
+
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import SyntheticVoice
-from apps.utils.factories.experiment import SyntheticVoiceFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -67,3 +71,18 @@ class TestSyntheticVoice:
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure}
         assert voice1 not in voices_queryset
+
+
+@pytest.mark.django_db()
+def test_experiment_session_last_message_date():
+    session = ExperimentSessionFactory()
+    with freeze_time("2022-01-01") as frozen_time:
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Sqeezy")
+        frozen_time.tick(timedelta(days=1))
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Sqeezy")
+        frozen_time.tick(timedelta(days=1))
+        last_chat_message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="Sqeezy"
+        )
+
+    assert session.get_last_message_date() == last_chat_message.created_at
