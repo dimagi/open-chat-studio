@@ -135,7 +135,7 @@
           {% for session in user_sessions %}
             <tr>
               <td>{{ session.created_at }}</td>
-              <td>{{ session.updated_at }}</td>
+              <td>{{ session.get_last_message_date }}</td>
               <td>
                 {% if session.is_complete %}
                   <a class="btn btn-sm btn-outline btn-primary"

@@ -168,6 +168,9 @@ class ExperimentSessionsTable(tables.Table):
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
 
+    def render_last_message(self, record):
+        return record.get_last_message_date()
+
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
         return template.render({"tags": record.chat.tags.all()})
