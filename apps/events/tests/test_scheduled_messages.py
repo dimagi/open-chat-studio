@@ -7,52 +7,53 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from freezegun import freeze_time
 
-from apps.chat.models import ScheduledMessage, ScheduledMessageConfig, TimePeriod, TriggerEvent
-from apps.chat.tasks import _get_messages_to_fire, poll_scheduled_messages
-from apps.utils.factories.chat import ScheduledMessageConfigFactory, ScheduledMessageFactory
+from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
+from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
+from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
+# @pytest.fixture
+# def static_trigger(db):
+#     return StaticTriggerFactory()
 
-def test_validation_error_raised(experiment):
-    data = {
-        "name": "pesky reminder",
-        "team": experiment.team,
-        "experiment": experiment,
-        "trigger_event": TriggerEvent.PARTICIPANT_JOINED_EXPERIMENT,
-        "recurring": True,
-        "time_period": TimePeriod.WEEKS,
-        "frequency": 2,
-        "repetitions": 0,
-        "prompt_text": "Check in with the user",
-    }
-    with pytest.raises(ValueError, match="Recurring schedules require `repetitions` to be larger than 0"):
-        ScheduledMessageConfig.objects.create(**data)
+# def test_validation_error_raised(experiment):
+#     data = {
+#         "name": "pesky reminder",
+#         "team": experiment.team,
+#         "experiment": experiment,
+#         "trigger_event": TriggerEvent.PARTICIPANT_JOINED_EXPERIMENT,
+#         "recurring": True,
+#         "time_period": TimePeriod.WEEKS,
+#         "frequency": 2,
+#         "repetitions": 0,
+#         "prompt_text": "Check in with the user",
+#     }
+#     with pytest.raises(ValueError, match="Recurring schedules require `repetitions` to be larger than 0"):
+#         ScheduledMessageConfig.objects.create(**data)
 
-    data["recurring"] = False
-    data["repetitions"] = 2
-    with pytest.raises(ValueError, match="Non recurring schedules cannot have `repetitions` larger than 0"):
-        ScheduledMessageConfig.objects.create(**data)
+#     data["recurring"] = False
+#     data["repetitions"] = 2
+#     with pytest.raises(ValueError, match="Non recurring schedules cannot have `repetitions` larger than 0"):
+#         ScheduledMessageConfig.objects.create(**data)
+
+
+def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
+    params = {"time_period": time_period, "frequency": frequency, "repetitions": repetitions, "prompt_text": ""}
+    return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("period", ["hours"])
+@pytest.mark.parametrize("period", ["hours", "days", "weeks"])
 @patch("apps.experiments.models.ExperimentSession.send_bot_message")
 def test_create_scheduled_message_sets_start_date(send_bot_message, period):
     session = ExperimentSessionFactory()
-    experiment = session.experiment
-    team = experiment.team
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod(period),
-        frequency=1,
-    )
+    event_action, params = _construct_event_action(time_period=TimePeriod(period))
     with freeze_time("2024-01-01"):
         message = ScheduledMessage.objects.create(
-            participant=session.participant, team=session.team, schedule=schedule_conf
+            participant=session.participant, team=session.team, action=event_action
         )
-        delta = relativedelta(**{schedule_conf.time_period: schedule_conf.frequency})
+        delta = relativedelta(**{params["time_period"]: params["frequency"]})
         rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
         assert rel_delta == delta
 
@@ -60,20 +61,14 @@ def test_create_scheduled_message_sets_start_date(send_bot_message, period):
 @pytest.mark.django_db()
 def test_get_messages_to_fire():
     session = ExperimentSessionFactory()
-    experiment = session.experiment
-    team = experiment.team
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod.DAYS,
-        frequency=1,
-        repetitions=2,
-    )
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS)
     with freeze_time("2024-04-01"), patch("apps.chat.tasks.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
 
-        scheduled_message = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
+        scheduled_message = ScheduledMessageFactory(
+            team=session.team, participant=session.participant, action=event_action
+        )
         # DB is behind the trigger date
         pending_messages = _get_messages_to_fire()
         assert len(pending_messages) == 0
@@ -125,22 +120,16 @@ def test_poll_scheduled_messages(send_bot_message, period):
         assert scheduled_message.is_complete == expected_is_complete
 
     session = ExperimentSessionFactory()
-    experiment = session.experiment
-    team = experiment.team
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod(period),
-        frequency=1,
-        repetitions=2,
-    )
-    delta = relativedelta(**{schedule_conf.time_period: schedule_conf.frequency})
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod(period), repetitions=2)
+    delta = relativedelta(**{params["time_period"]: params["frequency"]})
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
     with freeze_time("2024-04-01") as frozen_time, patch("apps.chat.tasks.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
-        scheduled_message = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
+        scheduled_message = ScheduledMessageFactory(
+            team=session.team, participant=session.participant, action=event_action
+        )
         # Set the DB time to now
 
         # DB is now behind the next trigger date
@@ -185,21 +174,13 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
     pending messages"""
 
     session = ExperimentSessionFactory()
-    experiment = session.experiment
-    team = experiment.team
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod.DAYS,
-        frequency=1,
-        repetitions=2,
-    )
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS, repetitions=2)
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.send_bot_message", side_effect=Exception("Oops")),
         patch("apps.chat.tasks.functions.Now") as db_time,
     ):
-        sm = ScheduledMessageFactory(participant=session.participant, schedule=schedule_conf)
+        sm = ScheduledMessageFactory(participant=session.participant, action=event_action, team=session.team)
 
         # Let's put the DB time ahead of the scheduled message
         utc_now = timezone.now()
@@ -222,7 +203,7 @@ def _assert_next_trigger_date(message: ScheduledMessage, expected_date: datetime
 
 
 @pytest.mark.django_db()
-def test_schedule_config_update():
+def test_schedule_update():
     """Tests that a frequency update affects scheduled messages in the following way:
     if last_triggered_at is None, set next_trigger_date as created_at + delta
     if last_triggered_at is not None, set next_trigger_date as last_triggered_at + delta
@@ -231,21 +212,13 @@ def test_schedule_config_update():
     experiment = session.experiment
     team = experiment.team
     session2 = ExperimentSessionFactory(team=team, experiment=experiment)
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod(TimePeriod.WEEKS),
-        frequency=1,
-        repetitions=4,
-    )
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
 
-    message1 = ScheduledMessage.objects.create(
-        participant=session.participant, team=session.team, schedule=schedule_conf
-    )
+    message1 = ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=event_action)
     message2 = ScheduledMessage.objects.create(
         participant=session2.participant,
         team=session.team,
-        schedule=schedule_conf,
+        action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=5),
     )
 
@@ -254,9 +227,9 @@ def test_schedule_config_update():
 
     # Frequency update. Message1 should use its `created_at` as the baseline, message2 its `last_triggered_at`
     new_frequency = 2
-    new_delta = relativedelta(**{schedule_conf.time_period: new_frequency})
-    schedule_conf.frequency = new_frequency
-    schedule_conf.save()
+    new_delta = relativedelta(**{params["time_period"]: new_frequency})
+    event_action.params["frequency"] = new_frequency
+    event_action.save()
 
     _assert_next_trigger_date(message1, message1.created_at + new_delta)
     _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
@@ -267,9 +240,9 @@ def test_schedule_config_update():
 
     # Time period update. Message1 should use its `created_at` as the baseline, message2 its `last_triggered_at`
     new_period = TimePeriod.DAYS
-    schedule_conf.time_period = new_period
-    new_delta = relativedelta(**{new_period: schedule_conf.frequency})
-    schedule_conf.save()
+    event_action.params["time_period"] = new_period
+    new_delta = relativedelta(**{new_period: event_action.params["frequency"]})
+    event_action.save()
 
     _assert_next_trigger_date(message1, message1.created_at + new_delta)
     _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
@@ -287,30 +260,21 @@ def test_schedule_config_repetition_update():
 
     """
     session = ExperimentSessionFactory()
-    experiment = session.experiment
-    team = experiment.team
-    schedule_conf = ScheduledMessageConfigFactory(
-        experiment=experiment,
-        team=team,
-        time_period=TimePeriod(TimePeriod.WEEKS),
-        frequency=1,
-        repetitions=4,
-    )
-
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
     message = ScheduledMessage.objects.create(
-        participant=session.participant, team=session.team, schedule=schedule_conf, is_complete=True, total_triggers=4
+        participant=session.participant, team=session.team, action=event_action, is_complete=True, total_triggers=4
     )
 
     # Increasing repetitions should undo resolution
-    schedule_conf.repetitions += 1
-    schedule_conf.save()
+    event_action.params["repetitions"] += 1
+    event_action.save()
 
     message.refresh_from_db()
     assert message.is_complete is False
 
     # Decreasing repetitions should affect only message 2
-    schedule_conf.repetitions -= 1
-    schedule_conf.save()
+    event_action.params["repetitions"] -= 1
+    event_action.save()
 
     message.refresh_from_db()
     assert message.is_complete is True
