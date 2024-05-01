@@ -222,10 +222,6 @@ class TimeoutTrigger(BaseModel):
         )
 
 
-class TriggerEvent(models.TextChoices):
-    PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
-
-
 class TimePeriod(models.TextChoices):
     HOURS = ("hours", "Hours")
     DAYS = ("days", "Days")
