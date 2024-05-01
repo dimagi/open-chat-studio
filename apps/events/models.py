@@ -48,6 +48,12 @@ class EventAction(BaseModel):
             action.on_update(self)
             return res
 
+    def delete(self, *args, **kwargs):
+        action = ACTION_HANDLERS[self.action_type]()
+        action.on_delete(self)
+        result = super().delete(*args, **kwargs)
+        return result
+
 
 class EventLogStatusChoices(models.TextChoices):
     SUCCESS = "success"
@@ -102,6 +108,12 @@ class StaticTrigger(BaseModel):
         except Exception as e:
             logging.error(e)
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+
+    @transaction.atomic()
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        self.action.delete(*args, **kwargs)
+        return result
 
 
 class TimeoutTrigger(BaseModel):

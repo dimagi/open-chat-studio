@@ -14,6 +14,9 @@ class EventActionHandlerBase:
     def on_update(self, action):
         ...
 
+    def on_delete(self, action):
+        ...
+
 
 class LogAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
@@ -80,6 +83,9 @@ class ScheduleTriggerAction(EventActionHandlerBase):
                 ),
             )
         )
+
+    def on_delete(self, action):
+        action.scheduled_messages.all().delete()
 
 
 class SendMessageToBotAction(EventActionHandlerBase):
