@@ -17,7 +17,7 @@ from apps.utils.models import BaseModel
 logger = logging.getLogger(__name__)
 
 
-ACTION_FUNCTIONS = {
+ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
     "log": actions.LogAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
@@ -44,7 +44,7 @@ class EventAction(BaseModel):
             return super().save(*args, **kwargs)
         else:
             res = super().save(*args, **kwargs)
-            action = ACTION_FUNCTIONS[self.action_type]()
+            action = ACTION_HANDLERS[self.action_type]()
             action.on_update(self)
             return res
 
@@ -96,7 +96,7 @@ class StaticTrigger(BaseModel):
 
     def fire(self, session):
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type]().invoke(session, self.action)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -183,7 +183,7 @@ class TimeoutTrigger(BaseModel):
             message_type=ChatMessageType.HUMAN,
         ).last()
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type]().invoke(session, self.action.params)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action.params)
             self.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )

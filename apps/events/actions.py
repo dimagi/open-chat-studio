@@ -7,7 +7,7 @@ from apps.experiments.models import ExperimentSession
 from apps.utils.django_db import MakeInterval
 
 
-class EventActionExecuterBase:
+class EventActionHandlerBase:
     def invoke(self, session, *args, **kwargs):
         ...
 
@@ -15,20 +15,20 @@ class EventActionExecuterBase:
         ...
 
 
-class LogAction(EventActionExecuterBase):
+class LogAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         last_message = session.chat.messages.last()
         if last_message:
             return last_message.content
 
 
-class EndConversationAction(EventActionExecuterBase):
+class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         session.end()
         return "Session ended"
 
 
-class SummarizeConversationAction(EventActionExecuterBase):
+class SummarizeConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         try:
             prompt = action.params["prompt"]
@@ -44,7 +44,7 @@ class SummarizeConversationAction(EventActionExecuterBase):
         return summary
 
 
-class ScheduleTriggerAction(EventActionExecuterBase):
+class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         from apps.events.models import ScheduledMessage
 
@@ -54,8 +54,6 @@ class ScheduleTriggerAction(EventActionExecuterBase):
     def on_update(self, action):
         """
         This method updates the scheduled_messages queryset by considering the following criteria:
-        - trigger_event and recurring: No effect. Users will not be able to change these at the moment
-
         - Number of repetitions:
             - If new repetitions are greater than total_triggers, set is_complete to False.
             - If new repetitions are less than total_triggers, set is_complete to True.
@@ -84,7 +82,7 @@ class ScheduleTriggerAction(EventActionExecuterBase):
         )
 
 
-class SendMessageToBotAction(EventActionExecuterBase):
+class SendMessageToBotAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         from apps.chat.tasks import bot_prompt_for_user, try_send_message
 
