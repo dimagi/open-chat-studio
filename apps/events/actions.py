@@ -11,10 +11,10 @@ class EventActionHandlerBase:
     def invoke(self, session, *args, **kwargs):
         ...
 
-    def on_update(self, action):
+    def event_action_updated(self, action):
         ...
 
-    def on_delete(self, action):
+    def event_action_deleted(self, action):
         ...
 
 
@@ -54,7 +54,7 @@ class ScheduleTriggerAction(EventActionHandlerBase):
         ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=action)
         return ""
 
-    def on_update(self, action):
+    def event_action_updated(self, action):
         """
         This method updates the scheduled_messages queryset by considering the following criteria:
         - Number of repetitions:
@@ -84,7 +84,7 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             )
         )
 
-    def on_delete(self, action):
+    def event_action_deleted(self, action):
         action.scheduled_messages.all().delete()
 
 

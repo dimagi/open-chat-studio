@@ -44,13 +44,13 @@ class EventAction(BaseModel):
             return super().save(*args, **kwargs)
         else:
             res = super().save(*args, **kwargs)
-            action = ACTION_HANDLERS[self.action_type]()
-            action.on_update(self)
+            handler = ACTION_HANDLERS[self.action_type]()
+            handler.event_action_updated(self)
             return res
 
     def delete(self, *args, **kwargs):
-        action = ACTION_HANDLERS[self.action_type]()
-        action.on_delete(self)
+        handler = ACTION_HANDLERS[self.action_type]()
+        handler.event_action_deleted(self)
         result = super().delete(*args, **kwargs)
         return result
 
