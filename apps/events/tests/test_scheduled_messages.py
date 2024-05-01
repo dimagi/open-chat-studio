@@ -13,30 +13,6 @@ from apps.utils.factories.events import EventActionFactory, ScheduledMessageFact
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
-# @pytest.fixture
-# def static_trigger(db):
-#     return StaticTriggerFactory()
-
-# def test_validation_error_raised(experiment):
-#     data = {
-#         "name": "pesky reminder",
-#         "team": experiment.team,
-#         "experiment": experiment,
-#         "trigger_event": TriggerEvent.PARTICIPANT_JOINED_EXPERIMENT,
-#         "recurring": True,
-#         "time_period": TimePeriod.WEEKS,
-#         "frequency": 2,
-#         "repetitions": 0,
-#         "prompt_text": "Check in with the user",
-#     }
-#     with pytest.raises(ValueError, match="Recurring schedules require `repetitions` to be larger than 0"):
-#         ScheduledMessageConfig.objects.create(**data)
-
-#     data["recurring"] = False
-#     data["repetitions"] = 2
-#     with pytest.raises(ValueError, match="Non recurring schedules cannot have `repetitions` larger than 0"):
-#         ScheduledMessageConfig.objects.create(**data)
-
 
 def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
     params = {"time_period": time_period, "frequency": frequency, "repetitions": repetitions, "prompt_text": ""}

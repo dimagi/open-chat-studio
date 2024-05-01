@@ -221,60 +221,6 @@ class TimePeriod(models.TextChoices):
     MONTHS = ("months", "Months")
 
 
-# class ScheduledMessageConfig(BaseTeamModel):
-#     name = models.CharField(max_length=64)
-#     experiment = models.ForeignKey(
-#         "experiments.Experiment", on_delete=models.CASCADE, related_name="scheduled_message_configs"
-#     )
-#     trigger_event = models.CharField(choices=TriggerEvent.choices, db_index=True, blank=False)
-#     recurring = models.BooleanField()
-#     time_period = models.CharField(choices=TimePeriod.choices)
-#     frequency = models.IntegerField(default=1)
-#     repetitions = models.IntegerField(default=0)
-#     prompt_text = models.TextField()
-
-#     def save(self, *args, **kwargs):
-#         if self.recurring and self.repetitions == 0:
-#             raise ValueError(_("Recurring schedules require `repetitions` to be larger than 0"))
-#         if not self.recurring and self.repetitions > 0:
-#             raise ValueError(_("Non recurring schedules cannot have `repetitions` larger than 0"))
-#         if self.id:
-#             self.update_scheduled_messages()
-#         return super().save(*args, **kwargs)
-
-# def update_scheduled_messages(self):
-#     """
-#     This method updates the scheduled_messages queryset by considering the following criteria:
-#     - trigger_event and recurring: No effect. Users will not be able to change these at the moment
-
-#     - Number of repetitions:
-#         - If new repetitions are greater than total_triggers, set is_complete to False.
-#         - If new repetitions are less than total_triggers, set is_complete to True.
-
-#     - Frequency and time period (delta change):
-#         - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
-#         is used as the baseline for adding the new delta
-#         - If the scheduled message's last_triggered_at field is not None (it has fired before), that field is
-#         then used as the baseline for adding the new delta
-#     """
-#     (
-#         self.scheduled_messages.annotate(
-#             new_delta=MakeInterval(self.time_period, self.frequency),
-#         ).update(
-#             is_complete=Case(
-#                 When(total_triggers__lt=self.repetitions, then=False),
-#                 When(total_triggers__gte=self.repetitions, then=True),
-#                 output_field=models.BooleanField(),
-#             ),
-#             next_trigger_date=Case(
-#                 When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
-#                 When(last_triggered_at__isnull=False, then=F("last_triggered_at") + F("new_delta")),
-#                 output_field=DateTimeField(),
-#             ),
-#         )
-#     )
-
-
 class ScheduledMessage(BaseTeamModel):
     action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
