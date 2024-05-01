@@ -8,6 +8,18 @@ from apps.utils.django_db import MakeInterval
 
 
 class EventActionHandlerBase:
+    """
+    Base class for event action handlers.
+
+    Methods:
+        invoke:
+            Executes the action.
+        event_action_updated:
+            Callback for whenever the associated action is updated.
+        event_action_deleted:
+            Callback for whenever the associated action is deleted, typically for cleanup.
+    """
+
     def invoke(self, session, *args, **kwargs):
         ...
 
