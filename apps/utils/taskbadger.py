@@ -10,7 +10,7 @@ def update_taskbadger_data(celery_task, message_handler, message):
             tb_task.update(
                 data={
                     "experiment_id": message_handler.experiment.id,
-                    "external_chat_id": message_handler.get_chat_id_from_message(message),
+                    "identifier": message_handler.get_chat_id_from_message(message),
                 },
                 data_merge_strategy="default",
             )
