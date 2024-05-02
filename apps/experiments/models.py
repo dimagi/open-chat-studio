@@ -458,7 +458,6 @@ class ExperimentRoute(BaseTeamModel):
 class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    external_chat_id = models.CharField(null=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
 
     @property
@@ -471,7 +470,7 @@ class Participant(BaseTeamModel):
 
     class Meta:
         ordering = ["identifier"]
-        unique_together = [("team", "identifier"), ("team", "external_chat_id")]
+        unique_together = [("team", "identifier")]
 
 
 class ParticipantData(BaseTeamModel):
@@ -504,7 +503,7 @@ class SessionStatus(models.TextChoices):
 
 class ExperimentSessionObjectManager(models.Manager):
     def for_chat_id(self, chat_id: str) -> list["ExperimentSession"]:
-        return self.filter(participant__external_chat_id=chat_id)
+        return self.filter(participant__identifier=chat_id)
 
 
 class ExperimentSession(BaseTeamModel):

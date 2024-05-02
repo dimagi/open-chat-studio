@@ -582,7 +582,6 @@ def _start_experiment_session(
         except Participant.DoesNotExist:
             participant = Participant.objects.create(
                 user=participant_user,
-                external_chat_id=participant_identifier,
                 identifier=participant_identifier,
                 team=experiment.team,
             )
@@ -790,7 +789,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 team=request.team,
                 experiment=experiment,
                 status__in=["setup", "pending"],
-                participant__external_chat_id=post_form.cleaned_data["email"],
+                participant__identifier=post_form.cleaned_data["email"],
             ).exists():
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")

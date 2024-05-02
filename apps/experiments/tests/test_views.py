@@ -133,9 +133,9 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
         participant_identifier=identifier,
     )
 
-    assert Participant.objects.filter(team=experiment.team, external_chat_id=identifier).count() == 1
+    assert Participant.objects.filter(team=experiment.team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=experiment.team).count() == 1
-    assert session.participant.external_chat_id == identifier
+    assert session.participant.identifier == identifier
 
 
 @pytest.mark.django_db()
@@ -161,7 +161,7 @@ def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, clie
     client.post(url, data=post_data)
     assert Participant.objects.filter(team=experiment.team).count() == 1
     if is_user:
-        assert Participant.objects.filter(team=experiment.team, external_chat_id=user.email).exists()
+        assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
 
 
 @pytest.mark.django_db()
@@ -187,9 +187,9 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         participant_identifier=identifier,
     )
 
-    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 1
-    assert session.participant.external_chat_id == identifier
+    assert session.participant.identifier == identifier
 
     # user starts a second session in the same team
     experiment2 = ExperimentFactory(team=team)
@@ -202,9 +202,9 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         participant_identifier=identifier,
     )
 
-    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 2
-    assert session.participant.external_chat_id == identifier
+    assert session.participant.identifier == identifier
 
 
 @pytest.mark.django_db()
@@ -228,9 +228,9 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         participant_identifier=identifier,
     )
 
-    assert Participant.objects.filter(team=team, external_chat_id=identifier).count() == 1
+    assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 1
-    assert session.participant.external_chat_id == identifier
+    assert session.participant.identifier == identifier
 
     # user starts a second session in another team
     if is_user:
@@ -248,12 +248,12 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         participant_identifier=identifier,
     )
 
-    assert Participant.objects.filter(team=new_team, external_chat_id=identifier).count() == 1
+    assert Participant.objects.filter(team=new_team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=new_team).count() == 1
 
-    # There should be two participants with external_chat_id = identifier accross all teams
-    assert Participant.objects.filter(external_chat_id=identifier).count() == 2
-    assert session.participant.external_chat_id == identifier
+    # There should be two participants with identifier = identifier accross all teams
+    assert Participant.objects.filter(identifier=identifier).count() == 2
+    assert session.participant.identifier == identifier
 
 
 @pytest.mark.django_db()
@@ -278,7 +278,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
 
     # Non platform user creates a session
     client.post(url, data=post_data)
-    participant = Participant.objects.get(team=experiment.team, external_chat_id=email)
+    participant = Participant.objects.get(team=experiment.team, identifier=email)
     assert participant.user is None
 
     # Let's create the user by creating another experiment
@@ -288,7 +288,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     client.login(username=user.username, password="password")
     client.post(url, data=post_data)
 
-    participant = Participant.objects.get(team=experiment.team, external_chat_id=email)
+    participant = Participant.objects.get(team=experiment.team, identifier=email)
     assert participant.user is not None
 
 
@@ -312,4 +312,4 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
         kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
     )
     client.post(url, data=post_data)
-    assert Participant.objects.filter(team=experiment.team, external_chat_id=user.email).exists()
+    assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
