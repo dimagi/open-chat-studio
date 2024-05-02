@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import markdown
@@ -616,3 +617,9 @@ class ExperimentSession(BaseTeamModel):
             from apps.events.tasks import enqueue_static_triggers
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+
+    def get_participant_data(self):
+        return self.experiment.get_participant_data(self.participant)
+
+    def get_participant_data_json(self):
+        return json.dumps(self.experiment.get_participant_data(self.participant), indent=2)

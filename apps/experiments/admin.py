@@ -41,6 +41,7 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id")
     readonly_fields = ("public_id",)
     list_filter = ("team",)
+    search_fields = ("external_chat_id",)
 
 
 @admin.register(models.ParticipantData)
