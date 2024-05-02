@@ -14,7 +14,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, OuterRef, Subquery, When
+from django.db.models import Case, Count, IntegerField, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -105,16 +105,9 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        last_message_created_at = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
+        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
         )
-        query_set = ExperimentSession.objects.annotate(
-            last_message_created_at=Subquery(last_message_created_at)
-        ).filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
         tags_query = self.request.GET.get("tags")
         if tags_query:
             tags = tags_query.split("&")
@@ -399,16 +392,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    last_message_created_at = (
-        ChatMessage.objects.filter(
-            chat__experiment_session=OuterRef("pk"),
-        )
-        .order_by("-created_at")
-        .values("created_at")[:1]
-    )
-    user_sessions = ExperimentSession.objects.annotate(
-        last_message_created_at=Subquery(last_message_created_at)
-    ).filter(
+    user_sessions = ExperimentSession.objects.with_last_message_created_at().filter(
         participant__user=request.user,
         experiment=experiment,
     )
