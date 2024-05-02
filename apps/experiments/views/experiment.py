@@ -563,6 +563,7 @@ def _start_experiment_session(
     experiment_channel: ExperimentChannel,
     participant_identifier: str,
     participant_user: CustomUser | None = None,
+    session_status: SessionStatus = SessionStatus.ACTIVE,
 ) -> ExperimentSession:
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
@@ -590,7 +591,7 @@ def _start_experiment_session(
             experiment=experiment,
             llm=experiment.llm,
             experiment_channel=experiment_channel,
-            status=SessionStatus.ACTIVE,
+            status=session_status,
             participant=participant,
         )
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
@@ -796,19 +797,11 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             else:
                 with transaction.atomic():
                     channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                    # TODO: Use _start_experiment_session and pass in specific kwargs
-                    participant, _ = Participant.objects.get_or_create(
-                        team=request.team,
-                        external_chat_id=post_form.cleaned_data["email"],
-                        identifier=post_form.cleaned_data["email"],
-                    )
-                    session = ExperimentSession.objects.create(
-                        team=request.team,
+                    session = _start_experiment_session(
                         experiment=experiment,
-                        llm=experiment.llm,
-                        status="setup",
                         experiment_channel=channel,
-                        participant=participant,
+                        participant_identifier=post_form.cleaned_data["email"],
+                        session_status=SessionStatus.SETUP,
                     )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
