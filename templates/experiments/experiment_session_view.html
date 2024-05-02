@@ -41,15 +41,13 @@
       {% include "experiments/components/experiment_details.html" %}
     </div>
     {% if experiment_session.get_participant_data %}
-      <div x-data="{showParticipantData: false}">
-        <h3 class="text-base font-semibold leading-7 mt-8 pl-4">
-          <div class="hover:cursor-pointer" @click="showParticipantData = !showParticipantData;">
-            <i x-show="!showParticipantData" class="fa fa-arrow-right" aria-hidden="true"></i>
-            <i x-cloak x-show="showParticipantData" class="fa fa-arrow-down" aria-hidden="true"></i>
-            Participant Data
-          </div>
-        </h3>
-        <div x-cloak x-show="showParticipantData" class="max-w-5xl mt-4 rounded-2xl">
+
+      <div class="app-card collapse collapse-arrow max-w-5xl">
+        <input type="checkbox" />
+        <div class="collapse-title text-xl font-medium">
+          Participant data
+        </div>
+        <div class="collapse-content">
           <div role="tablist" class="tabs tabs-bordered">
             <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Formatted" checked/>
             <div role="tabpanel" class="tab-content p-10">
@@ -64,13 +62,15 @@
             </div>
             <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Raw" />
             <div role="tabpanel" class="tab-content p-10">
-              <pre class="overflow-x-auto">
-                {{ experiment_session.get_participant_data_json }}
-              </pre>
+            <pre class="overflow-x-auto">
+              {{ experiment_session.get_participant_data_json }}
+            </pre>
             </div>
           </div>
         </div>
       </div>
+
+
     {% endif %}
     <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment chat</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
