@@ -115,6 +115,13 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     auth_token = forms.CharField(label=_("Auth Token"))
 
 
+class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["client_secret"]
+
+    client_id = forms.CharField(label=_("Client ID"))
+    client_secret = forms.CharField(label=_("Client Secret"))
+
+
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
 

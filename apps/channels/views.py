@@ -27,6 +27,13 @@ def new_twilio_message(request):
 
 
 @csrf_exempt
+def new_sureadhere_message(request, client_id: int):
+    message_data = json.loads(request.body)
+    tasks.handle_sureadhere_message.delay(client_id=client_id, message_data=message_data)
+    return HttpResponse()
+
+
+@csrf_exempt
 def new_turn_message(request, experiment_id: uuid):
     message_data = json.loads(request.body.decode("utf-8"))
     if "messages" not in message_data:

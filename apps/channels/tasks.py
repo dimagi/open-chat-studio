@@ -5,9 +5,9 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import TelegramMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -54,6 +54,21 @@ def handle_twilio_message(self, message_data: str):
     message_handler = ChannelClass(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
     message_handler.new_user_message(message)
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def handle_sureadhere_message(self, client_id: str, message_data: dict):
+    message = SureAdhereMessage.parse(message_data)
+    experiment_channel = ExperimentChannel.objects.filter(
+        extra_data__client_id=client_id,
+        platform=ChannelPlatform.IN_APP,
+        messaging_provider__type=MessagingProviderType.sureadhere,
+    ).first()
+    if not experiment_channel:
+        return
+    channel = SureAdhereChannel(experiment_channel=experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

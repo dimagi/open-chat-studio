@@ -576,6 +576,35 @@ class WhatsappChannel(ChannelBase):
         )
 
 
+class SureAdhereChannel(ChannelBase):
+    def initialize(self):
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
+    def send_text_to_user(self, text: str):
+        # client_id = self.experiment_channel.extra_data.get("client_id")
+        to_patient = self.chat_id
+        self.messaging_service.send_text_message(text, from_=24, to=to_patient, platform=ChannelPlatform.IN_APP)
+
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
+
+    @property
+    def voice_replies_supported(self) -> bool:
+        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+
+    @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
+
+    @property
+    def message_content_type(self):
+        return self.message.content_type
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+
 class FacebookMessengerChannel(ChannelBase):
     def initialize(self):
         self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
