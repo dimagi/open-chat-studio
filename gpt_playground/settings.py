@@ -30,7 +30,7 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
@@ -174,8 +174,6 @@ else:
 AUTH_USER_MODEL = "users.CustomUser"
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "/"
-
-CSRF_TRUSTED_ORIGINS = ["https://c10f-190-34-155-238.ngrok-free.app"]
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
