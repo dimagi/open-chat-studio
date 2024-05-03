@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
-from apps.chat.models import ChatMessage, ChatMessageType, ScheduledMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
@@ -203,17 +203,3 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
         fail_silently=False,
         html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
     )
-
-
-def _get_messages_to_fire():
-    return ScheduledMessage.objects.filter(is_complete=False, next_trigger_date__lte=functions.Now())
-
-
-@shared_task()
-def poll_scheduled_messages():
-    """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
-    new trigger details for each message."""
-
-    messages = _get_messages_to_fire()
-    for message in messages:
-        message.safe_trigger()

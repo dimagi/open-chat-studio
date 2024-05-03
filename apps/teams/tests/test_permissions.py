@@ -97,14 +97,6 @@ def test_group_def():
         ("chat message", "change_chatmessage"),
         ("chat message", "delete_chatmessage"),
         ("chat message", "view_chatmessage"),
-        ("scheduled message", "add_scheduledmessage"),
-        ("scheduled message", "change_scheduledmessage"),
-        ("scheduled message", "delete_scheduledmessage"),
-        ("scheduled message", "view_scheduledmessage"),
-        ("scheduled message config", "add_scheduledmessageconfig"),
-        ("scheduled message config", "change_scheduledmessageconfig"),
-        ("scheduled message config", "delete_scheduledmessageconfig"),
-        ("scheduled message config", "view_scheduledmessageconfig"),
         ("team", "change_team"),
         ("team", "view_team"),
     ]
@@ -123,14 +115,6 @@ def test_group_def():
         ("chat message", "change_chatmessage"),
         ("chat message", "delete_chatmessage"),
         ("chat message", "view_chatmessage"),
-        ("scheduled message", "add_scheduledmessage"),
-        ("scheduled message", "change_scheduledmessage"),
-        ("scheduled message", "delete_scheduledmessage"),
-        ("scheduled message", "view_scheduledmessage"),
-        ("scheduled message config", "add_scheduledmessageconfig"),
-        ("scheduled message config", "change_scheduledmessageconfig"),
-        ("scheduled message config", "delete_scheduledmessageconfig"),
-        ("scheduled message config", "view_scheduledmessageconfig"),
     ]
 
 
