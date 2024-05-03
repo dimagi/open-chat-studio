@@ -61,6 +61,9 @@ class SummarizeConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
+        from apps.events.models import ScheduledMessage
+
+        ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=action)
         return f"A scheduled message was created for participant '{session.participant.identifier}'"
 
     def event_action_updated(self, action):
