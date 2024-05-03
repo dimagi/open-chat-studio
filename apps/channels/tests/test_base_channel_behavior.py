@@ -33,7 +33,7 @@ def telegram_channel(db):
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
 def test_incoming_message_adds_channel_info(_get_llm_response, _send_text_to_user_mock, telegram_channel):
-    """When an `experiment_session` is created, channel specific info like `external_chat_id` and
+    """When an `experiment_session` is created, channel specific info like `identifier` and
     `experiment_channel` should also be added to the `experiment_session`
     """
 
@@ -42,7 +42,7 @@ def test_incoming_message_adds_channel_info(_get_llm_response, _send_text_to_use
     _simulate_user_message(telegram_channel, message)
 
     experiment_session = ExperimentSession.objects.filter(
-        experiment=telegram_channel.experiment, participant__external_chat_id=chat_id
+        experiment=telegram_channel.experiment, participant__identifier=chat_id
     ).get()
     assert experiment_session is not None
     assert experiment_session.experiment_channel is not None
@@ -55,7 +55,7 @@ def test_channel_added_for_experiment_session(_get_llm_response, _send_text_to_u
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
     _simulate_user_message(telegram_channel, message)
-    participant = Participant.objects.get(external_chat_id=chat_id)
+    participant = Participant.objects.get(identifier=chat_id)
     experiment_session = participant.experimentsession_set.first()
     assert experiment_session.experiment_channel is not None
 
@@ -76,7 +76,7 @@ def test_incoming_message_uses_existing_experiment_session(
 
     # Let's find the session it created
     experiment_sessions_count = ExperimentSession.objects.filter(
-        experiment=experiment, participant__external_chat_id=chat_id
+        experiment=experiment, participant__identifier=chat_id
     ).count()
     assert experiment_sessions_count == 1
 
@@ -88,7 +88,7 @@ def test_incoming_message_uses_existing_experiment_session(
 
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.filter(
-        experiment=experiment, participant__external_chat_id=chat_id
+        experiment=experiment, participant__identifier=chat_id
     ).count()
     assert experiment_sessions_count == 1
 
@@ -143,8 +143,8 @@ def test_different_participants_created_for_same_user_in_different_teams(_get_ll
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
     assert Participant.objects.count() == 2
-    participant1 = Participant.objects.get(team=experiment1.team, external_chat_id=chat_id)
-    participant2 = Participant.objects.get(team=experiment2.team, external_chat_id=chat_id)
+    participant1 = Participant.objects.get(team=experiment1.team, identifier=chat_id)
+    participant2 = Participant.objects.get(team=experiment2.team, identifier=chat_id)
     assert participant1 != participant2
 
 
@@ -483,8 +483,8 @@ def test_participant_reused_accross_experiments(_send_message_to_user, _get_llm_
     tele_channel3.telegram_bot = Mock()
     tele_channel3.new_user_message(telegram_messages.text_message(chat_id=chat_id))
 
-    # There should be 1 participant with external_chat_id = chat_id per team
-    assert Participant.objects.filter(team=team1, external_chat_id=chat_id).count() == 1
-    assert Participant.objects.filter(team=team2, external_chat_id=chat_id).count() == 1
-    # but 2 participants accross all teams with external_chat_id = chat_id
-    assert Participant.objects.filter(external_chat_id=chat_id).count() == 2
+    # There should be 1 participant with identifier = chat_id per team
+    assert Participant.objects.filter(team=team1, identifier=chat_id).count() == 1
+    assert Participant.objects.filter(team=team2, identifier=chat_id).count() == 1
+    # but 2 participants accross all teams with identifier = chat_id
+    assert Participant.objects.filter(identifier=chat_id).count() == 2

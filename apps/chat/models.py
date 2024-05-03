@@ -1,7 +1,6 @@
 from enum import StrEnum
 from urllib.parse import quote
 
-from django.conf import settings
 from django.db import models
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
@@ -19,7 +18,6 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     class MetadataKeys(StrEnum):
         OPENAI_THREAD_ID = "openai_thread_id"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
     metadata = models.JSONField(default=dict)

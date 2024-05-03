@@ -107,7 +107,7 @@ def test_get_latest_sessions_for_participants():
     part2_exp2_session1 = ExperimentSessionFactory(participant=participant_2)
     assert part2_exp2_session1.team != part2_exp1_session2.team
 
-    chat_ids = [participant_1.external_chat_id, participant_2.external_chat_id]
+    chat_ids = [participant_1.identifier, participant_2.identifier]
     sessions = _get_latest_sessions_for_participants(chat_ids, experiment_public_id=str(experiment.public_id))
     # Let's make sure the experiment was correctly filtered
     assert len(set([s.experiment for s in sessions])) == 1
