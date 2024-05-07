@@ -63,7 +63,7 @@ class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
-    extra = models.JSONField(default=dict)
+    extra = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"Tool Resources for {self.assistant.name}: {self.tool_type}"

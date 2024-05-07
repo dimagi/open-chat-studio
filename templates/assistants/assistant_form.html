@@ -18,17 +18,32 @@
   {% endif %}
 {% endblock pre_form %}
 {% block form %}
-  {{ block.super }}
+  {{ form.non_field_errors }}
+  {% render_form_fields form "name" "instructions" "llm_provider" "llm_model" "builtin_tools" %}
   {% if not object.id %}
     {% include "files/partials/file_formset.html" %}
   {% endif %}
 {% endblock form %}
 {% block post_form %}
   {% if object.id %}
-    <hr class="my-4">
-    {% url "assistants:add_file" request.team.slug object.id as upload_url %}
-    {% url "assistants:remove_file" request.team.slug object.id '000' as delete_url %}
-    {% include "files/partials/file_list.html" with files=object.files.all nested=False %}
+    {% with resources=object.tool_resources.all %}
+      <hr class="my-4">
+      <div role="tablist" class="tabs tabs-bordered">
+        {% for resource in resources %}
+
+          <input type="radio" name="files_tabs" role="tab" class="tab whitespace-nowrap"
+                 {% if resource.tool_type == "file_search" %}aria-label="Vector Store Files"{% endif %}
+                 {% if resource.tool_type == "code_interpreter" %}aria-label="Code Interpreter Files"{% endif %}
+                 {% if forloop.first %}checked{% endif %}
+          />
+          <div role="tabpanel" class="tab-content">
+            {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
+            {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
+            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endwith %}
   {% endif %}
 {% endblock post_form %}
 {% block page_js %}

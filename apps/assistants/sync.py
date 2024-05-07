@@ -71,7 +71,20 @@ def push_file_to_openai(assistant: OpenAiAssistant, file: File):
 
 
 @wrap_openai_errors
-def delete_file_from_openai(client: OpenAI, resource: ToolResources, file: File):
+def delete_file_from_vector_store(client, vector_store_id, file):
+    if not file.external_id or file.external_source != "openai":
+        return
+
+    try:
+        client.resources.beta.vector_stores.retrieve(vector_store_id)
+    except openai.NotFoundError:
+        pass
+    else:
+        client.resources.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file.external_id)
+
+
+@wrap_openai_errors
+def delete_file_from_openai(client: OpenAI, file: File):
     if not file.external_id or file.external_source != "openai":
         return
 
@@ -166,8 +179,7 @@ def sync_tool_resource_files_from_openai(file_ids, ocs_resource):
     File.objects.filter(id__in=unused_files).delete()
 
 
-def sync_vector_store_files_to_openai(assistant, vector_store_id, files_ids: list[str]):
-    client = assistant.llm_provider.get_llm_service().get_raw_client()
+def sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[str]):
     vector_store_files = (file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_id))
     to_delete_remote = []
     for file_id in vector_store_files:
@@ -179,7 +191,8 @@ def sync_vector_store_files_to_openai(assistant, vector_store_id, files_ids: lis
     for file_id in to_delete_remote:
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
 
-    client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=files_ids)
+    if files_ids:
+        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=files_ids)
 
 
 @wrap_openai_errors
@@ -220,7 +233,7 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
         "temperature": assistant.temperature,
         "top_p": assistant.top_p,
         "metadata": {
-            "ocs_assistant_id": assistant.id,
+            "ocs_assistant_id": str(assistant.id),
         },
         "tool_resources": {},
     }
@@ -233,13 +246,28 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
     if "file_search" in assistant.builtin_tools and (file_search := resources.get("file_search")):
         file_ids = create_files_remote(assistant, file_search.files.all())
         vector_store_id = file_search.extra.get("vector_store_id")
-        if vector_store_id:
-            sync_vector_store_files_to_openai(assistant, vector_store_id, file_ids)
-            data["tool_resources"]["file_search"] = {"vector_store_ids": [vector_store_id]}
-        else:
-            data["tool_resources"]["file_search"] = {"vector_stores": [{"file_ids": file_ids}]}
+        client = assistant.llm_provider.get_llm_service().get_raw_client()
+        vector_store_id = update_or_create_vector_store(
+            client, f"{assistant.name} - File Search", vector_store_id, file_ids
+        )
+        data["tool_resources"]["file_search"] = {"vector_store_ids": [vector_store_id]}
 
     return data
+
+
+@wrap_openai_errors
+def update_or_create_vector_store(client, name, vector_store_id, file_ids) -> str:
+    if vector_store_id:
+        try:
+            client.beta.vector_stores.retrieve(vector_store_id)
+        except openai.NotFoundError:
+            pass
+        else:
+            sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
+            return vector_store_id
+
+    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
+    return vector_store.id
 
 
 def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provider=None) -> dict:

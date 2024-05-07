@@ -17,10 +17,11 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
 from .forms import ImportAssistantForm, OpenAiAssistantForm
-from .models import OpenAiAssistant
+from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
+    delete_file_from_vector_store,
     delete_openai_assistant,
     import_openai_assistant,
     push_assistant_to_openai,
@@ -140,12 +141,12 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     @transaction.atomic()
     def form_valid(self, form):
         response = super().form_valid(form)
-        try:
-            push_assistant_to_openai(self.object)
-        except OpenAiSyncError as e:
-            messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
-            form.add_error(None, str(e))
-            return self.form_invalid(form)
+        # try:
+        #     push_assistant_to_openai(self.object)
+        # except OpenAiSyncError as e:
+        #     messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
+        #     form.add_error(None, str(e))
+        #     return self.form_invalid(form)
         return response
 
 
@@ -221,20 +222,30 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
 class AddFileToAssistant(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
-        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
-        if not assistant.builtin_tools:
-            raise ValueError("Files are only supported if retrieval or code_interpreter tools are enabled.")
+        resource = get_object_or_404(ToolResources, assistant_id=self.kwargs["pk"], pk=self.kwargs["resource_id"])
         file = super().form_valid(form)
-        assistant.files.add(file)
-        push_assistant_to_openai(assistant)
+        resource.files.add(file)
+        push_assistant_to_openai(resource.assistant)
         return file
 
     def get_delete_url(self, file):
-        return reverse("assistants:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
+        return reverse(
+            "assistants:remove_file",
+            args=[self.request.team.slug, self.kwargs["pk"], self.kwargs["resource_id"], file.pk],
+        )
 
 
 class DeleteFileFromAssistant(BaseDeleteFileView):
     def get_success_response(self, file):
-        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
-        delete_file_from_openai(assistant, file)
+        resource = get_object_or_404(
+            ToolResources,
+            assistant_id=self.kwargs["pk"],
+            id=self.kwargs["resource_id"],
+        )
+
+        client = resource.assistant.llm_provider.get_llm_service().get_raw_client()
+        vector_store_id = resource.extra.get("vector_store_id")
+        if vector_store_id:
+            delete_file_from_vector_store(client, vector_store_id, file)
+        delete_file_from_openai(client, file)
         return HttpResponse()

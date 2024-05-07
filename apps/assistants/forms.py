@@ -5,14 +5,13 @@ from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_
 
 
 class OpenAiAssistantForm(forms.ModelForm):
+    builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
+
     class Meta:
         model = OpenAiAssistant
         fields = ["name", "instructions", "builtin_tools", "llm_provider", "llm_model"]
         labels = {
             "builtin_tools": "Enable Built-in Tools",
-        }
-        widgets = {
-            "builtin_tools": forms.CheckboxSelectMultiple(choices=get_assistant_tool_options()),
         }
 
     def __init__(self, request, *args, **kwargs):
