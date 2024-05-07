@@ -193,14 +193,21 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
 
 @pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.delete")
-@patch("openai.resources.beta.assistants.Files.delete")
+@patch("openai.resources.beta.vector_stores.VectorStores.delete")
 @patch("openai.resources.Files.delete")
-def test_delete_openai_assistant(mock_file_delete, mock_assistant_file_delete, mock_delete):
-    files = FileFactory.create_batch(2, external_id="test_id", external_source="openai")
+def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, mock_delete):
+    files = FileFactory.create_batch(3, external_id="test_id", external_source="openai")
     local_assistant = OpenAiAssistantFactory()
-    local_assistant.files.set(files)
+
+    code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=local_assistant)
+    code_resource.files.set(files[:2])
+
+    search_resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": "vs_123"}
+    )
+    search_resource.files.set(files[2:])
 
     delete_openai_assistant(local_assistant)
     mock_delete.assert_called_with(local_assistant.assistant_id)
-    assert mock_file_delete.call_count == 2
-    assert mock_assistant_file_delete.call_count == 2
+    assert mock_file_delete.call_count == 3
+    assert mock_vector_store_delete.call_count == 1

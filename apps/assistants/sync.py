@@ -4,6 +4,7 @@ from functools import wraps
 from io import BytesIO
 
 import openai
+from openai import OpenAI
 from openai.types.beta import Assistant
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
@@ -70,12 +71,10 @@ def push_file_to_openai(assistant: OpenAiAssistant, file: File):
 
 
 @wrap_openai_errors
-def delete_file_from_openai(assistant: OpenAiAssistant, file: File):
+def delete_file_from_openai(client: OpenAI, resource: ToolResources, file: File):
     if not file.external_id or file.external_source != "openai":
         return
 
-    client = assistant.llm_provider.get_llm_service().get_raw_client()
-    client.beta.assistants.files.delete(assistant_id=assistant.assistant_id, file_id=file.external_id)
     try:
         client.files.delete(file.external_id)
     except openai.NotFoundError:
@@ -201,8 +200,13 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
     except openai.NotFoundError:
         pass
 
-    for file in assistant.files.all():
-        delete_file_from_openai(assistant, file)
+    for resource in assistant.tool_resources.all():
+        if resource.tool_type == "file_search" and "vector_store_id" in resource.extra:
+            vector_store_id = resource.extra.pop("vector_store_id")
+            client.beta.vector_stores.delete(vector_store_id=vector_store_id)
+
+        for file in resource.files.all():
+            delete_file_from_openai(client, resource, file)
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
