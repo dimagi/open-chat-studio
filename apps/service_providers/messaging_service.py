@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import ClassVar
+from urllib.parse import urljoin
 
 import boto3
 import pydantic
@@ -142,6 +143,7 @@ class SureAdhereService(MessagingService):
 
     client_id: str
     client_secret: str
+    base_url: str
 
     def get_access_token(self):
         auth_url = "https://sureadherelabs.b2clogin.com/sureadherelabs.onmicrosoft.com/B2C_1_Patients/oauth2/v2.0/token"
@@ -157,7 +159,7 @@ class SureAdhereService(MessagingService):
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
         access_token = self.get_access_token()
-        send_msg_url = "https://parker.sureadherelabs.com:8004/treatment/external/send-msg"
+        send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
         data = {"patient_Id": to, "message_Body": message, "user_Id": from_, "title": "Sample Title"}
         response = requests.post(send_msg_url, headers=headers, json=data)

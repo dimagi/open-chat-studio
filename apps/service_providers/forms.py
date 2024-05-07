@@ -120,6 +120,7 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     client_id = forms.CharField(label=_("Client ID"))
     client_secret = forms.CharField(label=_("Client Secret"))
+    base_url = forms.CharField(label=_("Base URL"))
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
