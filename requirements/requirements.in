@@ -45,4 +45,5 @@ django-field-audit>=1.2.7
 turn-python>=0.2.0
 jinja2
 django-taggit
-transformers
+transformers # this is required by the tokenizer that langchain uses
+# See https://github.com/langchain-ai/langchain/blob/ad3fd44a7f83e3c5e6b25024ce1b49f1a828defe/libs/core/langchain_core/language_models/base.py#L43
