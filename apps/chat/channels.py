@@ -622,3 +622,25 @@ class FacebookMessengerChannel(ChannelBase):
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
         )
+
+
+class ApiChannel(ChannelBase):
+    """Message Handler for the API"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
+
+    @property
+    def message_content_type(self):
+        return MESSAGE_TYPES.TEXT
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def new_bot_message(self, bot_message: str):
+        # Simply adding a new AI message to the chat history will cause it to be sent to the UI
+        pass

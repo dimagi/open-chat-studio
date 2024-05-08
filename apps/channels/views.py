@@ -3,9 +3,15 @@ import uuid
 
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 
+from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.experiments.models import Experiment
 
 
 @csrf_exempt
@@ -35,3 +41,22 @@ def new_turn_message(request, experiment_id: uuid):
 
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
+
+
+@api_view(["POST"])
+@permission_classes([HasUserAPIKey])
+def new_api_message(request):
+    """
+    Expected body: {"experiment_id": "", "message": ""}
+    """
+    message_data = request.POST.dict()
+    message_data["participant_id"] = request.user.email
+    experiment = get_object_or_404(Experiment, public_id=message_data["experiment_id"])
+    experiment_channel, _created = ExperimentChannel.objects.get_or_create(
+        name=f"{experiment.id}-api",
+        experiment=experiment,
+        platform=ChannelPlatform.API,
+    )
+
+    response = tasks.handle_api_message(experiment_channel, message_data=message_data)
+    return Response(data={"response": response})
