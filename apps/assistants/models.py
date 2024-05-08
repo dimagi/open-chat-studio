@@ -1,4 +1,5 @@
 from django.contrib.postgres.fields import ArrayField
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from field_audit import audit_fields
@@ -19,14 +20,16 @@ class OpenAiAssistantManager(AuditingManager):
     "builtin_tools",
     "llm_provider",
     "llm_model",
+    "temperature",
+    "top_p",
     audit_special_queryset_writes=True,
 )
 class OpenAiAssistant(BaseTeamModel):
     assistant_id = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     instructions = models.TextField()
-    temperature = models.FloatField(default=1.0)
-    top_p = models.FloatField(default=1.0)
+    temperature = models.FloatField(default=1.0, validators=[MinValueValidator(0.0), MaxValueValidator(2.0)])
+    top_p = models.FloatField(default=1.0, validators=[MinValueValidator(0.0), MaxValueValidator(1.0)])
     builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
@@ -45,6 +48,9 @@ class OpenAiAssistant(BaseTeamModel):
 
     objects = OpenAiAssistantManager()
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -59,11 +65,19 @@ class OpenAiAssistant(BaseTeamModel):
         return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
 
 
+@audit_fields(
+    "assistant_id",
+    "tool_type",
+    "extra",
+    audit_special_queryset_writes=True,
+)
 class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
     extra = models.JSONField(default=dict, blank=True)
+
+    objects = AuditingManager()
 
     @property
     def label(self):
