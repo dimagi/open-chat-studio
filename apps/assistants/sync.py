@@ -180,7 +180,7 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     openai_assistant = client.beta.assistants.retrieve(assistant_id)
     kwargs = _openai_assistant_to_ocs_kwargs(openai_assistant, team=team, llm_provider=llm_provider)
     assistant = OpenAiAssistant.objects.create(**kwargs)
-    sync_tool_resources(openai_assistant, assistant)
+    sync_tool_resources_from_openai(openai_assistant, assistant)
     return assistant
 
 
@@ -198,7 +198,7 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
             client.beta.vector_stores.delete(vector_store_id=vector_store_id)
 
         for file in resource.files.all():
-            delete_file_from_openai(client, resource, file)
+            delete_file_from_openai(client, file)
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:

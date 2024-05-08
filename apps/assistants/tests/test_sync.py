@@ -1,3 +1,4 @@
+import dataclasses
 from io import BytesIO
 from unittest.mock import call, patch
 
@@ -16,10 +17,16 @@ from apps.utils.factories.openai import AssistantFactory, FileObjectFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 
+@dataclasses.dataclass
+class ObjectWithId:
+    id: str
+
+
 @pytest.mark.django_db()
+@patch("openai.resources.beta.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
-def test_push_assistant_to_openai_create(mock_file_create, mock_create):
+def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create):
     local_assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
 
@@ -30,8 +37,9 @@ def test_push_assistant_to_openai_create(mock_file_create, mock_create):
     search_resource.files.set(files[2:])
 
     push_assistant_to_openai(local_assistant)
-    assert mock_create.called
+    assert assistant_create.called
     assert mock_file_create.call_count == 3
+    assert vs_create.called
     local_assistant.refresh_from_db()
     assert local_assistant.assistant_id == "test_id"
     for file in files:
@@ -46,8 +54,9 @@ def test_push_assistant_to_openai_create(mock_file_create, mock_create):
 @pytest.mark.django_db()
 @patch("openai.resources.beta.vector_stores.file_batches.FileBatches.create")
 @patch("openai.resources.beta.vector_stores.files.Files.list")
+@patch("openai.resources.beta.vector_stores.VectorStores.retrieve", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.update")
-def test_push_assistant_to_openai_update(mock_update, vs_files_list, file_batches):
+def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list, file_batches):
     local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
     files[0].external_id = "test_id"
@@ -68,6 +77,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_files_list, file_batche
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
         push_assistant_to_openai(local_assistant)
     assert mock_update.called
+    assert vs_retrieve.called
     assert mock_file_create.call_count == 2
 
     assert file_batches.call_args_list == [
