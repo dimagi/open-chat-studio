@@ -210,8 +210,9 @@ def _sync_tool_resources(assistant):
     if file_search := resources.get("file_search"):
         file_ids = _create_files_remote(assistant, file_search.files.all())
         store_id = file_search.extra.get("vector_store_id")
-        client = assistant.llm_provider.get_llm_service().get_raw_client()
-        updated_store_id = _update_or_create_vector_store(client, f"{assistant.name} - File Search", store_id, file_ids)
+        updated_store_id = _update_or_create_vector_store(
+            assistant, f"{assistant.name} - File Search", store_id, file_ids
+        )
         if store_id != updated_store_id:
             file_search.extra["vector_store_id"] = updated_store_id
             file_search.save()
@@ -220,15 +221,26 @@ def _sync_tool_resources(assistant):
     return resource_data
 
 
-def _update_or_create_vector_store(client, name, vector_store_id, file_ids) -> str:
+def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+    vector_store = None
     if vector_store_id:
         try:
-            client.beta.vector_stores.retrieve(vector_store_id)
+            vector_store = client.beta.vector_stores.retrieve(vector_store_id)
         except openai.NotFoundError:
             pass
-        else:
-            _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
-            return vector_store_id
+
+    if not vector_store and assistant.assistant_id:
+        # check if there is a vector store attached to this assistant that we don't know about
+        openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
+        try:
+            vector_store = openai_assistant.tool_resources.file_search.vector_store_ids[0]
+        except AttributeError:
+            pass
+
+    if vector_store:
+        _sync_vector_store_files_to_openai(client, vector_store.id, file_ids)
+        return vector_store.id
 
     vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
     return vector_store.id
