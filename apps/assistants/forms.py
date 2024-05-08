@@ -10,7 +10,15 @@ class OpenAiAssistantForm(forms.ModelForm):
 
     class Meta:
         model = OpenAiAssistant
-        fields = ["name", "instructions", "builtin_tools", "llm_provider", "llm_model"]
+        fields = [
+            "name",
+            "instructions",
+            "builtin_tools",
+            "llm_provider",
+            "llm_model",
+            "temperature",
+            "top_p",
+        ]
         labels = {
             "builtin_tools": "Enable Built-in Tools",
         }
