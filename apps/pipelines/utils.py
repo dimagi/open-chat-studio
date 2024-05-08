@@ -9,7 +9,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes import ExperimentSessionId, PipelineNode
 
 
-def build_runnable(graph: PipelineGraph, session_id: str | None = None) -> Runnable:
+def build_runnable_from_graph(graph: PipelineGraph, session_id: str | None = None) -> Runnable:
     all_nodes = importlib.import_module("apps.pipelines.nodes")
     runnable = RunnablePassthrough()
     for node in graph.nodes:

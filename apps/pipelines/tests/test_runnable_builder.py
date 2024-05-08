@@ -4,7 +4,7 @@ from django.test import override_settings
 from langchain_core.runnables import RunnableConfig
 
 from apps.pipelines.graph import PipelineGraph
-from apps.pipelines.utils import build_runnable
+from apps.pipelines.utils import build_runnable_from_graph
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -63,7 +63,7 @@ def test_full_email_sending_pipeline(session):
             "name": "New Pipeline",
         }
     )
-    runnable = build_runnable(graph, session_id=session.id)
+    runnable = build_runnable_from_graph(graph, session_id=session.id)
     runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
     assert len(mail.outbox) == 1
     assert mail.outbox[0].subject == "This is an interesting email"
@@ -93,7 +93,7 @@ def test_send_email():
             }
         }
     )
-    runnable = build_runnable(graph)
+    runnable = build_runnable_from_graph(graph)
     runnable.invoke("A cool message")
     assert len(mail.outbox) == 1
     assert mail.outbox[0].body == "A cool message"
@@ -124,8 +124,8 @@ def test_llm_response(session):
         }
     )
     with pytest.raises(ValueError, match="session_id"):
-        build_runnable(graph)
-    runnable = build_runnable(graph, session_id=session.id)
+        build_runnable_from_graph(graph)
+    runnable = build_runnable_from_graph(graph, session_id=session.id)
     assert runnable.invoke("Repeat exactly: 123").content == "123"
 
 
@@ -153,7 +153,7 @@ def test_render_template():
             "name": "New Pipeline",
         }
     )
-    runnable = build_runnable(graph)
+    runnable = build_runnable_from_graph(graph)
 
     assert runnable.invoke({"stuff": "Elephants"}) == "Elephants is cool"
     assert (
