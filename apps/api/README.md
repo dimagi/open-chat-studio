@@ -12,8 +12,12 @@ experiments = response.json()
 experiment_id = experiments[0]["experiment_id"]
 
 # Start a conversation with the experiment bot
-data = {"experiment_id": experiment_id, "message": "Hi there"}
-response = requests.post("https://chatbots.dimagi.com/channels/api/incoming_message", headers=headers, data=data)
+data = {"message": "Hi there"}
+response = requests.post(
+    f"https://chatbots.dimagi.com/channels/api/{experiment_id}/incoming_message",
+    data=data,
+    headers=headers
+)
 data = response.json()
 ```
 

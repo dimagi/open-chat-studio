@@ -45,13 +45,13 @@ def new_turn_message(request, experiment_id: uuid):
 
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
-def new_api_message(request):
+def new_api_message(request, experiment_id: uuid):
     """
-    Expected body: {"experiment_id": "", "message": ""}
+    Expected body: {"message": ""}
     """
-    message_data = request.data
+    message_data = request.data.copy()
     message_data["participant_id"] = request.user.email
-    experiment = get_object_or_404(Experiment, public_id=message_data["experiment_id"])
+    experiment = get_object_or_404(Experiment, public_id=experiment_id)
     experiment_channel, _created = ExperimentChannel.objects.get_or_create(
         name=f"{experiment.id}-api",
         experiment=experiment,

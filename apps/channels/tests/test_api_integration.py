@@ -33,8 +33,8 @@ def test_new_message_creates_a_channel(get_llm_response_mock, experiment, client
     client = _get_client_for_user(user, experiment.team)
 
     response = client.post(
-        reverse("channels:new_api_message"),
-        api_messages.text_message(experiment.public_id),
+        reverse("channels:new_api_message", kwargs={"experiment_id": experiment.public_id}),
+        api_messages.text_message(),
         content_type="application/json",
     )
     assert response.status_code == 200
