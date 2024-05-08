@@ -1,4 +1,5 @@
 from jinja2.sandbox import SandboxedEnvironment
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
     ConfigurableField,
     Runnable,
@@ -7,24 +8,25 @@ from langchain_core.runnables import (
     RunnableSerializable,
 )
 
+from apps.experiments.models import ExperimentSession
+from apps.pipelines.graph import Node
 
-class PipelineNode(RunnableSerializable):
-    typed_variables: int | None = None
 
-    def get_config_param(self, config: RunnableConfig, name: str):
-        return config.get("configurable", {})[name]
-
-    def build(self) -> Runnable:
-        # returns the runnable
-        return RunnablePassthrough
-
-    # def invoke(self, input, config, **kwargs):
-    #     # set any required variables
-    #     return super().invoke(input, config, **kwargs)
+class ExperimentSessionId(str):
+    pass
 
 
 class PipelineJinjaTemplate(str):
     pass
+
+
+class PipelineNode(RunnableSerializable):
+    def get_config_param(self, config: RunnableConfig, name: str):
+        return config.get("configurable", {})[name]
+
+    def build(self, node: dict, session_id: ExperimentSessionId | None = None) -> Runnable:
+        # returns the runnable
+        return RunnablePassthrough()
 
 
 class RenderTemplate(PipelineNode):
@@ -44,3 +46,24 @@ class RenderTemplate(PipelineNode):
                 id="template_string", name="template_string", description="The Jinja Template"
             )
         )
+
+
+class CreateReport(PipelineNode):
+    prompt: str | None = None
+
+    @classmethod
+    def build(cls, node):
+        return PromptTemplate.from_template(
+            template="Make a summary of the following chat: {input}"
+        ).configurable_fields(
+            template=ConfigurableField(id="prompt", name="prompt", description="The prompt to create the report")
+        )
+
+
+class LLMResponse(PipelineNode):
+    session_id: ExperimentSessionId
+
+    @classmethod
+    def build(cls, node: Node, session_id: ExperimentSessionId) -> Runnable:
+        session = ExperimentSession.objects.get(id=session_id)
+        return session.experiment.get_chat_model()
