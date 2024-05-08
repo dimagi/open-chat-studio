@@ -166,7 +166,8 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
             unused_files.remove(file.id)
         except KeyError:
             ocs_resource.files.add(_fetch_file_from_openai(ocs_resource.assistant, file_id))
-    File.objects.filter(id__in=unused_files).delete()
+    if unused_files:
+        File.objects.filter(id__in=unused_files).delete()
 
 
 def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[str]):
