@@ -1,19 +1,24 @@
+import json
 import uuid
 
 import markdown
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
+from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -39,6 +44,10 @@ class ConsentFormObjectManager(AuditingManager):
 
 
 class NoActivityMessageConfigObjectManager(AuditingManager):
+    pass
+
+
+class SyntheticVoiceObjectManager(AuditingManager):
     pass
 
 
@@ -175,6 +184,7 @@ class ConsentForm(BaseTeamModel):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
 
 
+@audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):
     """
     A synthetic voice as per the service documentation. This is used when synthesizing responses for an experiment
@@ -193,13 +203,17 @@ class SyntheticVoice(BaseModel):
     AWS = "AWS"
     Azure = "Azure"
     OpenAI = "OpenAI"
+    OpenAIVoiceEngine = "OpenAIVoiceEngine"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
+        ("OpenAIVoiceEngine", OpenAIVoiceEngine),
     )
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
 
+    objects = SyntheticVoiceObjectManager()
     name = models.CharField(
         max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
     )
@@ -210,15 +224,19 @@ class SyntheticVoice(BaseModel):
     )
 
     gender = models.CharField(
-        null=False, blank=False, choices=GENDERS, max_length=14, help_text="The gender of this voice"
+        null=False, blank=True, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
-        null=False, blank=False, choices=SERVICES, max_length=6, help_text="The service this voice is from"
+        null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
     )
+    voice_provider = models.ForeignKey(
+        "service_providers.VoiceProvider", verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True
+    )
+    file = models.ForeignKey("files.File", null=True, on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ["name"]
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service")
+        unique_together = ("name", "language_code", "language", "gender", "neural", "service", "voice_provider")
 
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work
@@ -232,6 +250,15 @@ class SyntheticVoice(BaseModel):
         if self.language:
             display_str = f"{self.language}, {display_str}"
         return display_str
+
+    @staticmethod
+    def get_for_team(team: Team, exclude_services=None) -> list["SyntheticVoice"]:
+        """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
+        to this team. Any services specified by `exclude_services` will be excluded from the final result"""
+        exclude_services = exclude_services or []
+        general_services = ~Q(service__in=SyntheticVoice.TEAM_SCOPED_SERVICES) & Q(voice_provider__isnull=True)
+        team_services = Q(voice_provider__team=team)
+        return SyntheticVoice.objects.filter(general_services | team_services, ~Q(service__in=exclude_services))
 
 
 @audit_fields(*model_audit_fields.NO_ACTIVITY_CONFIG_FIELDS, audit_special_queryset_writes=True)
@@ -373,6 +400,7 @@ class Experiment(BaseTeamModel):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
+    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -401,6 +429,12 @@ class Experiment(BaseTeamModel):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
+    def get_participant_data(self, participant: "Participant") -> "ParticipantData":
+        try:
+            return self.participant_data.get(participant=participant).data
+        except ParticipantData.DoesNotExist:
+            return None
+
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
@@ -425,6 +459,7 @@ class ExperimentRoute(BaseTeamModel):
 class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
 
     @property
     def email(self):
@@ -436,7 +471,24 @@ class Participant(BaseTeamModel):
 
     class Meta:
         ordering = ["identifier"]
-        unique_together = ("team", "identifier")
+        unique_together = [("team", "identifier")]
+
+
+class ParticipantData(BaseTeamModel):
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
+    data = encrypt(models.JSONField(default=dict))
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+        # A bot cannot have a link to multiple data entries for the same Participant
+        # Multiple bots can have a link to the same ParticipantData record
+        # A participant can have many participant data records
+        unique_together = ("participant", "content_type", "object_id")
 
 
 class SessionStatus(models.TextChoices):
@@ -450,13 +502,28 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
+class ExperimentSessionObjectManager(models.Manager):
+    def for_chat_id(self, chat_id: str) -> list["ExperimentSession"]:
+        return self.filter(participant__identifier=chat_id)
+
+    def with_last_message_created_at(self):
+        last_message_created_at = (
+            ChatMessage.objects.filter(
+                chat__experiment_session=models.OuterRef("pk"),
+            )
+            .order_by("-created_at")
+            .values("created_at")[:1]
+        )
+        return self.annotate(last_message_created_at=models.Subquery(last_message_created_at))
+
+
 class ExperimentSession(BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
 
+    objects = ExperimentSessionObjectManager()
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -470,7 +537,6 @@ class ExperimentSession(BaseTeamModel):
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
     no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
-    external_chat_id = models.CharField(null=False)
     experiment_channel = models.ForeignKey(
         "channels.ExperimentChannel",
         on_delete=models.SET_NULL,
@@ -484,11 +550,8 @@ class ExperimentSession(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
-            self.chat = Chat.objects.create(team=self.team, user=self.user, name=self.experiment.name)
+            self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
 
-        is_web_channel = self.experiment_channel and self.experiment_channel.platform == "web"
-        if is_web_channel and self.external_chat_id is None:
-            self.external_chat_id = self.chat.id
         super().save(*args, **kwargs)
 
     def has_display_messages(self) -> bool:
@@ -552,7 +615,7 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If propagate is True but commit is not.
         """
-
+        self.update_status(SessionStatus.PENDING_REVIEW)
         if propagate and not commit:
             raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()
@@ -563,3 +626,9 @@ class ExperimentSession(BaseTeamModel):
             from apps.events.tasks import enqueue_static_triggers
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+
+    def get_participant_data(self):
+        return self.experiment.get_participant_data(self.participant)
+
+    def get_participant_data_json(self):
+        return json.dumps(self.experiment.get_participant_data(self.participant), indent=2)

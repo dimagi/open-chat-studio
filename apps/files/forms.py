@@ -12,7 +12,8 @@ class BaseFileFormSet(BaseModelFormSet):
         return files
 
 
-def get_file_formset(request, prefix=""):
+def get_file_formset(request, formset_cls=None, prefix=""):
+    formset_cls = formset_cls or BaseFileFormSet
     kwargs = {}
     if request.method in ("POST", "PUT"):
         kwargs.update(
@@ -23,6 +24,6 @@ def get_file_formset(request, prefix=""):
         )
 
     FileFormSet = modelformset_factory(
-        File, formset=BaseFileFormSet, fields=("file",), can_delete=True, can_delete_extra=True, extra=0
+        File, formset=formset_cls, fields=("file",), can_delete=True, can_delete_extra=True, extra=0
     )
     return FileFormSet(queryset=File.objects.none(), prefix=f"{prefix}files", **kwargs)

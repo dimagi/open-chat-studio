@@ -18,7 +18,7 @@ from apps.utils.taskbadger import update_taskbadger_data
 def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     message_handler = WebChannel(experiment_session.experiment_channel)
-    message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
+    message = WebMessage(chat_id=experiment_session.participant.identifier, message_text=message_text)
     update_taskbadger_data(self, message_handler, message)
     return message_handler.new_user_message(message)
 

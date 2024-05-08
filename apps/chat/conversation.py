@@ -10,8 +10,8 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import BaseMemory
+from langchain_anthropic import ChatAnthropic
 from langchain_community.callbacks import get_openai_callback
-from langchain_community.chat_models import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage
 

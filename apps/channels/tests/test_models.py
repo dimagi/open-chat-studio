@@ -50,9 +50,11 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel(db):
     """Test to make sure that removing an experiment channel does not remove important related records"""
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     experiment_channel = ExperimentChannelFactory(experiment=experiment)
-    chat = Chat.objects.create(user=experiment.owner, team=experiment.team)
+    chat = Chat.objects.create(team=experiment.team)
     chat_messsage = ChatMessage.objects.create(chat=chat, content="Hi", message_type=ChatMessageType.HUMAN)
-    experiment_session = ExperimentSessionFactory(experiment=experiment, experiment_channel=experiment_channel)
+    experiment_session = ExperimentSessionFactory(
+        experiment=experiment, experiment_channel=experiment_channel, participant__user=experiment.owner
+    )
     experiment_session.chat = chat
     experiment_session.save()
 

@@ -41,6 +41,14 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id")
     readonly_fields = ("public_id",)
     list_filter = ("team",)
+    search_fields = ("external_chat_id",)
+
+
+@admin.register(models.ParticipantData)
+class ParticipantData(admin.ModelAdmin):
+    list_display = ("participant", "content_type", "object_id")
+    readonly_fields = ("data",)
+    list_filter = ("participant",)
 
 
 @admin.register(models.Survey)
@@ -73,13 +81,11 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "experiment",
         "team",
         "participant",
-        "user",
         "status",
         "created_at",
         "llm",
-        "external_chat_id",
     )
-    search_fields = ("public_id", "external_chat_id", "experiment__name", "participant__identifier")
+    search_fields = ("public_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
     readonly_fields = ("public_id",)
 
@@ -108,8 +114,13 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
         "language",
         "get_gender",
         "neural",
+        "team",
     )
     list_filter = ("service", "language", "gender")
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.voice_provider.team.name if obj.voice_provider else ""
 
 
 @admin.register(models.NoActivityMessageConfig)
