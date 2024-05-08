@@ -10,6 +10,8 @@ from langchain_core.runnables import (
 from langchain_openai.chat_models import ChatOpenAI
 
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.graph import PipelineGraph
+from apps.pipelines.nodes import ExperimentSessionId, PipelineNode
 
 
 def output_session(node) -> Runnable:
@@ -87,14 +89,26 @@ RUNNABLE_FUNCTIONS = {
 }
 
 
-def build_runnable(graph) -> Runnable:
+def build_runnable(graph: PipelineGraph, session_id: str | None = None) -> Runnable:
     # builds the final runnable from the graph.
     # assume a single ordered graph to start
     # the node is an LLM runnable
     all_nodes = importlib.import_module("apps.pipelines.nodes")
     runnable = RunnablePassthrough()
     for node in graph.nodes:
-        new_runnable = getattr(all_nodes, node.type).build(node)
+        node_class = getattr(all_nodes, node.type)
+        if _requires_session(node_class) and session_id is None:
+            raise ValueError("The pipeline requires a session_id, but none was passed in")
+
+    for node in graph.nodes:
+        if _requires_session(node_class):
+            new_runnable = getattr(all_nodes, node.type).build(node, session_id)
+        else:
+            new_runnable = getattr(all_nodes, node.type).build(node)
         runnable |= new_runnable
 
     return runnable
+
+
+def _requires_session(node: PipelineNode):
+    return any(field.type_ == ExperimentSessionId for field in node.__fields__.values())
