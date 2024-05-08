@@ -18,11 +18,8 @@ def get_user_from_request(request: HttpRequest) -> CustomUser | None:
 def get_team_from_request(request: HttpRequest) -> CustomUser | None:
     if request is None:
         return None
-    if request.user.is_anonymous:
-        user_api_key = _get_api_key_object(request, UserAPIKey)
-        return user_api_key.team
-    else:
-        return request.team
+    user_api_key = _get_api_key_object(request, UserAPIKey)
+    return user_api_key.team
 
 
 def _get_api_key_object(request, model_class):

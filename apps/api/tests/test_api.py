@@ -33,6 +33,29 @@ def test_list_experiments(experiment):
 
 
 @pytest.mark.django_db()
+def test_only_experiments_from_the_scoped_team_is_returned():
+    experiment_team_1 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment_team_2 = ExperimentFactory(team=TeamWithUsersFactory())
+    team1 = experiment_team_1.team
+    team2 = experiment_team_2.team
+    user = team1.members.first()
+    client_team_1 = _get_client_for_user(user, team1)
+    client_team_2 = _get_client_for_user(user, team2)
+
+    # Fetch experiments from team 1
+    response = client_team_1.get(reverse("api:list-experiments"))
+    experiments = response.json()
+    assert len(experiments) == 1
+    assert experiments[0]["experiment_id"] == experiment_team_1.public_id
+
+    # Fetch experiments from team 2
+    response = client_team_2.get(reverse("api:list-experiments"))
+    experiments = response.json()
+    assert len(experiments) == 1
+    assert experiments[0]["experiment_id"] == experiment_team_2.public_id
+
+
+@pytest.mark.django_db()
 def test_update_participant_data_creats_new_record():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
