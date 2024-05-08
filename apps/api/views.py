@@ -8,7 +8,7 @@ from apps.experiments.models import Experiment
 
 class ExperimentSerializer(serializers.Serializer):
     name = serializers.CharField()
-    public_id = serializers.UUIDField()
+    experiment_id = serializers.UUIDField(source="public_id")
 
 
 @api_view(["GET"])
