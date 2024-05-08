@@ -5,8 +5,10 @@ from unittest.mock import patch
 
 import openai
 import pytest
-from openai.types.beta.threads import MessageContentText, Run, ThreadMessage
-from openai.types.beta.threads.message_content_text import Text
+from openai.types.beta.threads import Message as ThreadMessage
+from openai.types.beta.threads import Run
+from openai.types.beta.threads.text import Text
+from openai.types.beta.threads.text_content_block import TextContentBlock
 
 from apps.chat.models import Chat
 from apps.service_providers.llm_service.runnables import (
@@ -189,12 +191,12 @@ def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict
             assistant_id=assistant_id,
             metadata={},
             created_at=0,
-            content=[MessageContentText(text=Text(annotations=[], value=list(message.values())[0]), type="text")],
-            file_ids=[],
+            content=[TextContentBlock(text=Text(annotations=[], value=list(message.values())[0]), type="text")],
             object="thread.message",
             role=list(message)[0],
             run_id=run_id,
             thread_id=thread_id,
+            status="completed",
         )
         for message in messages
     ]
@@ -219,7 +221,6 @@ def _create_run(
         started_at=0,
         created_at=0,
         expires_at=0,
-        file_ids=[],
         instructions="",
         model="",
         object="thread.run",
