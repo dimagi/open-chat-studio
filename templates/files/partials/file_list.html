@@ -5,7 +5,7 @@
 {#  - See also "files/partials/file_item.html" #}
 <div x-data="{}">
   <div class="flex flex-row justify-between mb-4">
-    <h3 class="text-lg font-medium">FILES</h3>
+    <h3 class="text-lg font-medium">{{ files_title|default:"FILES" }}</h3>
     <button type="button" class="btn btn-sm" @click="document.getElementById('{{ prefix|default:"" }}fileInput').click()">
       <i class="fa-solid fa-paperclip"></i> Add
     </button>

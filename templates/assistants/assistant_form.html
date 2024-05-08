@@ -21,28 +21,27 @@
   {{ form.non_field_errors }}
   {% render_form_fields form "name" "instructions" "llm_provider" "llm_model" "builtin_tools" %}
   {% if not object.id %}
-    {% include "files/partials/file_formset.html" %}
+    <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
+      {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
+    </div>
+    <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
+      {% include "files/partials/file_formset.html"  with form_title="File Search Files" prefix="file_search" %}
+    </div>
   {% endif %}
 {% endblock form %}
 {% block post_form %}
   {% if object.id %}
     {% with resources=object.tool_resources.all %}
       <hr class="my-4">
-      <div role="tablist" class="tabs tabs-bordered">
-        {% for resource in resources %}
-
-          <input type="radio" name="files_tabs" role="tab" class="tab whitespace-nowrap"
-                 {% if resource.tool_type == "file_search" %}aria-label="Vector Store Files"{% endif %}
-                 {% if resource.tool_type == "code_interpreter" %}aria-label="Code Interpreter Files"{% endif %}
-                 {% if forloop.first %}checked{% endif %}
-          />
-          <div role="tabpanel" class="tab-content">
-            {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
-            {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
+      {% for resource in resources %}
+        <div>
+          {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
+          {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
+          {% with files_title=resource.label|add:" Files" %}
             {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type %}
-          </div>
-        {% endfor %}
-      </div>
+          {% endwith %}
+        </div>
+      {% endfor %}
     {% endwith %}
   {% endif %}
 {% endblock post_form %}
@@ -52,6 +51,7 @@
     const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
     document.addEventListener('alpine:init', () => {
       Alpine.data('assistant', () => ({
+        builtinTools: [],
         llmProvider: null,
         llm_model: '{{object.llm_model|default:'null'}}',
         llm_model_options: [],

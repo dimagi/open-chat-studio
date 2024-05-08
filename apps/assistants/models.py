@@ -58,12 +58,19 @@ class OpenAiAssistant(BaseTeamModel):
     def get_assistant(self):
         return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
 
+    def get_tool_resources_by_type(self):
+        return {tool.tool_type: tool for tool in self.tool_resources.all()}
+
 
 class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
     extra = models.JSONField(default=dict, blank=True)
+
+    @property
+    def label(self):
+        return self.tool_type.replace("_", " ").title()
 
     def __str__(self):
         return f"Tool Resources for {self.assistant.name}: {self.tool_type}"
