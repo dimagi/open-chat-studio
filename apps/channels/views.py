@@ -49,7 +49,7 @@ def new_api_message(request):
     """
     Expected body: {"experiment_id": "", "message": ""}
     """
-    message_data = request.POST.dict()
+    message_data = request.data
     message_data["participant_id"] = request.user.email
     experiment = get_object_or_404(Experiment, public_id=message_data["experiment_id"])
     experiment_channel, _created = ExperimentChannel.objects.get_or_create(
@@ -57,6 +57,5 @@ def new_api_message(request):
         experiment=experiment,
         platform=ChannelPlatform.API,
     )
-
     response = tasks.handle_api_message(experiment_channel, message_data=message_data)
     return Response(data={"response": response})
