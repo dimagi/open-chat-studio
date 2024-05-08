@@ -170,6 +170,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = WhatsappChannel
         elif platform == "facebook":
             PlatformMessageHandlerClass = FacebookMessengerChannel
+        elif platform == "api":
+            PlatformMessageHandlerClass = ApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
