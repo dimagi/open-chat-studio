@@ -5,7 +5,7 @@ class Node(pydantic.BaseModel):
     id: str
     label: str
     type: str
-    params: dict | None = {}
+    params: dict = {}
 
 
 class Edge(pydantic.BaseModel):

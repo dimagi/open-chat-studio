@@ -1,4 +1,6 @@
 import pytest
+from django.core import mail
+from django.test import override_settings
 from langchain_core.runnables import RunnableConfig
 
 from apps.pipelines.graph import PipelineGraph
@@ -28,6 +30,43 @@ def session():
 
 
 # - Add event to trigger pipeline
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_send_email():
+    graph = PipelineGraph.from_json(
+        {
+            "data": {
+                "edges": [],
+                "nodes": [
+                    {
+                        "data": {
+                            "id": "llm-GUk0C",
+                            "label": "RenderTemplate",
+                            "type": "SendEmail",
+                            "params": {
+                                "recipient_list": ["test@example.com"],
+                                "subject": "This is an interesting email",
+                            },
+                        },
+                        "id": "llm-GUk0C",
+                        "position": {"x": 478.55002422163244, "y": 87.74100575049786},
+                        "selected": False,
+                        "type": "pipelineNode",
+                    },
+                ],
+                "viewport": {"x": 289.4160274478008, "y": 109.38674127734322, "zoom": 0.6224371176910848},
+            },
+            "id": 1,
+            "name": "New Pipeline",
+        }
+    )
+    runnable = build_runnable(graph)
+    runnable.invoke("A cool message")
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].body == "A cool message"
+    assert mail.outbox[0].subject == "This is an interesting email"
+    assert mail.outbox[0].to == ["test@example.com"]
 
 
 @pytest.mark.django_db()
@@ -102,6 +141,7 @@ def test_create_report():
 
 
 def test_render_template():
+    render_template_node_id = "render-123"
     graph = PipelineGraph.from_json(
         {
             "data": {
@@ -109,7 +149,7 @@ def test_render_template():
                 "nodes": [
                     {
                         "data": {
-                            "id": "llm-GUk0C",
+                            "id": render_template_node_id,
                             "label": "RenderTemplate",
                             "type": "RenderTemplate",
                             "params": {
@@ -133,7 +173,8 @@ def test_render_template():
     assert runnable.invoke({"stuff": "Elephants"}) == "Elephants is cool"
     assert (
         runnable.invoke(
-            {"stuff": "elephant"}, config=RunnableConfig(configurable={"template_string": "Hello {{stuff }}"})
+            {"stuff": "elephant"},
+            config=RunnableConfig(configurable={f"template_string_{render_template_node_id}": "Hello {{stuff }}"}),
         )
         == "Hello elephant"
     )
