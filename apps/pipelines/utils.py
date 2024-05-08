@@ -100,7 +100,6 @@ def build_runnable(graph: PipelineGraph, session_id: str | None = None) -> Runna
         if _requires_session(node_class) and session_id is None:
             raise ValueError("The pipeline requires a session_id, but none was passed in")
 
-    for node in graph.nodes:
         if _requires_session(node_class):
             new_runnable = getattr(all_nodes, node.type).build(node, session_id)
         else:
