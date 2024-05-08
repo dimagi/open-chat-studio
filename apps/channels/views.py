@@ -51,7 +51,7 @@ def new_api_message(request, experiment_id: uuid):
     """
     message_data = request.data.copy()
     message_data["participant_id"] = request.user.email
-    experiment = get_object_or_404(Experiment, public_id=experiment_id)
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_channel, _created = ExperimentChannel.objects.get_or_create(
         name=f"{experiment.id}-api",
         experiment=experiment,
