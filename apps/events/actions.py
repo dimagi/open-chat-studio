@@ -4,6 +4,7 @@ from langchain.memory.summary import SummarizerMixin
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.utils import build_runnable
 from apps.utils.django_db import MakeInterval
 
 
@@ -97,3 +98,16 @@ class SendMessageToBotAction(EventActionHandlerBase):
         last_message = session.chat.messages.last()
         if last_message:
             return last_message.content
+
+
+def start_pipeline(session: ExperimentSession, params) -> str:
+    from apps.pipelines.models import Pipeline
+
+    try:
+        pipeline = Pipeline.objects.get(params["pipeline_id"])
+    except KeyError:
+        raise ValueError("The action is missing the pipeline id")
+    except Pipeline.DoesNotExist:
+        raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
+    runnable = build_runnable(pipeline, session.id)
+    return runnable.invoke(session.chat.messages.last())

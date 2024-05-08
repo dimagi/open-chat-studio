@@ -6,7 +6,13 @@ from langchain_core.runnables import (
 )
 
 from apps.pipelines.graph import PipelineGraph
+from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import ExperimentSessionId, PipelineNode
+
+
+def build_runnable(pipeline: Pipeline, session_id: str | None = None) -> Runnable:
+    graph = PipelineGraph.from_json(pipeline.data)
+    return build_runnable_from_graph(graph)
 
 
 def build_runnable_from_graph(graph: PipelineGraph, session_id: str | None = None) -> Runnable:
