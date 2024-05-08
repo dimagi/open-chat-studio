@@ -396,7 +396,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         participant__user=request.user,
         experiment=experiment,
     )
-    channels = experiment.experimentchannel_set.exclude(platform="web").all()
+    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = set(ChannelPlatform.for_dropdown()) - used_platforms
     platform_forms = {}
