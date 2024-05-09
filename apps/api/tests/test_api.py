@@ -6,7 +6,7 @@ from django.urls import reverse
 from apps.experiments.models import Participant
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.tests.clients import TestApiClient
+from apps.utils.tests.clients import ApiTestClient
 
 
 @pytest.fixture()
@@ -17,7 +17,7 @@ def experiment(db):
 @pytest.mark.django_db()
 def test_list_experiments(experiment):
     user = experiment.team.members.first()
-    client = TestApiClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team)
     response = client.get(reverse("api:list-experiments"))
     assert response.status_code == 200
     expected_json = [{"name": experiment.name, "experiment_id": experiment.public_id}]
@@ -31,8 +31,8 @@ def test_only_experiments_from_the_scoped_team_is_returned():
     team1 = experiment_team_1.team
     team2 = experiment_team_2.team
     user = team1.members.first()
-    client_team_1 = TestApiClient(user, team1)
-    client_team_2 = TestApiClient(user, team2)
+    client_team_1 = ApiTestClient(user, team1)
+    client_team_2 = ApiTestClient(user, team2)
 
     # Fetch experiments from team 1
     response = client_team_1.get(reverse("api:list-experiments"))
@@ -54,7 +54,7 @@ def test_update_participant_data_creats_new_record():
     experiment2 = ExperimentFactory(team=experiment.team)
     participant = Participant.objects.create(identifier=identifier, team=experiment.team)
     user = experiment.team.members.first()
-    client = TestApiClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
     data = {"data": {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}}

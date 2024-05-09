@@ -7,7 +7,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Participant
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.tests.clients import TestApiClient
+from apps.utils.tests.clients import ApiTestClient
 
 from .message_examples import api_messages
 
@@ -22,7 +22,7 @@ def experiment(db):
 def test_new_message_creates_a_channel(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
     user = experiment.team.members.first()
-    client = TestApiClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team)
 
     response = client.post(
         reverse("channels:new_api_message", kwargs={"experiment_id": experiment.public_id}),

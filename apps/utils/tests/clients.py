@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 from apps.api.models import UserAPIKey
 
 
-class TestApiClient(APIClient):
+class ApiTestClient(APIClient):
     def __init__(self, user, team):
         super().__init__()
         _user_key, self._api_key = UserAPIKey.objects.create_key(name=f"{user.email}-key", user=user, team=team)
