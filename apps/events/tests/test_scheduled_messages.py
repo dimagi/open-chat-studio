@@ -197,6 +197,14 @@ def test_schedule_update():
         action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=5),
     )
+    message3 = ScheduledMessage.objects.create(
+        participant=session2.participant,
+        team=session.team,
+        action=event_action,
+        last_triggered_at=timezone.now() - relativedelta(days=1),
+        is_complete=True,
+    )
+    message3_next_trigger_data = message3.next_trigger_date
 
     message1_prev_trigger_date = message1.next_trigger_date
     message2_prev_trigger_date = message2.next_trigger_date
@@ -209,6 +217,9 @@ def test_schedule_update():
 
     _assert_next_trigger_date(message1, message1.created_at + new_delta)
     _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
+    # Since message3 is completed, its `next_trigger_date` and `is_complete` should not change
+    _assert_next_trigger_date(message3, message3_next_trigger_data)
+    assert message3.is_complete is True
     assert message1.next_trigger_date > message1_prev_trigger_date
     assert message2.next_trigger_date > message2_prev_trigger_date
     message1_prev_trigger_date = message1.next_trigger_date
@@ -222,35 +233,6 @@ def test_schedule_update():
 
     _assert_next_trigger_date(message1, message1.created_at + new_delta)
     _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
+    _assert_next_trigger_date(message3, message3_next_trigger_data)
     assert message1.next_trigger_date < message1_prev_trigger_date
     assert message2.next_trigger_date < message2_prev_trigger_date
-
-
-@pytest.mark.django_db()
-def test_schedule_config_repetition_update():
-    """Tests that a repetition update affects scheduled messages in the following way:
-    if new_repetitions >= scheduled_message.total_triggers:
-        is_complete = False
-    if new_repetitions < scheduled_message.total_triggers:
-        is_complete = True
-
-    """
-    session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
-    message = ScheduledMessage.objects.create(
-        participant=session.participant, team=session.team, action=event_action, is_complete=True, total_triggers=4
-    )
-
-    # Increasing repetitions should undo resolution
-    event_action.params["repetitions"] += 1
-    event_action.save()
-
-    message.refresh_from_db()
-    assert message.is_complete is False
-
-    # Decreasing repetitions should affect only message 2
-    event_action.params["repetitions"] -= 1
-    event_action.save()
-
-    message.refresh_from_db()
-    assert message.is_complete is True

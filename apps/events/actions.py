@@ -1,4 +1,4 @@
-from django.db.models import BooleanField, Case, DateTimeField, F, When
+from django.db.models import Case, DateTimeField, F, When
 from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain.memory.summary import SummarizerMixin
 
@@ -64,10 +64,6 @@ class ScheduleTriggerAction(EventActionHandlerBase):
     def event_action_updated(self, action):
         """
         This method updates the scheduled_messages queryset by considering the following criteria:
-        - Number of repetitions:
-            - If new repetitions are greater than total_triggers, set is_complete to False.
-            - If new repetitions are less than total_triggers, set is_complete to True.
-
         - Frequency and time period (delta change):
             - If the scheduled message's last_triggered_at field is None (it has not fired), the created_at field
             is used as the baseline for adding the new delta
@@ -77,12 +73,9 @@ class ScheduleTriggerAction(EventActionHandlerBase):
         (
             action.scheduled_messages.annotate(
                 new_delta=MakeInterval(action.params["time_period"], action.params["frequency"]),
-            ).update(
-                is_complete=Case(
-                    When(total_triggers__lt=action.params["repetitions"], then=False),
-                    When(total_triggers__gte=action.params["repetitions"], then=True),
-                    output_field=BooleanField(),
-                ),
+            )
+            .filter(is_complete=False)
+            .update(
                 next_trigger_date=Case(
                     When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
                     When(last_triggered_at__isnull=False, then=F("last_triggered_at") + F("new_delta")),
