@@ -1,24 +1,12 @@
 import json
 
 import pytest
-from django.conf import settings
 from django.urls import reverse
-from rest_framework.test import APIClient
 
-from apps.api.models import UserAPIKey
 from apps.experiments.models import Participant
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-
-
-class TestApiClient(APIClient):
-    def __init__(self, user, team):
-        super().__init__()
-        _user_key, self._api_key = UserAPIKey.objects.create_key(name=f"{user.email}-key", user=user, team=team)
-
-    def request(self, *args, **kwargs):
-        kwargs.setdefault(settings.API_KEY_CUSTOM_HEADER, self._api_key)
-        return super().request(*args, **kwargs)
+from apps.utils.tests.clients import TestApiClient
 
 
 @pytest.fixture()
