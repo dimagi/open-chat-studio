@@ -499,3 +499,6 @@ DOCUMENTATION_LINKS = {
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
 }
+
+# Django rest framework config
+API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

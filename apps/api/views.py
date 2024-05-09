@@ -31,7 +31,7 @@ def update_participant_data(request):
     experiment_public_id = request.data["experiment_id"]
     identifier = request.data["participant_id"]
     new_data = request.data["details"]
-    experiment = get_object_or_404(Experiment, public_id=experiment_public_id)
+    experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
     participant = get_object_or_404(Participant, identifier=identifier, team=experiment.team)
 
     try:

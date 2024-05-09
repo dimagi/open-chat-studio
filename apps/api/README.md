@@ -4,7 +4,7 @@ The API can be used to chat to a bot. For this you'll need to create a `UserAPIK
 ```python
 import requests
 
-headers = {'Accept': 'application/json', 'Authorization': 'Api-Key <api-key>'}
+headers = {'Accept': 'application/json', 'X-Api-Key': <api-key>}
 
 # List experiments
 response = requests.get("https://chatbots.dimagi.com/api/experiments", headers=headers)
