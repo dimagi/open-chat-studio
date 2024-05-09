@@ -33,7 +33,7 @@ def _get_latest_sessions_for_participants(
 
     latest_participant_session_ids = (
         Participant.objects.filter(
-            experimentsession__experiment__public_id=experiment_public_id, external_chat_id__in=participant_chat_ids
+            experimentsession__experiment__public_id=experiment_public_id, identifier__in=participant_chat_ids
         )
         .annotate(latest_session_id=Subquery(latest_session_id))
         .values("latest_session_id")

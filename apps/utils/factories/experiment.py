@@ -79,7 +79,6 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     identifier = factory.Faker("uuid4")
-    external_chat_id = factory.LazyAttribute(lambda obj: obj.identifier)
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):

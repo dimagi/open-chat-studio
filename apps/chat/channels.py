@@ -103,8 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
-        if self.experiment_session and self.experiment_session.participant.external_chat_id:
-            return self.experiment_session.participant.external_chat_id
+        if self.experiment_session and self.experiment_session.participant.identifier:
+            return self.experiment_session.participant.identifier
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -399,7 +399,7 @@ class ChannelBase:
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
-                participant__external_chat_id=str(self.chat_id),
+                participant__identifier=str(self.chat_id),
             )
             .order_by("-created_at")
             .first()
@@ -433,9 +433,7 @@ class ChannelBase:
         session
         """
         if not self.experiment_session:
-            participant, _ = Participant.objects.get_or_create(
-                external_chat_id=self.chat_id, identifier=self.chat_id, team=self.experiment.team
-            )
+            participant, _ = Participant.objects.get_or_create(identifier=self.chat_id, team=self.experiment.team)
         else:
             participant = self.experiment_session.participant
         self.experiment_session = ExperimentSession.objects.create(

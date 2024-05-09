@@ -13,7 +13,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, OuterRef, Subquery, When
+from django.db.models import Case, Count, IntegerField, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -104,16 +104,9 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        last_message_created_at = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
+        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
         )
-        query_set = ExperimentSession.objects.annotate(
-            last_message_created_at=Subquery(last_message_created_at)
-        ).filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
         tags_query = self.request.GET.get("tags")
         if tags_query:
             tags = tags_query.split("&")
@@ -398,16 +391,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    last_message_created_at = (
-        ChatMessage.objects.filter(
-            chat__experiment_session=OuterRef("pk"),
-        )
-        .order_by("-created_at")
-        .values("created_at")[:1]
-    )
-    user_sessions = ExperimentSession.objects.annotate(
-        last_message_created_at=Subquery(last_message_created_at)
-    ).filter(
+    user_sessions = ExperimentSession.objects.with_last_message_created_at().filter(
         participant__user=request.user,
         experiment=experiment,
     )
@@ -562,6 +546,7 @@ def _start_experiment_session(
     experiment_channel: ExperimentChannel,
     participant_identifier: str,
     participant_user: CustomUser | None = None,
+    session_status: SessionStatus = SessionStatus.ACTIVE,
 ) -> ExperimentSession:
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
@@ -580,7 +565,6 @@ def _start_experiment_session(
         except Participant.DoesNotExist:
             participant = Participant.objects.create(
                 user=participant_user,
-                external_chat_id=participant_identifier,
                 identifier=participant_identifier,
                 team=experiment.team,
             )
@@ -589,7 +573,7 @@ def _start_experiment_session(
             experiment=experiment,
             llm=experiment.llm,
             experiment_channel=experiment_channel,
-            status=SessionStatus.ACTIVE,
+            status=session_status,
             participant=participant,
         )
     if participant.experimentsession_set.count() == 1:
@@ -790,26 +774,18 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 team=request.team,
                 experiment=experiment,
                 status__in=["setup", "pending"],
-                participant__external_chat_id=post_form.cleaned_data["email"],
+                participant__identifier=post_form.cleaned_data["email"],
             ).exists():
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
                 with transaction.atomic():
                     channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                    # TODO: Use _start_experiment_session and pass in specific kwargs
-                    participant, _ = Participant.objects.get_or_create(
-                        team=request.team,
-                        external_chat_id=post_form.cleaned_data["email"],
-                        identifier=post_form.cleaned_data["email"],
-                    )
-                    session = ExperimentSession.objects.create(
-                        team=request.team,
+                    session = _start_experiment_session(
                         experiment=experiment,
-                        llm=experiment.llm,
-                        status="setup",
                         experiment_channel=channel,
-                        participant=participant,
+                        participant_identifier=post_form.cleaned_data["email"],
+                        session_status=SessionStatus.SETUP,
                     )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
