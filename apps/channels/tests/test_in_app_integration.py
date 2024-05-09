@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from django.urls import reverse
 
 from apps.channels.datamodels import SureAdhereMessage
 from apps.channels.models import ChannelPlatform
@@ -28,7 +29,7 @@ class TestSureAdhere:
     )
     def test_parse_text_message(self, message, message_type):
         message = SureAdhereMessage.parse(message)
-        assert message.chat_id == "6225"
+        assert message.chat_id == 6225
         assert message.body == "Hi"
         assert message.content_type == MESSAGE_TYPES.TEXT
 
@@ -52,3 +53,12 @@ class TestSureAdhere:
             client_id=sureadhere_in_app_channel.extra_data.get("client_id", ""), message_data=incoming_message
         )
         send_text_message.assert_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("message", [sureadhere_messages.outbound_message()])
+    @patch("apps.channels.tasks.handle_sureadhere_message")
+    def test_outbound_message_ignored(self, handle_sureadhere_message_task, message, client):
+        url = reverse("channels:new_sureadhere_message", kwargs={"client_id": "6"})
+        response = client.post(url, data=message, content_type="application/json")
+        assert response.status_code == 200
+        handle_sureadhere_message_task.assert_not_called()
