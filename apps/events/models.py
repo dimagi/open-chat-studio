@@ -48,13 +48,6 @@ class EventAction(BaseModel):
             handler.event_action_updated(self)
             return res
 
-    @transaction.atomic()
-    def delete(self, *args, **kwargs):
-        handler = ACTION_HANDLERS[self.action_type]()
-        handler.event_action_deleted(self)
-        result = super().delete(*args, **kwargs)
-        return result
-
 
 class EventLogStatusChoices(models.TextChoices):
     SUCCESS = "success"

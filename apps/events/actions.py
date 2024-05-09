@@ -16,17 +16,12 @@ class EventActionHandlerBase:
             Executes the action.
         event_action_updated:
             Callback for whenever the associated action is updated.
-        event_action_deleted:
-            Callback for whenever the associated action is deleted, typically for cleanup.
     """
 
     def invoke(self, session, *args, **kwargs):
         ...
 
     def event_action_updated(self, action):
-        ...
-
-    def event_action_deleted(self, action):
         ...
 
 
@@ -95,9 +90,6 @@ class ScheduleTriggerAction(EventActionHandlerBase):
                 ),
             )
         )
-
-    def event_action_deleted(self, action):
-        action.scheduled_messages.all().delete()
 
 
 class SendMessageToBotAction(EventActionHandlerBase):
