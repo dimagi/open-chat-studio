@@ -80,7 +80,7 @@ class BasicConversation(Conversation):
         self.memory.chat_memory.messages = messages
 
     def load_memory_from_chat(self, chat, max_token_limit):
-        self.load_memory_from_messages(self._get_optimized_history(chat, max_token_limit))
+        self.load_memory_from_messages(chat.messages.all())
 
     def _get_optimized_history(self, chat, max_token_limit) -> list[BaseMessage]:
         try:
