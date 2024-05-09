@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
@@ -24,22 +26,30 @@ def get_experiments(request):
 
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
-def update_participant_data(request):
+def update_participant_data(request, participant_id: UUID):
     """
     Upsert participant data for a specific experiment
     """
-    experiment_public_id = request.data["experiment_id"]
-    identifier = request.data["participant_id"]
-    new_data = request.data["details"]
-    experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
-    participant = get_object_or_404(Participant, identifier=identifier, team=experiment.team)
+    experiment_data = request.data["data"]
+    experiment_ids = experiment_data.keys()
+    experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=request.team)
+    experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
+    participant = get_object_or_404(Participant, public_id=participant_id, team=request.team)
 
-    try:
-        participant_data = experiment.participant_data.get(participant=participant)
-        participant_data.data = new_data
-        participant_data.save(update_fields=["data"])
-    except ParticipantData.DoesNotExist:
-        ParticipantData.objects.create(
-            participant=participant, data=new_data, content_object=experiment, team=experiment.team
-        )
+    experiments_not_updated = []
+    for experiment_id, new_data in experiment_data.items():
+        if experiment_id not in experiment_map:
+            experiments_not_updated.append(experiment_id)
+            continue
+
+        experiment = experiment_map[experiment_id]
+
+        try:
+            participant_data = experiment.participant_data.get(participant=participant)
+            participant_data.data = new_data
+            participant_data.save(update_fields=["data"])
+        except ParticipantData.DoesNotExist:
+            ParticipantData.objects.create(
+                participant=participant, data=new_data, content_object=experiment, team=experiment.team
+            )
     return HttpResponse()
