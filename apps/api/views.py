@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
@@ -17,6 +18,7 @@ class ExperimentSerializer(serializers.Serializer):
 
 @api_view(["GET"])
 @permission_classes([HasUserAPIKey])
+@permission_required("experiments.view_experiment")
 def get_experiments(request):
     data = []
     for experiment in Experiment.objects.filter(team__slug=request.team.slug).all():
@@ -26,6 +28,7 @@ def get_experiments(request):
 
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
+@permission_required("experiments.change_participantdata")
 def update_participant_data(request, participant_id: UUID):
     """
     Upsert participant data for a specific experiment

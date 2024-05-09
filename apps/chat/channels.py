@@ -644,5 +644,5 @@ class ApiChannel(ChannelBase):
         return self.message.message_text
 
     def new_bot_message(self, bot_message: str):
-        # Simply adding a new AI message to the chat history will cause it to be sent to the UI
+        # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
