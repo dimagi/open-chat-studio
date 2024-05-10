@@ -106,6 +106,7 @@ def _no_activity_pings():
             return
         ping_message = bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
+            # TODO: experiment_session.send_bot_message
             try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
@@ -161,13 +162,15 @@ def bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructio
     return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
 
 
-def try_send_message(experiment_session: ExperimentSession, message: str):
+def try_send_message(experiment_session: ExperimentSession, message: str, fail_silently=True):
     """Tries to send a message to the experiment session"""
     try:
         channel = ChannelBase.from_experiment_session(experiment_session)
         channel.new_bot_message(message)
     except Exception as e:
         logging.exception(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
+        if not fail_silently:
+            raise e
 
 
 @shared_task

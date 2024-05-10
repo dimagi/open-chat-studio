@@ -1,22 +1,28 @@
 import logging
 from datetime import timedelta
 
+from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.events.actions import end_conversation, log, send_message_to_bot, summarize_conversation
+from apps.events import actions
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
-ACTION_FUNCTIONS = {
-    "end_conversation": end_conversation,
-    "log": log,
-    "send_message_to_bot": send_message_to_bot,
-    "summarize": summarize_conversation,
+logger = logging.getLogger(__name__)
+
+
+ACTION_HANDLERS = {
+    "end_conversation": actions.EndConversationAction,
+    "log": actions.LogAction,
+    "send_message_to_bot": actions.SendMessageToBotAction,
+    "summarize": actions.SummarizeConversationAction,
+    "schedule_trigger": actions.ScheduleTriggerAction,
 }
 
 
@@ -25,11 +31,22 @@ class EventActionType(models.TextChoices):
     END_CONVERSATION = ("end_conversation", "End the conversation")
     SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
+    SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
 
 
 class EventAction(BaseModel):
     action_type = models.CharField(choices=EventActionType.choices)
     params = models.JSONField(blank=True, default=dict)
+
+    @transaction.atomic()
+    def save(self, *args, **kwargs):
+        if not self.id:
+            return super().save(*args, **kwargs)
+        else:
+            res = super().save(*args, **kwargs)
+            handler = ACTION_HANDLERS[self.action_type]()
+            handler.event_action_updated(self)
+            return res
 
 
 class EventLogStatusChoices(models.TextChoices):
@@ -64,6 +81,7 @@ class StaticTriggerType(models.TextChoices):
     CONVERSATION_START = ("conversation_start", "A new conversation is started")
     NEW_HUMAN_MESSAGE = ("new_human_message", "A new human message is received")
     NEW_BOT_MESSAGE = ("new_bot_message", "A new bot message is received")
+    PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
 class StaticTrigger(BaseModel):
@@ -78,12 +96,18 @@ class StaticTrigger(BaseModel):
 
     def fire(self, session):
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
             logging.error(e)
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+
+    @transaction.atomic()
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        self.action.delete(*args, **kwargs)
+        return result
 
 
 class TimeoutTrigger(BaseModel):
@@ -165,7 +189,7 @@ class TimeoutTrigger(BaseModel):
             message_type=ChatMessageType.HUMAN,
         ).last()
         try:
-            result = ACTION_FUNCTIONS[self.action.action_type](session, self.action.params)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action.params)
             self.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -190,3 +214,53 @@ class TimeoutTrigger(BaseModel):
             ).count()
             < self.total_num_triggers
         )
+
+
+class TimePeriod(models.TextChoices):
+    HOURS = ("hours", "Hours")
+    DAYS = ("days", "Days")
+    WEEKS = ("weeks", "Weeks")
+    MONTHS = ("months", "Months")
+
+
+class ScheduledMessage(BaseTeamModel):
+    action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
+    participant = models.ForeignKey(
+        "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
+    )
+    next_trigger_date = models.DateTimeField(null=True)
+    last_triggered_at = models.DateTimeField(null=True)
+    total_triggers = models.IntegerField(default=0)
+    is_complete = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [models.Index(fields=["is_complete"])]
+
+    def save(self, *args, **kwargs):
+        if not self.next_trigger_date:
+            delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+            self.next_trigger_date = timezone.now() + delta
+        super().save(*args, **kwargs)
+
+    def safe_trigger(self):
+        """This wraps a call to the _trigger method in a try-catch block"""
+        try:
+            self._trigger()
+        except Exception as e:
+            logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
+
+    def _trigger(self):
+        delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+        utc_now = timezone.now()
+
+        experiment_session = self.participant.get_latest_session()
+        experiment_session.send_bot_message(self.action.params["prompt_text"], fail_silently=False)
+
+        self.last_triggered_at = utc_now
+        self.total_triggers += 1
+        if self.total_triggers >= self.action.params["repetitions"]:
+            self.is_complete = True
+        else:
+            self.next_trigger_date = utc_now + delta
+
+        self.save()

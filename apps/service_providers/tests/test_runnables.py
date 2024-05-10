@@ -65,7 +65,7 @@ def test_runnable(runnable, session, fake_llm):
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
-        {"system": "You are a helpful assistant\nCurrent datetime: 2024-02-08 13:00:08.877096+00:00"},
+        {"system": "You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
         {"human": "hi"},
     ]
     if runnable.expect_tools:
@@ -83,7 +83,8 @@ def test_runnable_with_source_material(runnable, session, fake_llm):
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = (
-        "System prompt with this is the source material" + "\nCurrent datetime: 2024-02-08 13:00:08.877096+00:00"
+        "System prompt with this is the source material"
+        + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
     )
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
@@ -95,7 +96,9 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     chain = runnable.build(experiment=session.experiment, session=session)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
-    expected_system__prompt = "System prompt with " + "\nCurrent datetime: 2024-02-08 13:00:08.877096+00:00"
+    expected_system__prompt = (
+        "System prompt with " + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+    )
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
 
@@ -134,7 +137,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
-        {"system": experiment.prompt_text + "\nCurrent datetime: 2024-02-08 13:00:08.877096+00:00"},
+        {"system": experiment.prompt_text + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
         {"human": "Hello"},
         {"human": "hi"},
     ]
