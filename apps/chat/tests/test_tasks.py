@@ -3,7 +3,7 @@ from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chat.tasks import bot_prompt_for_user
+from apps.chat.tasks import _get_latest_sessions_for_participants, bot_prompt_for_user
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
@@ -59,7 +59,7 @@ class TasksTest(TestCase):
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
         experiment_session = _start_experiment_session(
-            experiment, external_chat_id=self.telegram_chat_id, experiment_channel=self.experiment_channel
+            experiment, experiment_channel=self.experiment_channel, participant_identifier=self.telegram_chat_id
         )
         experiment_session.status = session_status
         experiment_session.save()
@@ -90,3 +90,31 @@ def test_no_activity_ping_with_assistant_bot():
     assert messages[0].message_type == "ai"
     assert response == expected_ping_message
     assert messages[0].content == expected_ping_message
+
+
+@pytest.mark.django_db()
+def test_get_latest_sessions_for_participants():
+    p1_session1 = ExperimentSessionFactory()
+    participant_1 = p1_session1.participant
+    experiment = p1_session1.experiment
+    ExperimentSessionFactory(experiment=experiment, participant=participant_1)
+    part1_exp1_session3 = ExperimentSessionFactory(experiment=experiment, participant=participant_1)
+
+    p2_session1 = ExperimentSessionFactory(experiment=experiment)
+    participant_2 = p2_session1.participant
+    part2_exp1_session2 = ExperimentSessionFactory(experiment=experiment, participant=participant_2)
+
+    part2_exp2_session1 = ExperimentSessionFactory(participant=participant_2)
+    assert part2_exp2_session1.team != part2_exp1_session2.team
+
+    chat_ids = [participant_1.identifier, participant_2.identifier]
+    sessions = _get_latest_sessions_for_participants(chat_ids, experiment_public_id=str(experiment.public_id))
+    # Let's make sure the experiment was correctly filtered
+    assert len(set([s.experiment for s in sessions])) == 1
+    assert sessions[0].experiment == experiment
+
+    # Let's make sure only the latest sessions of each participant is returned
+    assert len(sessions) == 2
+    session_ids = [s.id for s in sessions]
+    assert part1_exp1_session3.id in session_ids
+    assert part2_exp1_session2.id in session_ids

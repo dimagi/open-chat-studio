@@ -8,5 +8,5 @@ def get_llm_providers_for_assistants(team):
 def get_assistant_tool_options():
     return [
         ("code_interpreter", "Code Interpreter"),
-        ("retrieval", "Retrieval"),
+        ("file_search", "File Search"),
     ]

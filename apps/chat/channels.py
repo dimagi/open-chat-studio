@@ -7,7 +7,7 @@ from typing import ClassVar
 import requests
 from django.conf import settings
 from telebot import TeleBot
-from telebot.util import smart_split
+from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -16,7 +16,7 @@ from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerExcepti
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -103,8 +103,8 @@ class ChannelBase:
 
     @property
     def chat_id(self) -> int:
-        if self.experiment_session and self.experiment_session.external_chat_id:
-            return self.experiment_session.external_chat_id
+        if self.experiment_session and self.experiment_session.participant.identifier:
+            return self.experiment_session.participant.identifier
         return self.get_chat_id_from_message(self.message)
 
     @abstractmethod
@@ -170,6 +170,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = WhatsappChannel
         elif platform == "facebook":
             PlatformMessageHandlerClass = FacebookMessengerChannel
+        elif platform == "api":
+            PlatformMessageHandlerClass = ApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
@@ -399,7 +401,7 @@ class ChannelBase:
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
-                external_chat_id=str(self.chat_id),
+                participant__identifier=str(self.chat_id),
             )
             .order_by("-created_at")
             .first()
@@ -407,6 +409,7 @@ class ChannelBase:
 
         if not self.experiment_session:
             self._create_new_experiment_session()
+            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         else:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
@@ -428,15 +431,21 @@ class ChannelBase:
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
+        """Creates a new experiment session. If one already exists, the participant will be transfered to the new
+        session
+        """
+        if not self.experiment_session:
+            participant, _ = Participant.objects.get_or_create(identifier=self.chat_id, team=self.experiment.team)
+        else:
+            participant = self.experiment_session.participant
         self.experiment_session = ExperimentSession.objects.create(
             team=self.experiment.team,
-            user=None,
-            participant=None,
+            participant=participant,
             experiment=self.experiment,
             llm=self.experiment.llm,
-            external_chat_id=self.chat_id,
             experiment_channel=self.experiment_channel,
         )
+        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.CONVERSATION_START)
 
     def _is_reset_conversation_request(self):
         return self.user_query == ExperimentChannel.RESET_COMMAND
@@ -502,11 +511,13 @@ class TelegramChannel(ChannelBase):
         return self.message.body
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        self.telegram_bot.send_voice(self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration)
+        antiflood(
+            self.telegram_bot.send_voice, self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration
+        )
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
-            self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
+            antiflood(self.telegram_bot.send_message, self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
@@ -645,3 +656,25 @@ class FacebookMessengerChannel(ChannelBase):
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
         )
+
+
+class ApiChannel(ChannelBase):
+    """Message Handler for the API"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
+
+    @property
+    def message_content_type(self):
+        return MESSAGE_TYPES.TEXT
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def new_bot_message(self, bot_message: str):
+        # The bot cannot send messages to this client, since it wouldn't know where to send it to
+        pass

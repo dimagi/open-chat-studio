@@ -9,6 +9,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from apps.service_providers.llm_service import LlmService
 
@@ -64,6 +65,9 @@ class FakeLlm(FakeListChatModel):
 
     def get_call_messages(self):
         return [call[1][0] for call in self.calls]
+
+    def bind_tools(self, tools):
+        return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
 
 class FakeLlmService(LlmService):

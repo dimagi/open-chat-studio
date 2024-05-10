@@ -12,7 +12,7 @@ class WebMessage(BaseModel):
     """
 
     message_text: str
-    chat_id: int
+    chat_id: str
 
     @property
     def content(self) -> str:
@@ -205,3 +205,20 @@ class FacebookMessage(BaseModel):
             content_type=content_type,
             content_type_unparsed=content_type,
         )
+
+
+class ApiMessage(BaseModel):
+    """
+    A wrapper class for user messages coming from the API
+    """
+
+    participant_id: str
+    message: str
+
+    @property
+    def chat_id(self) -> str:
+        return self.participant_id
+
+    @property
+    def message_text(self) -> str:
+        return self.message

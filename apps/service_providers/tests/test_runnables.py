@@ -40,7 +40,6 @@ def chat(team_with_users):
 @dataclasses.dataclass
 class RunnableFixture:
     runnable: type[ExperimentRunnable]
-    extra_messages: list[dict[str, str]] = dataclasses.field(default_factory=list)
     expect_tools: bool = False
 
     def build(self, *args, **kwargs):
@@ -49,9 +48,7 @@ class RunnableFixture:
 
 runnables = {
     "simple": RunnableFixture(SimpleExperimentRunnable),
-    "agent": RunnableFixture(
-        AgentExperimentRunnable, extra_messages=[{"system": "2024-02-08 13:00:08.877096+00:00"}], expect_tools=True
-    ),
+    "agent": RunnableFixture(AgentExperimentRunnable, expect_tools=True),
 }
 
 
@@ -67,14 +64,10 @@ def test_runnable(runnable, session, fake_llm):
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
-    assert (
-        _messages_to_dict(fake_llm.get_call_messages()[0])
-        == [
-            {"system": "You are a helpful assistant"},
-            {"human": "hi"},
-        ]
-        + runnable.extra_messages
-    )
+    assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
+        {"system": "You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
+        {"human": "hi"},
+    ]
     if runnable.expect_tools:
         assert "tools" in fake_llm.get_calls()[0].kwargs
     else:
@@ -82,22 +75,31 @@ def test_runnable(runnable, session, fake_llm):
 
 
 @pytest.mark.django_db()
+@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_source_material(runnable, session, fake_llm):
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(experiment=session.experiment, session=session)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
-    assert fake_llm.get_call_messages()[0][0] == SystemMessage(content="System prompt with this is the source material")
+    expected_system__prompt = (
+        "System prompt with this is the source material"
+        + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+    )
+    assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
 
 @pytest.mark.django_db()
+@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(experiment=session.experiment, session=session)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
-    assert fake_llm.get_call_messages()[0][0] == SystemMessage(content="System prompt with ")
+    expected_system__prompt = (
+        "System prompt with " + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+    )
+    assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
 
 @pytest.mark.django_db()
@@ -134,15 +136,11 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
-    assert (
-        _messages_to_dict(fake_llm.get_call_messages()[0])
-        == [
-            {"system": experiment.prompt_text},
-            {"human": "Hello"},
-            {"human": "hi"},
-        ]
-        + runnable.extra_messages
-    )
+    assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
+        {"system": experiment.prompt_text + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
+        {"human": "Hello"},
+        {"human": "hi"},
+    ]
     assert chat.messages.count() == 3
 
 

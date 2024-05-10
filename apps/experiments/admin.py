@@ -41,6 +41,14 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id")
     readonly_fields = ("public_id",)
     list_filter = ("team",)
+    search_fields = ("external_chat_id",)
+
+
+@admin.register(models.ParticipantData)
+class ParticipantData(admin.ModelAdmin):
+    list_display = ("participant", "content_type", "object_id")
+    readonly_fields = ("data",)
+    list_filter = ("participant",)
 
 
 @admin.register(models.Survey)
@@ -62,19 +70,22 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
 
 
+@admin.register(models.ExperimentRoute)
+class ExperimentRouteAdmin(admin.ModelAdmin):
+    list_display = ("parent", "child", "keyword", "is_default")
+
+
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
     list_display = (
         "experiment",
         "team",
         "participant",
-        "user",
         "status",
         "created_at",
         "llm",
-        "external_chat_id",
     )
-    search_fields = ("public_id", "external_chat_id", "experiment__name", "participant__identifier")
+    search_fields = ("public_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
     readonly_fields = ("public_id",)
 
@@ -103,8 +114,13 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
         "language",
         "get_gender",
         "neural",
+        "team",
     )
     list_filter = ("service", "language", "gender")
+
+    @admin.display(description="Team")
+    def team(self, obj):
+        return obj.voice_provider.team.name if obj.voice_provider else ""
 
 
 @admin.register(models.NoActivityMessageConfig)

@@ -2,14 +2,13 @@ import logging
 import re
 import time
 from abc import ABC
-from datetime import datetime
 from operator import itemgetter
 from time import sleep
 from typing import Any, Literal
 
 import openai
-import pytz
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from django.utils import timezone
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
@@ -137,7 +136,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
         if self.cancelled:
             raise GenerationCancelled(result)
 
-        self._save_message_to_history(output, ChatMessageType.AI)
+        if config.get("configurable", {}).get("save_output_to_history", True):
+            self._save_message_to_history(output, ChatMessageType.AI)
         return result
 
     def _get_output_check_cancellation(self, input, config):
@@ -175,12 +175,18 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
+    @property
+    def participant_data(self):
+        return self.experiment.get_participant_data(self.session.participant) or ""
+
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
     @property
     def prompt(self):
-        system_prompt = SystemMessagePromptTemplate.from_template(self.experiment.prompt_text)
+        current_datetime = timezone.now().strftime("%A, %d %B %Y %H:%M:%S %Z")
+        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
+        system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
                 system_prompt,
@@ -209,6 +215,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -227,12 +234,11 @@ class AgentExperimentRunnable(ExperimentRunnable):
         assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
-        # TODO: use https://python.langchain.com/docs/integrations/chat/anthropic_functions
-        # when we implement this for anthropic
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
             | RunnableLambda(self.format_input)
-            | create_openai_tools_agent(llm=model, tools=tools, prompt=self.prompt)
+            | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -245,13 +251,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
     @property
     def prompt(self):
         prompt = super().prompt
-        return ChatPromptTemplate.from_messages(
-            prompt.messages
-            + [
-                ("system", str(datetime.now().astimezone(pytz.UTC))),
-                MessagesPlaceholder("agent_scratchpad"),
-            ]
-        )
+        return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):

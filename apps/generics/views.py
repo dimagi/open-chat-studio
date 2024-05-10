@@ -1,7 +1,9 @@
 from django import views
+from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 
+from apps.files.forms import get_file_formset
 from apps.generics.type_select_form import TypeSelectForm
 
 
@@ -30,12 +32,22 @@ class BaseTypeSelectFormView(views.View):
 
     def post(self, request, *args, **kwargs):
         form = self.get_form(request.POST)
-        if form.is_valid():
-            self.form_valid(form)
+
+        file_formset = None
+        if request.FILES:
+            secondary_form_key = form.primary[form.secondary_key_field].value()
+            secondary_form = form.secondary[secondary_form_key]
+            file_formset = get_file_formset(request, formset_cls=secondary_form.file_formset_form)
+
+        if form.is_valid() and (not file_formset or file_formset.is_valid()):
+            self.form_valid(form, file_formset)
             return HttpResponseRedirect(self.get_success_url())
+
+        if file_formset and not file_formset.is_valid():
+            messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, "generic/type_select_form.html", self.get_context_data(form))
 
-    def form_valid(self, form):
+    def form_valid(self, form, file_formset):
         instance = form.save()
         instance.save()
 
@@ -46,6 +58,7 @@ class BaseTypeSelectFormView(views.View):
             "title": self.title,
             "form": form,
             "secondary_key": form.get_secondary_key(obj),
+            "object": obj,
             "button_text": "Update" if obj else "Create",
             **extra_context,
         }

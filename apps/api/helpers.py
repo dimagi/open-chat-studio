@@ -15,6 +15,13 @@ def get_user_from_request(request: HttpRequest) -> CustomUser | None:
         return request.user
 
 
+def get_team_from_request(request: HttpRequest) -> CustomUser | None:
+    if request is None:
+        return None
+    user_api_key = _get_api_key_object(request, UserAPIKey)
+    return user_api_key.team
+
+
 def _get_api_key_object(request, model_class):
     return model_class.objects.get_from_key(_get_api_key(request))
 

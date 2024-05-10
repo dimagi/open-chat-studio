@@ -31,6 +31,7 @@ class ChannelPlatform(models.TextChoices):
     WHATSAPP = "whatsapp", "WhatsApp"
     FACEBOOK = "facebook", "Facebook"
     IN_APP = "in_app", "In App"
+    API = "api", "API"
 
     @classmethod
     def for_dropdown(cls):

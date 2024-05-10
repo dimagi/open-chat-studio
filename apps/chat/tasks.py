@@ -5,7 +5,7 @@ from celery.app import shared_task
 from django.conf import settings
 from django.core.cache import cache
 from django.core.mail import send_mail
-from django.db.models import Count, F, Q, functions
+from django.db.models import Count, F, OuterRef, Q, Subquery, functions
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -13,13 +13,37 @@ from django.utils.translation import gettext_lazy as _
 from apps.chat.bots import TopicBot
 from apps.chat.channels import ChannelBase
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
+
+
+def _get_latest_sessions_for_participants(
+    participant_chat_ids: list, experiment_public_id: UUID
+) -> list[ExperimentSession]:
+    latest_session_id = (
+        ExperimentSession.objects.filter(experiment__public_id=experiment_public_id, participant=OuterRef("pk"))
+        .order_by("-created_at")
+        .values("id")[:1]
+    )
+
+    latest_participant_session_ids = (
+        Participant.objects.filter(
+            experimentsession__experiment__public_id=experiment_public_id, identifier__in=participant_chat_ids
+        )
+        .annotate(latest_session_id=Subquery(latest_session_id))
+        .values("latest_session_id")
+    )
+
+    return (
+        ExperimentSession.objects.filter(id__in=Subquery(latest_participant_session_ids))
+        .prefetch_related("experiment")
+        .all()
+    )
 
 
 @shared_task
@@ -30,16 +54,10 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
     chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
     response will be saved to the chat history.
     """
-    experiment_sessions = (
-        ExperimentSession.objects.filter(
-            external_chat_id__in=chat_ids, experiment__public_id=UUID(experiment_public_id)
-        )
-        .prefetch_related(
-            "experiment",
-        )
-        .all()
-    )
-    for experiment_session in experiment_sessions:
+
+    latest_sessions = _get_latest_sessions_for_participants(chat_ids, experiment_public_id=UUID(experiment_public_id))
+
+    for experiment_session in latest_sessions:
         try:
             if experiment_session.is_stale():
                 continue
@@ -88,6 +106,7 @@ def _no_activity_pings():
             return
         ping_message = bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
+            # TODO: experiment_session.send_bot_message
             try_send_message(experiment_session=experiment_session, message=ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
@@ -143,13 +162,15 @@ def bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instructio
     return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
 
 
-def try_send_message(experiment_session: ExperimentSession, message: str):
+def try_send_message(experiment_session: ExperimentSession, message: str, fail_silently=True):
     """Tries to send a message to the experiment session"""
     try:
         channel = ChannelBase.from_experiment_session(experiment_session)
         channel.new_bot_message(message)
     except Exception as e:
         logging.exception(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
+        if not fail_silently:
+            raise e
 
 
 @shared_task

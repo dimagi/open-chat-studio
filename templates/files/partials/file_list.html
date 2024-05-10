@@ -5,8 +5,8 @@
 {#  - See also "files/partials/file_item.html" #}
 <div x-data="{}">
   <div class="flex flex-row justify-between mb-4">
-    <h3 class="text-lg font-medium">FILES</h3>
-    <button type="button" class="btn btn-sm" @click="document.getElementById('fileInput').click()">
+    <h3 class="text-lg font-medium">{{ files_title|default:"FILES" }}</h3>
+    <button type="button" class="btn btn-sm" @click="document.getElementById('{{ prefix|default:"" }}fileInput').click()">
       <i class="fa-solid fa-paperclip"></i> Add
     </button>
   </div>
@@ -14,13 +14,13 @@
   hx-post="{{ upload_url }}"
   hx-trigger="change"
   hx-swap="afterbegin"
-  hx-target="#fileList"
+  hx-target="#{{ prefix|default:"" }}fileList"
   hx-params="*"
   >
-  <input type="file" name="file" id="fileInput" class="hidden">
+  <input type="file" name="file" id="{{ prefix|default:"" }}fileInput" class="hidden">
   <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
 </{% if nested|default:False %}div{% else %}form{% endif %}>
-<ul id="fileList">
+<ul id="{{ prefix|default:"" }}fileList">
   {% for file in files %}
     {% include "files/partials/file_item.html" %}
   {% endfor %}

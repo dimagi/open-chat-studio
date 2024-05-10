@@ -8,7 +8,6 @@ from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics import actions
 from apps.service_providers.models import LlmProvider
@@ -16,8 +15,8 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
-from .forms import ImportAssistantForm, OpenAiAssistantForm
-from .models import OpenAiAssistant
+from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
+from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
@@ -63,7 +62,7 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team)
+        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -98,38 +97,25 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     button_text = "Create"
     permission_required = "assistants.add_openaiassistant"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if "file_formset" not in context:
-            context["file_formset"] = self._get_file_formset()
-        return context
-
-    def _get_file_formset(self):
-        return get_file_formset(self.request)
-
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
-        file_formset = self._get_file_formset()
-        if form.is_valid() and file_formset.is_valid():
-            return self.form_valid(form, file_formset)
+        resource_formsets = ToolResourceFileFormsets(request)
+        if form.is_valid() and resource_formsets.is_valid():
+            return self.form_valid(form, resource_formsets)
         else:
-            return self.form_invalid(form, file_formset)
+            return self.form_invalid(form)
 
     @transaction.atomic()
-    def form_valid(self, form, file_formset):
+    def form_valid(self, form, resource_formsets):
         self.object = form.save()
-        files = file_formset.save(self.request)
-        self.object.files.set(files)
+        resource_formsets.save(self.request, self.object)
         try:
             push_assistant_to_openai(self.object)
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
-            return self.form_invalid(form, file_formset)
+            return self.form_invalid(form)
         return HttpResponseRedirect(self.get_success_url())
-
-    def form_invalid(self, form, file_formset):
-        return self.render_to_response(self.get_context_data(form=form, file_formset=file_formset))
 
 
 class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
@@ -140,6 +126,10 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     @transaction.atomic()
     def form_valid(self, form):
         response = super().form_valid(form)
+        if "code_interpreter" in self.object.builtin_tools:
+            ToolResources.objects.get_or_create(assistant=self.object, tool_type="code_interpreter")
+        if "file_search" in self.object.builtin_tools:
+            ToolResources.objects.get_or_create(assistant=self.object, tool_type="file_search")
         try:
             push_assistant_to_openai(self.object)
         except OpenAiSyncError as e:
@@ -221,20 +211,27 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
 class AddFileToAssistant(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
-        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
-        if not assistant.builtin_tools:
-            raise ValueError("Files are only supported if retrieval or code_interpreter tools are enabled.")
+        resource = get_object_or_404(ToolResources, assistant_id=self.kwargs["pk"], pk=self.kwargs["resource_id"])
         file = super().form_valid(form)
-        assistant.files.add(file)
-        push_assistant_to_openai(assistant)
+        resource.files.add(file)
+        push_assistant_to_openai(resource.assistant)
         return file
 
     def get_delete_url(self, file):
-        return reverse("assistants:remove_file", args=[self.request.team.slug, self.kwargs["pk"], file.pk])
+        return reverse(
+            "assistants:remove_file",
+            args=[self.request.team.slug, self.kwargs["pk"], self.kwargs["resource_id"], file.pk],
+        )
 
 
 class DeleteFileFromAssistant(BaseDeleteFileView):
     def get_success_response(self, file):
-        assistant = get_object_or_404(OpenAiAssistant, team=self.request.team, pk=self.kwargs["pk"])
-        delete_file_from_openai(assistant, file)
+        resource = get_object_or_404(
+            ToolResources,
+            assistant_id=self.kwargs["pk"],
+            id=self.kwargs["resource_id"],
+        )
+
+        client = resource.assistant.llm_provider.get_llm_service().get_raw_client()
+        delete_file_from_openai(client, file)
         return HttpResponse()

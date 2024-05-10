@@ -1,8 +1,25 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from apps.files.forms import BaseFileFormSet
+
 
 class ProviderTypeConfigForm(forms.Form):
+    """
+    Base class for provider type forms.
+
+    Attributes relating to file uploads:
+    allow_file_upload: If `True`, the user will be able to upload files when creating the provider. Please note
+        that you have to implement the `add_files` method on your provider when this is `True`; otherwise nothing
+        will happen. See `ProviderMixin` in `apps/service_providers/models.py`
+    file_formset_form: This form should be a subclass of `BaseFileFormSet`. This allows you to perform provider
+    specific file validation (like checking file extentions etc). If this is `None` and `allow_file_upload` is
+    `True`, then the `BaseFileFormSet` class will be used by default.
+    """
+
+    allow_file_upload = False
+    file_formset_form = None
+
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
@@ -54,6 +71,26 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             " one organization or want to use your default organization."
         ),
     )
+
+
+class OpenAIVoiceEngineFileFormset(BaseFileFormSet):
+    accepted_file_types = ["mp4", "mp3"]
+
+    def clean(self) -> None:
+        invalid_extentions = set()
+        for _key, in_memory_file in self.files.items():
+            file_extention = in_memory_file.name.split(".")[1]
+            if file_extention not in self.accepted_file_types:
+                invalid_extentions.add(f".{file_extention}")
+        if invalid_extentions:
+            string = ", ".join(invalid_extentions)
+            raise forms.ValidationError(f"File extentions not supported: {string}")
+        return super().clean()
+
+
+class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
+    allow_file_upload = True
+    file_formset_form = OpenAIVoiceEngineFileFormset
 
 
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

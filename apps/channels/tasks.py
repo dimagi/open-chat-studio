@@ -5,9 +5,10 @@ from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 
-from apps.channels.datamodels import SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import SureAdhereMessage, ApiMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import SureAdhereChannel, ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -84,3 +85,10 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     channel = WhatsappChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
+
+
+def handle_api_message(experiment_channel: ExperimentChannel, message_data: dict):
+    """Synchronously handles the message coming from the API"""
+    message = ApiMessage(participant_id=message_data["participant_id"], message=message_data["message"])
+    channel = ApiChannel(experiment_channel=experiment_channel)
+    return channel.new_user_message(message)

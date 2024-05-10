@@ -5,11 +5,10 @@ from .models import Chat, ChatMessage
 
 @admin.register(Chat)
 class ChatAdmin(admin.ModelAdmin):
-    list_display = ("user", "team", "created_at", "updated_at")
-    search_fields = ("user__email",)
+    list_display = ("participant", "team", "created_at", "updated_at")
+    search_fields = ("experiment_session__participant__identifier",)
     list_filter = (
         "team",
-        "user",
         "created_at",
         "updated_at",
     )
@@ -17,6 +16,10 @@ class ChatAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    @admin.display(description="Participant")
+    def participant(self, obj):
+        return obj.experiment_session.participant.identifier
 
 
 @admin.register(ChatMessage)

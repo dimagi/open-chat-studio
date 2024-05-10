@@ -3,7 +3,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, SessionStatus
 
 
 def send_experiment_invitation(experiment_session: ExperimentSession):
@@ -21,6 +21,6 @@ def send_experiment_invitation(experiment_session: ExperimentSession):
         fail_silently=False,
         html_message=render_to_string("experiments/email/invitation.html", context=email_context),
     )
-    if experiment_session.status == "setup":
-        experiment_session.status = "pending"
+    if experiment_session.status == SessionStatus.SETUP:
+        experiment_session.status = SessionStatus.PENDING
         experiment_session.save()
