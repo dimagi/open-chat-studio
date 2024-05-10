@@ -39,7 +39,7 @@ def update_participant_data(request, participant_id: str):
     experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
     participant = get_object_or_404(Participant, identifier=participant_id, team=request.team)
 
-    missing_ids = [exp_id for exp_id in experiment_data if exp_id not in experiment_map]
+    missing_ids = set(experiment_ids) - set(experiment_map)
     if missing_ids:
         response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
         return JsonResponse(data=response, status=404)
