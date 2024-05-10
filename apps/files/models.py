@@ -1,6 +1,7 @@
 import mimetypes
 import pathlib
 
+from django.core.files.base import ContentFile
 from django.db import models
 
 from apps.teams.models import BaseTeamModel
@@ -29,3 +30,19 @@ class File(BaseTeamModel):
 
                 self.content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         super().save(*args, **kwargs)
+
+    def duplicate(self):
+        new_file = File(
+            name=self.name,
+            external_source=self.external_source,
+            external_id=self.external_id,
+            content_size=self.content_size,
+            content_type=self.content_type,
+            schema=self.schema,
+            team=self.team,
+        )
+        new_file_file = ContentFile(self.file.read())
+        new_file_file.name = self.file.name
+        new_file.file = new_file_file
+        new_file.save()
+        return new_file

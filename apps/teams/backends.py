@@ -53,7 +53,7 @@ class TeamBackend(ModelBackend):
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
     "analysis": ["analysis", "rungroup", "analysisrun", "resource"],
-    "assistants": ["openaiassistant"],
+    "assistants": ["openaiassistant", "toolresources"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage"],
     "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
