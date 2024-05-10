@@ -1,6 +1,7 @@
 from django import forms
 from langchain.memory.prompt import SUMMARY_PROMPT
 
+from apps.events.models import TimePeriod
 from apps.generics.type_select_form import TypeSelectForm
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
@@ -37,6 +38,26 @@ class EmptyForm(forms.Form):
     pass
 
 
+class ScheduledMessageConfigForm(forms.Form):
+    prompt_text = forms.CharField(
+        label="Bot's instructions",
+        help_text="Instructions for the bot to formulate a response",
+        widget=forms.Textarea(attrs={"rows": 5}),
+    )
+    frequency = forms.IntegerField(label="Every...", min_value=1)
+    time_period = forms.ChoiceField(label="Time period", choices=TimePeriod.choices)
+    repetitions = forms.IntegerField(
+        label="Repetitions",
+        min_value=1,
+        help_text="Indicates how many times this should go on for. Specify '1' for a one time event",
+    )
+
+    def __init__(self, *args, **kwargs):
+        if "initial" not in kwargs:
+            kwargs["initial"] = {"frequency": 1, "repetitions": 1, "time_period": TimePeriod.WEEKS}
+        super().__init__(*args, **kwargs)
+
+
 class EventActionForm(forms.ModelForm):
     class Meta:
         model = EventAction
@@ -68,6 +89,7 @@ def get_action_params_form(data=None, instance=None):
             "send_message_to_bot": SendMessageToBotForm(data=data, initial=instance.params if instance else None),
             "end_conversation": EmptyForm(data=data, initial=instance.params if instance else None),
             "summarize": SummarizeConversationForm(data=data, initial=instance.params if instance else None),
+            "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=instance.params if instance else None),
         },
         secondary_key_field="action_type",
     )

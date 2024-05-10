@@ -1,3 +1,8 @@
+from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
+
+
 def seconds_to_human(value):
     value = int(value)
     days = value // 86400
@@ -13,3 +18,8 @@ def seconds_to_human(value):
         human_readable += f"{minutes} minute{'s' if minutes > 1 else ''}, "
     human_readable += f"{seconds} second{'s' if seconds > 1 else ''}"
     return human_readable.strip(", ")
+
+
+def timedelta_to_relative_delta(timedelta: timedelta):
+    """Converts a `timedelta` instance to a `relativedelta` instance"""
+    return relativedelta(seconds=timedelta.total_seconds())

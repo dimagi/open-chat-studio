@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime
 from urllib.parse import quote
 
-import pytz
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django import forms
@@ -581,6 +580,8 @@ def _start_experiment_session(
             status=session_status,
             participant=participant,
         )
+    if participant.experimentsession_set.count() == 1:
+        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
 
@@ -686,7 +687,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
         ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
-    since = datetime.now().astimezone(pytz.timezone("UTC"))
+    since = timezone.now()
     if since_param and since_param != "null":
         try:
             since = datetime.fromisoformat(since_param)

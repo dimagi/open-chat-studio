@@ -7,7 +7,7 @@ from typing import ClassVar
 import requests
 from django.conf import settings
 from telebot import TeleBot
-from telebot.util import smart_split
+from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -409,6 +409,7 @@ class ChannelBase:
 
         if not self.experiment_session:
             self._create_new_experiment_session()
+            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         else:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
@@ -444,6 +445,7 @@ class ChannelBase:
             llm=self.experiment.llm,
             experiment_channel=self.experiment_channel,
         )
+        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.CONVERSATION_START)
 
     def _is_reset_conversation_request(self):
         return self.user_query == ExperimentChannel.RESET_COMMAND
@@ -509,11 +511,13 @@ class TelegramChannel(ChannelBase):
         return self.message.body
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        self.telegram_bot.send_voice(self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration)
+        antiflood(
+            self.telegram_bot.send_voice, self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration
+        )
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
-            self.telegram_bot.send_message(chat_id=self.chat_id, text=message_text)
+            antiflood(self.telegram_bot.send_message, self.chat_id, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)

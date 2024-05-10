@@ -1,3 +1,4 @@
+import logging
 from enum import StrEnum
 from urllib.parse import quote
 
@@ -8,6 +9,8 @@ from langchain.schema import BaseMessage, messages_from_dict
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
