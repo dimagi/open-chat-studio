@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 
-from .models import EventAction, EventLog, StaticTrigger, TimeoutTrigger
+from .models import EventAction, EventLog, ScheduledMessage, StaticTrigger, TimeoutTrigger
 
 
 class EventLogInline(GenericTabularInline):
@@ -21,4 +21,9 @@ class StaticTriggerAdmin(admin.ModelAdmin):
 
 @admin.register(EventAction)
 class EventActionAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(ScheduledMessage)
+class ScheduledMessageAdmin(admin.ModelAdmin):
     pass
