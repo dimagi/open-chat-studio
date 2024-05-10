@@ -99,7 +99,6 @@ class SureAdhereMessage(BaseModel):
     """
 
     from_: int
-    to: int
     body: str | None
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     content_type_unparsed: str | None = Field(default=None)
@@ -120,9 +119,7 @@ class SureAdhereMessage(BaseModel):
 
     @staticmethod
     def parse(message_data: dict) -> "SureAdhereMessage":
-        return SureAdhereMessage(
-            from_=message_data["patient_id"], to=message_data["user_id"], body=message_data["message_text"]
-        )
+        return SureAdhereMessage(from_=message_data["patient_id"], body=message_data["message_text"])
 
 
 class TurnWhatsappMessage(BaseModel):

@@ -1,4 +1,4 @@
-# Open Chat Studio
+ a # Open Chat Studio
 
 Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more information.
 

@@ -157,10 +157,10 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
+    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
-        data = {"patient_Id": to, "message_Body": message, "user_Id": from_, "title": "Sample Title"}
+        data = {"patient_Id": to, "message_Body": message}
         response = requests.post(send_msg_url, headers=headers, json=data)
         response.raise_for_status()
