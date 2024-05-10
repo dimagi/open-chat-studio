@@ -11,10 +11,11 @@ def migrate_assistant_to_v2(assistant, tool_resources_cls=None):
 
     assistant.save()
 
-    files = assistant.files.all()
     for tool in builtin_tools:
         resource, created = tool_resources_cls.objects.get_or_create(tool_type=tool, assistant=assistant)
         if created:
+            # copy the file so that it is not shared between resources
+            files = [file.duplicate() for file in assistant.files.all()]
             resource.files.set(files)
 
-    assistant.files.clear()
+    assistant.files.all().delete()

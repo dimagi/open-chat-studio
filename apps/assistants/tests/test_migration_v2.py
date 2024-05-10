@@ -1,6 +1,7 @@
 import pytest
 
 from apps.assistants.migrations.utils import migrate_assistant_to_v2
+from apps.files.models import File
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.files import FileFactory
 
@@ -25,3 +26,5 @@ def test_migrate_assistant():
     code_interpreter = assistant.tool_resources.filter(tool_type="code_interpreter").first()
     assert code_interpreter.tool_type == "code_interpreter"
     assert code_interpreter.files.count() == 2
+
+    assert File.objects.count() == 4
