@@ -184,7 +184,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        prompt = self.experiment.prompt_text + "\nCurrent datetime: {current_time}"
+        current_datetime = timezone.now().strftime("%A, %d %B %Y %H:%M:%S %Z")
+        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
         system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
@@ -215,7 +216,6 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnablePassthrough.assign(current_time=RunnableLambda(lambda x: str(timezone.now())))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -237,7 +237,6 @@ class AgentExperimentRunnable(ExperimentRunnable):
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnablePassthrough.assign(current_time=RunnableLambda(lambda x: str(timezone.now())))
             | RunnableLambda(self.format_input)
             | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         )
