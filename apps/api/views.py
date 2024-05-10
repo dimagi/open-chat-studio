@@ -48,14 +48,13 @@ def update_participant_data(request, participant_id: str):
 
         experiment = experiment_map[experiment_id]
 
-        try:
-            participant_data = experiment.participant_data.get(participant=participant)
-            participant_data.data = new_data
-            participant_data.save(update_fields=["data"])
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=participant, data=new_data, content_object=experiment, team=experiment.team
-            )
+        ParticipantData.objects.update_or_create(
+            participant=participant,
+            content_type__model="experiment",
+            object_id=experiment.id,
+            team=request.team,
+            defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
+        )
     response_body = ""
     if experiments_not_updated:
         response_body = {"unsuccessful_updates": experiments_not_updated}
