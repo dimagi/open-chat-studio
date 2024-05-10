@@ -79,7 +79,8 @@ def test_update_participant_data():
 
 
 @pytest.mark.django_db()
-def test_update_participant_data_cannot_update_experiments_in_another_team():
+def test_update_participant_data_returns_404():
+    """A 404 will be returned when any experiment in the payload is not found. No updates should occur"""
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=TeamWithUsersFactory())
@@ -91,5 +92,7 @@ def test_update_participant_data_cannot_update_experiments_in_another_team():
     data = {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}
     url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
     response = client.post(url, json.dumps(data), content_type="application/json")
-    assert response.status_code == 200
-    assert response.json() == {"unsuccessful_updates": [str(experiment2.public_id)]}
+    assert response.status_code == 404
+    assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
+    # Assert that nothing was created
+    assert experiment.participant_data.filter(participant=participant).exists() is False

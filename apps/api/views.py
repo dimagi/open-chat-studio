@@ -1,10 +1,10 @@
 from django.contrib.auth.decorators import permission_required
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
-from rest_framework.response import Response
 
 from apps.api.permissions import HasUserAPIKey
 from apps.experiments.models import Experiment, Participant, ParticipantData
@@ -19,7 +19,6 @@ class ExperimentSerializer(serializers.Serializer):
 
 @method_decorator(require_view_experiment, name="get")
 class ExperimentsView(ListAPIView):
-    http_method_names = ["get"]
     permission_classes = [HasUserAPIKey]
     serializer_class = ExperimentSerializer
 
@@ -32,7 +31,7 @@ class ExperimentsView(ListAPIView):
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request, participant_id: str):
     """
-    Upsert participant data for a specific experiment
+    Upsert participant data for all specified experiments in the payload
     """
     experiment_data = request.data
     experiment_ids = experiment_data.keys()
@@ -40,12 +39,12 @@ def update_participant_data(request, participant_id: str):
     experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
     participant = get_object_or_404(Participant, identifier=participant_id, team=request.team)
 
-    experiments_not_updated = []
-    for experiment_id, new_data in experiment_data.items():
-        if experiment_id not in experiment_map:
-            experiments_not_updated.append(experiment_id)
-            continue
+    missing_ids = [exp_id for exp_id in experiment_data if exp_id not in experiment_map]
+    if missing_ids:
+        response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
+        return JsonResponse(data=response, status=404)
 
+    for experiment_id, new_data in experiment_data.items():
         experiment = experiment_map[experiment_id]
 
         ParticipantData.objects.update_or_create(
@@ -55,7 +54,4 @@ def update_participant_data(request, participant_id: str):
             team=request.team,
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
-    response_body = ""
-    if experiments_not_updated:
-        response_body = {"unsuccessful_updates": experiments_not_updated}
-    return Response(data=response_body)
+    return HttpResponse()
