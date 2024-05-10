@@ -177,7 +177,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def participant_data(self):
-        return self.experiment.get_participant_data(self.session.participant) or ""
+        return self.session.get_participant_data() or ""
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError

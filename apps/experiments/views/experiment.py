@@ -586,7 +586,7 @@ def _start_experiment_session(
             status=session_status,
             participant=participant,
         )
-    if participant.experimentsession_set.count() == 1:
+    if experiment.sessions.filter(participant=participant).count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)

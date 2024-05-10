@@ -42,6 +42,7 @@ class RecurringReminderTool(CustomBaseTool):
 
     def action(
         self,
+        name: str,
         datetime_due: datetime,
         datetime_end: datetime,
         every: int,
@@ -81,6 +82,25 @@ class OneOffReminderTool(CustomBaseTool):
         return "Success"
 
 
+class ScheduledMessageTool(CustomBaseTool):
+    name = "schedule-update-tool"
+    description = "useful to update the schedule of a scheduled message. Use only to update schedules"
+    requires_session = True
+    args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
+
+    def action(
+        self,
+        name: str,
+        weekday: str,
+    ):
+        from apps.events.models import ScheduledMessage
+
+        _message = ScheduledMessage.objects.get(
+            participant=self.experiment_session.participant, action__params__name=name
+        )
+        return "Success"
+
+
 def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
     task_kwargs = json.dumps(
         {
@@ -102,4 +122,5 @@ def get_tools(experiment_session) -> list[BaseTool]:
     return [
         RecurringReminderTool(experiment_session=experiment_session),
         OneOffReminderTool(experiment_session=experiment_session),
+        ScheduledMessageTool(experiment_session=experiment_session),
     ]

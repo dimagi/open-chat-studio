@@ -639,8 +639,30 @@ class ExperimentSession(BaseTeamModel):
         bot_message = bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
         try_send_message(self, message=bot_message, fail_silently=fail_silently)
 
+    def get_participant_scheduled_messages(self):
+        from apps.events.models import ScheduledMessage
+
+        messages = ScheduledMessage.objects.filter(participant=self.participant, team=self.team)
+        scheduled_messages_str = ""
+        for message in messages:
+            schedule_info = message.action.params
+            name = schedule_info["name"]  # TODO: We need to make sure there aren't duplicate schedule names
+            frequency = schedule_info["frequency"]
+            time_period = schedule_info["time_period"]
+            repetitions = schedule_info["repetitions"]
+            description = f"{name}: Every {frequency} {time_period}, {repetitions} times"
+            if time_period not in ["hour", "day"]:
+                weekday = message.next_trigger_date.strftime("%A")
+                description = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
+            scheduled_messages_str = f"{scheduled_messages_str},{description}"
+        return scheduled_messages_str
+
     def get_participant_data(self):
-        return self.experiment.get_participant_data(self.participant)
+        scheduled_messages_str = self.get_participant_scheduled_messages()
+        participant_data = self.experiment.get_participant_data(self.participant)
+        return f"{participant_data}. Scheduled messages: {scheduled_messages_str}"
 
     def get_participant_data_json(self):
-        return json.dumps(self.experiment.get_participant_data(self.participant), indent=2)
+        data = self.experiment.get_participant_data(self.participant) or {}
+        data["schedules"] = self.get_participant_scheduled_messages()
+        return json.dumps(data, indent=2)
