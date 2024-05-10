@@ -172,6 +172,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = FacebookMessengerChannel
         elif platform == "api":
             PlatformMessageHandlerClass = ApiChannel
+        elif platform == "in_app":
+            PlatformMessageHandlerClass = SureAdhereChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
