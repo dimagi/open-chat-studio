@@ -115,12 +115,16 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 
 
 class ExperimentForm(forms.ModelForm):
+    PROMPT_HELP_TEXT = """
+        Use {source_material} to place source material in the prompt. Use {participant_data} to place participant
+        data in the prompt.
+    """
     type = forms.ChoiceField(
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
 
@@ -395,7 +399,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         participant__user=request.user,
         experiment=experiment,
     )
-    channels = experiment.experimentchannel_set.exclude(platform="web").all()
+    channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = set(ChannelPlatform.for_dropdown()) - used_platforms
     platform_forms = {}

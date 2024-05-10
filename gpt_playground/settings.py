@@ -329,9 +329,10 @@ SITE_ID = 1
 
 # DRF config
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ("apps.api.permissions.IsAuthenticatedOrHasUserAPIKey",),
+    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.IsAuthenticatedOrHasUserAPIKey"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
 }
 
@@ -498,3 +499,6 @@ DOCUMENTATION_LINKS = {
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
 }
+
+# Django rest framework config
+API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"

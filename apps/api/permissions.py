@@ -4,7 +4,7 @@ from django.http import HttpRequest
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_api_key.permissions import BaseHasAPIKey
 
-from .helpers import get_user_from_request
+from .helpers import get_team_from_request, get_user_from_request
 from .models import UserAPIKey
 
 
@@ -16,6 +16,7 @@ class HasUserAPIKey(BaseHasAPIKey):
         if has_perm:
             # if they have permission, also populate the request.user object for convenience
             request.user = get_user_from_request(request)
+            request.team = get_team_from_request(request)
         return has_perm
 
 

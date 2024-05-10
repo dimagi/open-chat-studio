@@ -29,6 +29,7 @@ class ChannelPlatform(models.TextChoices):
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
     FACEBOOK = "facebook", "Facebook"
+    API = "api", "API"
 
     @classmethod
     def for_dropdown(cls):
