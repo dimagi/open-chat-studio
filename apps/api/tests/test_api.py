@@ -52,7 +52,7 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
 
 @pytest.mark.django_db()
-def test_update_participant_data_creats_new_record():
+def test_update_participant_data():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
@@ -61,8 +61,8 @@ def test_update_participant_data_creats_new_record():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
-    data = {"data": {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}}
-    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.public_id})
+    data = {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}
+    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -72,7 +72,24 @@ def test_update_participant_data_creats_new_record():
     assert participant_data_exp_2.data["name"] == "Doe"
 
     # Let's update the data
-    data["data"][str(experiment.public_id)]["name"] = "Harry"
+    data[str(experiment.public_id)]["name"] = "Harry"
     client.post(url, json.dumps(data), content_type="application/json")
     participant_data_exp_1.refresh_from_db()
     assert participant_data_exp_1.data["name"] == "Harry"
+
+
+@pytest.mark.django_db()
+def test_update_participant_data_cannot_update_experiments_in_another_team():
+    identifier = "part1"
+    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment2 = ExperimentFactory(team=TeamWithUsersFactory())
+    participant = Participant.objects.create(identifier=identifier, team=experiment.team)
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    # This call should create ParticipantData for team 1's experiment only
+    data = {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}
+    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+    assert response.json() == {"unsuccessful_updates": [str(experiment2.public_id)]}
