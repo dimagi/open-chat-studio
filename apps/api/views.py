@@ -3,12 +3,15 @@ from uuid import UUID
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
 
 from apps.api.permissions import HasUserAPIKey
 from apps.experiments.models import Experiment, Participant, ParticipantData
+
+require_view_experiment = permission_required("experiments.view_experiment")
 
 
 class ExperimentSerializer(serializers.Serializer):
@@ -16,14 +19,14 @@ class ExperimentSerializer(serializers.Serializer):
     experiment_id = serializers.UUIDField(source="public_id")
 
 
-@api_view(["GET"])
-@permission_classes([HasUserAPIKey])
-@permission_required("experiments.view_experiment")
-def get_experiments(request):
-    data = []
-    for experiment in Experiment.objects.filter(team__slug=request.team.slug).all():
-        data.append(ExperimentSerializer(experiment).data)
-    return Response(data=data)
+@method_decorator(require_view_experiment, name="get")
+class ExperimentsView(ListAPIView):
+    http_method_names = ["get"]
+    permission_classes = [HasUserAPIKey]
+    serializer_class = ExperimentSerializer
+
+    def get_queryset(self):
+        return Experiment.objects.filter(team__slug=self.request.team.slug).all()
 
 
 @api_view(["POST"])

@@ -20,7 +20,11 @@ def test_list_experiments(experiment):
     client = ApiTestClient(user, experiment.team)
     response = client.get(reverse("api:list-experiments"))
     assert response.status_code == 200
-    expected_json = [{"name": experiment.name, "experiment_id": experiment.public_id}]
+    expected_json = {
+        "results": [{"name": experiment.name, "experiment_id": experiment.public_id}],
+        "next": None,
+        "previous": None,
+    }
     assert response.json() == expected_json
 
 
@@ -36,13 +40,13 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
     # Fetch experiments from team 1
     response = client_team_1.get(reverse("api:list-experiments"))
-    experiments = response.json()
+    experiments = response.json()["results"]
     assert len(experiments) == 1
     assert experiments[0]["experiment_id"] == experiment_team_1.public_id
 
     # Fetch experiments from team 2
     response = client_team_2.get(reverse("api:list-experiments"))
-    experiments = response.json()
+    experiments = response.json()["results"]
     assert len(experiments) == 1
     assert experiments[0]["experiment_id"] == experiment_team_2.public_id
 

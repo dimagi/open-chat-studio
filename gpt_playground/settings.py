@@ -332,7 +332,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.IsAuthenticatedOrHasUserAPIKey"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
 }
 
