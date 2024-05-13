@@ -10,8 +10,8 @@ class Node(pydantic.BaseModel):
 
 class Edge(pydantic.BaseModel):
     id: str
-    label: str
-    type: str
+    source: str
+    target: str
 
 
 class PipelineGraph(pydantic.BaseModel):
@@ -20,6 +20,6 @@ class PipelineGraph(pydantic.BaseModel):
 
     @classmethod
     def from_json(cls, obj: dict) -> "PipelineGraph":
-        node_data = [Node(**node["data"]) for node in obj["data"]["nodes"]]
-        edge_data = [Edge(**edge["data"]) for edge in obj["data"]["edges"]]
+        node_data = [Node(**node["data"]) for node in obj["nodes"]]
+        edge_data = [Edge(**edge) for edge in obj["edges"]]
         return cls(nodes=node_data, edges=edge_data)

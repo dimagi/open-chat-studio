@@ -20,48 +20,46 @@ def provider():
 def test_full_email_sending_pipeline(provider):
     graph = PipelineGraph.from_json(
         {
-            "data": {
-                "edges": [],
-                "nodes": [
-                    {
-                        "data": {
-                            "id": "llm-GUk0C",
-                            "label": "Create the report",
-                            "type": "CreateReport",
-                            "params": {
-                                "llm_provider_id": provider.id,
-                                "llm_model": "fake-model",
-                                "prompt": """Make a summary of the following text: {input}.
+            "edges": [],
+            "nodes": [
+                {
+                    "data": {
+                        "id": "llm-GUk0C",
+                        "label": "Create the report",
+                        "type": "CreateReport",
+                        "params": {
+                            "llm_provider_id": provider.id,
+                            "llm_model": "fake-model",
+                            "prompt": """Make a summary of the following text: {input}.
                                 Output it as JSON with a single key called 'summary' with the summary.""",
-                            },
                         },
-                        "id": "llm-GUk0C",
                     },
-                    {
-                        "data": {
-                            "id": "template",
-                            "label": "render a template",
-                            "type": "RenderTemplate",
-                            "params": {
-                                "template_string": "<b>{{ summary }}</b>",
-                            },
+                    "id": "llm-GUk0C",
+                },
+                {
+                    "data": {
+                        "id": "template",
+                        "label": "render a template",
+                        "type": "RenderTemplate",
+                        "params": {
+                            "template_string": "<b>{{ summary }}</b>",
                         },
-                        "id": "llm-GUk0C",
                     },
-                    {
-                        "data": {
-                            "id": "llm-GUk0C",
-                            "label": "Send an email",
-                            "type": "SendEmail",
-                            "params": {
-                                "recipient_list": ["test@example.com"],
-                                "subject": "This is an interesting email",
-                            },
+                    "id": "llm-GUk0C",
+                },
+                {
+                    "data": {
+                        "id": "llm-GUk0C",
+                        "label": "Send an email",
+                        "type": "SendEmail",
+                        "params": {
+                            "recipient_list": ["test@example.com"],
+                            "subject": "This is an interesting email",
                         },
-                        "id": "llm-GUk0C",
                     },
-                ],
-            },
+                    "id": "llm-GUk0C",
+                },
+            ],
             "id": 1,
             "name": "New Pipeline",
         }
@@ -69,33 +67,31 @@ def test_full_email_sending_pipeline(provider):
     service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
     with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
         runnable = build_runnable_from_graph(graph)
-    runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
-    assert len(mail.outbox) == 1
-    assert mail.outbox[0].subject == "This is an interesting email"
-    assert mail.outbox[0].to == ["test@example.com"]
+        runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].subject == "This is an interesting email"
+        assert mail.outbox[0].to == ["test@example.com"]
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_send_email():
     graph = PipelineGraph.from_json(
         {
-            "data": {
-                "edges": [],
-                "nodes": [
-                    {
-                        "data": {
-                            "id": "llm-GUk0C",
-                            "label": "Send an email",
-                            "type": "SendEmail",
-                            "params": {
-                                "recipient_list": ["test@example.com"],
-                                "subject": "This is an interesting email",
-                            },
-                        },
+            "edges": [],
+            "nodes": [
+                {
+                    "data": {
                         "id": "llm-GUk0C",
+                        "label": "Send an email",
+                        "type": "SendEmail",
+                        "params": {
+                            "recipient_list": ["test@example.com"],
+                            "subject": "This is an interesting email",
+                        },
                     },
-                ],
-            }
+                    "id": "llm-GUk0C",
+                },
+            ],
         }
     )
     runnable = build_runnable_from_graph(graph)
@@ -110,52 +106,44 @@ def test_send_email():
 def test_llm_response(provider):
     graph = PipelineGraph.from_json(
         {
-            "data": {
-                "edges": [],
-                "nodes": [
-                    {
-                        "data": {
-                            "id": "llm-GUk0C",
-                            "label": "Get the robot to respond",
-                            "type": "LLMResponse",
-                            "params": {"llm_provider_id": provider.id, "llm_model": "fake-model"},
-                        },
+            "edges": [],
+            "nodes": [
+                {
+                    "data": {
                         "id": "llm-GUk0C",
+                        "label": "Get the robot to respond",
+                        "type": "LLMResponse",
+                        "params": {"llm_provider_id": provider.id, "llm_model": "fake-model"},
                     },
-                ],
-            },
-            "id": 1,
-            "name": "New Pipeline",
+                    "id": "llm-GUk0C",
+                },
+            ],
         }
     )
     service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
     with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
         runnable = build_runnable_from_graph(graph)
-    assert runnable.invoke("Repeat exactly: 123").content == "123"
+        assert runnable.invoke("Repeat exactly: 123").content == "123"
 
 
 def test_render_template():
     render_template_node_id = "render-123"
     graph = PipelineGraph.from_json(
         {
-            "data": {
-                "edges": [],
-                "nodes": [
-                    {
-                        "data": {
-                            "id": render_template_node_id,
-                            "label": "RenderTemplate",
-                            "type": "RenderTemplate",
-                            "params": {
-                                "template_string": "{{ thing }} is cool",
-                            },
+            "edges": [],
+            "nodes": [
+                {
+                    "data": {
+                        "id": render_template_node_id,
+                        "label": "RenderTemplate",
+                        "type": "RenderTemplate",
+                        "params": {
+                            "template_string": "{{ thing }} is cool",
                         },
-                        "id": "llm-GUk0C",
                     },
-                ],
-            },
-            "id": 1,
-            "name": "New Pipeline",
+                    "id": "llm-GUk0C",
+                },
+            ],
         }
     )
     runnable = build_runnable_from_graph(graph)
