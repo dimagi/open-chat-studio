@@ -3,6 +3,7 @@ from langchain.memory.prompt import SUMMARY_PROMPT
 
 from apps.events.models import TimePeriod
 from apps.generics.type_select_form import TypeSelectForm
+from apps.pipelines.models import Pipeline
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
 
@@ -32,6 +33,22 @@ class SendMessageToBotForm(forms.Form):
         if not data:
             return "The user hasn't responded, please prompt them again."
         return data
+
+
+class PipelineStartForm(forms.Form):
+    pipeline_id = forms.ModelChoiceField(
+        queryset=None,
+        label="Select a pipeline",
+        required=True,
+    )
+
+    def __init__(self, *args, **kwargs):
+        team_id = kwargs.pop("team_id")
+        super().__init__(*args, **kwargs)
+        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(team_id=team_id)
+
+    def clean_pipeline_id(self):
+        return self.cleaned_data["pipeline_id"].id
 
 
 class EmptyForm(forms.Form):
@@ -81,7 +98,7 @@ class EventActionTypeSelectForm(TypeSelectForm):
         return instance
 
 
-def get_action_params_form(data=None, instance=None):
+def get_action_params_form(data=None, instance=None, team_id=None):
     return EventActionTypeSelectForm(
         primary=EventActionForm(data=data, instance=instance),
         secondary={
@@ -90,6 +107,9 @@ def get_action_params_form(data=None, instance=None):
             "end_conversation": EmptyForm(data=data, initial=instance.params if instance else None),
             "summarize": SummarizeConversationForm(data=data, initial=instance.params if instance else None),
             "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=instance.params if instance else None),
+            "pipeline_start": PipelineStartForm(
+                team_id=team_id, data=data, initial=instance.params if instance else None
+            ),
         },
         secondary_key_field="action_type",
     )

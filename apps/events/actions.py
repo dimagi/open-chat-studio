@@ -104,10 +104,12 @@ def pipeline_start(session: ExperimentSession, params) -> str:
     from apps.pipelines.models import Pipeline
 
     try:
-        pipeline = Pipeline.objects.get(params["pipeline_id"])
+        pipeline = Pipeline.objects.get(id=params["pipeline_id"])
     except KeyError:
         raise ValueError("The action is missing the pipeline id")
     except Pipeline.DoesNotExist:
         raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
     runnable = build_runnable(pipeline)
-    return runnable.invoke(session.chat.messages.last())
+    last_message = session.chat.messages.last()
+    invoked = runnable.invoke(last_message.content)
+    return str(invoked)

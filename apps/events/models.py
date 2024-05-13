@@ -32,6 +32,7 @@ class EventActionType(models.TextChoices):
     SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
+    PIPELINE_START = ("pipeline_start", "Start a pipeline")
 
 
 class EventAction(BaseModel):
