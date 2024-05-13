@@ -3,22 +3,21 @@ from unittest import mock
 import pytest
 from django.core import mail
 from django.test import override_settings
-from langchain_core.runnables import RunnableConfig
 
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.utils import build_runnable_from_graph
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.langchain import FakeLlm, FakeLlmService
 
 
 @pytest.fixture()
-def session():
-    return ExperimentSessionFactory()
+def provider():
+    return LlmProviderFactory()
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.django_db()
-def test_full_email_sending_pipeline(session):
+def test_full_email_sending_pipeline(provider):
     graph = PipelineGraph.from_json(
         {
             "data": {
@@ -30,6 +29,8 @@ def test_full_email_sending_pipeline(session):
                             "label": "Create the report",
                             "type": "CreateReport",
                             "params": {
+                                "llm_provider_id": provider.id,
+                                "llm_model": "fake-model",
                                 "prompt": """Make a summary of the following text: {input}.
                                 Output it as JSON with a single key called 'summary' with the summary.""",
                             },
@@ -66,8 +67,8 @@ def test_full_email_sending_pipeline(session):
         }
     )
     service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
-    with mock.patch("apps.experiments.models.Experiment.get_llm_service", return_value=service):
-        runnable = build_runnable_from_graph(graph, session_id=session.id)
+    with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+        runnable = build_runnable_from_graph(graph)
     runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
     assert len(mail.outbox) == 1
     assert mail.outbox[0].subject == "This is an interesting email"
@@ -106,7 +107,7 @@ def test_send_email():
 
 
 @pytest.mark.django_db()
-def test_llm_response(session):
+def test_llm_response(provider):
     graph = PipelineGraph.from_json(
         {
             "data": {
@@ -117,6 +118,7 @@ def test_llm_response(session):
                             "id": "llm-GUk0C",
                             "label": "Get the robot to respond",
                             "type": "LLMResponse",
+                            "params": {"llm_provider_id": provider.id, "llm_model": "fake-model"},
                         },
                         "id": "llm-GUk0C",
                     },
@@ -126,11 +128,9 @@ def test_llm_response(session):
             "name": "New Pipeline",
         }
     )
-    with pytest.raises(ValueError, match="session_id"):
-        build_runnable_from_graph(graph)
     service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
-    with mock.patch("apps.experiments.models.Experiment.get_llm_service", return_value=service):
-        runnable = build_runnable_from_graph(graph, session_id=session.id)
+    with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+        runnable = build_runnable_from_graph(graph)
     assert runnable.invoke("Repeat exactly: 123").content == "123"
 
 
@@ -147,7 +147,7 @@ def test_render_template():
                             "label": "RenderTemplate",
                             "type": "RenderTemplate",
                             "params": {
-                                "template_string": "{{ stuff }} is cool",
+                                "template_string": "{{ thing }} is cool",
                             },
                         },
                         "id": "llm-GUk0C",
@@ -159,12 +159,4 @@ def test_render_template():
         }
     )
     runnable = build_runnable_from_graph(graph)
-
-    assert runnable.invoke({"stuff": "Elephants"}) == "Elephants is cool"
-    assert (
-        runnable.invoke(
-            {"stuff": "elephant"},
-            config=RunnableConfig(configurable={f"template_string_{render_template_node_id}": "Hello {{stuff }}"}),
-        )
-        == "Hello elephant"
-    )
+    assert runnable.invoke({"thing": "Cycling"}) == "Cycling is cool"

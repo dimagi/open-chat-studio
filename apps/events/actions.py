@@ -109,5 +109,5 @@ def start_pipeline(session: ExperimentSession, params) -> str:
         raise ValueError("The action is missing the pipeline id")
     except Pipeline.DoesNotExist:
         raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
-    runnable = build_runnable(pipeline, session.id)
+    runnable = build_runnable(pipeline)
     return runnable.invoke(session.chat.messages.last())

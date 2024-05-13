@@ -5,19 +5,26 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
-    ConfigurableField,
     Runnable,
     RunnableConfig,
     RunnableSerializable,
 )
 
-from apps.experiments.models import ExperimentSession
+from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
 from apps.pipelines.tasks import send_email_from_pipeline
 
 
-class ExperimentSessionId(str):
-    _description = "The Session ID"
+class LlmProviderId(str):
+    _description = "The LLM Provider ID"
+
+
+class LlmModel(str):
+    _description = "The LLM Model Name"
+
+
+class LlmTemperature(float):
+    _description = "The LLM temperature"
 
 
 class PipelineJinjaTemplate(str):
@@ -25,39 +32,20 @@ class PipelineJinjaTemplate(str):
 
 
 class PipelineNode(RunnableSerializable):
-    node: Node
-
     class Config:
         arbitrary_types_allowed = True
 
     def get_config_param(self, config: RunnableConfig, name: str):
-        return config.get("configurable", {})[f"{name}_{self.node.id}"]
+        return config.get("configurable", {})[name]
 
     @classmethod
-    def build(cls, node: Node, session_id: ExperimentSessionId | None = None) -> Runnable:
-        # we need the node when fetching the configurable parameters
-        class_kwargs = {"node": node}
-
+    def build(cls, node: Node) -> Runnable:
         # Construct the object with the configurable fields passed in
         # `node.data.params` if they are intended to be configurable
-        configurable_param_names = {name for name in cls.__fields__.keys() if name not in ["name", "node"]}
-        class_kwargs.update(
-            {name: provided_param for name, provided_param in node.params.items() if name in configurable_param_names}
-        )
-
-        # Make all the configurable fields actually configurable
-        configurable_fields = {
-            name: ConfigurableField(
-                # We use the node id to allow us to have more than one of the same runnable with different parameters
-                id=f"{name}_{node.id}",
-                name=name,
-                description=getattr(field.type_, "_description", name),
-            )
-            for name, field in cls.__fields__.items()
-            if name not in ["name", "node"]
+        configurable_param_names = {name for name in cls.__fields__.keys() if name not in ["name"]}
+        class_kwargs = {
+            name: provided_param for name, provided_param in node.params.items() if name in configurable_param_names
         }
-        if configurable_fields:
-            return cls(**class_kwargs).configurable_fields(**configurable_fields)
 
         return cls(**class_kwargs)
 
@@ -87,10 +75,9 @@ class RenderTemplate(PipelineNode):
 
 class CreateReport(PipelineNode):
     prompt: str | None = None
-    session_id: ExperimentSessionId
 
     @classmethod
-    def build(cls, node, session_id: ExperimentSessionId):
+    def build(cls, node):
         return PromptTemplate.from_template(
             template=node.params.get(
                 "prompt",
@@ -99,18 +86,37 @@ class CreateReport(PipelineNode):
                     "Output it as JSON with a single key called 'summary' with the summary."
                 ),
             )
-        ).configurable_fields(
-            template=ConfigurableField(id="prompt", name="prompt", description="The prompt to create the report")
-        ) | LLMResponse.build(node, session_id)
+        ) | LLMResponse.build(node)
 
 
 class LLMResponse(PipelineNode):
-    session_id: ExperimentSessionId
+    llm_provider_id: LlmProviderId
+    llm_model: LlmModel
+    llm_temperature: LlmTemperature = LlmTemperature(1.0)
 
     @classmethod
-    def build(cls, node: Node, session_id: ExperimentSessionId) -> Runnable:
-        session = ExperimentSession.objects.get(id=session_id)
-        return session.experiment.get_chat_model()
+    def build(cls, node: Node) -> Runnable:
+        from apps.service_providers.models import LlmProvider
+
+        try:
+            provider_id = node.params["llm_provider_id"]
+        except KeyError:
+            raise PipelineNodeBuildError("llm_provider_id is required")
+        try:
+            llm_model = node.params["llm_model"]
+        except KeyError:
+            raise PipelineNodeBuildError("llm_model is required")
+        try:
+            llm_temperature = node.params["llm_temperature"]
+        except KeyError:
+            llm_temperature = 1.0
+        try:
+            provider = LlmProvider.objects.get(id=provider_id)
+        except LlmProvider.DoesNotExist:
+            raise PipelineNodeBuildError("LLM provider with id {provider_id} does not exist")
+
+        service = provider.get_llm_service()
+        return service.get_chat_model(llm_model, llm_temperature)
 
 
 class SendEmail(PipelineNode):
