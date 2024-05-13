@@ -100,7 +100,7 @@ class SendMessageToBotAction(EventActionHandlerBase):
             return last_message.content
 
 
-def start_pipeline(session: ExperimentSession, params) -> str:
+def pipeline_start(session: ExperimentSession, params) -> str:
     from apps.pipelines.models import Pipeline
 
     try:
