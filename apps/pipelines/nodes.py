@@ -9,6 +9,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSerializable,
 )
+from pydantic.v1 import ValidationError
 
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
@@ -46,8 +47,10 @@ class PipelineNode(RunnableSerializable):
         class_kwargs = {
             name: provided_param for name, provided_param in node.params.items() if name in configurable_param_names
         }
-
-        return cls(**class_kwargs)
+        try:
+            return cls(**class_kwargs)
+        except ValidationError as ex:
+            raise PipelineNodeBuildError(ex)
 
 
 class RenderTemplate(PipelineNode):
