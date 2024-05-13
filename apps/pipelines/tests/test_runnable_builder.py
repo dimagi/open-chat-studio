@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 from django.core import mail
 from django.test import override_settings
@@ -6,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.utils import build_runnable_from_graph
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.langchain import FakeLlm, FakeLlmService
 
 
 @pytest.fixture()
@@ -13,7 +16,6 @@ def session():
     return ExperimentSessionFactory()
 
 
-@pytest.mark.skip()  # I can't get the LLM to work the FakeLLM, I think because we refetch the session from the DB
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.django_db()
 def test_full_email_sending_pipeline(session):
@@ -63,7 +65,9 @@ def test_full_email_sending_pipeline(session):
             "name": "New Pipeline",
         }
     )
-    runnable = build_runnable_from_graph(graph, session_id=session.id)
+    service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
+    with mock.patch("apps.experiments.models.Experiment.get_llm_service", return_value=service):
+        runnable = build_runnable_from_graph(graph, session_id=session.id)
     runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
     assert len(mail.outbox) == 1
     assert mail.outbox[0].subject == "This is an interesting email"
@@ -101,7 +105,6 @@ def test_send_email():
     assert mail.outbox[0].to == ["test@example.com"]
 
 
-@pytest.mark.skip()  # I can't get the LLM to work the FakeLLM, I think because we refetch the session from the DB
 @pytest.mark.django_db()
 def test_llm_response(session):
     graph = PipelineGraph.from_json(
@@ -125,7 +128,9 @@ def test_llm_response(session):
     )
     with pytest.raises(ValueError, match="session_id"):
         build_runnable_from_graph(graph)
-    runnable = build_runnable_from_graph(graph, session_id=session.id)
+    service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
+    with mock.patch("apps.experiments.models.Experiment.get_llm_service", return_value=service):
+        runnable = build_runnable_from_graph(graph, session_id=session.id)
     assert runnable.invoke("Repeat exactly: 123").content == "123"
 
 
