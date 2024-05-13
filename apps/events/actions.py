@@ -100,16 +100,17 @@ class SendMessageToBotAction(EventActionHandlerBase):
             return last_message.content
 
 
-def pipeline_start(session: ExperimentSession, params) -> str:
-    from apps.pipelines.models import Pipeline
+class PipelineStartAction(EventActionHandlerBase):
+    def invoke(self, session: ExperimentSession, action) -> str:
+        from apps.pipelines.models import Pipeline
 
-    try:
-        pipeline = Pipeline.objects.get(id=params["pipeline_id"])
-    except KeyError:
-        raise ValueError("The action is missing the pipeline id")
-    except Pipeline.DoesNotExist:
-        raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
-    runnable = build_runnable(pipeline)
-    last_message = session.chat.messages.last()
-    invoked = runnable.invoke(last_message.content)
-    return str(invoked)
+        try:
+            pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
+        except KeyError:
+            raise ValueError("The action is missing the pipeline id")
+        except Pipeline.DoesNotExist:
+            raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
+        runnable = build_runnable(pipeline)
+        last_message = session.chat.messages.last()
+        invoked = runnable.invoke(last_message.content)
+        return str(invoked)
