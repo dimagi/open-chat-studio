@@ -14,7 +14,7 @@ def build_runnable(pipeline: Pipeline) -> Runnable:
 
 
 def build_runnable_from_graph(graph: PipelineGraph) -> Runnable:
-    from apps.pipelines import nodes
+    from apps.pipelines.nodes import nodes
 
     if not graph.nodes:
         raise PipelineBuildError("There are no nodes in the graph")
