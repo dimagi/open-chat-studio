@@ -41,11 +41,7 @@ def pipeline_node_input_types(request, team_slug):
     fields = defaultdict(dict)
     from apps.pipelines.nodes import nodes
 
-    node_classes = [
-        cls
-        for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineLambdaNode) or issubclass(cls, nodes.PipelinePreBuiltNode)
-    ]
+    node_classes = [cls for _, cls in inspect.getmembers(nodes, inspect.isclass) if issubclass(cls, nodes.PipelineNode)]
     for node_class in node_classes:
         for field_name, info in node_class.model_fields.items():
             fields[node_class.__name__][field_name] = str(info.annotation)
