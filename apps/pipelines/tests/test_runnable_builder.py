@@ -67,10 +67,12 @@ def test_full_email_sending_pipeline(provider):
     service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
     with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
         runnable = build_runnable_from_graph(graph)
-        runnable.invoke({"input": "Ice is not a liquid. When it is melted it turns into water."})
-        assert len(mail.outbox) == 1
-        assert mail.outbox[0].subject == "This is an interesting email"
-        assert mail.outbox[0].to == ["test@example.com"]
+    runnable.invoke(
+        {"input": "Ice is not a liquid. When it is melted it turns into water."},
+    )
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].subject == "This is an interesting email"
+    assert mail.outbox[0].to == ["test@example.com"]
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -95,7 +97,9 @@ def test_send_email():
         }
     )
     runnable = build_runnable_from_graph(graph)
-    runnable.invoke("A cool message")
+    runnable.invoke(
+        "A cool message",
+    )
     assert len(mail.outbox) == 1
     assert mail.outbox[0].body == "A cool message"
     assert mail.outbox[0].subject == "This is an interesting email"
@@ -123,7 +127,7 @@ def test_llm_response(provider):
     service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
     with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
         runnable = build_runnable_from_graph(graph)
-        assert runnable.invoke("Repeat exactly: 123").content == "123"
+    assert runnable.invoke("Repeat exactly: 123").content == "123"
 
 
 def test_render_template():
