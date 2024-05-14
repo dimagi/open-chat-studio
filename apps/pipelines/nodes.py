@@ -56,7 +56,7 @@ class PipelineLambdaNode(BaseModel, ABC):
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
 
-        return RunnableLambda(built_node._invoke)
+        return RunnableLambda(built_node._invoke, name=cls.__name__)
 
 
 class PipelinePreBuiltNode(BaseModel, ABC):
@@ -108,13 +108,15 @@ class RenderTemplate(PipelineLambdaNode):
         except json.JSONDecodeError:
             # As a last resort, just set the all the variables in the template to the input
             content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
         template = SandboxedEnvironment().from_string(self.template_string)
         return template.render(content)
 
 
 class CreateReport(PipelinePreBuiltNode):
-    prompt: str = "Make a summary of the following text: {input}. Output it as JSON with a single key called 'summary' with the summary."
+    prompt: str = (
+        "Make a summary of the following text: {input}. "
+        "Output it as JSON with a single key called 'summary' with the summary."
+    )
 
     def get_runnable(self, node: Node) -> Runnable:
         return PromptTemplate.from_template(template=self.prompt) | LLMResponse.build(node)

@@ -1,6 +1,9 @@
 from django.db import models
+from langchain_core.runnables import RunnableConfig
 
+from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.teams.models import BaseTeamModel
+from apps.utils.models import BaseModel
 
 
 class Pipeline(BaseTeamModel):
@@ -12,3 +15,15 @@ class Pipeline(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def invoke(self, input):
+        from apps.pipelines.utils import build_runnable
+
+        runnable = build_runnable(self)
+        return runnable.invoke(input, config=RunnableConfig(callbacks=[PipelineLoggingCallbackHandler(self)]))
+
+
+class PipelineRun(BaseModel):
+    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE, related_name="runs")
+    status = models.CharField()
+    log = models.TextField(blank=True)
