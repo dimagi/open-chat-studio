@@ -1,6 +1,6 @@
-from typing import TypeAlias
+from typing_extensions import TypeAliasType
 
-LlmProviderId: TypeAlias = int
-LlmModel: TypeAlias = str
-LlmTemperature: TypeAlias = float
-PipelineJinjaTemplate: TypeAlias = str  # TODO: type PipelineJinjaTempate = str in python 3.12
+LlmProviderId = TypeAliasType("LlmProviderId", int)
+LlmModel = TypeAliasType("LlmModel", str)
+LlmTemperature = TypeAliasType("LlmTemperature", float)
+PipelineJinjaTemplate = TypeAliasType("PipelineJinjaTemplate", str)

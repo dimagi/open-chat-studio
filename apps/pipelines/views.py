@@ -1,3 +1,6 @@
+import inspect
+from collections import defaultdict
+
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
@@ -10,6 +13,43 @@ from apps.teams.decorators import login_and_team_required
 @login_and_team_required
 def pipeline_builder(request, team_slug: str):
     return render(request, "pipelines/pipeline_builder.html")
+
+
+def pipeline_node_input_types(request, team_slug):
+    """Returns all the input types for the various nodes
+
+    Example:
+        {
+          "CreateReport": {
+            "prompt": "<class 'str'>"
+          },
+          "LLMResponse": {
+            "llm_provider_id": "LlmProviderId",
+            "llm_model": "LlmModel",
+            "llm_temperature": "LlmTemperature"
+          },
+          "RenderTemplate": {
+            "template_string": "PipelineJinjaTemplate"
+          },
+          "SendEmail": {
+            "recipient_list": "list[str]",
+            "subject": "<class 'str'>"
+          }
+        }
+    """
+
+    fields = defaultdict(dict)
+    from apps.pipelines.nodes import nodes
+
+    node_classes = [
+        cls
+        for _, cls in inspect.getmembers(nodes, inspect.isclass)
+        if issubclass(cls, nodes.PipelineLambdaNode) or issubclass(cls, nodes.PipelinePreBuiltNode)
+    ]
+    for node_class in node_classes:
+        for field_name, info in node_class.model_fields.items():
+            fields[node_class.__name__][field_name] = str(info.annotation)
+    return JsonResponse(fields)
 
 
 @login_and_team_required
