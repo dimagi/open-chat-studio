@@ -1,4 +1,5 @@
 import json
+from typing import TypeAlias
 
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
@@ -6,10 +7,10 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
     Runnable,
-    RunnableConfig,
-    RunnableSerializable,
+    RunnableLambda,
 )
-from pydantic.v1 import ValidationError
+from pydantic import BaseModel
+from pydantic_core import ValidationError
 
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
@@ -28,39 +29,33 @@ class LlmTemperature(float):
     _description = "The LLM temperature"
 
 
-class PipelineJinjaTemplate(str):
-    _description = "The template to render"
+PipelineJinjaTemplate: TypeAlias = str  # TODO: type PipelineJinjaTempate = str in python 3.12
 
 
-class PipelineNode(RunnableSerializable):
+class PipelineNode(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    def get_config_param(self, config: RunnableConfig, name: str):
-        return config.get("configurable", {})[name]
+    def _invoke(self, input):
+        """ """
+
+        pass
 
     @classmethod
     def build(cls, node: Node) -> Runnable:
-        # Construct the object with the configurable fields passed in
-        # `node.data.params` if they are intended to be configurable
-        configurable_param_names = {name for name in cls.__fields__.keys() if name not in ["name"]}
-        class_kwargs = {
-            name: provided_param for name, provided_param in node.params.items() if name in configurable_param_names
-        }
         try:
-            return cls(**class_kwargs)
+            built_node = cls(**node.params)
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
 
+        return RunnableLambda(built_node._invoke)
+
 
 class RenderTemplate(PipelineNode):
-    template_string: PipelineJinjaTemplate | None = None
+    template_string: PipelineJinjaTemplate
 
-    def invoke(self, input: BaseMessage | dict | str, config, **kwargs):
+    def _invoke(self, input: BaseMessage | dict | str) -> str:
         env = SandboxedEnvironment()
-        configured_template = (
-            self.template_string if self.template_string else self.get_config_param(config, "template_string")
-        )
         try:
             if isinstance(input, BaseMessage):
                 content = json.loads(input.content)
@@ -70,9 +65,9 @@ class RenderTemplate(PipelineNode):
                 content = json.loads(input)
         except json.JSONDecodeError:
             # As a last resort, just set the all the variables in the template to the input
-            content = {var: input for var in meta.find_undeclared_variables(env.parse(configured_template))}
+            content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
-        template = SandboxedEnvironment().from_string(configured_template)
+        template = SandboxedEnvironment().from_string(self.template_string)
         return template.render(content)
 
 
@@ -126,6 +121,7 @@ class SendEmail(PipelineNode):
     recipient_list: list[str]
     subject: str
 
-    def invoke(self, input, config):
-        send_email_from_pipeline.delay(self.recipient_list, subject=self.subject, message=input)
-        return super().invoke(input, config)
+    def _invoke(self, input):
+        send_email_from_pipeline.delay(recipient_list=self.recipient_list, subject=self.subject, message=input)
+        # raise Exception("BLAHHH")
+        return f"To: {', '.join(self.recipient_list)} \nSubject: {self.subject}\n\n{input}"
