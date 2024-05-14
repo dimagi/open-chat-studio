@@ -1,8 +1,13 @@
 from django.contrib import admin
 
-from .models import Pipeline
+from .models import Pipeline, PipelineRun
+
+
+class PipelineRunInline(admin.TabularInline):
+    model = PipelineRun
+    extra = 0
 
 
 @admin.register(Pipeline)
 class PipelineAdmin(admin.ModelAdmin):
-    pass
+    inlines = [PipelineRunInline]
