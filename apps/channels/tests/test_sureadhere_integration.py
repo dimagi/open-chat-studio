@@ -13,12 +13,11 @@ from .message_examples import sureadhere_messages
 
 
 @pytest.fixture()
-def sureadhere_in_app_channel(sureadhere_provider):
+def sureadhere_channel(sureadhere_provider):
     return ExperimentChannelFactory(
-        platform=ChannelPlatform.IN_APP,
+        platform=ChannelPlatform.SUREADHERE,
         messaging_provider=sureadhere_provider,
         experiment__team=sureadhere_provider.team,
-        extra_data={"client_id": "6"},
     )
 
 
@@ -30,7 +29,7 @@ class TestSureAdhere:
     def test_parse_text_message(self, message, message_type):
         message = SureAdhereMessage.parse(message)
         assert message.chat_id == 6225
-        assert message.body == "Hi"
+        assert message.message_text == "Hi"
         assert message.content_type == MESSAGE_TYPES.TEXT
 
     @pytest.mark.django_db()
@@ -40,18 +39,16 @@ class TestSureAdhere:
     )
     @patch("apps.service_providers.messaging_service.SureAdhereService.send_text_message")
     @patch("apps.chat.channels.SureAdhereChannel._get_llm_response")
-    def test_sureadhere_in_app_channel_implementation(
+    def test_sureadhere_channel_implementation(
         self,
         _get_llm_response,
         send_text_message,
         incoming_message,
         message_type,
-        sureadhere_in_app_channel,
+        sureadhere_channel,
     ):
         _get_llm_response.return_value = "Hi"
-        handle_sureadhere_message(
-            client_id=sureadhere_in_app_channel.extra_data.get("client_id", ""), message_data=incoming_message
-        )
+        handle_sureadhere_message(experiment_id=sureadhere_channel.experiment.public_id, message_data=incoming_message)
         send_text_message.assert_called()
 
     @pytest.mark.django_db()

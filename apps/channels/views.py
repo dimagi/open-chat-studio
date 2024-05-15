@@ -5,6 +5,7 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
@@ -26,6 +27,7 @@ def new_telegram_message(request, channel_external_id: uuid):
 
 
 @csrf_exempt
+@require_POST
 def new_twilio_message(request):
     message_data = json.dumps(request.POST.dict())
     tasks.handle_twilio_message.delay(message_data)
@@ -33,9 +35,9 @@ def new_twilio_message(request):
 
 
 @csrf_exempt
-def new_sureadhere_message(request, client_id: int):
+def new_sureadhere_message(request, experiment_id: uuid):
     message_data = json.loads(request.body)
-    tasks.handle_sureadhere_message.delay(client_id=client_id, message_data=message_data)
+    tasks.handle_sureadhere_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
 
 

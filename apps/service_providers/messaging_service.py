@@ -137,7 +137,7 @@ class TurnIOService(MessagingService):
 
 class SureAdhereService(MessagingService):
     _type: ClassVar[str] = "sureadhere"
-    supported_platforms: ClassVar[list] = [ChannelPlatform.IN_APP]
+    supported_platforms: ClassVar[list] = [ChannelPlatform.SUREADHERE]
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 

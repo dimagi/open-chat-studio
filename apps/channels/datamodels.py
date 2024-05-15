@@ -98,8 +98,8 @@ class SureAdhereMessage(BaseModel):
     A wrapper class for user messages coming from the sureadhere
     """
 
-    from_: int
-    body: str | None
+    chat_id: int
+    message_text: str | None
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     content_type_unparsed: str | None = Field(default=None)
 
@@ -109,17 +109,13 @@ class SureAdhereMessage(BaseModel):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 
-    @property
-    def chat_id(self) -> int:
-        return self.from_
-
-    @property
-    def message_text(self) -> str:
-        return self.body
-
     @staticmethod
     def parse(message_data: dict) -> "SureAdhereMessage":
-        return SureAdhereMessage(from_=message_data["patient_id"], body=message_data["message_text"])
+        return SureAdhereMessage(
+            chat_id=message_data["patient_id"],
+            message_text=message_data["message_text"],
+            content_type_unparsed=MESSAGE_TYPES.TEXT,
+        )
 
 
 class TurnWhatsappMessage(BaseModel):

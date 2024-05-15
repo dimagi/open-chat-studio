@@ -22,7 +22,7 @@ WEB = "web"
 TELEGRAM = "telegram"
 WHATSAPP = "whatsapp"
 FACEBOOK = "facebook"
-IN_APP = "in_app"
+SUREADHERE = "sureadhere"
 
 
 class ChannelPlatform(models.TextChoices):
@@ -30,12 +30,12 @@ class ChannelPlatform(models.TextChoices):
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
     FACEBOOK = "facebook", "Facebook"
-    IN_APP = "in_app", "In App"
+    SUREADHERE = "sureadhere", "SureAdhere"
     API = "api", "API"
 
     @classmethod
     def for_dropdown(cls):
-        return [cls.TELEGRAM, cls.WHATSAPP, cls.FACEBOOK, cls.IN_APP]
+        return [cls.TELEGRAM, cls.WHATSAPP, cls.FACEBOOK, cls.SUREADHERE]
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm
@@ -54,8 +54,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
             case self.FACEBOOK:
                 return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
-            case self.IN_APP:
-                return forms.InAppChannelForm(channel=channel, *args, **kwargs)
+            case self.SUREADHERE:
+                return forms.SureAdhereChannelForm(channel=channel, *args, **kwargs)
 
     @property
     def channel_identifier_key(self) -> str:
@@ -66,7 +66,7 @@ class ChannelPlatform(models.TextChoices):
                 return "number"
             case self.FACEBOOK:
                 return "page_id"
-            case self.IN_APP:
+            case self.SUREADHERE:
                 return "client_id"
 
 
@@ -91,7 +91,7 @@ class ExperimentChannel(BaseModel):
         (WEB, "Web"),
         (WHATSAPP, "WhatsApp"),
         (FACEBOOK, "Facebook"),
-        (IN_APP, "In App"),
+        (SUREADHERE, "SureAdhere"),
     )
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
@@ -168,7 +168,7 @@ class ExperimentChannel(BaseModel):
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
         elif provider_type == MessagingProviderType.sureadhere:
-            uri = reverse("channels:new_sureadhere_message", kwargs={"client_id": self.extra_data.get("client_id", "")})
+            uri = reverse("channels:new_sureadhere_message", kwargs={"experiment_id": self.experiment.public_id})
         return absolute_url(
             uri,
             is_secure=True,
