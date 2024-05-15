@@ -63,6 +63,26 @@ def test_link_tag(tag, chat, client):
 
 
 @pytest.mark.django_db()
+def test_tags_with_same_name_can_be_used_in_different_teams(client):
+    """This simply ensures that different teams can use tags with the same name"""
+    team1 = TeamWithUsersFactory()
+    team2 = TeamWithUsersFactory()
+    user1 = team1.members.first()
+    user2 = team2.members.first()
+    session1 = ExperimentSessionFactory(team=team1, chat__team=team1)
+    session2 = ExperimentSessionFactory(team=team2, chat__team=team2)
+    chat1 = session1.chat
+    chat2 = session2.chat
+    tag1 = Tag.objects.create(name="testing", created_by=user1, team=team1)
+    tag2 = Tag.objects.create(name="testing", created_by=user2, team=team2)
+
+    _link_tag_to_item(client, tag=tag1, chat=chat1)
+    _link_tag_to_item(client, tag=tag2, chat=chat2)
+    chat1.tags.get(name=tag1)
+    chat2.tags.get(name=tag1)
+
+
+@pytest.mark.django_db()
 def test_new_tag_created_when_linking(chat, client):
     team = chat.team
     tag_name = "super cool"
