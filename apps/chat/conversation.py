@@ -83,12 +83,7 @@ class BasicConversation(Conversation):
         self.load_memory_from_messages(self._get_optimized_history(chat, max_token_limit))
 
     def _get_optimized_history(self, chat, max_token_limit) -> list[BaseMessage]:
-        try:
-            return compress_chat_history(chat, self.llm, max_token_limit)
-        except (NameError, ImportError, ValueError, NotImplementedError):
-            # typically this is because a library required to count tokens isn't installed
-            log.exception("Unable to compress history")
-            return chat.get_langchain_messages_until_summary()
+        return compress_chat_history(chat, self.llm, max_token_limit)
 
     def predict(self, input: str) -> tuple[str, int, int]:
         if isinstance(self.llm, ChatAnthropic):
@@ -110,6 +105,17 @@ class BasicConversation(Conversation):
 
 
 def compress_chat_history(
+    chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10
+) -> list[BaseMessage]:
+    try:
+        return _compress_chat_history(chat, llm, max_token_limit, keep_history_len)
+    except (NameError, ImportError, ValueError, NotImplementedError):
+        # typically this is because a library required to count tokens isn't installed
+        log.exception("Unable to compress history")
+        return chat.get_langchain_messages_until_summary()
+
+
+def _compress_chat_history(
     chat: Chat, llm: BaseChatModel, max_token_limit: int, keep_history_len: int = 10
 ) -> list[BaseMessage]:
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history

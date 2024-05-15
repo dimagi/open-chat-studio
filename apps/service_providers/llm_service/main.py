@@ -49,13 +49,17 @@ class OpenAILlmService(LlmService):
         return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        return ChatOpenAI(
+        model = ChatOpenAI(
             model=llm_model,
             temperature=temperature,
             openai_api_key=self.openai_api_key,
             openai_api_base=self.openai_api_base,
             openai_organization=self.openai_organization,
         )
+        if model._get_encoding_model()[0] == "cl100k_base":
+            # fallback to gpt-4 if the model is not available for encoding
+            model.tiktoken_model_name = "gpt-4"
+        return model
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self.get_raw_client().audio.transcriptions.create(
