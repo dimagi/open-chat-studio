@@ -7,9 +7,8 @@ from apps.assistants.migrations.utils import migrate_assistant_to_v2
 
 def do_migration(apps, schema_editor):
     OpenAiAssistant = apps.get_model("assistants.OpenAiAssistant")
-    ToolResources = apps.get_model("assistants.ToolResources")
     for assistant in OpenAiAssistant.objects.all():
-        migrate_assistant_to_v2(assistant, tool_resources_cls=ToolResources)
+        migrate_assistant_to_v2(assistant, apps=apps)
 
 
 class Migration(migrations.Migration):
