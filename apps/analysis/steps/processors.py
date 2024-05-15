@@ -12,6 +12,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts import PromptTemplate
 from openai.types import FileObject
+from openai.types.beta.threads import MessageContentImageFile, MessageContentText
 from pydantic import model_validator
 
 import apps.analysis.exceptions
@@ -177,10 +178,10 @@ class AssistantStep(core.BaseStep[Any, str]):
             if message.role == "user":
                 continue
             for content in message.content:
-                if content.type == "image_file":
+                if isinstance(content, MessageContentImageFile):
                     resource = self.make_resource_from_file(content.image_file.file_id, ResourceType.IMAGE)
                     output.response += get_resource_markdown_link(resource, image=True)
-                elif content.type == "text":
+                elif isinstance(content, MessageContentText):
                     message_content = content.text
                     annotations = message_content.annotations
                     citations = []
@@ -258,7 +259,7 @@ def get_resource_markdown_link(resource: Resource, link_text: str = None, image=
 
 def log_message_creation(step, thread_id, message_creation):
     message = step.client.beta.threads.messages.retrieve(thread_id=thread_id, message_id=message_creation.message_id)
-    content = "\n".join([content.text.value for content in message.content if content.type == "text"])
+    content = "\n".join([content.text.value for content in message.content if isinstance(content, MessageContentText)])
     step.log.info(f"{message.role}: {content}")
 
 

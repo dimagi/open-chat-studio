@@ -11,8 +11,6 @@ class AssistantFactory(factory.Factory):
     created_at = factory.Faker("pyint")
     name = factory.Faker("name")
     description = factory.Faker("sentence")
-    temperature = 0.9
-    top_p = 1.0
     file_ids = []
     metadata = None
     object = "assistant"
@@ -20,13 +18,9 @@ class AssistantFactory(factory.Factory):
     model = factory.Faker("random_element", elements=["gpt4", "gpt-3.5-turbo"])
     tools = [
         {"type": "code_interpreter"},
-        {"type": "file_search"},
+        {"type": "retrieval"},
         {"type": "function", "function": {"name": "test", "parameters": {"test": {"type": "string"}}}},
     ]
-    tool_resources = {
-        "code_interpreter": {"file_ids": ["file_123"]},
-        "file_search": {"vector_store_ids": ["vs_123"]},
-    }
 
 
 class FileObjectFactory(factory.Factory):

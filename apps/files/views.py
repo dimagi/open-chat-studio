@@ -1,5 +1,3 @@
-import logging
-
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -12,8 +10,6 @@ from django.views import View
 
 from apps.files.models import File
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-
-logger = logging.getLogger(__name__)
 
 
 class FileView(LoginAndTeamRequiredMixin, View):
@@ -48,7 +44,6 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
             try:
                 file = self.form_valid(form)
             except Exception as e:
-                logger.exception("Error saving file")
                 return self.get_error_response(e)
             return self.get_success_response(file)
         return self.get_error_response(form.errors.as_text())
