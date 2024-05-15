@@ -18,7 +18,7 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
     def on_chain_end(self, outputs, **kwargs):
         from apps.pipelines.models import PipelineRun
 
-        self.depth -= 1  # Decrease depth as a chain (or sub-chain) ends
+        self.depth -= 1
         self.log = f"{self.log} --> output: {outputs}\n"
         if self.depth == 0:
             PipelineRun.objects.create(
