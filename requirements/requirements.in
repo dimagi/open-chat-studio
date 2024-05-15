@@ -23,6 +23,7 @@ openai
 pandas
 sentry-sdk
 tenacity
+toposort
 whitenoise[brotli]
 langchain
 langchain-openai

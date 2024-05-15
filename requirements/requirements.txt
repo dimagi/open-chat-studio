@@ -417,6 +417,8 @@ tqdm==4.66.3
     #   huggingface-hub
     #   openai
     #   transformers
+toposort==1.10
+    # via -r requirements/requirements.in
 transformers==4.39.3
     # via -r requirements/requirements.in
 turn-python==0.2.0
