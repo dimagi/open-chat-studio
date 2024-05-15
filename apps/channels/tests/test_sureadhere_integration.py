@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from django.urls import reverse
@@ -55,7 +56,7 @@ class TestSureAdhere:
     @pytest.mark.parametrize("message", [sureadhere_messages.outbound_message()])
     @patch("apps.channels.tasks.handle_sureadhere_message")
     def test_outbound_message_ignored(self, handle_sureadhere_message_task, message, client):
-        url = reverse("channels:new_sureadhere_message", kwargs={"client_id": "6"})
+        url = reverse("channels:new_sureadhere_message", kwargs={"experiment_id": str(uuid4())})
         response = client.post(url, data=message, content_type="application/json")
         assert response.status_code == 200
         handle_sureadhere_message_task.assert_not_called()
