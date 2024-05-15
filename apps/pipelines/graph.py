@@ -1,4 +1,8 @@
+from collections import defaultdict
+from functools import cached_property
+
 import pydantic
+from toposort import toposort_flatten
 
 
 class Node(pydantic.BaseModel):
@@ -23,3 +27,20 @@ class PipelineGraph(pydantic.BaseModel):
         node_data = [Node(**node["data"]) for node in obj["nodes"]]
         edge_data = [Edge(**edge) for edge in obj["edges"]]
         return cls(nodes=node_data, edges=edge_data)
+
+    @cached_property
+    def sorted_nodes(self):
+        """Assume a DAG"""
+        if len(self.nodes) == 1 and not self.edges:
+            # In the case that there are no edges, the nodes are already sorted...
+            return self.nodes
+
+        dependency_graph = defaultdict(set)
+        for edge in self.edges:
+            dependency_graph[edge.target].add(edge.source)
+
+        toposorted_ids = toposort_flatten(dependency_graph)
+        nodes_to_ids = {node.id: node for node in self.nodes}
+        sorted_nodes = [nodes_to_ids[node_id] for node_id in toposorted_ids]
+
+        return sorted_nodes
