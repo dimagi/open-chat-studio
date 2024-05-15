@@ -75,6 +75,8 @@ class WhatsappChannelForm(WebhookUrlFormBase):
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
+    client_id = forms.CharField(label="Client ID", max_length=100)
+
     def get_success_message(self, channel: ExperimentChannel):
         """The message to be displayed when the channel is successfully linked"""
         return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
