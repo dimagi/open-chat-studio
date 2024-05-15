@@ -1,6 +1,7 @@
 import pytest
 
 from apps.assistants.migrations.utils import migrate_assistant_to_v2
+from apps.assistants.models import OpenAiAssistant
 from apps.files.models import File
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.files import FileFactory
@@ -12,8 +13,9 @@ def test_migrate_assistant():
     files = FileFactory.create_batch(2, external_id="test_id", external_source="openai")
     assistant.files.set(files)
 
-    migrate_assistant_to_v2(assistant)
+    migrate_assistant_to_v2(OpenAiAssistant.objects.get(id=assistant.id))
 
+    assistant.refresh_from_db()
     assert set(assistant.builtin_tools) == {"file_search", "code_interpreter"}
     assert assistant.files.count() == 0
     assert assistant.tool_resources.count() == 2
