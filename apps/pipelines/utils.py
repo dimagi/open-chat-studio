@@ -1,6 +1,6 @@
 from langchain_core.runnables import (
-    Runnable,
     RunnablePassthrough,
+    RunnableSequence,
 )
 
 from apps.pipelines.exceptions import PipelineBuildError
@@ -8,12 +8,12 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 
 
-def build_runnable(pipeline: Pipeline) -> Runnable:
+def build_runnable(pipeline: Pipeline) -> RunnableSequence:
     graph = PipelineGraph.from_json(pipeline.data)
     return build_runnable_from_graph(graph)
 
 
-def build_runnable_from_graph(graph: PipelineGraph) -> Runnable:
+def build_runnable_from_graph(graph: PipelineGraph) -> RunnableSequence:
     from apps.pipelines.nodes import nodes
 
     if not graph.nodes:

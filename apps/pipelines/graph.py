@@ -4,6 +4,8 @@ from functools import cached_property
 import pydantic
 from toposort import toposort_flatten
 
+from apps.pipelines.exceptions import PipelineBuildError
+
 
 class Node(pydantic.BaseModel):
     id: str
@@ -40,7 +42,12 @@ class PipelineGraph(pydantic.BaseModel):
             dependency_graph[edge.target].add(edge.source)
 
         toposorted_ids = toposort_flatten(dependency_graph)
-        nodes_to_ids = {node.id: node for node in self.nodes}
-        sorted_nodes = [nodes_to_ids[node_id] for node_id in toposorted_ids]
+
+        for node in self.nodes:
+            if node.id not in toposorted_ids:
+                raise PipelineBuildError(f"Node: {node.id} is orphaned and has no edges attached to it")
+
+        node_ids_to_nodes = {node.id: node for node in self.nodes}
+        sorted_nodes = [node_ids_to_nodes[node_id] for node_id in toposorted_ids]
 
         return sorted_nodes
