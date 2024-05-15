@@ -20,11 +20,22 @@ def provider():
 def test_full_email_sending_pipeline(provider):
     graph = PipelineGraph.from_json(
         {
-            "edges": [],
+            "edges": [
+                {
+                    "id": "report->template",
+                    "source": "report",
+                    "target": "template",
+                },
+                {
+                    "id": "template->email",
+                    "source": "template",
+                    "target": "email",
+                },
+            ],
             "nodes": [
                 {
                     "data": {
-                        "id": "llm-GUk0C",
+                        "id": "report",
                         "label": "Create the report",
                         "type": "CreateReport",
                         "params": {
@@ -34,7 +45,7 @@ def test_full_email_sending_pipeline(provider):
                                 Output it as JSON with a single key called 'summary' with the summary.""",
                         },
                     },
-                    "id": "llm-GUk0C",
+                    "id": "report",
                 },
                 {
                     "data": {
@@ -45,11 +56,11 @@ def test_full_email_sending_pipeline(provider):
                             "template_string": "<b>{{ summary }}</b>",
                         },
                     },
-                    "id": "llm-GUk0C",
+                    "id": "template",
                 },
                 {
                     "data": {
-                        "id": "llm-GUk0C",
+                        "id": "email",
                         "label": "Send an email",
                         "type": "SendEmail",
                         "params": {
@@ -57,7 +68,7 @@ def test_full_email_sending_pipeline(provider):
                             "subject": "This is an interesting email",
                         },
                     },
-                    "id": "llm-GUk0C",
+                    "id": "email",
                 },
             ],
             "id": 1,
