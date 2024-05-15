@@ -40,8 +40,9 @@ def _duplicate_file(file, apps=None):
         schema=file.schema,
         team=file.team,
     )
-    new_file_file = ContentFile(file.file.read())
-    new_file_file.name = file.file.name
-    new_file.file = new_file_file
+    if file.file:
+        new_file_file = ContentFile(file.file.read())
+        new_file_file.name = file.file.name
+        new_file.file = new_file_file
     new_file.save()
     return new_file
