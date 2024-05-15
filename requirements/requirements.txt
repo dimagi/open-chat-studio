@@ -400,7 +400,7 @@ tenacity==8.2.3
     #   langchain
     #   langchain-community
     #   langchain-core
-tiktoken==0.5.2
+tiktoken==0.7.0
     # via
     #   -r requirements/requirements.in
     #   langchain-openai
