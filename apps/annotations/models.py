@@ -83,7 +83,8 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     tags = TaggableManager(through=CustomTaggedItem)
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
-        for tag in tags:
+        tag_objs = Tag.objects.filter(team=team, name__in=tags)
+        for tag in tag_objs:
             self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     @property

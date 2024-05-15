@@ -10,10 +10,10 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import SearchVector
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
+from django.db.models import Case, Count, IntegerField, Q, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -92,7 +92,13 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         query_set = Experiment.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+            search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
+            search_query = SearchQuery(search)
+            query_set = (
+                query_set.annotate(document=search_vector, rank=SearchRank(search_vector, search_query))
+                .filter(Q(document=search_query) | Q(owner__username__icontains=search))
+                .order_by("-rank")
+            )
         return query_set
 
 
