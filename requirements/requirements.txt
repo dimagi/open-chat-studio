@@ -409,7 +409,7 @@ tokenizers==0.15.0
     #   transformers
 tomlkit==0.11.8
     # via taskbadger
-tqdm==4.66.1
+tqdm==4.66.3
     # via
     #   huggingface-hub
     #   openai
