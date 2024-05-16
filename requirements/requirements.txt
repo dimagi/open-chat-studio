@@ -4,7 +4,7 @@
 #
 #    inv requirements
 #
-aiohttp==3.9.4
+aiohttp==3.9.5
     # via
     #   aiohttp-retry
     #   langchain
