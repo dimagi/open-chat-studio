@@ -224,24 +224,23 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store = None
     if vector_store_id:
         try:
-            vector_store = client.beta.vector_stores.retrieve(vector_store_id)
+            client.beta.vector_stores.retrieve(vector_store_id)
         except openai.NotFoundError:
-            pass
+            vector_store_id = None
 
-    if not vector_store and assistant.assistant_id:
+    if not vector_store_id and assistant.assistant_id:
         # check if there is a vector store attached to this assistant that we don't know about
         openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
         try:
-            vector_store = openai_assistant.tool_resources.file_search.vector_store_ids[0]
+            vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
         except AttributeError:
             pass
 
-    if vector_store:
-        _sync_vector_store_files_to_openai(client, vector_store.id, file_ids)
-        return vector_store.id
+    if vector_store_id:
+        _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
+        return vector_store_id
 
     vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
     return vector_store.id
