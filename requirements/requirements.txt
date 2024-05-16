@@ -86,7 +86,7 @@ colorama==0.4.6
     # via typer
 cron-descriptor==1.4.0
     # via django-celery-beat
-cryptography==41.0.5
+cryptography==42.0.4
     # via
     #   django-anymail
     #   django-cryptography
