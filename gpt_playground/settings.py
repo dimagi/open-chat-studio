@@ -459,6 +459,7 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
         },
+        "httpx": {"handlers": ["console"], "level": "WARN"},
     },
 }
 
