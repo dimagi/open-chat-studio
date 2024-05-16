@@ -49,14 +49,14 @@ class TestSureAdhere:
         sureadhere_channel,
     ):
         _get_llm_response.return_value = "Hi"
-        handle_sureadhere_message(experiment_id=sureadhere_channel.experiment.public_id, message_data=incoming_message)
+        handle_sureadhere_message(channel_external_id=sureadhere_channel.external_id, message_data=incoming_message)
         send_text_message.assert_called()
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [sureadhere_messages.outbound_message()])
     @patch("apps.channels.tasks.handle_sureadhere_message")
     def test_outbound_message_ignored(self, handle_sureadhere_message_task, message, client):
-        url = reverse("channels:new_sureadhere_message", kwargs={"experiment_id": str(uuid4())})
+        url = reverse("channels:new_sureadhere_message", kwargs={"channel_external_id": str(uuid4())})
         response = client.post(url, data=message, content_type="application/json")
         assert response.status_code == 200
         handle_sureadhere_message_task.assert_not_called()

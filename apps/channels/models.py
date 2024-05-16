@@ -168,7 +168,7 @@ class ExperimentChannel(BaseModel):
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
         elif provider_type == MessagingProviderType.sureadhere:
-            uri = reverse("channels:new_sureadhere_message", kwargs={"experiment_id": self.experiment.public_id})
+            uri = reverse("channels:new_sureadhere_message", kwargs={"channel_external_id": self.external_id})
         return absolute_url(
             uri,
             is_secure=True,

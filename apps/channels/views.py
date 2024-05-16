@@ -35,9 +35,10 @@ def new_twilio_message(request):
 
 
 @csrf_exempt
-def new_sureadhere_message(request, experiment_id: uuid):
+@require_POST
+def new_sureadhere_message(request, channel_external_id: uuid):
     message_data = json.loads(request.body)
-    tasks.handle_sureadhere_message.delay(experiment_id=experiment_id, message_data=message_data)
+    tasks.handle_sureadhere_message.delay(channel_external_id=channel_external_id, message_data=message_data)
     return HttpResponse()
 
 

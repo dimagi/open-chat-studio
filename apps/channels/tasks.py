@@ -62,15 +62,15 @@ def handle_twilio_message(self, message_data: str):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def handle_sureadhere_message(self, experiment_id: uuid, message_data: dict):
+def handle_sureadhere_message(self, channel_external_id: uuid, message_data: dict):
     message = SureAdhereMessage.parse(message_data)
     experiment_channel = ExperimentChannel.objects.filter(
-        experiment__public_id=experiment_id,
+        external_id=channel_external_id,
         platform=ChannelPlatform.SUREADHERE,
         messaging_provider__type=MessagingProviderType.sureadhere,
     ).first()
     if not experiment_channel:
-        logger.info(f"No experiment channel found for experiment_id: {experiment_id}")
+        logger.info(f"No experiment channel found for external_id: {channel_external_id}")
         return
     channel = SureAdhereChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)

@@ -61,6 +61,10 @@ class WebhookUrlFormBase(ExtraFormBase):
             # We only show the webhook URL field when there is something to show
             self.fields["webook_url"].widget = forms.HiddenInput()
 
+    def get_success_message(self, channel: ExperimentChannel):
+        """The message to be displayed when the channel is successfully linked"""
+        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
 
 class TelegramChannelForm(ExtraFormBase):
     bot_token = forms.CharField(label="Bot Token", max_length=100)
@@ -69,22 +73,10 @@ class TelegramChannelForm(ExtraFormBase):
 class WhatsappChannelForm(WebhookUrlFormBase):
     number = forms.CharField(label="Number", max_length=100)
 
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
-
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
     client_id = forms.CharField(label="Client ID", max_length=100)
 
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
-
 
 class FacebookChannelForm(WebhookUrlFormBase):
     page_id = forms.CharField(label="Page ID", max_length=100)
-
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"

@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
@@ -157,7 +158,7 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     client_id = forms.CharField(label=_("Client ID"))
     client_secret = forms.CharField(label=_("Client Secret"))
-    base_url = forms.CharField(label=_("Base URL"))
+    base_url = forms.URLField(label=_("Base URL"), validators=[URLValidator(schemes=["https"])])
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
