@@ -28,6 +28,7 @@ whitenoise[brotli]
 langchain
 langchain-openai
 langchain-anthropic
+langgraph
 Markdown
 # unstructured  # langchain loaders
 # chromadb  # langchain queries
