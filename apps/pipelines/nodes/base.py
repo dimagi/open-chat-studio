@@ -1,5 +1,8 @@
 from abc import ABC
+from collections.abc import Callable, Sequence
+from typing import Annotated, Any, TypedDict
 
+from langchain_core.messages import BaseMessage
 from langchain_core.runnables import (
     Runnable,
 )
@@ -8,6 +11,15 @@ from pydantic_core import ValidationError
 
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
+
+
+def add_messages(left: list, right: list):
+    # Could probably log here
+    return left + right
+
+
+class PipelineState(TypedDict):
+    messages: Annotated[Sequence[Any], add_messages]
 
 
 class PipelineNode(BaseModel, ABC):
@@ -39,13 +51,27 @@ class PipelineNode(BaseModel, ABC):
         arbitrary_types_allowed = True
 
     @classmethod
-    def build(cls, node: Node) -> Runnable:
+    def build(cls, node: Node) -> Callable[[dict], dict]:
         try:
             built_node = cls(**node.params)
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
 
         return built_node.get_runnable(node)
+
+    @classmethod
+    def get_callable(cls, node: Node) -> Callable:
+        built_node = cls.build(node)
+
+        def fn(state: PipelineState) -> PipelineState:
+            # Log the message...
+            output = built_node.invoke(state["messages"][-1])
+            if isinstance(output, BaseMessage):
+                return PipelineState(messages=[output.content])
+
+            return PipelineState(messages=[output])
+
+        return fn
 
     def get_runnable(self, node: Node) -> Runnable:
         """Get a predefined runnable to be used in the pipeline"""

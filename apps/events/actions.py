@@ -110,4 +110,4 @@ class PipelineStartAction(EventActionHandlerBase):
         except Pipeline.DoesNotExist:
             raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
         last_message = session.chat.messages.last()
-        return str(pipeline.invoke(last_message.content))
+        return str(pipeline.invoke({"outputs": [last_message.content]})["outputs"][-1])
