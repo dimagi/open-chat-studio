@@ -123,7 +123,13 @@ class AssistantStep(core.BaseStep[Any, str]):
             raise StepError("Unable to create file for assistant.", e)
 
         thread = self.client.beta.threads.create(
-            messages=[{"role": "user", "content": params.prompt, "file_ids": [openai_file.id]}]
+            messages=[
+                {
+                    "role": "user",
+                    "content": params.prompt,
+                    "attachments": [{"file_id": openai_file.id, "tools": [{"type": "code_interpreter"}]}],
+                }
+            ]
         )
         self.log.info(f"Assistant Thread created ({thread.id})")
 
