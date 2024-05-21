@@ -342,7 +342,7 @@ regex==2023.12.25
     # via
     #   tiktoken
     #   transformers
-requests==2.31.0
+requests==2.32.0
     # via
     #   django-allauth
     #   django-anymail
