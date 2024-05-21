@@ -60,7 +60,7 @@ class LLMResponse(PipelineNode):
         try:
             provider = LlmProvider.objects.get(id=self.llm_provider_id)
         except LlmProvider.DoesNotExist:
-            raise PipelineNodeBuildError("LLM provider with id {provider_id} does not exist")
+            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
 
         service = provider.get_llm_service()
         return service.get_chat_model(self.llm_model, self.llm_temperature)
