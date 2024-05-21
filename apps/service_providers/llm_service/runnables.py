@@ -284,6 +284,7 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         file_resources = {}
         attachments = []
 
+        # TODO: Optimize
         for resource in self.experiment.assistant.tool_resources.all():
             for file in resource.files.all():
                 if file.external_id in file_resources:
