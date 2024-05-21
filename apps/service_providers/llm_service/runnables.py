@@ -280,6 +280,24 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         if thread_id:
             input_dict["thread_id"] = thread_id
 
+        # Set attachments
+        file_resources = {}
+        attachments = []
+
+        for resource in self.experiment.assistant.tool_resources.all():
+            for file in resource.files.all():
+                if file.external_id in file_resources:
+                    file_resources[file.external_id].append(resource)
+                else:
+                    file_resources[file.external_id] = [resource.tool_type]
+
+        for file_id, resources in file_resources.items():
+            tools = [{"type": resource} for resource in resources]
+            attachment = {"file_id": file_id, "tools": tools}
+            attachments.append(attachment)
+
+        input_dict["attachments"] = attachments
+
         response = self._get_response_with_retries(config, input_dict, thread_id)
         if not thread_id:
             self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
