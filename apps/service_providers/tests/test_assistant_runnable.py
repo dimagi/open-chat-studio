@@ -33,6 +33,7 @@ def session():
     return session
 
 
+@pytest.mark.django_db()
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -54,6 +55,7 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@pytest.mark.django_db()
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
@@ -78,6 +80,7 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
     assert result.output == "ai response"
 
 
+@pytest.mark.django_db()
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -101,6 +104,7 @@ def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, l
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
 
 
+@pytest.mark.django_db()
 def test_assistant_runnable_raises_error(session):
     experiment = session.experiment
 
@@ -111,6 +115,7 @@ def test_assistant_runnable_raises_error(session):
             assistant.invoke("test")
 
 
+@pytest.mark.django_db()
 def test_assistant_runnable_handles_cancellation_status(session):
     experiment = session.experiment
 
@@ -121,6 +126,7 @@ def test_assistant_runnable_handles_cancellation_status(session):
             assistant.invoke("test")
 
 
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("responses", "exception", "output"),
     [
