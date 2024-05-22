@@ -19,6 +19,7 @@ celery-progress
 celery
 celery[redis]
 httpx
+loguru
 openai
 pandas
 sentry-sdk
