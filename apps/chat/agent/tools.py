@@ -9,6 +9,7 @@ from langchain.tools.base import BaseTool
 from apps.chat.agent import schemas
 from apps.events.models import ScheduledMessage
 from apps.experiments.models import ExperimentSession
+from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
 
@@ -109,8 +110,7 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         message.extra_data["preferred_schedule"] = {"weekday": weekday_int, "hour": hour, "minute": minute}
         message.save()
 
-        new_date = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
-        return f"The new datetime is {new_date}"
+        return f"The new datetime is {pretty_date(message.next_trigger_date)}"
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):

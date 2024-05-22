@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -23,3 +23,8 @@ def seconds_to_human(value):
 def timedelta_to_relative_delta(timedelta: timedelta):
     """Converts a `timedelta` instance to a `relativedelta` instance"""
     return relativedelta(seconds=timedelta.total_seconds())
+
+
+def pretty_date(date: datetime) -> str:
+    """Returns the date like this: 'Monday, 1 January 2024 08:00:00 UTC'"""
+    return date.strftime("%A, %d %B %Y %H:%M:%S %Z")

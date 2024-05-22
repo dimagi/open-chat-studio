@@ -41,4 +41,4 @@ class ScheduledMessageSchema(BaseModel):
     weekday: WeekdaysEnum = Field(description="The day of the week")
     hour: int = Field(description="The hour of the day")
     minute: int = Field(description="The minute of the hour")
-    user_specified_custom_date: bool = Field(description="This will be true if the user specifies a datetime")
+    user_specified_custom_date: bool = Field(description="True if the user specifies a date")
