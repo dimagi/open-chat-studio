@@ -4,6 +4,7 @@ from langchain.memory.summary import SummarizerMixin
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.nodes.base import PipelineState
 from apps.utils.django_db import MakeInterval
 
 
@@ -109,5 +110,5 @@ class PipelineStartAction(EventActionHandlerBase):
             raise ValueError("The action is missing the pipeline id")
         except Pipeline.DoesNotExist:
             raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
-        last_message = session.chat.messages.last()
-        return str(pipeline.invoke({"outputs": [last_message.content]})["outputs"][-1])
+        last_message = session.chat.messages.last().content
+        return pipeline.invoke(PipelineState(messages=[last_message]))
