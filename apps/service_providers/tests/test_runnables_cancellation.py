@@ -30,11 +30,13 @@ def session(fake_llm):
     return session
 
 
+@pytest.mark.django_db()
 def test_simple_runnable_cancellation(session, fake_llm):
     runnable = _get_assistant_mocked_history_recording(session, SimpleExperimentRunnable)
     _test_runnable(runnable, session, "This is")
 
 
+@pytest.mark.django_db()
 def test_agent_runnable_cancellation(session, fake_llm):
     runnable = _get_assistant_mocked_history_recording(session, AgentExperimentRunnable)
 

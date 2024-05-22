@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.load import dumpd
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
+from langsmith import traceable
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
 
@@ -113,6 +114,7 @@ class OpenAILlmService(LlmService):
     def get_assistant(self, assistant_id: str, as_agent=False):
         return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
+    @traceable
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
         model = ChatOpenAI(
             model=llm_model,
