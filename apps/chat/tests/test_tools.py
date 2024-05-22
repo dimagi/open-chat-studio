@@ -26,7 +26,7 @@ from apps.utils.time import pretty_date
 def test_move_datetime_to_new_weekday_and_time(
     initial_datetime_str, new_weekday, new_hour, new_minute, expected_new_datetime_str
 ):
-    """Test weekday and time changes. A weekday change will cause the datetime to jump to a different week"""
+    """Test weekday and time changes. A weekday change will not cause the datetime to jump to a different week"""
     initial_datetime = datetime.strptime(initial_datetime_str, "%Y-%m-%d %H:%M:%S")
     initial_datetime = initial_datetime.astimezone(pytz.UTC)
     new_datetime = _move_datetime_to_new_weekday_and_time(
