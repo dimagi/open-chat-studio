@@ -93,6 +93,20 @@ class TwilioMessage(BaseModel):
         )
 
 
+class SureAdhereMessage(BaseModel):
+    """
+    A wrapper class for user messages coming from the sureadhere
+    """
+
+    chat_id: int
+    message_text: str | None
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+
+    @staticmethod
+    def parse(message_data: dict) -> "SureAdhereMessage":
+        return SureAdhereMessage(chat_id=message_data["patient_id"], message_text=message_data["message_text"])
+
+
 class TurnWhatsappMessage(BaseModel):
     from_number: str
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel

@@ -14,3 +14,12 @@ def twilio_provider(db):
 @pytest.fixture()
 def turn_io_provider():
     return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
+
+
+@pytest.fixture()
+def sureadhere_provider():
+    return MessagingProviderFactory(
+        name="sureadhere",
+        type=MessagingProviderType.sureadhere,
+        config={"client_id": "123", "client_secret": "456", "base_url": "https://example.com"},
+    )

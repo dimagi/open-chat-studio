@@ -172,6 +172,8 @@ class ChannelBase:
             PlatformMessageHandlerClass = FacebookMessengerChannel
         elif platform == "api":
             PlatformMessageHandlerClass = ApiChannel
+        elif platform == "sureadhere":
+            PlatformMessageHandlerClass = SureAdhereChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return PlatformMessageHandlerClass(
@@ -585,6 +587,30 @@ class WhatsappChannel(ChannelBase):
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
+
+
+class SureAdhereChannel(ChannelBase):
+    def initialize(self):
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
+    def send_text_to_user(self, text: str):
+        to_patient = self.chat_id
+        self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
+
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
+
+    @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
+
+    @property
+    def message_content_type(self):
+        return self.message.content_type
+
+    @property
+    def message_text(self):
+        return self.message.message_text
 
 
 class FacebookMessengerChannel(ChannelBase):
