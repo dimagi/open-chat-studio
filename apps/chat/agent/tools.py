@@ -1,12 +1,13 @@
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
+from apps.events.models import ScheduledMessage
 from apps.experiments.models import ExperimentSession
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
@@ -23,7 +24,7 @@ class CustomBaseTool(BaseTool):
         try:
             return self.action(*args, **kwargs)
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
@@ -82,23 +83,40 @@ class OneOffReminderTool(CustomBaseTool):
         return "Success"
 
 
-class ScheduledMessageTool(CustomBaseTool):
+class UpdateScheduledMessageTool(CustomBaseTool):
     name = "schedule-update-tool"
-    description = "useful to update the schedule of a scheduled message. Use only to update schedules"
+    description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
     def action(
         self,
         name: str,
-        weekday: str,
+        weekday: schemas.WeekdaysEnum,
+        hour: int,
+        minute: int,
+        user_specified_custom_date: bool,
     ):
-        from apps.events.models import ScheduledMessage
-
-        _message = ScheduledMessage.objects.get(
+        if user_specified_custom_date:
+            return "The user cannot do that. Only weekdays and time of day can be changed"
+        message = ScheduledMessage.objects.get(
             participant=self.experiment_session.participant, action__params__name=name
         )
-        return "Success"
+        weekday_int = weekday.value - 1
+        message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
+            message.next_trigger_date, weekday_int, hour, minute
+        )
+        message.extra_data["preferred_schedule"] = {"weekday": weekday_int, "hour": hour, "minute": minute}
+        message.save()
+
+        new_date = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+        return f"The new datetime is {new_date}"
+
+
+def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
+    current_weekday = date.weekday()
+    day_diff = new_weekday - current_weekday
+    return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
 
 def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
@@ -122,5 +140,5 @@ def get_tools(experiment_session) -> list[BaseTool]:
     return [
         RecurringReminderTool(experiment_session=experiment_session),
         OneOffReminderTool(experiment_session=experiment_session),
-        ScheduledMessageTool(experiment_session=experiment_session),
+        UpdateScheduledMessageTool(experiment_session=experiment_session),
     ]
