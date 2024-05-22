@@ -103,6 +103,7 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         message = ScheduledMessage.objects.get(
             participant=self.experiment_session.participant, action__params__name=name
         )
+        # the datetime object regard Monday as day 0 whereas the llm regards it as day 1
         weekday_int = weekday.value - 1
         message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
             message.next_trigger_date, weekday_int, hour, minute
