@@ -75,6 +75,7 @@ class ScheduleTriggerAction(EventActionHandlerBase):
                 new_delta=MakeInterval(action.params["time_period"], action.params["frequency"]),
             )
             .filter(is_complete=False)
+            .exclude(extra_data__has_key="preferred_schedule")
             .update(
                 next_trigger_date=Case(
                     When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),
