@@ -17,9 +17,9 @@ class Pipeline(BaseTeamModel):
         return self.name
 
     def invoke(self, input):
-        from apps.pipelines.utils import build_runnable
+        from apps.pipelines.graph import PipelineGraph
 
-        runnable = build_runnable(self)
+        runnable = PipelineGraph.build_runnable_from_json(self.data)
         return runnable.invoke(input, config=RunnableConfig(callbacks=[PipelineLoggingCallbackHandler(self)]))
 
 
