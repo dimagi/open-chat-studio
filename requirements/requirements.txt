@@ -415,8 +415,6 @@ tokenizers==0.15.0
     #   transformers
 tomlkit==0.11.8
     # via taskbadger
-toposort==1.10
-    # via -r requirements/requirements.in
 tqdm==4.66.3
     # via
     #   huggingface-hub
