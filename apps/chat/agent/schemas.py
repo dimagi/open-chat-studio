@@ -4,6 +4,16 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+class WeekdaysEnum(int, Enum):
+    MONDAY = 1
+    TUESDAY = 2
+    WEDNESDAY = 3
+    THURSDAY = 4
+    FRIDAY = 5
+    SATERDAY = 6
+    SUNDAY = 7
+
+
 class PeriodEnum(str, Enum):
     SECOND = "seconds"
     MINUTE = "minutes"
@@ -28,4 +38,7 @@ class OneOffReminderSchema(BaseModel):
 
 class ScheduledMessageSchema(BaseModel):
     name: str = Field(description="the name of the scheduled message")
-    weekday: str = Field(description="The day of the week")
+    weekday: WeekdaysEnum = Field(description="The day of the week")
+    hour: int = Field(description="The hour of the day")
+    minute: int = Field(description="The minute of the hour")
+    user_specified_custom_date: bool = Field(description="This will be true if the user specifies a datetime")
