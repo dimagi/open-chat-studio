@@ -21,6 +21,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -678,7 +679,7 @@ class ExperimentSession(BaseTeamModel):
             if time_period not in ["hour", "day"]:
                 weekday = message.next_trigger_date.strftime("%A")
                 schedule = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
-            next_trigger = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+            next_trigger = pretty_date(message.next_trigger_date)
             schedule = f"{schedule} (next trigger is {next_trigger})"
             scheduled_messages_str = schedule if not scheduled_messages_str else f"{scheduled_messages_str},{schedule}"
         return scheduled_messages_str

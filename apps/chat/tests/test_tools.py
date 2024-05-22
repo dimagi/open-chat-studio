@@ -9,6 +9,7 @@ from apps.chat.agent.tools import UpdateScheduledMessageTool, _move_datetime_to_
 from apps.events.models import ScheduledMessage
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.time import pretty_date
 
 
 @pytest.mark.parametrize(
@@ -43,7 +44,7 @@ def test_update_schedule_tool():
             participant=session.participant, team=session.team, action=EventActionFactory(params=params)
         )
 
-        expected_date = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+        expected_date = pretty_date(message.next_trigger_date)
         assert expected_date == "Tuesday, 02 January 2024 00:00:00 UTC"
 
         tool = UpdateScheduledMessageTool(experiment_session=session)
@@ -51,7 +52,7 @@ def test_update_schedule_tool():
             name="A test schedule", weekday=WeekdaysEnum.FRIDAY, hour=8, minute=0, user_specified_custom_date=False
         )
         message.refresh_from_db()
-        expected_date = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+        expected_date = pretty_date(message.next_trigger_date)
         assert expected_date == "Friday, 05 January 2024 08:00:00 UTC"
         assert response == f"The new datetime is {expected_date}"
 
