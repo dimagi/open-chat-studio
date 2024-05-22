@@ -53,7 +53,7 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     if experiment.tools_enabled:
         return AgentExperimentRunnable(experiment=experiment, session=session)
-    if experiment.files.all():
+    if experiment.files.exists():
         return RagExperimentRunnable(experiment=experiment, session=session)
     return SimpleExperimentRunnable(experiment=experiment, session=session)
 
