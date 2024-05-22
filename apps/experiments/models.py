@@ -674,17 +674,19 @@ class ExperimentSession(BaseTeamModel):
             frequency = schedule_info["frequency"]
             time_period = schedule_info["time_period"]
             repetitions = schedule_info["repetitions"]
-            description = f"{name}: Every {frequency} {time_period}, {repetitions} times"
+            schedule = f"{name}: Every {frequency} {time_period}, {repetitions} times"
             if time_period not in ["hour", "day"]:
                 weekday = message.next_trigger_date.strftime("%A")
-                description = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
-            scheduled_messages_str = f"{scheduled_messages_str},{description}"
+                schedule = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
+            next_trigger = message.next_trigger_date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+            schedule = f"{schedule} (next trigger is {next_trigger})"
+            scheduled_messages_str = schedule if not scheduled_messages_str else f"{scheduled_messages_str},{schedule}"
         return scheduled_messages_str
 
     def get_participant_data(self):
         scheduled_messages_str = self.get_participant_scheduled_messages()
         participant_data = self.experiment.get_participant_data(self.participant)
-        return f"{participant_data}. Scheduled messages: {scheduled_messages_str}"
+        return f"{participant_data}. Scheduled messages:\n{scheduled_messages_str}"
 
     def get_participant_data_json(self):
         data = self.experiment.get_participant_data(self.participant) or {}
