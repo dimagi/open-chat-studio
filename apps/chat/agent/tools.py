@@ -44,7 +44,6 @@ class RecurringReminderTool(CustomBaseTool):
 
     def action(
         self,
-        name: str,
         datetime_due: datetime,
         datetime_end: datetime,
         every: int,
