@@ -232,7 +232,7 @@ class ScheduledMessage(BaseTeamModel):
     last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
-    preference_data = models.JSONField(blank=True, default=dict)
+    extra_data = models.JSONField(blank=True, default=dict)
 
     class Meta:
         indexes = [models.Index(fields=["is_complete"])]
