@@ -7,6 +7,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
     Runnable,
     RunnableLambda,
+    RunnablePassthrough,
 )
 from langchain_core.runnables.utils import Input
 
@@ -76,3 +77,8 @@ class SendEmail(PipelineNode):
             return input
 
         return RunnableLambda(fn, name=self.__class__.__name__)
+
+
+class Passthrough(PipelineNode):
+    def get_runnable(self, node: Node) -> RunnablePassthrough:
+        return RunnablePassthrough()
