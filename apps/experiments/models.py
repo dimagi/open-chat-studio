@@ -288,6 +288,20 @@ class VoiceResponseBehaviours(models.TextChoices):
     NEVER = "never", gettext("Never")
 
 
+class AgentTools(models.TextChoices):
+    RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
+    ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
+    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+
+
+class AgentToolResource(BaseModel):
+    experiment = models.ForeignKey("experiments.Experiment", on_delete=models.CASCADE, related_name="tool_resources")
+    tool_name = models.CharField(choices=AgentTools.choices)
+
+    def __str__(self):
+        return f"Tool Resources for {self.experiment.name}: {self.agent_tool.name}"
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
