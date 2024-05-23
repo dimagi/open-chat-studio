@@ -52,3 +52,40 @@
   --danger: #f87272;
   --success: #36d399;
 }
+
+.ts-wrapper {
+  @apply w-full !ml-0;
+}
+
+.ts-control {
+  @apply
+    rounded-lg
+    bg-white
+    py-2
+    px-3;
+
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+}
+
+.ts-dropdown {
+  @apply rounded-md border border-solid border-t border-gray-300;
+}
+
+.ts-dropdown [data-selectable].option:first-child {
+  @apply rounded-t-lg;
+}
+
+.ts-dropdown [data-selectable].option:last-child {
+  @apply rounded-b-lg;
+}
+
+.ts-dropdown .create:hover, .ts-dropdown .option:hover{
+  @apply bg-sky-50 text-sky-900;
+}
+
+.ts-dropdown .active {
+  @apply bg-gray-100 text-gray-900;
+}
