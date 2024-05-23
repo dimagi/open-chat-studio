@@ -69,7 +69,7 @@ def test_user_cannot_set_custom_date():
 
 @pytest.mark.django_db()
 def test_tool_map():
-    """A simple test to check that all tools in `AgentTools` have an assiciated tool class that can be instantiated"""
+    """A simple test to check that all tools in `AgentTools` have an associated tool class that can be instantiated"""
     session = ExperimentSessionFactory()
     session.experiment.set_tools(AgentTools.values)
     get_tools(session)

@@ -299,7 +299,7 @@ class AgentToolResource(BaseModel):
     tool_name = models.CharField(choices=AgentTools.choices)
 
     def __str__(self):
-        return f"Tool Resources for {self.experiment.name}: {self.agent_tool.name}"
+        return f"Tool Resources for {self.experiment.name}: {self.tool_name}"
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)

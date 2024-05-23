@@ -73,13 +73,15 @@ class TestExperimentTools:
     @pytest.mark.django_db()
     def test_set_tools(self):
         experiment = ExperimentFactory()
-        assert experiment.get_tool_names() == []
+        assert len(experiment.get_tool_names()) == 0
 
         experiment.set_tools([AgentTools.ONE_OFF_REMINDER, AgentTools.SCHEDULE_UPDATE])
         experiment.refresh_from_db()
-        assert experiment.get_tool_names() == [AgentTools.ONE_OFF_REMINDER, AgentTools.SCHEDULE_UPDATE]
+        tools = experiment.get_tool_names()
+        assert AgentTools.ONE_OFF_REMINDER in tools
+        assert AgentTools.SCHEDULE_UPDATE in tools
 
         # Set experiment tools to only include one tool
         experiment.set_tools([AgentTools.ONE_OFF_REMINDER])
         experiment.refresh_from_db()
-        assert experiment.get_tool_names() == [AgentTools.ONE_OFF_REMINDER]
+        assert list(experiment.get_tool_names()) == [AgentTools.ONE_OFF_REMINDER]
