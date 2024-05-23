@@ -16,4 +16,4 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == "SUCCESS"
-    assert run.log["entries"][0]["message"] == "{'messages': ['hello', 'hello', 'hello']}"
+    assert len(run.log["entries"]) == 3

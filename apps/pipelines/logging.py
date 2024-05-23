@@ -15,10 +15,14 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
 
     def on_chain_start(self, serialized, inputs, *args, **kwargs):
         self.depth += 1
+        self.logger.info("chain starting")
+        # apps.pipelines.models.PipelineRun.DoesNotExist: PipelineRun matching query does not exist.
         super().on_chain_start(serialized, inputs, *args, **kwargs)
 
     def on_chain_end(self, outputs, **kwargs):
         self.depth -= 1
+        self.logger.info(outputs)
+        # apps.pipelines.models.PipelineRun.DoesNotExist: PipelineRun matching query does not exist.
         if self.depth == 0:
             self.logger.info(outputs)
 
