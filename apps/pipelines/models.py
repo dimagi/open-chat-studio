@@ -1,3 +1,7 @@
+from datetime import datetime
+
+import pydantic
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from langchain_core.runnables import RunnableConfig
 
@@ -23,7 +27,29 @@ class Pipeline(BaseTeamModel):
         return runnable.invoke(input, config=RunnableConfig(callbacks=[PipelineLoggingCallbackHandler(self)]))
 
 
+class PipelineRunStatus(models.TextChoices):
+    RUNNING = "running", "Running"
+    SUCCESS = "success", "Success"
+    ERROR = "error", "Error"
+
+
 class PipelineRun(BaseModel):
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE, related_name="runs")
     status = models.CharField()
-    log = models.TextField(blank=True)
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=128, choices=PipelineRunStatus.choices)
+    error = models.TextField(blank=True)
+    output_summary = models.TextField(blank=True)
+    log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+
+
+class LogEntry(pydantic.BaseModel):
+    time: datetime
+    level: str
+    message: str
+    # file: str
+    # line: int
+
+    class Config:
+        json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")}
