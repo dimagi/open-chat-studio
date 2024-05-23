@@ -52,7 +52,14 @@ from apps.experiments.forms import (
     SurveyCompletedForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
+from apps.experiments.models import (
+    AgentTools,
+    Experiment,
+    ExperimentSession,
+    Participant,
+    SessionStatus,
+    SyntheticVoice,
+)
 from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
@@ -267,6 +274,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "button_text": self.button_title,
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
+                "available_tools": AgentTools.values,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -329,6 +337,8 @@ class CreateExperiment(BaseExperimentView, CreateView):
         if file_formset:
             files = file_formset.save(self.request)
             self.object.files.set(files)
+
+        self.object.set_tools(tool_names=self.request.POST.getlist("tools[]", []))
         return HttpResponseRedirect(self.get_success_url())
 
     def form_invalid(self, form, file_formset):
@@ -344,6 +354,12 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial = super().get_initial()
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        tool_names = self.request.POST.getlist("tools[]", [])
+        self.object.set_tools(tool_names=tool_names)
+        return response
 
 
 def _get_voice_provider_alpine_context(request):

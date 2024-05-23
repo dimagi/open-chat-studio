@@ -71,6 +71,12 @@
           {% endif %}
         {% endflag %}
       </div>
+
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools">
+      <div role="tabpanel" class="tab-content">
+        {% include "experiments/components/add_tools.html" %}
+      </div>
+
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "no_activity_config" %}

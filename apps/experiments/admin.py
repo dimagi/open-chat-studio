@@ -132,3 +132,8 @@ class NoActivityMessageConfigAdmin(admin.ModelAdmin):
         "max_pings",
     )
     list_filter = ("team",)
+
+
+@admin.register(models.AgentToolResource)
+class ToolResourceAdmin(admin.ModelAdmin):
+    pass

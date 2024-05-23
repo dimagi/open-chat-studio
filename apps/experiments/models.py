@@ -7,7 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
@@ -452,6 +452,23 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+    def get_tool_names(self):
+        return list(self.tool_resources.all().values_list("tool_name", flat=True))
+
+    @transaction.atomic()
+    def set_tools(self, tool_names: list):
+        """Sets the experiment's tools to those specified by `tool_names`. If `tool_names` is a subset of the
+        experiment's current tools, then the difference between these two lists will be deleted.
+        """
+        incoming_tool_set = set(tool_names)
+        existing_tool_set = set(self.tool_resources.all().values_list("tool_name", flat=True))
+        tools_to_delete = existing_tool_set.difference(incoming_tool_set)
+        tools_to_add = incoming_tool_set.difference(existing_tool_set)
+        for tool in tools_to_add:
+            AgentToolResource.objects.create(experiment=self, tool_name=AgentTools(tool))
+
+        self.tool_resources.filter(tool_name__in=tools_to_delete).delete()
 
 
 class ExperimentRoute(BaseTeamModel):
