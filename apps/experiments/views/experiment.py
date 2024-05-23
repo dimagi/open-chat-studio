@@ -220,6 +220,10 @@ def _validate_prompt_variables(form_data):
     available_variables = set()
     if form_data.get("source_material"):
         available_variables.add("source_material")
+    #  available_variables below should be added as above using
+    #  form_data , but I could not figure out how to od it with form_data.
+    available_variables.add("context")
+    available_variables.add("input")
     missing_vars = required_variables - available_variables
     known_vars = {"source_material"}
     if missing_vars:

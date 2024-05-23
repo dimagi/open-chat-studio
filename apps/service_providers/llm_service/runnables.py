@@ -9,7 +9,6 @@ from typing import Any, Literal
 
 import openai
 import pytz
-from langchain import hub
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
@@ -230,13 +229,12 @@ class RagExperimentRunnable(ExperimentRunnable):
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         embeddings = self.experiment.get_llm_service().get_openai_embeddings()
         retriever = PGVector(self.experiment, embeddings).as_retriever()
-        prompt = hub.pull("rlm/rag-prompt")
         return (
-            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            {"context": retriever | format_docs, "input": RunnablePassthrough()}
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
-            | prompt
+            | self.prompt
             | model
             | StrOutputParser()
         )
