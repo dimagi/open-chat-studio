@@ -2,16 +2,23 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
+from importlib import import_module
 
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
 from apps.events.models import ScheduledMessage
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import AgentTools, ExperimentSession
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
+
+TOOL_CLASS_MAP = {
+    AgentTools.SCHEDULE_UPDATE: "apps.chat.agent.tools.UpdateScheduledMessageTool",
+    AgentTools.ONE_OFF_REMINDER: "apps.chat.agent.tools.OneOffReminderTool",
+    AgentTools.RECURRING_REMINDER: "apps.chat.agent.tools.RecurringReminderTool",
+}
 
 
 class CustomBaseTool(BaseTool):
@@ -37,7 +44,7 @@ class CustomBaseTool(BaseTool):
 
 
 class RecurringReminderTool(CustomBaseTool):
-    name = "recurring-reminder"
+    name = AgentTools.RECURRING_REMINDER
     description = "useful to schedule recurring reminders"
     requires_session = True
     args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
@@ -63,7 +70,7 @@ class RecurringReminderTool(CustomBaseTool):
 
 
 class OneOffReminderTool(CustomBaseTool):
-    name = "one-off-reminder"
+    name = AgentTools.ONE_OFF_REMINDER
     description = "useful to schedule one-off reminders"
     requires_session = True
     args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
@@ -84,7 +91,7 @@ class OneOffReminderTool(CustomBaseTool):
 
 
 class UpdateScheduledMessageTool(CustomBaseTool):
-    name = "schedule-update-tool"
+    name = AgentTools.SCHEDULE_UPDATE
     description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
@@ -137,8 +144,11 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
 
 
 def get_tools(experiment_session) -> list[BaseTool]:
-    return [
-        RecurringReminderTool(experiment_session=experiment_session),
-        OneOffReminderTool(experiment_session=experiment_session),
-        UpdateScheduledMessageTool(experiment_session=experiment_session),
-    ]
+    tools = []
+    for tool_name in experiment_session.experiment.get_tool_names():
+        tool_path = TOOL_CLASS_MAP[tool_name]
+        module_path, class_name = tool_path.rsplit(".", 1)
+        module = import_module(module_path)
+        tool_class = getattr(module, class_name)
+        tools.append(tool_class(experiment_session=experiment_session))
+    return tools
