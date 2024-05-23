@@ -220,8 +220,8 @@ def _validate_prompt_variables(form_data):
     available_variables = set()
     if form_data.get("source_material"):
         available_variables.add("source_material")
-    #  available_variables below should be added as above using
-    #  form_data , but I could not figure out how to od it with form_data.
+        #  available_variables below should be added by making a
+        #  db request to check if there are  any RAG files uploaded
     available_variables.add("context")
     available_variables.add("input")
     missing_vars = required_variables - available_variables
@@ -365,7 +365,7 @@ class AddFileToExperiment(BaseAddFileHtmxView):
         experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         experiment.files.add(file)
-        store_rag_embedding(experiment)
+        store_rag_embedding(experiment.id)
         return file
 
     def get_delete_url(self, file):

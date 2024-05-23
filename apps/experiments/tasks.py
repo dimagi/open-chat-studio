@@ -5,13 +5,12 @@ from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
-from langchain_openai import OpenAIEmbeddings
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
@@ -28,14 +27,14 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def store_rag_embedding(self, experiment) -> None:
+def store_rag_embedding(self, experiment_id: int) -> None:
+    experiment = Experiment.objects.get(id=experiment_id)
     file_path = experiment.files.all().last().file.path
     splits = load_rag_file(file_path)
-    embeddings_model = OpenAIEmbeddings()
+    embeddings_model = experiment.get_llm_service().get_openai_embeddings()
     PGVector.from_texts(splits, embeddings_model, None, experiment)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
 def load_rag_file(file_path: str) -> list[str]:
     """
     Loads a text file of any supported type (PDF, TXT, HTML) into Langchain.
