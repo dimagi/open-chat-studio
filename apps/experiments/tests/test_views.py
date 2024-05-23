@@ -36,7 +36,7 @@ def test_create_experiment_success(db, client, team_with_users):
         "llm": "gpt-3.5",
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
-        "tools[]": [AgentTools.ONE_OFF_REMINDER],
+        "tools": [AgentTools.ONE_OFF_REMINDER],
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)

@@ -337,7 +337,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
             files = file_formset.save(self.request)
             self.object.files.set(files)
 
-        self.object.set_tools(tool_names=self.request.POST.getlist("tools[]"))
+        self.object.set_tools(tool_names=self.request.POST.getlist("tools"))
         return HttpResponseRedirect(self.get_success_url())
 
     def form_invalid(self, form, file_formset):
@@ -356,7 +356,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        tool_names = self.request.POST.getlist("tools[]")
+        tool_names = self.request.POST.getlist("tools")
         self.object.set_tools(tool_names=tool_names)
         return response
 
