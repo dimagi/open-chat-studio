@@ -154,7 +154,6 @@ class ExperimentForm(forms.ModelForm):
             "prompt_text",
             "input_formatter",
             "safety_layers",
-            "tools_enabled",
             "conversational_consent_enabled",
             "source_material",
             "seed_message",

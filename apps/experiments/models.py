@@ -337,13 +337,6 @@ class Experiment(BaseTeamModel):
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
     )
-    tools_enabled = models.BooleanField(
-        default=False,
-        help_text=(
-            "If checked, this bot will be able to use prebuilt tools (set reminders etc). This uses more tokens, "
-            "so it will cost more. This doesn't currently work with Anthropic models."
-        ),
-    )
 
     source_material = models.ForeignKey(
         SourceMaterial,
@@ -431,6 +424,10 @@ class Experiment(BaseTeamModel):
         return self.name
 
     @property
+    def tools_enabled(self):
+        return self.tool_resources.count() > 0
+
+    @property
     def event_triggers(self):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
@@ -454,7 +451,7 @@ class Experiment(BaseTeamModel):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     def get_tool_names(self):
-        return list(self.tool_resources.all().values_list("tool_name", flat=True))
+        return self.tool_resources.all().values_list("tool_name", flat=True)
 
     @transaction.atomic()
     def set_tools(self, tool_names: list):
