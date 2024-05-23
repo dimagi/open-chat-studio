@@ -26,7 +26,7 @@ def fake_llm():
 def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.tools_enabled = True
+    session.experiment.tools_enabled = lambda *args: True
     return session
 
 
