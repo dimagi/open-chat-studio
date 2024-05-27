@@ -107,7 +107,7 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
             message.next_trigger_date, weekday_int, hour, minute
         )
-        message.extra_data["preferred_schedule"] = {"weekday": weekday_int, "hour": hour, "minute": minute}
+        message.custom_schedule_params = {"weekday": weekday_int, "hour": hour, "minute": minute}
         message.save()
 
         return f"The new datetime is {pretty_date(message.next_trigger_date)}"
@@ -138,7 +138,7 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
 
 def get_tools(experiment_session) -> list[BaseTool]:
     return [
-        RecurringReminderTool(experiment_session=experiment_session),
-        OneOffReminderTool(experiment_session=experiment_session),
+        # RecurringReminderTool(experiment_session=experiment_session),
+        # OneOffReminderTool(experiment_session=experiment_session),
         UpdateScheduledMessageTool(experiment_session=experiment_session),
     ]
