@@ -25,3 +25,4 @@ class ScheduledMessageFactory(factory.django.DjangoModelFactory):
         model = ScheduledMessage
 
     action = factory.SubFactory(EventActionFactory)
+    experiment = factory.SubFactory(ExperimentFactory)
