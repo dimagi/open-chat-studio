@@ -41,7 +41,10 @@ def test_update_schedule_tool():
     with freeze_time("2024-01-01"):
         params = {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "A test schedule"}
         message = ScheduledMessage.objects.create(
-            participant=session.participant, team=session.team, action=EventActionFactory(params=params)
+            participant=session.participant,
+            team=session.team,
+            action=EventActionFactory(params=params),
+            experiment=session.experiment,
         )
 
         expected_date = pretty_date(message.next_trigger_date)

@@ -27,7 +27,7 @@ def test_create_scheduled_message_sets_start_date(send_bot_message, period):
     event_action, params = _construct_event_action(time_period=TimePeriod(period))
     with freeze_time("2024-01-01"):
         message = ScheduledMessage.objects.create(
-            participant=session.participant, team=session.team, action=event_action
+            participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
         )
         delta = relativedelta(**{params["time_period"]: params["frequency"]})
         rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
@@ -190,12 +190,15 @@ def test_schedule_update():
     session2 = ExperimentSessionFactory(team=team, experiment=experiment)
     event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
 
-    message1 = ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=event_action)
+    message1 = ScheduledMessage.objects.create(
+        participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
+    )
     message2 = ScheduledMessage.objects.create(
         participant=session2.participant,
         team=session.team,
         action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=5),
+        experiment=session2.experiment,
     )
     message3 = ScheduledMessage.objects.create(
         participant=session2.participant,
@@ -203,6 +206,7 @@ def test_schedule_update():
         action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=1),
         is_complete=True,
+        experiment=session2.experiment,
     )
     message3_next_trigger_data = message3.next_trigger_date
 
