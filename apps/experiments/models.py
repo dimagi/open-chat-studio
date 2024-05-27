@@ -21,7 +21,6 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
-from apps.utils.time import pretty_date
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -670,18 +669,9 @@ class ExperimentSession(BaseTeamModel):
         messages = ScheduledMessage.objects.filter(participant=self.participant, team=self.team)
         scheduled_messages_str = ""
         for message in messages:
-            schedule_info = message.action.params
-            name = schedule_info["name"]  # TODO: We need to make sure there aren't duplicate schedule names
-            frequency = schedule_info["frequency"]
-            time_period = schedule_info["time_period"]
-            repetitions = schedule_info["repetitions"]
-            schedule = f"{name}: Every {frequency} {time_period}, {repetitions} times"
-            if time_period not in ["hour", "day"]:
-                weekday = message.next_trigger_date.strftime("%A")
-                schedule = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
-            next_trigger = pretty_date(message.next_trigger_date)
-            schedule = f"{schedule} (next trigger is {next_trigger})"
-            scheduled_messages_str = schedule if not scheduled_messages_str else f"{scheduled_messages_str},{schedule}"
+            scheduled_messages_str = (
+                str(message) if not scheduled_messages_str else f"{scheduled_messages_str},{message}"
+            )
         return scheduled_messages_str
 
     def get_participant_data(self):
