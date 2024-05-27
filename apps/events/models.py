@@ -13,6 +13,7 @@ from apps.events import actions
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -265,3 +266,16 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = utc_now + delta
 
         self.save()
+
+    def __str__(self):
+        schedule_info = self.action.params
+        name = schedule_info["name"]  # TODO: We need to make sure there aren't duplicate schedule names
+        frequency = schedule_info["frequency"]
+        time_period = schedule_info["time_period"]
+        repetitions = schedule_info["repetitions"]
+        schedule = f"{name}: Every {frequency} {time_period}, {repetitions} times"
+        if time_period not in ["hour", "day"]:
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule = f"{name}: Every {frequency} {time_period} on {weekday} for {repetitions} times"
+        next_trigger = pretty_date(self.next_trigger_date)
+        return f"{schedule} (next trigger is {next_trigger})"
