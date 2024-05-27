@@ -666,20 +666,18 @@ class ExperimentSession(BaseTeamModel):
     def get_participant_scheduled_messages(self):
         from apps.events.models import ScheduledMessage
 
-        messages = ScheduledMessage.objects.filter(participant=self.participant, team=self.team)
-        scheduled_messages_str = ""
+        messages = ScheduledMessage.objects.filter(participant=self.participant, team=self.team).select_related(
+            "action"
+        )
+        scheduled_messages = []
         for message in messages:
-            scheduled_messages_str = (
-                str(message) if not scheduled_messages_str else f"{scheduled_messages_str},{message}"
-            )
-        return scheduled_messages_str
+            scheduled_messages.append(str(message))
+        return scheduled_messages
 
     def get_participant_data(self):
-        scheduled_messages_str = self.get_participant_scheduled_messages()
-        participant_data = self.experiment.get_participant_data(self.participant)
-        return f"{participant_data}. Scheduled messages:\n{scheduled_messages_str}"
+        participant_data = self.experiment.get_participant_data(self.participant) or {}
+        participant_data = {**participant_data, "scheduled_messages": self.get_participant_scheduled_messages()}
+        return participant_data
 
     def get_participant_data_json(self):
-        data = self.experiment.get_participant_data(self.participant) or {}
-        data["schedules"] = self.get_participant_scheduled_messages()
-        return json.dumps(data, indent=2)
+        return json.dumps(self.get_participant_scheduled_messages(), indent=2)

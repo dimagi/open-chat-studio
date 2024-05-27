@@ -138,7 +138,7 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
 
 def get_tools(experiment_session) -> list[BaseTool]:
     return [
-        # RecurringReminderTool(experiment_session=experiment_session),
-        # OneOffReminderTool(experiment_session=experiment_session),
+        RecurringReminderTool(experiment_session=experiment_session),
+        OneOffReminderTool(experiment_session=experiment_session),
         UpdateScheduledMessageTool(experiment_session=experiment_session),
     ]
