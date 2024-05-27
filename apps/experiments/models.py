@@ -680,4 +680,4 @@ class ExperimentSession(BaseTeamModel):
         return participant_data
 
     def get_participant_data_json(self):
-        return json.dumps(self.get_participant_scheduled_messages(), indent=2)
+        return json.dumps(self.get_participant_data(), indent=2)
