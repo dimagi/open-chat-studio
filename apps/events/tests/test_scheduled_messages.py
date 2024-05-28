@@ -251,12 +251,39 @@ def test_schedule_update():
 
 @pytest.mark.django_db()
 def test_get_participant_scheduled_messages():
-    session = ExperimentSessionFactory()
-    event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
-    ScheduledMessageFactory.create_batch(
-        size=2, experiment=session.experiment, team=session.team, participant=session.participant, action=event_action
-    )
-    assert len(session.get_participant_scheduled_messages()) == 2
+    with freeze_time("2024-01-01"):
+        session = ExperimentSessionFactory()
+        event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
+        ScheduledMessageFactory.create_batch(
+            size=2,
+            experiment=session.experiment,
+            team=session.team,
+            participant=session.participant,
+            action=event_action,
+        )
+        assert len(session.get_participant_scheduled_messages()) == 2
+        expected_str_version = [
+            "Test: Every 1 days on Tuesday for 1 times (next trigger is Tuesday, 02 January 2024 00:00:00 UTC)",
+            "Test: Every 1 days on Tuesday for 1 times (next trigger is Tuesday, 02 January 2024 00:00:00 UTC)",
+        ]
+        expected_dict_version = [
+            {
+                "name": "Test",
+                "frequency": 1,
+                "time_period": "days",
+                "repetitions": 1,
+                "next_trigger_date": "Tuesday, 02 January 2024 00:00:00 UTC",
+            },
+            {
+                "name": "Test",
+                "frequency": 1,
+                "time_period": "days",
+                "repetitions": 1,
+                "next_trigger_date": "Tuesday, 02 January 2024 00:00:00 UTC",
+            },
+        ]
+        assert session.get_participant_scheduled_messages() == expected_str_version
+        assert session.get_participant_scheduled_messages(as_dict=True) == expected_dict_version
 
 
 @pytest.mark.django_db()
