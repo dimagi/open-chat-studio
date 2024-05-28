@@ -664,11 +664,17 @@ class ExperimentSession(BaseTeamModel):
                 raise e
 
     def get_participant_scheduled_messages(self):
+        """Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent"""
         from apps.events.models import ScheduledMessage
 
-        messages = ScheduledMessage.objects.filter(participant=self.participant, team=self.team).select_related(
-            "action"
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
+        messages = ScheduledMessage.objects.filter(
+            Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+            participant=self.participant,
+            team=self.team,
         )
+
         scheduled_messages = []
         for message in messages:
             scheduled_messages.append(str(message))
