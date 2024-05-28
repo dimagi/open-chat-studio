@@ -105,6 +105,10 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
             input[self.input_key] = self.experiment.input_formatter.format(input=input[self.input_key])
         return input
 
+    @property
+    def participant_data(self):
+        return self.experiment.get_participant_data(self.session.participant) or ""
+
 
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
@@ -175,10 +179,6 @@ class ExperimentRunnable(BaseExperimentRunnable):
     @property
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
-
-    @property
-    def participant_data(self):
-        return self.session.get_participant_data() or ""
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
@@ -280,6 +280,12 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
         if thread_id:
             input_dict["thread_id"] = thread_id
+
+        # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
+        # override the instructions if we want to pass in dynamic data.
+        # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
+        new_instructions = self.experiment.assistant.instructions.format(participant_data=self.participant_data)
+        input_dict["instructions"] = new_instructions
 
         response = self._get_response_with_retries(config, input_dict, thread_id)
         if not thread_id:
