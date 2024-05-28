@@ -235,7 +235,7 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
         try:
             vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
-        except AttributeError:
+        except (AttributeError, IndexError):
             pass
 
     if vector_store_id:
