@@ -6,7 +6,7 @@ import pytest
 from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -26,7 +26,7 @@ def fake_llm():
 def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.tools_enabled = lambda *args: True
+    session.experiment.builtin_tools = [AgentTools.SCHEDULE_UPDATE]
     return session
 
 

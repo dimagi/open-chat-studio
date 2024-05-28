@@ -71,5 +71,6 @@ def test_user_cannot_set_custom_date():
 def test_tool_map():
     """A simple test to check that all tools in `AgentTools` have an associated tool class that can be instantiated"""
     session = ExperimentSessionFactory()
+    session.experiment.builtin_tools = AgentTools.values
     session.experiment.set_tools(AgentTools.values)
     get_tools(session)

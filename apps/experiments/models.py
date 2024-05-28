@@ -7,7 +7,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
-from django.db import models, transaction
+from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
@@ -294,14 +294,6 @@ class AgentTools(models.TextChoices):
     SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
 
 
-class AgentToolResource(BaseModel):
-    experiment = models.ForeignKey("experiments.Experiment", on_delete=models.CASCADE, related_name="tool_resources")
-    tool_name = models.CharField(choices=AgentTools.choices)
-
-    def __str__(self):
-        return f"Tool Resources for {self.experiment.name}: {self.tool_name}"
-
-
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -412,6 +404,7 @@ class Experiment(BaseTeamModel):
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
+    builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -425,7 +418,7 @@ class Experiment(BaseTeamModel):
 
     @property
     def tools_enabled(self):
-        return self.tool_resources.count() > 0
+        return len(self.builtin_tools) > 0
 
     @property
     def event_triggers(self):
@@ -451,21 +444,12 @@ class Experiment(BaseTeamModel):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     def get_tool_names(self):
-        return self.tool_resources.all().values_list("tool_name", flat=True)
+        return self.builtin_tools
 
-    @transaction.atomic()
     def set_tools(self, tool_names: list):
-        """Sets the experiment's tools to those specified by `tool_names`. If `tool_names` is a subset of the
-        experiment's current tools, then the difference between these two lists will be deleted.
-        """
-        incoming_tool_set = set(tool_names)
-        existing_tool_set = set(self.tool_resources.all().values_list("tool_name", flat=True))
-        tools_to_delete = existing_tool_set.difference(incoming_tool_set)
-        tools_to_add = incoming_tool_set.difference(existing_tool_set)
-        for tool in tools_to_add:
-            AgentToolResource.objects.create(experiment=self, tool_name=AgentTools(tool))
-
-        self.tool_resources.filter(tool_name__in=tools_to_delete).delete()
+        """Sets the experiment's tools to those specified by `tool_names`"""
+        self.builtin_tools = tool_names
+        self.save()
 
 
 class ExperimentRoute(BaseTeamModel):

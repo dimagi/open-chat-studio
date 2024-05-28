@@ -70,7 +70,6 @@ CONTENT_TYPES = {
         "sourcematerial",
         "survey",
         "syntheticvoice",
-        "agenttoolresource",
     ],
     "files": ["file"],
     "pipelines": ["pipeline"],
