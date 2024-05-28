@@ -98,6 +98,12 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         user_specified_custom_date: bool,
     ):
         if user_specified_custom_date:
+            # When the user specifies a new date, the bot will extract the day of the week that that day falls on
+            # and pass it as a parameter to this method.
+            # Since we only allow users to change the weekday of their schedules, this bahvaiour can lead to a
+            # confusing conversation where the bot updated their schedule to a seemingly random date that
+            # corresponds to the same weekday as the requested day. To resolve this, we simply don't allow users
+            # to specify dates, but only a weekday and the time of day.
             return "The user cannot do that. Only weekdays and time of day can be changed"
         message = ScheduledMessage.objects.get(
             participant=self.experiment_session.participant, action__params__name=name
