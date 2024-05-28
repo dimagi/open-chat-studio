@@ -27,9 +27,11 @@ class Pipeline(BaseTeamModel):
 
         pipeline_run = PipelineRun.objects.create(pipeline=self, status=PipelineRunStatus.RUNNING, log={"entries": []})
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
+        logging_callback.logger.info("Starting pipeline run")
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
         finally:
+            logging_callback.logger.info("Pipeline run finished")
             logging_callback.pipeline_run.save()
         return output
 

@@ -6,8 +6,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
     Runnable,
+    RunnableConfig,
     RunnableLambda,
-    RunnablePassthrough,
 )
 from langchain_core.runnables.utils import Input
 
@@ -80,5 +80,9 @@ class SendEmail(PipelineNode):
 
 
 class Passthrough(PipelineNode):
-    def get_runnable(self, node: Node) -> RunnablePassthrough:
-        return RunnablePassthrough()
+    def get_runnable(self, node: Node) -> RunnableLambda:
+        def fn(input: Input, config: RunnableConfig):
+            self.logger(config).debug(f"Returning input: '{input}' without modification")
+            return input
+
+        return RunnableLambda(fn, name=self.__class__.__name__)

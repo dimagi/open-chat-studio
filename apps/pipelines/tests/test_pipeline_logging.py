@@ -12,12 +12,17 @@ def pipeline():
 
 @pytest.mark.django_db()
 def test_running_pipeline_creates_run(pipeline: Pipeline):
-    pipeline.invoke(PipelineState(messages=["hello"]))
+    input = "foo"
+    pipeline.invoke(PipelineState(messages=[input]))
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
-    assert len(run.log["entries"]) == 4
-    assert run.log["entries"][0]["message"] == "Passthrough starting"
-    assert run.log["entries"][1]["message"] == "Passthrough finished: hello"
-    assert run.log["entries"][2]["message"] == "Passthrough starting"
-    assert run.log["entries"][3]["message"] == "Passthrough finished: hello"
+    assert len(run.log["entries"]) == 8
+    assert run.log["entries"][1]["level"] == "INFO"
+    assert run.log["entries"][1]["message"] == "Passthrough starting"
+    assert run.log["entries"][2]["level"] == "DEBUG"
+    assert run.log["entries"][2]["message"] == f"Returning input: '{input}' without modification"
+    assert run.log["entries"][3]["message"] == f"Passthrough finished: {input}"
+    assert run.log["entries"][4]["message"] == "Passthrough starting"
+    assert run.log["entries"][5]["message"] == f"Returning input: '{input}' without modification"
+    assert run.log["entries"][6]["message"] == f"Passthrough finished: {input}"

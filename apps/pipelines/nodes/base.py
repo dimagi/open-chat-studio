@@ -11,6 +11,7 @@ from pydantic_core import ValidationError
 
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
+from apps.pipelines.logging import PipelineLoggingCallbackHandler
 
 
 def add_messages(left: list, right: list):
@@ -76,3 +77,9 @@ class PipelineNode(BaseModel, ABC):
     def get_runnable(self, node: Node) -> Runnable:
         """Get a predefined runnable to be used in the pipeline"""
         raise NotImplementedError
+
+    def logger(self, config):
+        for handler in config["callbacks"].handlers:
+            if isinstance(handler, PipelineLoggingCallbackHandler):
+                return handler.logger
+        raise AttributeError("No logger found")
