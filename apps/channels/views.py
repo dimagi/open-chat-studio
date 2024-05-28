@@ -28,7 +28,11 @@ def new_telegram_message(request, channel_external_id: uuid):
 @csrf_exempt
 def new_twilio_message(request):
     message_data = json.dumps(request.POST.dict())
-    tasks.handle_twilio_message.delay(message_data)
+    tasks.handle_twilio_message.delay(
+        message_data=message_data,
+        request_url=request.build_absolute_uri(),
+        signature=request.headers.get("X-Twilio-Signature"),
+    )
     return HttpResponse()
 
 
