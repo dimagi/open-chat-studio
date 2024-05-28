@@ -293,6 +293,12 @@ pyjwt[crypto]==2.8.0
     #   django-allauth
     #   pyjwt
     #   twilio
+pymupdf==1.24.4
+    # via pymupdf4llm
+pymupdf4llm==0.0.5
+    # via -r requirements/requirements.in
+pymupdfb==1.24.3
+    # via pymupdf
 pypng==0.20220715.0
     # via qrcode
 pytelegrambotapi==4.12.0
