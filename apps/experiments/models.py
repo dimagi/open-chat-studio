@@ -673,7 +673,7 @@ class ExperimentSession(BaseTeamModel):
             Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
             participant=self.participant,
             team=self.team,
-        )
+        ).select_related("action")
 
         scheduled_messages = []
         for message in messages:
