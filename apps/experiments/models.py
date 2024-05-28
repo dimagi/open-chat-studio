@@ -21,6 +21,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -663,9 +664,14 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_scheduled_messages(self):
-        """Returns all scheduled messages for the associated participant for this session's experiment as well as
-        any child experiments in the case where the experiment is a parent"""
+    def get_participant_scheduled_messages(self, as_dict=False):
+        """
+        Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent
+
+        Parameters:
+        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        """
         from apps.events.models import ScheduledMessage
 
         child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
@@ -677,7 +683,18 @@ class ExperimentSession(BaseTeamModel):
 
         scheduled_messages = []
         for message in messages:
-            scheduled_messages.append(str(message))
+            if as_dict:
+                scheduled_messages.append(
+                    {
+                        "name": message.name,
+                        "frequency": message.frequency,
+                        "time_period": message.time_period,
+                        "repetitions": message.repetitions,
+                        "next_trigger_date": pretty_date(message.next_trigger_date),
+                    }
+                )
+            else:
+                scheduled_messages.append(str(message))
         return scheduled_messages
 
     def get_participant_data(self):
@@ -686,4 +703,9 @@ class ExperimentSession(BaseTeamModel):
         return participant_data
 
     def get_participant_data_json(self):
-        return json.dumps(self.get_participant_data(), indent=2)
+        participant_data = self.experiment.get_participant_data(self.participant) or {}
+        participant_data = {
+            **participant_data,
+            "scheduled_messages": self.get_participant_scheduled_messages(as_dict=True),
+        }
+        return json.dumps(participant_data, indent=2)
