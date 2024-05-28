@@ -9,13 +9,20 @@ from freezegun import freeze_time
 
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
+from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
 def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
-    params = {"time_period": time_period, "frequency": frequency, "repetitions": repetitions, "prompt_text": ""}
+    params = {
+        "name": "Test",
+        "time_period": time_period,
+        "frequency": frequency,
+        "repetitions": repetitions,
+        "prompt_text": "",
+    }
     return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
 
@@ -240,3 +247,28 @@ def test_schedule_update():
     _assert_next_trigger_date(message3, message3_next_trigger_data)
     assert message1.next_trigger_date < message1_prev_trigger_date
     assert message2.next_trigger_date < message2_prev_trigger_date
+
+
+@pytest.mark.django_db()
+def test_get_participant_scheduled_messages():
+    session = ExperimentSessionFactory()
+    event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
+    ScheduledMessageFactory.create_batch(
+        size=2, experiment=session.experiment, team=session.team, participant=session.participant, action=event_action
+    )
+    assert len(session.get_participant_scheduled_messages()) == 2
+
+
+@pytest.mark.django_db()
+def test_get_participant_scheduled_messages_includes_child_experiments():
+    session = ExperimentSessionFactory()
+    team = session.team
+    participant = session.participant
+    session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
+    event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
+    ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
+    ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
+    ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
+
+    assert len(session2.get_participant_scheduled_messages()) == 1
+    assert len(session.get_participant_scheduled_messages()) == 2
