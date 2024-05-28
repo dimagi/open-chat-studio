@@ -5,15 +5,16 @@ import pymupdf4llm
 from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownTextSplitter
+from pymupdf import Document as PyMuPDFDocument
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
+from apps.files.models import File
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
@@ -30,38 +31,32 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def store_rag_embedding(self, experiment_id: int) -> None:
+def store_rag_embedding(self, experiment_id: int, file_id: int) -> None:
     experiment = Experiment.objects.get(id=experiment_id)
-    file_path = experiment.files.all().last().file.path
-    documents = load_rag_file(file_path)
+    file = experiment.files.get(id=file_id)
+    documents = load_rag_file(file)
     embeddings_model = experiment.get_llm_service().get_openai_embeddings()
     PGVector.from_documents(documents, embeddings_model, experiment)
 
 
-def load_rag_file(file_path: str) -> list[Document]:
+def load_rag_file(file: File) -> list[Document]:
     """
     Loads a text file of any supported type (PDF, TXT, HTML) into Langchain.
-
-    Args:
-        file_path (str): The path to the text file.
-
-    Returns:
-        str_splits: A list of strings from  Langchain Document objects
-        containing the loaded page_content.
     """
 
-    # Automatically detect loader based on file extension if not provided
-    extension = file_path.split(".")[-1].lower()
-    if extension == "pdf":
-        md_text = pymupdf4llm.to_markdown(file_path)  # get markdown for all pages
+    if file.content_type == "application/pdf":
+        doc = PyMuPDFDocument(stream=file.file.open(), filetype="pdf")
+        md_text = pymupdf4llm.to_markdown(doc)
         splitter = MarkdownTextSplitter(chunk_size=1000, chunk_overlap=0)
         documents = splitter.create_documents([md_text])
-    elif extension in ("txt", "text"):
-        loader = TextLoader(file_path)
+    elif file.content_type.startswith("text"):
+        with file.file.open() as f:
+            metadata = {"source": file.name}
+            doc = Document(page_content=f.read(), metadata=metadata)
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        documents = text_splitter.split_documents(loader.load())
+        documents = text_splitter.split_documents([doc])
     else:
-        raise ValueError(f"Unsupported file type: {extension}")
+        raise ValueError(f"Unsupported file type: {file.content_type}")
 
     return documents
 

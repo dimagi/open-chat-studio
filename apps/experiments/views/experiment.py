@@ -365,7 +365,7 @@ class AddFileToExperiment(BaseAddFileHtmxView):
         experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         experiment.files.add(file)
-        store_rag_embedding(experiment.id)
+        store_rag_embedding(experiment.id, file.id)
         return file
 
     def get_delete_url(self, file):
