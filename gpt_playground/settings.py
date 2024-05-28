@@ -70,6 +70,7 @@ THIRD_PARTY_APPS = [
     "django_tables2",
     "field_audit",
     "taggit",
+    "tz_detect",
 ]
 
 PROJECT_APPS = [
@@ -111,6 +112,7 @@ MIDDLEWARE = [
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
+    "tz_detect.middleware.TimezoneMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
