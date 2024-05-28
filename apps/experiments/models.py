@@ -690,7 +690,7 @@ class ExperimentSession(BaseTeamModel):
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,
-                        "next_trigger_date": pretty_date(message.next_trigger_date),
+                        "next_trigger_date": message.next_trigger_date.isoformat(),
                     }
                 )
             else:
