@@ -2,7 +2,6 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from importlib import import_module
 
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
@@ -13,12 +12,6 @@ from apps.experiments.models import AgentTools, ExperimentSession
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
-
-TOOL_CLASS_MAP = {
-    AgentTools.SCHEDULE_UPDATE: "apps.chat.agent.tools.UpdateScheduledMessageTool",
-    AgentTools.ONE_OFF_REMINDER: "apps.chat.agent.tools.OneOffReminderTool",
-    AgentTools.RECURRING_REMINDER: "apps.chat.agent.tools.RecurringReminderTool",
-}
 
 
 class CustomBaseTool(BaseTool):
@@ -143,12 +136,16 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
     )
 
 
+TOOL_CLASS_MAP = {
+    AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
+    AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
+    AgentTools.RECURRING_REMINDER: RecurringReminderTool,
+}
+
+
 def get_tools(experiment_session) -> list[BaseTool]:
     tools = []
     for tool_name in experiment_session.experiment.get_tool_names():
-        tool_path = TOOL_CLASS_MAP[tool_name]
-        module_path, class_name = tool_path.rsplit(".", 1)
-        module = import_module(module_path)
-        tool_class = getattr(module, class_name)
-        tools.append(tool_class(experiment_session=experiment_session))
+        tool_cls = TOOL_CLASS_MAP[tool_name]
+        tools.append(tool_cls(experiment_session=experiment_session))
     return tools
