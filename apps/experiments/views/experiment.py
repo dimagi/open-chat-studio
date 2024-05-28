@@ -53,7 +53,7 @@ from apps.experiments.forms import (
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
-from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.tasks import get_response_for_webchat_task, store_rag_embedding
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
@@ -220,6 +220,10 @@ def _validate_prompt_variables(form_data):
     available_variables = set()
     if form_data.get("source_material"):
         available_variables.add("source_material")
+        #  available_variables below should be added by making a
+        #  db request to check if there are  any RAG files uploaded
+    available_variables.add("context")
+    available_variables.add("input")
     missing_vars = required_variables - available_variables
     known_vars = {"source_material"}
     if missing_vars:
@@ -361,6 +365,7 @@ class AddFileToExperiment(BaseAddFileHtmxView):
         experiment = get_object_or_404(Experiment, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         experiment.files.add(file)
+        store_rag_embedding(experiment.id)
         return file
 
     def get_delete_url(self, file):

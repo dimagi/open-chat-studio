@@ -3,15 +3,18 @@ from datetime import datetime
 
 from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import WebMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
+from apps.vectordb.vectorstore import PGVector
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -21,6 +24,44 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
     message = WebMessage(chat_id=experiment_session.chat.id, message_text=message_text)
     update_taskbadger_data(self, message_handler, message)
     return message_handler.new_user_message(message)
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def store_rag_embedding(self, experiment_id: int) -> None:
+    experiment = Experiment.objects.get(id=experiment_id)
+    file_path = experiment.files.all().last().file.path
+    splits = load_rag_file(file_path)
+    embeddings_model = experiment.get_llm_service().get_openai_embeddings()
+    PGVector.from_texts(splits, embeddings_model, None, experiment)
+
+
+def load_rag_file(file_path: str) -> list[str]:
+    """
+    Loads a text file of any supported type (PDF, TXT, HTML) into Langchain.
+
+    Args:
+        file_path (str): The path to the text file.
+
+    Returns:
+        str_splits: A list of strings from  Langchain Document objects
+        containing the loaded page_content.
+    """
+
+    # Automatically detect loader based on file extension if not provided
+    extension = file_path.split(".")[-1].lower()
+    if extension == "pdf":
+        loader = PyMuPDFLoader(file_path, extract_images=False)
+    elif extension in ("txt", "text"):
+        loader = TextLoader(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {extension}")
+
+    # Load the text file using the appropriate loader
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(documents)
+    str_splits = [s.page_content for s in splits[0:10]]
+    return str_splits
 
 
 @shared_task

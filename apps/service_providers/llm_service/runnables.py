@@ -29,6 +29,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.vectordb.vectorstore import PGVector
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,8 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     if experiment.tools_enabled:
         return AgentExperimentRunnable(experiment=experiment, session=session)
-
+    if experiment.files.exists():
+        return RagExperimentRunnable(experiment=experiment, session=session)
     return SimpleExperimentRunnable(experiment=experiment, session=session)
 
 
@@ -213,6 +215,25 @@ class SimpleExperimentRunnable(ExperimentRunnable):
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
             | RunnableLambda(self.format_input)
+            | self.prompt
+            | model
+            | StrOutputParser()
+        )
+
+
+class RagExperimentRunnable(ExperimentRunnable):
+    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+        def format_docs(docs):
+            return "\n\n".join(doc.page_content for doc in docs)
+
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        embeddings = self.experiment.get_llm_service().get_openai_embeddings()
+        retriever = PGVector(self.experiment, embeddings).as_retriever()
+        return (
+            {"context": retriever | format_docs, "input": RunnablePassthrough()}
+            | RunnablePassthrough.assign(
+                history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
+            )
             | self.prompt
             | model
             | StrOutputParser()
