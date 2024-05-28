@@ -24,7 +24,14 @@ class Pipeline(BaseTeamModel):
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
-        return runnable.invoke(input, config=RunnableConfig(callbacks=[PipelineLoggingCallbackHandler(self)]))
+
+        pipeline_run = PipelineRun.objects.create(pipeline=self, status=PipelineRunStatus.RUNNING, log={"entries": []})
+        logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
+        try:
+            output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
+        finally:
+            logging_callback.pipeline_run.save()
+        return output
 
 
 class PipelineRunStatus(models.TextChoices):

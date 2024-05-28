@@ -1,6 +1,5 @@
 import uuid
 
-from django.db import transaction
 from langchain_core.callbacks import BaseCallbackHandler
 from loguru import logger
 
@@ -13,43 +12,61 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
 
     """
 
-    def __init__(self, pipeline, verbose=False) -> None:
-        from apps.pipelines.models import PipelineRun
-
-        self.pipeline = pipeline
-        self.pipeline_run = PipelineRun.objects.create(pipeline=self.pipeline, status="SUCCESS")
+    def __init__(self, pipeline_run, verbose=False) -> None:
+        self.pipeline_run = pipeline_run
         self.logger = get_logger(uuid.uuid4().hex, self.pipeline_run)
-        self.log = ""
         self.depth = 0
-        self.errored = False
+        self.verbose = verbose
+        self._run_id_names = {}
+
+    def _should_log(self, kwargs):
+        if "langsmith:hidden" in kwargs.get("tags", []):
+            return False
+        if self.verbose:
+            return True
+        if kwargs.get("run_id") in self._run_id_names:
+            return True
+        from apps.pipelines.nodes import nodes
+
+        if hasattr(nodes, kwargs.get("name", "")):
+            self._run_id_names[kwargs.get("run_id")] = kwargs.get("name")
+            return True
+        return False
 
     def on_chain_start(self, serialized, inputs, *args, **kwargs):
         self.depth += 1
-        self.logger.info(f"{kwargs.get('name', serialized.get('name'))} starting")
-        super().on_chain_start(serialized, inputs, *args, **kwargs)
+        if self._should_log(kwargs):
+            self.logger.info(f"{kwargs.get('name', serialized.get('name'))} starting")
 
     def on_chain_end(self, outputs, **kwargs):
+        from apps.pipelines.models import PipelineRunStatus
+
         self.depth -= 1
-        self.logger.info(f"chain ending {outputs}")
+        if self._should_log(kwargs):
+            self.logger.info(f"{self._run_id_names[kwargs.get('run_id')]} finished: {outputs}")
+
         if self.depth == 0:
-            self.logger.info(outputs)
+            self.pipeline_run.status = PipelineRunStatus.SUCCESS
+            self.pipeline_run.save()
 
     def on_chain_error(self, error, *args, **kwargs):
+        from apps.pipelines.models import PipelineRunStatus
+
+        self.pipeline_run.status = PipelineRunStatus.ERROR
         self.logger.error(error)
 
 
+def get_logger(name, pipeline_run):
+    log = logger.bind(name=name)
+    log.level("DEBUG")
+    log.remove()
+    log.add(LogHandler(pipeline_run))
+    return log
+
+
 class LogHandler:
-    def __init__(self, pipeline_run_id):
-        self.pipeline_run_id = pipeline_run_id
-        self.logs = {"entries": []}
-
-    def write_log(self, entries):
-        # Write the logs in a separate transaction in a thread safe way
-        from apps.pipelines.models import PipelineRun
-
-        with transaction.atomic():
-            PipelineRun.objects.filter(pk=self.pipeline_run_id).update(log=entries)
-            # This just swallows the errors - if filter doesn't match anything, this will just do nothing
+    def __init__(self, pipeline_run):
+        self.pipeline_run = pipeline_run
 
     def __call__(self, message):
         from apps.pipelines.models import LogEntry
@@ -62,13 +79,5 @@ class LogHandler:
                 "message": record["message"],
             }
         )
-        self.logs["entries"].append(log_entry.model_dump())
-        self.write_log(self.logs)
-
-
-def get_logger(name, pipeline_run):
-    log = logger.bind(name=name)
-    log.level("DEBUG")
-    log.remove()
-    log.add(LogHandler(pipeline_run.pk))
-    return log
+        # Appending to a list is thread safe in python
+        self.pipeline_run.log["entries"].append(log_entry.model_dump())
