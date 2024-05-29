@@ -124,7 +124,6 @@
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" checked />
     <div role="tabpanel" class="tab-content">
       <div class="app-card">
-        <h2 class="pg-subtitle">My Previous Chat Sessions</h2>
         <div class="overflow-x-auto">
           <table class="pg-table">
             <thead>
@@ -163,7 +162,6 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions"/>
       <div role="tabpanel" class="tab-content">
         <div class="app-card">
-          <h2 class="pg-subtitle">All Chat Sessions</h2>
           <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
             <div class="grid grid-flow-col auto-cols-max gap-x-2">
               {% if perms.experiments.download_chats %}
@@ -200,7 +198,6 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events"/>
       <div role="tabpanel" class="tab-content">
         <div class="app-card">
-          <h2 class="pg-subtitle">Events</h2>
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
           {% if show_events %}
