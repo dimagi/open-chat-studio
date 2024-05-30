@@ -508,3 +508,6 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
+
+# tz_detect
+TZ_DETECT_COUNTRIES = ["ZA"]
