@@ -21,7 +21,6 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
-from apps.utils.time import pretty_date
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
