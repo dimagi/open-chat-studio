@@ -19,6 +19,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 
 
 class RenderTemplate(PipelineNode):
+    __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
     def get_runnable(self, node: Node) -> Runnable:
@@ -41,6 +42,8 @@ class RenderTemplate(PipelineNode):
 
 
 class CreateReport(PipelineNode):
+    __human_name__ = "Create a report"
+
     prompt: str = (
         "Make a summary of the following text: {input}. "
         "Output it as JSON with a single key called 'summary' with the summary."
@@ -51,6 +54,8 @@ class CreateReport(PipelineNode):
 
 
 class LLMResponse(PipelineNode):
+    __human_name__ = "LLM response"
+
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
@@ -68,6 +73,7 @@ class LLMResponse(PipelineNode):
 
 
 class SendEmail(PipelineNode):
+    __human_name__ = "Send an email"
     recipient_list: list[str]
     subject: str
 
@@ -80,6 +86,8 @@ class SendEmail(PipelineNode):
 
 
 class Passthrough(PipelineNode):
+    __human_name__ = "Do Nothing"
+
     def get_runnable(self, node: Node) -> RunnableLambda:
         def fn(input: Input, config: RunnableConfig):
             self.logger(config).debug(f"Returning input: '{input}' without modification")

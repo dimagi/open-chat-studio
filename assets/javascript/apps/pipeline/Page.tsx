@@ -2,7 +2,7 @@ import React from "react";
 import Pipeline from "./Pipeline";
 import SidePanel from "./panel/SidePanel";
 
-export default function Page() {
+export default function Page(props: {inputTypes}) {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
@@ -13,7 +13,7 @@ export default function Page() {
         </div>
       </div>
       <div>
-        <SidePanel/>
+        <SidePanel inputTypes={props.inputTypes} />
       </div>
     </div>
   )

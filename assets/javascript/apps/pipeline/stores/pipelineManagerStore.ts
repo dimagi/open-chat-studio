@@ -11,7 +11,8 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
   currentPipelineId: undefined,
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
-    apiClient.getPipeline(pipelineId).then((pipeline) => {
+    apiClient.getPipeline(pipelineId).then((data) => {
+      const pipeline = data.pipeline;
       if (pipeline) {
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         set({isLoading: false});
