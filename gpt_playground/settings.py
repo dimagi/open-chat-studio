@@ -70,6 +70,7 @@ THIRD_PARTY_APPS = [
     "django_tables2",
     "field_audit",
     "taggit",
+    "tz_detect",
 ]
 
 PROJECT_APPS = [
@@ -111,6 +112,7 @@ MIDDLEWARE = [
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
+    "tz_detect.middleware.TimezoneMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -506,3 +508,6 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
+
+# tz_detect
+TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]

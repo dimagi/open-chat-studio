@@ -30,7 +30,9 @@
                   {% else %}
                     {% include "experiments/chat/components/user_icon.html" %}
                   {% endif %}
-                  <small>{{ message.created_at.time }}</small>
+                  <small><time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
+                    {{ message.created_at|date:"DATETIME_FORMAT" }}
+                  </time></small>
                 </div>
               </td>
               <td class="px-3 py-4 text-sm text-gray-500">{{ message.content|render_markdown }}</td>
