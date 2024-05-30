@@ -1,5 +1,4 @@
 import inspect
-from collections import defaultdict
 
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -38,11 +37,12 @@ def pipeline_node_input_types(request, team_slug):
         }
     """
 
-    fields = defaultdict(dict)
+    fields = {}
     from apps.pipelines.nodes import nodes
 
     node_classes = [cls for _, cls in inspect.getmembers(nodes, inspect.isclass) if issubclass(cls, nodes.PipelineNode)]
     for node_class in node_classes:
+        fields[node_class.__name__] = {}
         for field_name, info in node_class.model_fields.items():
             fields[node_class.__name__][field_name] = str(info.annotation)
     return JsonResponse(fields)
