@@ -30,6 +30,7 @@ def session():
     session = ExperimentSessionFactory.build(chat=chat)
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
+    session.experiment.get_participant_data = lambda *args: None
     return session
 
 

@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from functools import cached_property
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -13,6 +14,7 @@ from apps.events import actions
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +227,7 @@ class TimePeriod(models.TextChoices):
 
 class ScheduledMessage(BaseTeamModel):
     action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
@@ -232,7 +235,7 @@ class ScheduledMessage(BaseTeamModel):
     last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
-    extra_data = models.JSONField(blank=True, default=dict)
+    custom_schedule_params = models.JSONField(blank=True, default=dict)
 
     class Meta:
         indexes = [models.Index(fields=["is_complete"])]
@@ -265,3 +268,29 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = utc_now + delta
 
         self.save()
+
+    @cached_property
+    def name(self) -> str:
+        return self.action.params["name"]
+
+    @cached_property
+    def frequency(self) -> str:
+        return self.action.params["frequency"]
+
+    @cached_property
+    def time_period(self) -> str:
+        return self.action.params["time_period"]
+
+    @cached_property
+    def repetitions(self) -> str:
+        return self.action.params["repetitions"]
+
+    def __str__(self):
+        schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
+        if self.time_period not in ["hour", "day"]:
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule = (
+                f"{self.name}: Every {self.frequency} {self.time_period} on {weekday} for {self.repetitions} times"
+            )
+        next_trigger = pretty_date(self.next_trigger_date)
+        return f"{schedule} (next trigger is {next_trigger})"

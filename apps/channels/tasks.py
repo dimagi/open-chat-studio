@@ -1,15 +1,19 @@
 import json
+import logging
 import uuid
 
 from celery.app import shared_task
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
+from twilio.request_validator import RequestValidator
 
 from apps.channels.datamodels import ApiMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
+
+log = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -33,8 +37,9 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def handle_twilio_message(self, message_data: str):
-    message = TwilioMessage.parse(json.loads(message_data))
+def handle_twilio_message(self, message_data: str, request_uri: str, signature: str):
+    raw_data = json.loads(message_data)
+    message = TwilioMessage.parse(raw_data)
 
     channel_id_key = ""
     ChannelClass = None
@@ -51,9 +56,28 @@ def handle_twilio_message(self, message_data: str):
     ).first()
     if not experiment_channel:
         return
+
+    validate_twillio_request(experiment_channel, raw_data, request_uri, signature)
+
     message_handler = ChannelClass(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
     message_handler.new_user_message(message)
+
+
+def validate_twillio_request(experiment_channel, raw_data, request_uri, signature):
+    """For now this just logs an error if the signature validation fails.
+    In the future we will want to raise an error.
+
+    See https://www.twilio.com/docs/usage/webhooks/webhooks-security
+    """
+    try:
+        auth_token = experiment_channel.messaging_provider.get_messaging_service().auth_token
+        request_valid = RequestValidator(auth_token).validate(request_uri, raw_data, signature)
+    except Exception:
+        log.exception("Twilio signature validation failed")
+    else:
+        if not request_valid:
+            log.error("Twilio signature validation failed")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
