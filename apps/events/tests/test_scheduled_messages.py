@@ -272,14 +272,14 @@ def test_get_participant_scheduled_messages():
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "Tuesday, 02 January 2024 00:00:00 UTC",
+                "next_trigger_date": "2024-01-02T00:00:00+00:00",
             },
             {
                 "name": "Test",
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "Tuesday, 02 January 2024 00:00:00 UTC",
+                "next_trigger_date": "2024-01-02T00:00:00+00:00",
             },
         ]
         assert session.get_participant_scheduled_messages() == expected_str_version
