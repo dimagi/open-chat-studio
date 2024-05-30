@@ -1,10 +1,11 @@
 import React from "react";
 import Component from "./Component";
+import { NodeParams } from "../types/nodeParams";
 
 export default function SidePanel(props: { inputTypes }) {
     function onDragStart(
         event: React.DragEvent<any>,
-        data: { type: string, label: string }
+        data: { type: string, label: string, inputParams: NodeParams[] }
     ): void {
         event.dataTransfer.setData("nodedata", JSON.stringify(data));
     }
@@ -18,6 +19,7 @@ export default function SidePanel(props: { inputTypes }) {
                     onDragStart={(event) =>
                         onDragStart(event, {
                             label: inputType.human_name,
+                            inputParams: inputType.input_params,
                             type: inputType.name,
                         })
                     } />
