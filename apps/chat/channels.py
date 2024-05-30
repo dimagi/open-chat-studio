@@ -279,7 +279,6 @@ class ChannelBase:
         self.send_text_to_user(bot_message)
 
     def _ask_user_to_take_survey(self):
-        # TODO: Survey needs a participant. For external channels we can use the chat_id as the identifier I think
         pre_survey_link = self.experiment_session.get_pre_survey_link()
         confirmation_text = self.experiment.pre_survey.confirmation_text
         bot_message = confirmation_text.format(survey_link=pre_survey_link)
