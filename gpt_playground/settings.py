@@ -510,4 +510,4 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
 
 # tz_detect
-TZ_DETECT_COUNTRIES = ["ZA"]
+TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
