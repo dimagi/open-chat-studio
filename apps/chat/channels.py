@@ -301,8 +301,11 @@ class ChannelBase:
 
     def _extract_user_query(self) -> str:
         if self.message_content_type == MESSAGE_TYPES.VOICE:
-            # TODO: Error handling
-            return self._get_voice_transcript()
+            try:
+                return self._get_voice_transcript()
+            except Exception as e:
+                self._inform_user_of_error()
+                raise e
         return self.message_text
 
     def _send_message_to_user(self, bot_message: str):
@@ -462,6 +465,16 @@ class ChannelBase:
         return self._generate_response_for_user(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
+
+    def _inform_user_of_error(self):
+        """Simply tells the user that something went wrong to keep them in the loop"""
+        bot_message = self._generate_response_for_user(
+            """
+            Tell the user that something went wrong while processing their message and that they should
+            try again later
+            """
+        )
+        self.new_bot_message(bot_message)
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
