@@ -8,12 +8,13 @@ def _create_agent_tool_resouces(apps, schema_editor):
     from apps.experiments.models import AgentTools
 
     for experiment in Experiment.objects.filter(tools_enabled=True):
-        experiment.set_tools([AgentTools.RECURRING_REMINDER, AgentTools.ONE_OFF_REMINDER])
+        experiment.tools = [AgentTools.RECURRING_REMINDER, AgentTools.ONE_OFF_REMINDER]
+        experiment.save()
         
 
 def _remove_agent_tool_resouces(apps, schema_editor):
     Experiment = apps.get_model("experiments", "Experiment")
-    Experiment.objects.all.update(builtin_tools=[])
+    Experiment.objects.all.update(tools=[])
 
 
 class Migration(migrations.Migration):
@@ -25,7 +26,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='experiment',
-            name='builtin_tools',
+            name='tools',
             field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=128), blank=True, default=list, size=None),
         ),
         migrations.RunPython(_create_agent_tool_resouces, _remove_agent_tool_resouces),

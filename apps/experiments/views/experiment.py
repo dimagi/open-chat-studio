@@ -140,6 +140,7 @@ class ExperimentForm(forms.ModelForm):
     prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
 
     class Meta:
         model = Experiment
@@ -165,6 +166,7 @@ class ExperimentForm(forms.ModelForm):
             "no_activity_config",
             "safety_violation_notification_emails",
             "voice_response_behaviour",
+            "tools",
         ]
         labels = {
             "source_material": "Inline Source Material",
@@ -209,6 +211,7 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+
         errors = {}
         bot_type = cleaned_data["type"]
         if bot_type == "llm":
@@ -337,7 +340,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
             files = file_formset.save(self.request)
             self.object.files.set(files)
 
-        self.object.set_tools(tool_names=self.request.POST.getlist("tools"))
         return HttpResponseRedirect(self.get_success_url())
 
     def form_invalid(self, form, file_formset):
@@ -356,8 +358,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        tool_names = self.request.POST.getlist("tools")
-        self.object.set_tools(tool_names=tool_names)
         return response
 
 

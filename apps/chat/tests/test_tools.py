@@ -5,9 +5,8 @@ import pytz
 from freezegun import freeze_time
 
 from apps.chat.agent.schemas import WeekdaysEnum
-from apps.chat.agent.tools import UpdateScheduledMessageTool, _move_datetime_to_new_weekday_and_time, get_tools
+from apps.chat.agent.tools import UpdateScheduledMessageTool, _move_datetime_to_new_weekday_and_time
 from apps.events.models import ScheduledMessage
-from apps.experiments.models import AgentTools
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import pretty_date
@@ -65,12 +64,3 @@ def test_user_cannot_set_custom_date():
         name="A test schedule", weekday=WeekdaysEnum.MONDAY, hour=8, minute=0, user_specified_custom_date=True
     )
     assert response == "The user cannot do that. Only weekdays and time of day can be changed"
-
-
-@pytest.mark.django_db()
-def test_tool_map():
-    """A simple test to check that all tools in `AgentTools` have an associated tool class that can be instantiated"""
-    session = ExperimentSessionFactory()
-    session.experiment.builtin_tools = AgentTools.values
-    session.experiment.set_tools(AgentTools.values)
-    get_tools(session)

@@ -404,7 +404,7 @@ class Experiment(BaseTeamModel):
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
-    builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -418,7 +418,7 @@ class Experiment(BaseTeamModel):
 
     @property
     def tools_enabled(self):
-        return len(self.builtin_tools) > 0
+        return len(self.tools) > 0
 
     @property
     def event_triggers(self):
@@ -442,14 +442,6 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
-
-    def get_tool_names(self):
-        return self.builtin_tools
-
-    def set_tools(self, tool_names: list):
-        """Sets the experiment's tools to those specified by `tool_names`"""
-        self.builtin_tools = tool_names
-        self.save()
 
 
 class ExperimentRoute(BaseTeamModel):

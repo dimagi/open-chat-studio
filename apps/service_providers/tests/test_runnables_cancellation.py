@@ -29,7 +29,7 @@ def session(fake_llm):
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.builtin_tools = [AgentTools.SCHEDULE_UPDATE]
+    session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
     session.experiment.get_participant_data = lambda *args, **kwargs: ""
     return session
 

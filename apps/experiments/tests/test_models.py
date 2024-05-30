@@ -1,7 +1,7 @@
 import pytest
 
-from apps.experiments.models import AgentTools, SyntheticVoice
-from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
+from apps.experiments.models import SyntheticVoice
+from apps.utils.factories.experiment import SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -67,21 +67,3 @@ class TestSyntheticVoice:
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure}
         assert voice1 not in voices_queryset
-
-
-class TestExperimentTools:
-    @pytest.mark.django_db()
-    def test_set_tools(self):
-        experiment = ExperimentFactory()
-        assert len(experiment.get_tool_names()) == 0
-
-        experiment.set_tools([AgentTools.ONE_OFF_REMINDER, AgentTools.SCHEDULE_UPDATE])
-        experiment.refresh_from_db()
-        tools = experiment.get_tool_names()
-        assert AgentTools.ONE_OFF_REMINDER in tools
-        assert AgentTools.SCHEDULE_UPDATE in tools
-
-        # Set experiment tools to only include one tool
-        experiment.set_tools([AgentTools.ONE_OFF_REMINDER])
-        experiment.refresh_from_db()
-        assert list(experiment.get_tool_names()) == [AgentTools.ONE_OFF_REMINDER]

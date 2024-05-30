@@ -74,7 +74,11 @@
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools">
       <div role="tabpanel" class="tab-content">
-        {% include "experiments/components/tools.html" %}
+        <div class="py-4 form-text">
+          <h3 class="text-md font-bold">{% translate "Please note" %} <i class="fas fa-exclamation-triangle"></i></h3>
+          <p class="text-sm">{% translate "Make sure that your selected model supports tool usage" %}</p>
+        </div>
+        {% render_form_fields form "tools" %}
       </div>
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">

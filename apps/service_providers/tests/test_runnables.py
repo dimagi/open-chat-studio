@@ -26,7 +26,7 @@ def fake_llm():
 def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.builtin_tools = [AgentTools.SCHEDULE_UPDATE]
+    session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
     return session
 
 
