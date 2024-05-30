@@ -56,6 +56,7 @@ IGNORE_APPS = {
     "humanize",
     "field_audit",
     "taggit",
+    "tz_detect",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

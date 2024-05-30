@@ -65,4 +65,5 @@ urlpatterns = [
     path("hijack/", include("hijack.urls", namespace="hijack")),
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("api/", include("apps.api.urls", namespace="api")),
+    path("tz_detect/", include("tz_detect.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
