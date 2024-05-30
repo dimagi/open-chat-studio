@@ -3,7 +3,7 @@ from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chat.tasks import _get_latest_sessions_for_participants, bot_prompt_for_user
+from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
 from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
@@ -49,7 +49,7 @@ class TasksTest(TestCase):
     def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
         with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
-            response = bot_prompt_for_user(self.experiment_session, "Some message")
+            response = self.experiment_session._bot_prompt_for_user("Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
         assert len(messages) == 1
@@ -83,7 +83,7 @@ def test_no_activity_ping_with_assistant_bot():
 
     expected_ping_message = "Hey, answer me!"
     with mock_experiment_llm(session.experiment, responses=[expected_ping_message]):
-        response = bot_prompt_for_user(session, "Some message")
+        response = session._bot_prompt_for_user("Some message")
     messages = ChatMessage.objects.filter(chat=session.chat).all()
     # Only the AI message should be there
     assert len(messages) == 1

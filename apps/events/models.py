@@ -258,7 +258,7 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
 
         experiment_session = self.participant.get_latest_session()
-        experiment_session.send_bot_message(self.action.params["prompt_text"], fail_silently=False)
+        experiment_session.ad_hoc_bot_message(self.action.params["prompt_text"], fail_silently=False)
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1

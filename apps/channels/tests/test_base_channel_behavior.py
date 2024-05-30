@@ -332,6 +332,41 @@ def test_voice_response_behaviour(
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("voice_behaviour", "voice_response_expected"),
+    [
+        (VoiceResponseBehaviours.ALWAYS, True),
+        (VoiceResponseBehaviours.NEVER, False),
+        (VoiceResponseBehaviours.RECIPROCAL, True),
+    ],
+)
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
+@patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
+def test_failed_transcription_informs_the_user(
+    _generate_response_for_user,
+    _reply_voice_message,
+    send_text_to_user,
+    voice_behaviour,
+    voice_response_expected,
+    telegram_channel,
+):
+    """When we fail to transcribe the user's voice message, we should inform them"""
+
+    _generate_response_for_user.return_value = "Sorry, we could not transcribe your message"
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = voice_behaviour
+    experiment.save()
+
+    with pytest.raises(Exception, match="Nope"):
+        with patch("apps.chat.channels.TelegramChannel._get_voice_transcript", side_effect=Exception("Nope")):
+            telegram_channel.new_user_message(telegram_messages.audio_message())
+
+    assert _reply_voice_message.called == voice_response_expected
+    assert send_text_to_user.called == (not voice_response_expected)
+
+
+@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
