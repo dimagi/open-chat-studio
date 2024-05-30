@@ -21,8 +21,8 @@ def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1)
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("period", ["hours", "days", "weeks"])
-@patch("apps.experiments.models.ExperimentSession.send_bot_message")
-def test_create_scheduled_message_sets_start_date(send_bot_message, period):
+@patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
     session = ExperimentSessionFactory()
     event_action, params = _construct_event_action(time_period=TimePeriod(period))
     with freeze_time("2024-01-01"):
@@ -65,8 +65,8 @@ def test_get_messages_to_fire():
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("period", ["hours", "days", "weeks", "months"])
-@patch("apps.experiments.models.ExperimentSession.send_bot_message")
-def test_poll_scheduled_messages(send_bot_message, period):
+@patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     scheduled_message = None
     delta = None
 
@@ -153,7 +153,7 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
     event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS, repetitions=2)
     with (
         caplog.at_level(logging.ERROR),
-        patch("apps.experiments.models.ExperimentSession.send_bot_message", side_effect=Exception("Oops")),
+        patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
         patch("apps.chat.tasks.functions.Now") as db_time,
     ):
         sm = ScheduledMessageFactory(participant=session.participant, action=event_action, team=session.team)
