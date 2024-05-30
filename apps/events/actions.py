@@ -87,16 +87,12 @@ class ScheduleTriggerAction(EventActionHandlerBase):
 
 class SendMessageToBotAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.chat.tasks import bot_prompt_for_user, try_send_message
-
         try:
             message = action.params["message_to_bot"]
         except KeyError:
             message = "The user hasn't responded, please prompt them again."
 
-        # TODO: experiment_session.send_bot_message
-        ping_message = bot_prompt_for_user(session, prompt_instruction=message)
-        try_send_message(experiment_session=session, message=ping_message)
+        session.ad_hoc_bot_message(instruction_prompt=message)
 
         last_message = session.chat.messages.last()
         if last_message:

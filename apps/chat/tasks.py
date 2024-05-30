@@ -10,8 +10,6 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.chat.bots import TopicBot
-from apps.chat.channels import ChannelBase
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.utils.django_db import MakeInterval
@@ -64,14 +62,13 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
 
             bot_message_to_user = message
             if is_bot_instruction:
-                bot_message_to_user = bot_prompt_for_user(
-                    experiment_session=experiment_session, prompt_instruction=message
-                )
+                bot_message_to_user = experiment_session.ad_hoc_bot_message(prompt_instruction=message)
             else:
                 ChatMessage.objects.create(
                     chat=experiment_session.chat, message_type=ChatMessageType.AI, content=message
                 )
-            try_send_message(experiment_session=experiment_session, message=bot_message_to_user)
+                experiment_session.try_send_message(message=bot_message_to_user)
+
         except Exception as exception:
             logger.exception(exception)
 
@@ -104,10 +101,8 @@ def _no_activity_pings():
                 f"'{experiment_session.experiment.name}'"
             )
             return
-        ping_message = bot_prompt_for_user(experiment_session, prompt_instruction=bot_ping_message)
         try:
-            # TODO: experiment_session.send_bot_message
-            try_send_message(experiment_session=experiment_session, message=ping_message)
+            experiment_session.ad_hoc_bot_message(instruction_prompt=bot_ping_message)
         finally:
             experiment_session.no_activity_ping_count += 1
             experiment_session.save(update_fields=["no_activity_ping_count"])
@@ -152,25 +147,6 @@ def _get_sessions_to_ping():
     )
 
     return [chat_msg.chat.experiment_session for chat_msg in matches]
-
-
-def bot_prompt_for_user(experiment_session: ExperimentSession, prompt_instruction: str) -> str:
-    """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
-    message. The response from the bot will be saved to the chat history.
-    """
-    topic_bot = TopicBot(experiment_session)
-    return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
-
-
-def try_send_message(experiment_session: ExperimentSession, message: str, fail_silently=True):
-    """Tries to send a message to the experiment session"""
-    try:
-        channel = ChannelBase.from_experiment_session(experiment_session)
-        channel.new_bot_message(message)
-    except Exception as e:
-        logging.exception(f"Could not send message to experiment session {experiment_session.id}. Reason: {e}")
-        if not fail_silently:
-            raise e
 
 
 @shared_task
