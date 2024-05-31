@@ -54,7 +54,7 @@ class PipelineGraph(pydantic.BaseModel):
         if len(start) != 1:
             raise PipelineBuildError(f"Expected 1 start node, got {len(start)}")
         if len(end) != 1:
-            raise PipelineBuildError(f"Expected 1 end node, got {len(start)}")
+            raise PipelineBuildError(f"Expected 1 end node, got {len(end)}")
         state_graph.set_entry_point(start[0])
         state_graph.set_finish_point(end[0])
 

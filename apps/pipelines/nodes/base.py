@@ -2,7 +2,9 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, TypedDict
 
+from langchain.prompts import BasePromptTemplate
 from langchain_core.messages import BaseMessage
+from langchain_core.prompt_values import StringPromptValue
 from langchain_core.runnables import (
     Runnable,
 )
@@ -65,11 +67,17 @@ class PipelineNode(BaseModel, ABC):
         built_node = cls.build(node)
 
         def fn(state: PipelineState) -> PipelineState:
-            # Log the message...
-            output = built_node.invoke(state["messages"][-1])
-            if isinstance(output, BaseMessage):
-                return PipelineState(messages=[output.content])
-
+            if isinstance(built_node, BasePromptTemplate):
+                input = {"input": state["messages"][-1]}
+            else:
+                input = state["messages"][-1]
+            result = built_node.invoke(input)
+            if isinstance(result, BaseMessage):
+                output = result.content
+            elif isinstance(result, StringPromptValue):
+                output = result.text
+            else:
+                output = result
             return PipelineState(messages=[output])
 
         return fn

@@ -66,7 +66,7 @@ def test_full_email_sending_pipeline(provider):
                             "label": "Send an email",
                             "type": "SendEmail",
                             "params": {
-                                "recipient_list": ["test@example.com"],
+                                "recipient_list": "test@example.com",
                                 "subject": "This is an interesting email",
                             },
                         },
@@ -78,7 +78,7 @@ def test_full_email_sending_pipeline(provider):
             }
         )
 
-    runnable.invoke(PipelineState(messages=[{"input": "Ice is not a liquid. When it is melted it turns into water."}]))
+    runnable.invoke(PipelineState(messages=["Ice is not a liquid. When it is melted it turns into water."]))
     assert len(mail.outbox) == 1
     assert mail.outbox[0].subject == "This is an interesting email"
     assert mail.outbox[0].to == ["test@example.com"]
@@ -96,7 +96,7 @@ def test_send_email():
                         "label": "Send an email",
                         "type": "SendEmail",
                         "params": {
-                            "recipient_list": ["test@example.com"],
+                            "recipient_list": "test@example.com",
                             "subject": "This is an interesting email",
                         },
                     },

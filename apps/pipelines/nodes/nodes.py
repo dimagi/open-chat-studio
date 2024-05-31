@@ -50,7 +50,7 @@ class CreateReport(PipelineNode):
     )
 
     def get_runnable(self, node: Node) -> Runnable:
-        return PromptTemplate.from_template(template=self.prompt) | LLMResponse.build(node)
+        return PromptTemplate.from_template(template=self.prompt)
 
 
 class LLMResponse(PipelineNode):
@@ -74,12 +74,14 @@ class LLMResponse(PipelineNode):
 
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
-    recipient_list: list[str]
+    recipient_list: str
     subject: str
 
     def get_runnable(self, node: Node) -> RunnableLambda:
         def fn(input: Input):
-            send_email_from_pipeline.delay(recipient_list=self.recipient_list, subject=self.subject, message=input)
+            send_email_from_pipeline.delay(
+                recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
+            )
             return input
 
         return RunnableLambda(fn, name=self.__class__.__name__)
