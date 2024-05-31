@@ -47,7 +47,6 @@ class ParticipantAdmin(admin.ModelAdmin):
 @admin.register(models.ParticipantData)
 class ParticipantData(admin.ModelAdmin):
     list_display = ("participant", "content_type", "object_id")
-    readonly_fields = ("data",)
     list_filter = ("participant",)
 
 
