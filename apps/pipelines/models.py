@@ -6,6 +6,7 @@ from django.db import models
 from langchain_core.runnables import RunnableConfig
 
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
+from apps.pipelines.nodes.base import PipelineState
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -20,19 +21,23 @@ class Pipeline(BaseTeamModel):
     def __str__(self):
         return self.name
 
-    def invoke(self, input):
+    def invoke(self, input: PipelineState) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
 
-        pipeline_run = PipelineRun.objects.create(pipeline=self, status=PipelineRunStatus.RUNNING, log={"entries": []})
+        pipeline_run = PipelineRun.objects.create(
+            pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}
+        )
+
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
         logging_callback.logger.info("Starting pipeline run")
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
+            pipeline_run.output = output
         finally:
             logging_callback.logger.info("Pipeline run finished")
-            logging_callback.pipeline_run.save()
+            pipeline_run.save()
         return output
 
 
@@ -44,12 +49,9 @@ class PipelineRunStatus(models.TextChoices):
 
 class PipelineRun(BaseModel):
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE, related_name="runs")
-    status = models.CharField()
-    start_time = models.DateTimeField(null=True, blank=True)
-    end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=128, choices=PipelineRunStatus.choices)
-    error = models.TextField(blank=True)
-    output_summary = models.TextField(blank=True)
+    input = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
+    output = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
     log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
 
 
@@ -57,8 +59,6 @@ class LogEntry(pydantic.BaseModel):
     time: datetime
     level: str
     message: str
-    # file: str
-    # line: int
 
     class Config:
         json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")}

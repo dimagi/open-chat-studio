@@ -47,7 +47,7 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
 
         if self.depth == 0:
             self.pipeline_run.status = PipelineRunStatus.SUCCESS
-            self.pipeline_run.save()
+            self.pipeline_run.save()  # We can only save in the original thread. Not totally clear why
 
     def on_chain_error(self, error, *args, **kwargs):
         from apps.pipelines.models import PipelineRunStatus
