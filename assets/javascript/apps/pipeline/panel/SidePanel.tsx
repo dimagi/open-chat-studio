@@ -1,8 +1,9 @@
 import React from "react";
 import Component from "./Component";
 import { NodeParams } from "../types/nodeParams";
+import { NodeInputTypes } from "../types/nodeInputTypes";
 
-export default function SidePanel(props: { inputTypes }) {
+export default function SidePanel(props: { inputTypes: NodeInputTypes[] }) {
     function onDragStart(
         event: React.DragEvent<any>,
         data: { type: string, label: string, inputParams: NodeParams[] }

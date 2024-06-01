@@ -36,7 +36,7 @@ class ApiClient {
       if (response.status !== 200) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return response.data;
+      return response.data.pipeline;
     } catch (error) {
       console.error(error);
       throw error;

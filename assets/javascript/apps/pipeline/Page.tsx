@@ -1,8 +1,9 @@
 import React from "react";
 import Pipeline from "./Pipeline";
 import SidePanel from "./panel/SidePanel";
+import { NodeInputTypes } from "./types/nodeInputTypes";
 
-export default function Page(props: {inputTypes}) {
+export default function Page(props: {inputTypes: NodeInputTypes[]}) {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
