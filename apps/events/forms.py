@@ -99,17 +99,19 @@ class EventActionTypeSelectForm(TypeSelectForm):
 
 
 def get_action_params_form(data=None, instance=None, team_id=None):
+    form_kwargs = {
+        "data": data,
+        "initial": instance.params if instance else None,
+    }
     return EventActionTypeSelectForm(
         primary=EventActionForm(data=data, instance=instance),
         secondary={
-            "log": EmptyForm(data=data, initial=instance.params if instance else None),
-            "send_message_to_bot": SendMessageToBotForm(data=data, initial=instance.params if instance else None),
-            "end_conversation": EmptyForm(data=data, initial=instance.params if instance else None),
-            "summarize": SummarizeConversationForm(data=data, initial=instance.params if instance else None),
-            "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=instance.params if instance else None),
-            "pipeline_start": PipelineStartForm(
-                team_id=team_id, data=data, initial=instance.params if instance else None
-            ),
+            "log": EmptyForm(**form_kwargs),
+            "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
+            "end_conversation": EmptyForm(**form_kwargs),
+            "summarize": SummarizeConversationForm(**form_kwargs),
+            "schedule_trigger": ScheduledMessageConfigForm(**form_kwargs),
+            "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
         },
         secondary_key_field="action_type",
     )
