@@ -41,18 +41,6 @@ class RenderTemplate(PipelineNode):
         return RunnableLambda(fn, name=self.__class__.__name__)
 
 
-class CreateReport(PipelineNode):
-    __human_name__ = "Create a report"
-
-    prompt: str = (
-        "Make a summary of the following text: {input}. "
-        "Output it as JSON with a single key called 'summary' with the summary."
-    )
-
-    def get_runnable(self, node: Node) -> Runnable:
-        return PromptTemplate.from_template(template=self.prompt)
-
-
 class LLMResponse(PipelineNode):
     __human_name__ = "LLM response"
 
@@ -70,6 +58,18 @@ class LLMResponse(PipelineNode):
 
         service = provider.get_llm_service()
         return service.get_chat_model(self.llm_model, self.llm_temperature)
+
+
+class CreateReport(LLMResponse):
+    __human_name__ = "Create a report"
+
+    prompt: str = (
+        "Make a summary of the following text: {input}. "
+        "Output it as JSON with a single key called 'summary' with the summary."
+    )
+
+    def get_runnable(self, node: Node) -> Runnable:
+        return PromptTemplate.from_template(template=self.prompt) | super().get_runnable(node)
 
 
 class SendEmail(PipelineNode):
