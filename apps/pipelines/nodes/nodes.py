@@ -16,6 +16,7 @@ from apps.pipelines.graph import Node
 from apps.pipelines.nodes.base import PipelineNode
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
+from apps.service_providers.exceptions import ServiceProviderConfigError
 
 
 class RenderTemplate(PipelineNode):
@@ -55,8 +56,11 @@ class LLMResponse(PipelineNode):
             provider = LlmProvider.objects.get(id=self.llm_provider_id)
         except LlmProvider.DoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
+        try:
+            service = provider.get_llm_service()
+        except ServiceProviderConfigError as e:
+            raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
-        service = provider.get_llm_service()
         return service.get_chat_model(self.llm_model, self.llm_temperature)
 
 
