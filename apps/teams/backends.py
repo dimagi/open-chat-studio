@@ -72,7 +72,7 @@ CONTENT_TYPES = {
         "syntheticvoice",
     ],
     "files": ["file"],
-    "pipelines": ["pipeline"],
+    "pipelines": ["pipeline", "pipelinerun"],
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
