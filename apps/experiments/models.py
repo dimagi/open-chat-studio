@@ -644,19 +644,17 @@ class ExperimentSession(BaseTeamModel):
             specific child bot to handle the check-in.
         """
 
-        bot_message = self._bot_prompt_for_user(
-            self, prompt_instruction=instruction_prompt, use_experiment=use_experiment
-        )
-        self.try_send_message(self, message=bot_message, fail_silently=fail_silently)
+        bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
+        self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
-    def _bot_prompt_for_user(self, prompt_instruction: str, use_experiment: Experiment | None = None) -> str:
-        """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+    def _bot_prompt_for_user(self, instruction_prompt: str, use_experiment: Experiment | None = None) -> str:
+        """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import TopicBot
 
         topic_bot = TopicBot(self, experiment=use_experiment)
-        return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
+        return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
