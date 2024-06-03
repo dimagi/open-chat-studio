@@ -1,7 +1,9 @@
 from django import forms
+from django.db.models import Q, Subquery
 from langchain.memory.prompt import SUMMARY_PROMPT
 
 from apps.events.models import TimePeriod
+from apps.experiments.models import Experiment, ExperimentRoute
 from apps.generics.type_select_form import TypeSelectForm
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
@@ -52,11 +54,25 @@ class ScheduledMessageConfigForm(forms.Form):
         min_value=1,
         help_text="Indicates how many times this should go on for. Specify '1' for a one time event",
     )
+    experiment_id = forms.ChoiceField(
+        label="Experiment", help_text="Select the child experiment to process this scheduled message"
+    )
 
     def __init__(self, *args, **kwargs):
-        if "initial" not in kwargs:
-            kwargs["initial"] = {"frequency": 1, "repetitions": 1, "time_period": TimePeriod.WEEKS}
+        experiment_id = kwargs.pop("experiment_id")
         super().__init__(*args, **kwargs)
+
+        field = self.fields["experiment_id"]
+        children_subquery = Subquery(
+            ExperimentRoute.objects.filter(parent__id=experiment_id).values_list("child", flat=True)
+        )
+        experiments = Experiment.objects.filter(Q(id=experiment_id) | Q(id__in=children_subquery)).values_list(
+            "id", "name"
+        )
+        field.choices = experiments
+        if not kwargs.get("initial") and len(experiments) == 1:
+            field.initial = experiment_id
+            field.widget = field.hidden_widget()
 
 
 class EventActionForm(forms.ModelForm):
@@ -82,15 +98,16 @@ class EventActionTypeSelectForm(TypeSelectForm):
         return instance
 
 
-def get_action_params_form(data=None, instance=None):
+def get_action_params_form(data=None, instance=None, experiment_id=None):
+    initial = instance.params if instance else None
     return EventActionTypeSelectForm(
         primary=EventActionForm(data=data, instance=instance),
         secondary={
-            "log": EmptyForm(data=data, initial=instance.params if instance else None),
-            "send_message_to_bot": SendMessageToBotForm(data=data, initial=instance.params if instance else None),
-            "end_conversation": EmptyForm(data=data, initial=instance.params if instance else None),
-            "summarize": SummarizeConversationForm(data=data, initial=instance.params if instance else None),
-            "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=instance.params if instance else None),
+            "log": EmptyForm(data=data, initial=initial),
+            "send_message_to_bot": SendMessageToBotForm(data=data, initial=initial),
+            "end_conversation": EmptyForm(data=data, initial=initial),
+            "summarize": SummarizeConversationForm(data=data, initial=initial),
+            "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=initial, experiment_id=experiment_id),
         },
         secondary_key_field="action_type",
     )
