@@ -1,21 +1,22 @@
 import logging
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
 from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
-def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
+def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1, experiment_id=None) -> tuple:
     params = {
         "name": "Test",
         "time_period": time_period,
@@ -23,6 +24,9 @@ def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1)
         "repetitions": repetitions,
         "prompt_text": "",
     }
+    if experiment_id:
+        params["experiment_id"] = experiment_id
+
     return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
 
@@ -299,3 +303,31 @@ def test_get_participant_scheduled_messages_includes_child_experiments():
 
     assert len(session2.get_participant_scheduled_messages()) == 1
     assert len(session.get_participant_scheduled_messages()) == 2
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("use_custom_experiment", [False, True])
+def test_scheduled_message_experiment(use_custom_experiment):
+    """ScheduledMessages should be linked to the experiment found in the linked action's params, otherwise use the
+    session's experiment"""
+    custom_experiment = ExperimentFactory() if use_custom_experiment else None
+    session = ExperimentSessionFactory()
+    event_action_kwargs = {"time_period": TimePeriod.DAYS}
+    if custom_experiment:
+        event_action_kwargs["experiment_id"] = custom_experiment.id
+
+    event_action, params = _construct_event_action(**event_action_kwargs)
+    trigger_action = ScheduleTriggerAction()
+    trigger_action.invoke(session, action=event_action)
+    experiment = custom_experiment if custom_experiment else session.experiment
+
+    session.ad_hoc_bot_message = Mock()
+    message = ScheduledMessage.objects.get(action=event_action, experiment=experiment)
+    message.participant.get_latest_session = lambda *args, **kwargs: session
+    message.safe_trigger()
+
+    experiment_used = session.ad_hoc_bot_message.call_args_list[0].kwargs["use_experiment"]
+    if use_custom_experiment:
+        assert experiment_used == custom_experiment
+    else:
+        assert experiment_used == session.experiment
