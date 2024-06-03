@@ -21,6 +21,9 @@
     @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8;
   }
 
+  .tab:is(input[type="radio"]) {
+  	@apply whitespace-nowrap;
+  }
 }
 
 /* subscriptions */
