@@ -257,8 +257,12 @@ class ScheduledMessage(BaseTeamModel):
         delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
         utc_now = timezone.now()
 
+        # We assume the participant is not enaged in multiple experiments at the same time
+        # except through a multi bot setup. In the multi bot setup, the latest session will be the one of the router
         experiment_session = self.participant.get_latest_session()
-        experiment_session.ad_hoc_bot_message(self.action.params["prompt_text"], fail_silently=False)
+        experiment_session.ad_hoc_bot_message(
+            self.action.params["prompt_text"], fail_silently=False, use_experiment=self.experiment
+        )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1
