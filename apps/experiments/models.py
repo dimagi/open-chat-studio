@@ -637,8 +637,8 @@ class ExperimentSession(BaseTeamModel):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
         this session's history"""
 
-        bot_message = self._bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
-        self.try_send_message(self, message=bot_message, fail_silently=fail_silently)
+        bot_message = self._bot_prompt_for_user(prompt_instruction=instruction_prompt)
+        self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
     def _bot_prompt_for_user(self, prompt_instruction: str) -> str:
         """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
