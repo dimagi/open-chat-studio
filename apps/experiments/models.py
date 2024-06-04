@@ -290,6 +290,12 @@ class VoiceResponseBehaviours(models.TextChoices):
     NEVER = "never", gettext("Never")
 
 
+class AgentTools(models.TextChoices):
+    RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
+    ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
+    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -324,13 +330,6 @@ class Experiment(BaseTeamModel):
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
-    )
-    tools_enabled = models.BooleanField(
-        default=False,
-        help_text=(
-            "If checked, this bot will be able to use prebuilt tools (set reminders etc). This uses more tokens, "
-            "so it will cost more. This doesn't currently work with Anthropic models."
-        ),
     )
 
     source_material = models.ForeignKey(
@@ -407,6 +406,7 @@ class Experiment(BaseTeamModel):
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
+    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -417,6 +417,10 @@ class Experiment(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def tools_enabled(self):
+        return len(self.tools) > 0
 
     @property
     def event_triggers(self):

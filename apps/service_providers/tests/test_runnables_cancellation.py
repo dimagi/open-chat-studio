@@ -1,7 +1,11 @@
+from unittest.mock import patch
+
 import pytest
 from langchain_core.messages import AIMessageChunk
 
+from apps.chat.agent.tools import OneOffReminderTool
 from apps.chat.models import Chat
+from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -25,7 +29,7 @@ def session(fake_llm):
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.tools_enabled = True
+    session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
     session.experiment.get_participant_data = lambda *args, **kwargs: ""
     return session
 
@@ -37,7 +41,9 @@ def test_simple_runnable_cancellation(session, fake_llm):
 
 
 @pytest.mark.django_db()
-def test_agent_runnable_cancellation(session, fake_llm):
+@patch("apps.service_providers.llm_service.runnables.get_tools")
+def test_agent_runnable_cancellation(get_tools, session, fake_llm):
+    get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
     runnable = _get_assistant_mocked_history_recording(session, AgentExperimentRunnable)
 
     fake_llm.responses = [

@@ -8,7 +8,7 @@ from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
 from apps.events.models import ScheduledMessage
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import AgentTools, ExperimentSession
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
@@ -37,7 +37,7 @@ class CustomBaseTool(BaseTool):
 
 
 class RecurringReminderTool(CustomBaseTool):
-    name = "recurring-reminder"
+    name = AgentTools.RECURRING_REMINDER
     description = "useful to schedule recurring reminders"
     requires_session = True
     args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
@@ -63,7 +63,7 @@ class RecurringReminderTool(CustomBaseTool):
 
 
 class OneOffReminderTool(CustomBaseTool):
-    name = "one-off-reminder"
+    name = AgentTools.ONE_OFF_REMINDER
     description = "useful to schedule one-off reminders"
     requires_session = True
     args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
@@ -84,7 +84,7 @@ class OneOffReminderTool(CustomBaseTool):
 
 
 class UpdateScheduledMessageTool(CustomBaseTool):
-    name = "schedule-update-tool"
+    name = AgentTools.SCHEDULE_UPDATE
     description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
@@ -142,9 +142,16 @@ def create_periodic_task(experiment_session: ExperimentSession, message: str, **
     )
 
 
+TOOL_CLASS_MAP = {
+    AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
+    AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
+    AgentTools.RECURRING_REMINDER: RecurringReminderTool,
+}
+
+
 def get_tools(experiment_session) -> list[BaseTool]:
-    return [
-        RecurringReminderTool(experiment_session=experiment_session),
-        OneOffReminderTool(experiment_session=experiment_session),
-        UpdateScheduledMessageTool(experiment_session=experiment_session),
-    ]
+    tools = []
+    for tool_name in experiment_session.experiment.tools:
+        tool_cls = TOOL_CLASS_MAP[tool_name]
+        tools.append(tool_cls(experiment_session=experiment_session))
+    return tools
