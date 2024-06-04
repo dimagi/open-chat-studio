@@ -1,13 +1,15 @@
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
+from apps.events.models import ScheduledMessage
 from apps.experiments.models import ExperimentSession
+from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
 
@@ -23,7 +25,7 @@ class CustomBaseTool(BaseTool):
         try:
             return self.action(*args, **kwargs)
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
@@ -81,6 +83,48 @@ class OneOffReminderTool(CustomBaseTool):
         return "Success"
 
 
+class UpdateScheduledMessageTool(CustomBaseTool):
+    name = "schedule-update-tool"
+    description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
+    requires_session = True
+    args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
+
+    def action(
+        self,
+        name: str,
+        weekday: schemas.WeekdaysEnum,
+        hour: int,
+        minute: int,
+        user_specified_custom_date: bool,
+    ):
+        if user_specified_custom_date:
+            # When the user specifies a new date, the bot will extract the day of the week that that day falls on
+            # and pass it as a parameter to this method.
+            # Since we only allow users to change the weekday of their schedules, this bahvaiour can lead to a
+            # confusing conversation where the bot updated their schedule to a seemingly random date that
+            # corresponds to the same weekday as the requested day. To resolve this, we simply don't allow users
+            # to specify dates, but only a weekday and the time of day.
+            return "The user cannot do that. Only weekdays and time of day can be changed"
+        message = ScheduledMessage.objects.get(
+            participant=self.experiment_session.participant, action__params__name=name
+        )
+        # the datetime object regard Monday as day 0 whereas the llm regards it as day 1
+        weekday_int = weekday.value - 1
+        message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
+            message.next_trigger_date, weekday_int, hour, minute
+        )
+        message.custom_schedule_params = {"weekday": weekday_int, "hour": hour, "minute": minute}
+        message.save()
+
+        return f"The new datetime is {pretty_date(message.next_trigger_date)}"
+
+
+def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
+    current_weekday = date.weekday()
+    day_diff = new_weekday - current_weekday
+    return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
+
+
 def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
     task_kwargs = json.dumps(
         {
@@ -102,4 +146,5 @@ def get_tools(experiment_session) -> list[BaseTool]:
     return [
         RecurringReminderTool(experiment_session=experiment_session),
         OneOffReminderTool(experiment_session=experiment_session),
+        UpdateScheduledMessageTool(experiment_session=experiment_session),
     ]

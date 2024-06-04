@@ -28,6 +28,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        current_datetime = timezone.now().strftime("%A, %d %B %Y %H:%M:%S %Z")
+        current_datetime = pretty_date(timezone.now())
         prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
         system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(

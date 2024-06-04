@@ -663,8 +663,48 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
+    def get_participant_scheduled_messages(self, as_dict=False):
+        """
+        Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent
+
+        Parameters:
+        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        """
+        from apps.events.models import ScheduledMessage
+
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
+        messages = ScheduledMessage.objects.filter(
+            Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+            participant=self.participant,
+            team=self.team,
+        ).select_related("action")
+
+        scheduled_messages = []
+        for message in messages:
+            if as_dict:
+                scheduled_messages.append(
+                    {
+                        "name": message.name,
+                        "frequency": message.frequency,
+                        "time_period": message.time_period,
+                        "repetitions": message.repetitions,
+                        "next_trigger_date": message.next_trigger_date.isoformat(),
+                    }
+                )
+            else:
+                scheduled_messages.append(str(message))
+        return scheduled_messages
+
     def get_participant_data(self):
-        return self.experiment.get_participant_data(self.participant)
+        participant_data = self.experiment.get_participant_data(self.participant) or {}
+        participant_data = {**participant_data, "scheduled_messages": self.get_participant_scheduled_messages()}
+        return participant_data
 
     def get_participant_data_json(self):
-        return json.dumps(self.experiment.get_participant_data(self.participant), indent=2)
+        participant_data = self.experiment.get_participant_data(self.participant) or {}
+        participant_data = {
+            **participant_data,
+            "scheduled_messages": self.get_participant_scheduled_messages(as_dict=True),
+        }
+        return json.dumps(participant_data, indent=2)
