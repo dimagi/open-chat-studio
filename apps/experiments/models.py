@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 import markdown
@@ -21,6 +22,8 @@ from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
+
+log = logging.getLogger(__name__)
 
 
 class PromptObjectManager(AuditingManager):
@@ -634,14 +637,35 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
-    def send_bot_message(self, instruction_prompt: str, fail_silently=True):
+    def ad_hoc_bot_message(self, instruction_prompt: str, fail_silently=True):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
         this session's history"""
-        from apps.chat.tasks import bot_prompt_for_user, try_send_message
-        # TODO: Move bot_prompt_for_user and try_send_message to better suited places
 
-        bot_message = bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
-        try_send_message(self, message=bot_message, fail_silently=fail_silently)
+        bot_message = self._bot_prompt_for_user(prompt_instruction=instruction_prompt)
+        self.try_send_message(message=bot_message, fail_silently=fail_silently)
+
+    def _bot_prompt_for_user(self, prompt_instruction: str) -> str:
+        """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+        message. The response from the bot will be saved to the chat history.
+        """
+        from apps.chat.bots import TopicBot
+
+        topic_bot = TopicBot(self)
+        return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
+
+    def try_send_message(self, message: str, fail_silently=True):
+        """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
+        directly. This is not an instruction to the bot.
+        """
+        from apps.chat.channels import ChannelBase
+
+        try:
+            channel = ChannelBase.from_experiment_session(self)
+            channel.new_bot_message(message)
+        except Exception as e:
+            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if not fail_silently:
+                raise e
 
     def get_participant_scheduled_messages(self, as_dict=False):
         """

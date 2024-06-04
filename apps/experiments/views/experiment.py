@@ -57,6 +57,7 @@ from apps.experiments.models import (
     Experiment,
     ExperimentSession,
     Participant,
+    ParticipantData,
     SessionStatus,
     SyntheticVoice,
 )
@@ -572,6 +573,7 @@ def _start_experiment_session(
     participant_identifier: str,
     participant_user: CustomUser | None = None,
     session_status: SessionStatus = SessionStatus.ACTIVE,
+    timezone: str | None = None,
 ) -> ExperimentSession:
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
@@ -601,7 +603,16 @@ def _start_experiment_session(
             status=session_status,
             participant=participant,
         )
-    if experiment.sessions.filter(participant=participant).count() == 1:
+
+        # Record the participant's timezone
+        if timezone:
+            data_records = ParticipantData.objects.filter(participant=participant)
+            for data_record in data_records:
+                data_record.data["timezone"] = timezone
+                data_record.save()
+            ParticipantData.objects.bulk_update(data_records, fields=["data"])
+
+    if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return _check_and_process_seed_message(session)
@@ -628,6 +639,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
         experiment_channel=experiment_channel,
         participant_user=request.user,
         participant_identifier=request.user.email,
+        timezone=request.session.get("detected_tz", None),
     )
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
@@ -758,6 +770,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 experiment_channel=experiment_channel,
                 participant_user=user,
                 participant_identifier=identifier,
+                timezone=request.session.get("detected_tz", None),
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
@@ -811,6 +824,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                         experiment_channel=channel,
                         participant_identifier=post_form.cleaned_data["email"],
                         session_status=SessionStatus.SETUP,
+                        timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)

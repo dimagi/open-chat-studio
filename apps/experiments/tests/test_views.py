@@ -7,7 +7,14 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession, Participant, VoiceResponseBehaviours
+from apps.experiments.models import (
+    AgentTools,
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    VoiceResponseBehaviours,
+)
 from apps.experiments.views.experiment import ExperimentForm, _start_experiment_session, _validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -315,3 +322,31 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
     )
     client.post(url, data=post_data)
     assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+def test_timezone_saved_in_participant_data(_trigger_mock):
+    """A participant's timezone data should be saved in all ParticipantData records"""
+    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment2 = ExperimentFactory()
+    channel = ExperimentChannelFactory(experiment=experiment)
+    team = experiment.team
+    identifier = "someone@example.com"
+    participant = Participant.objects.create(identifier=identifier, team=team)
+    part_data1 = ParticipantData.objects.create(team=team, participant=participant, content_object=experiment)
+    part_data2 = ParticipantData.objects.create(
+        team=experiment2.team, participant=participant, content_object=experiment2
+    )
+
+    _start_experiment_session(
+        experiment,
+        experiment_channel=channel,
+        participant_identifier=identifier,
+        timezone="Africa/Johannesburg",
+    )
+
+    part_data1.refresh_from_db()
+    part_data2.refresh_from_db()
+    assert part_data1.data["timezone"] == "Africa/Johannesburg"
+    assert part_data2.data["timezone"] == "Africa/Johannesburg"
