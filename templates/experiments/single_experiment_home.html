@@ -119,85 +119,94 @@
       {% endfor %}
     {% endif %}
   </div>
-  <div class="app-card">
 
-    <h2 class="pg-subtitle">My Previous Chat Sessions</h2>
-    <div class="overflow-x-auto">
-      <table class="pg-table">
-        <thead>
-          <tr>
-            <th>Started</th>
-            <th>Last Message</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for session in user_sessions %}
-            <tr>
-              <td>{{ session.created_at }}</td>
-              <td>{{ session.last_message_created_at }}</td>
-              <td>
-                {% if session.is_complete %}
-                  <a class="btn btn-sm btn-outline btn-primary"
-                     href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
-                     class="link">Review Chat</a>
-                {% else %}
-                  <a class="btn btn-sm btn-outline btn-primary"
-                     href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
-                    Continue Chat
-                  </a>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% if perms.chat.view_chat %}
-    <div class="app-card">
-      <h2 class="pg-subtitle">All Chat Sessions</h2>
-      <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
-        <div class="grid grid-flow-col auto-cols-max gap-x-2">
-          {% if perms.experiments.download_chats %}
-            <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
-              {% csrf_token %}
-              <input name="tags" class="hidden" x-bind:value="tags" />
-              <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
-            </form>
-          {% endif %}
-          {% if perms.annotations.view_customtaggeditem %}
-            <div class="w-96 my-2">
-              <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
-                <option value="">Filter tags...</option>
-                {% for tag in available_tags %}
-                  <option value="{{ tag.name }}">{{ tag.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          {% endif %}
+  <div role="tablist" class="tabs tabs-bordered">
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" checked />
+    <div role="tabpanel" class="tab-content">
+      <div class="app-card">
+        <div class="overflow-x-auto">
+          <table class="pg-table">
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Last Message</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for session in user_sessions %}
+                <tr>
+                  <td>{{ session.created_at }}</td>
+                  <td>{{ session.last_message_created_at }}</td>
+                  <td>
+                    {% if session.is_complete %}
+                      <a class="btn btn-sm btn-outline btn-primary"
+                         href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
+                         class="link">Review Chat</a>
+                    {% else %}
+                      <a class="btn btn-sm btn-outline btn-primary"
+                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+                        Continue Chat
+                      </a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-        <div
-          id="sessions-table"
-          hx-trigger="load, tagFilter"
-          hx-target="this"
-          hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-          hx-swap="innerHTML"
-        ></div>
       </div>
     </div>
-  {% endif %}
-  {% flag "events" %}
-    <div class="app-card">
-      <h2 class="pg-subtitle">Events</h2>
-      <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
-      <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
-      {% if show_events %}
-        {% render_table events_table %}
-      {% endif %}
-    </div>
-  {% endflag %}
 
+    {% if perms.chat.view_chat %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions"/>
+      <div role="tabpanel" class="tab-content">
+        <div class="app-card">
+          <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
+            <div class="grid grid-flow-col auto-cols-max gap-x-2">
+              {% if perms.experiments.download_chats %}
+                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+                  {% csrf_token %}
+                  <input name="tags" class="hidden" x-bind:value="tags" />
+                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+                </form>
+              {% endif %}
+              {% if perms.annotations.view_customtaggeditem %}
+                <div class="w-96 my-2">
+                  <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
+                    <option value="">Filter tags...</option>
+                    {% for tag in available_tags %}
+                      <option value="{{ tag.name }}">{{ tag.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              {% endif %}
+            </div>
+            <div
+              id="sessions-table"
+              hx-trigger="load, tagFilter"
+              hx-target="this"
+              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+              hx-swap="innerHTML"
+            ></div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {% flag "events" %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events"/>
+      <div role="tabpanel" class="tab-content">
+        <div class="app-card">
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+          {% if show_events %}
+            {% render_table events_table %}
+          {% endif %}
+        </div>
+      </div>
+    {% endflag %}
+  </div>
   <script>
     let url = "{{ filter_tags_url|escapejs }}"
     function filterSessions(tags) {
