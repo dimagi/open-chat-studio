@@ -257,8 +257,6 @@ class ScheduledMessage(BaseTeamModel):
         delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
         utc_now = timezone.now()
 
-        # We assume the participant is not enaged in multiple experiments at the same time
-        # except through a multi bot setup. In the multi bot setup, the latest session will be the one of the router
         experiment_id = self.action.params.get("experiment_id", self.experiment.id)
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
         experiment_to_use = Experiment.objects.get(id=experiment_id)
