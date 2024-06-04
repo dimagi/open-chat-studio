@@ -3,7 +3,7 @@ from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain.memory.summary import SummarizerMixin
 
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 from apps.utils.django_db import MakeInterval
 
 
@@ -58,13 +58,8 @@ class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         from apps.events.models import ScheduledMessage
 
-        experiment_id = action.params.get("experiment_id", None)
-        if experiment_id:
-            experiment = Experiment.objects.get(id=experiment_id)
-        else:
-            experiment = session.experiment
         ScheduledMessage.objects.create(
-            experiment=experiment, participant=session.participant, team=session.team, action=action
+            experiment=session.experiment, participant=session.participant, team=session.team, action=action
         )
         return f"A scheduled message was created for participant '{session.participant.identifier}'"
 

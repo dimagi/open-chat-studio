@@ -472,8 +472,8 @@ class Participant(BaseTeamModel):
     def __str__(self):
         return self.identifier
 
-    def get_latest_session(self) -> "ExperimentSession":
-        return self.experimentsession_set.order_by("-created_at").first()
+    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
+        return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     class Meta:
         ordering = ["identifier"]

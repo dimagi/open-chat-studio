@@ -308,8 +308,7 @@ def test_get_participant_scheduled_messages_includes_child_experiments():
 @pytest.mark.django_db()
 @pytest.mark.parametrize("use_custom_experiment", [False, True])
 def test_scheduled_message_experiment(use_custom_experiment):
-    """ScheduledMessages should be linked to the experiment found in the linked action's params, otherwise use the
-    session's experiment"""
+    """ScheduledMessages should use the experiment specified in the linked action's params"""
     custom_experiment = ExperimentFactory() if use_custom_experiment else None
     session = ExperimentSessionFactory()
     event_action_kwargs = {"time_period": TimePeriod.DAYS}
@@ -319,10 +318,9 @@ def test_scheduled_message_experiment(use_custom_experiment):
     event_action, params = _construct_event_action(**event_action_kwargs)
     trigger_action = ScheduleTriggerAction()
     trigger_action.invoke(session, action=event_action)
-    experiment = custom_experiment if custom_experiment else session.experiment
 
     session.ad_hoc_bot_message = Mock()
-    message = ScheduledMessage.objects.get(action=event_action, experiment=experiment)
+    message = ScheduledMessage.objects.get(action=event_action)
     message.participant.get_latest_session = lambda *args, **kwargs: session
     message.safe_trigger()
 
