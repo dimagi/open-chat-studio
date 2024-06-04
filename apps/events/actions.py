@@ -59,7 +59,9 @@ class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         from apps.events.models import ScheduledMessage
 
-        ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=action)
+        ScheduledMessage.objects.create(
+            experiment=session.experiment, participant=session.participant, team=session.team, action=action
+        )
         return f"A scheduled message was created for participant '{session.participant.identifier}'"
 
     def event_action_updated(self, action):
@@ -75,7 +77,7 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             action.scheduled_messages.annotate(
                 new_delta=MakeInterval(action.params["time_period"], action.params["frequency"]),
             )
-            .filter(is_complete=False)
+            .filter(is_complete=False, custom_schedule_params={})
             .update(
                 next_trigger_date=Case(
                     When(last_triggered_at__isnull=True, then=F("created_at") + F("new_delta")),

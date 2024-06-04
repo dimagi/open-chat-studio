@@ -7,7 +7,14 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData, VoiceResponseBehaviours
+from apps.experiments.models import (
+    AgentTools,
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    VoiceResponseBehaviours,
+)
 from apps.experiments.views.experiment import ExperimentForm, _start_experiment_session, _validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -36,12 +43,14 @@ def test_create_experiment_success(db, client, team_with_users):
         "llm": "gpt-3.5",
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
+        "tools": [AgentTools.ONE_OFF_REMINDER],
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
     assert response.status_code == 302, response.context.form.errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
+    experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
 @override_flag("assistants", active=True)

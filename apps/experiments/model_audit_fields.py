@@ -8,7 +8,6 @@ EXPERIMENT_FIELDS = [
     "input_formatter",
     "safety_layers",
     "is_active",
-    "tools_enabled",
     "source_material",
     "seed_message",
     "pre_survey",

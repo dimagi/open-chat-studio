@@ -56,6 +56,7 @@ class EmptyForm(forms.Form):
 
 
 class ScheduledMessageConfigForm(forms.Form):
+    name = forms.CharField(label="Name", help_text="Descriptive name for this schedule")
     prompt_text = forms.CharField(
         label="Bot's instructions",
         help_text="Instructions for the bot to formulate a response",

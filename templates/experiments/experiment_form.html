@@ -35,7 +35,7 @@
     <div role="tablist" class="tabs tabs-bordered grid-flow-col auto-cols-max mt-4">
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Language Model" x-bind:checked="type === 'llm'" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" "tools_enabled" %}
+        {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="OpenAI Assistant" x-bind:checked="type === 'assistant'" x-show="type === 'assistant'" {% if experiment_type != "assistant" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
@@ -71,6 +71,16 @@
           {% endif %}
         {% endflag %}
       </div>
+
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools">
+      <div role="tabpanel" class="tab-content">
+        <div class="py-4 form-text">
+          <h3 class="text-md font-bold">{% translate "Please note" %} <i class="fas fa-exclamation-triangle"></i></h3>
+          <p class="text-sm">{% translate "Make sure that your selected model supports tool usage" %}</p>
+        </div>
+        {% render_form_fields form "tools" %}
+      </div>
+
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "no_activity_config" %}
