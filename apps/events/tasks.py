@@ -53,7 +53,9 @@ def fire_trigger(trigger_id, session_id):
 
 
 def _get_messages_to_fire():
-    return ScheduledMessage.objects.filter(is_complete=False, next_trigger_date__lte=functions.Now())
+    return ScheduledMessage.objects.filter(is_complete=False, next_trigger_date__lte=functions.Now()).select_related(
+        "action"
+    )
 
 
 @shared_task()
