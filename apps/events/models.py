@@ -291,12 +291,15 @@ class ScheduledMessage(BaseTeamModel):
     def repetitions(self) -> str:
         return self.action.params["repetitions"]
 
-    def __str__(self):
+    def as_string(self, as_timezone: str | None = None):
         schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
         if self.time_period not in ["hour", "day"]:
             weekday = self.next_trigger_date.strftime("%A")
             schedule = (
                 f"{self.name}: Every {self.frequency} {self.time_period} on {weekday} for {self.repetitions} times"
             )
-        next_trigger = pretty_date(self.next_trigger_date)
+        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
         return f"{schedule} (next trigger is {next_trigger})"
+
+    def __str__(self):
+        return self.as_string()

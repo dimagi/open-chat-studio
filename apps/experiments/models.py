@@ -1,8 +1,10 @@
 import json
 import logging
 import uuid
+from functools import cached_property
 
 import markdown
+import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -436,12 +438,6 @@ class Experiment(BaseTeamModel):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
-    def get_participant_data(self, participant: "Participant") -> "ParticipantData":
-        try:
-            return self.participant_data.get(participant=participant).data
-        except ParticipantData.DoesNotExist:
-            return None
-
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
@@ -673,13 +669,14 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_scheduled_messages(self, as_dict=False):
+    def get_participant_scheduled_messages(self, as_dict=False, as_timezone: str | None = None):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
         any child experiments in the case where the experiment is a parent
 
         Parameters:
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        timezone: The timezone to use for the dates. Defaults to the active timezone.
         """
         from apps.events.models import ScheduledMessage
 
@@ -691,7 +688,10 @@ class ExperimentSession(BaseTeamModel):
         ).select_related("action")
 
         scheduled_messages = []
+        as_timezone = as_timezone or timezone.get_current_timezone_name()
+
         for message in messages:
+            next_trigger_date = message.next_trigger_date.astimezone(pytz.timezone(as_timezone))
             if as_dict:
                 scheduled_messages.append(
                     {
@@ -699,22 +699,39 @@ class ExperimentSession(BaseTeamModel):
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,
-                        "next_trigger_date": message.next_trigger_date.isoformat(),
+                        "next_trigger_date": next_trigger_date.isoformat(),
                     }
                 )
             else:
-                scheduled_messages.append(str(message))
+                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
         return scheduled_messages
 
-    def get_participant_data(self):
-        participant_data = self.experiment.get_participant_data(self.participant) or {}
-        participant_data = {**participant_data, "scheduled_messages": self.get_participant_scheduled_messages()}
+    @cached_property
+    def participant_data_from_experiment(self) -> "ParticipantData":
+        try:
+            return self.experiment.participant_data.get(participant=self.participant).data
+        except ParticipantData.DoesNotExist:
+            return {}
+
+    def get_participant_timezone(self):
+        return self.participant_data_from_experiment.get("timezone")
+
+    def get_participant_data(self, use_participant_tz=False):
+        """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
+        will be represented in the timezone that the participant is in if that information is available"""
+        participant_data = self.participant_data_from_experiment
+        as_timezone = None
+        if use_participant_tz:
+            as_timezone = self.get_participant_timezone()
+
+        scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
+        if scheduled_messages:
+            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return participant_data
 
     def get_participant_data_json(self):
-        participant_data = self.experiment.get_participant_data(self.participant) or {}
-        participant_data = {
-            **participant_data,
-            "scheduled_messages": self.get_participant_scheduled_messages(as_dict=True),
-        }
+        participant_data = self.participant_data_from_experiment
+        scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
+        if scheduled_messages:
+            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return json.dumps(participant_data, indent=2)

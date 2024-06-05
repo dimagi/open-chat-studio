@@ -17,10 +17,12 @@ from apps.utils.taskbadger import update_taskbadger_data
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str) -> str:
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
-    message_handler = WebChannel(experiment_session.experiment_channel)
+    web_channel = WebChannel(
+        experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
+    )
     message = WebMessage(chat_id=experiment_session.participant.identifier, message_text=message_text)
-    update_taskbadger_data(self, message_handler, message)
-    return message_handler.new_user_message(message)
+    update_taskbadger_data(self, web_channel, message)
+    return web_channel.new_user_message(message)
 
 
 @shared_task
