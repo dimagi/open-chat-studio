@@ -24,6 +24,7 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
+from apps.annotations.models import Tag
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -202,11 +203,14 @@ class ExperimentRunnable(BaseExperimentRunnable):
         self.memory.chat_memory.messages = messages
 
     def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
         )
+        if not Tag.objects.filter(name=self.experiment.name, team=self.session.team).exists():
+            chat_message.tags.create(team=self.session.team, name=self.experiment.name, is_system_tag=True)
+        chat_message.add_tags([self.experiment.name], team=self.session.team, added_by=None)
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
