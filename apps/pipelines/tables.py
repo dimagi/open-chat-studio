@@ -2,10 +2,17 @@ from django.conf import settings
 from django_tables2 import columns, tables
 
 from apps.generics import actions
-from apps.pipelines.models import Pipeline
+from apps.pipelines.models import Pipeline, PipelineRun
 
 
 class PipelineTable(tables.Table):
+    name = columns.Column(
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
@@ -29,4 +36,22 @@ class PipelineTable(tables.Table):
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
-        empty_text = "No safety layers found."
+        empty_text = "No pipelines found."
+
+
+class PipelineRunTable(tables.Table):
+    created_at = columns.DateTimeColumn(
+        verbose_name="Created",
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+
+    class Meta:
+        model = PipelineRun
+        fields = ("created_at", "status")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No runs found."

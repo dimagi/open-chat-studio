@@ -3,6 +3,7 @@ from datetime import datetime
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
+from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -20,6 +21,9 @@ class Pipeline(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse("pipelines:details", args=[self.team.slug, self.id])
 
     def invoke(self, input: PipelineState) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
@@ -53,6 +57,9 @@ class PipelineRun(BaseModel):
     input = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
     output = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
     log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+
+    def get_absolute_url(self):
+        return reverse("pipelines:run_details", args=[self.pipeline.team.slug, self.pipeline_id, self.id])
 
 
 class LogEntry(pydantic.BaseModel):

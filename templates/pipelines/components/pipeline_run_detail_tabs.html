@@ -1,0 +1,44 @@
+{% load humanize %}
+<div role="tablist" class="tabs tabs-bordered">
+    <input type="radio" name="pipeline_run_tabs_{{ pipeline_run.id }}" role="tab" class="tab" aria-label="Input" checked/>
+    <div role="tabpanel" class="tab-content p-4">
+        {% for message in pipeline_run.input.messages %}
+        <pre class="whitespace-pre-wrap">{{ message }}</pre>
+            <div class="divider"></div>
+        {% endfor %}
+    </div>
+
+    <input type="radio" name="pipeline_run_tabs_{{ pipeline_run.id }}" role="tab" class="tab" aria-label="Output"/>
+    <div role="tabpanel" class="tab-content p-4">
+        {% for message in pipeline_run.output.messages %}
+        <pre class="whitespace-pre-wrap">{{ message }}</pre>
+            <div class="divider"></div>
+        {% endfor %}
+    </div>
+
+    <input type="radio" name="pipeline_run_tabs_{{ pipeline_run.id }}" role="tab" class="tab" aria-label="Logs"/>
+    <div role="tabpanel" class="tab-content p-4" x-data="{ showDebug: false }">
+        <div class="font-mono">
+
+            <div class="flex items-center cursor-pointer float-right">
+                <span class="label-text mr-2">Show Debug</span>
+                <input x-model="showDebug" type="checkbox" class="toggle" />
+            </div>
+            {% for entry in pipeline_run.log.entries %}
+                <div class="log log-{{ entry.level|lower }}" {% if entry.level == "DEBUG" %}x-show="showDebug"{% endif %}>
+                    <time datetime="{{ entry.time }}"
+                          title="{{ entry.time }}">{{ entry.time }}</time>
+                    <div class="badge
+                                {% if entry.level == "DEBUG" %}badge-neutral
+                                {% elif entry.level == "INFO" %}badge-info
+                                {% elif entry.level == "WARNING" %}badge-warning
+                                {% elif entry.level == "ERROR" %}badge-error
+                                {% endif %}
+                               ">{{ entry.level }}</div>
+                    <span>{{ entry.message|linebreaksbr }}</span>
+                    <div class="divider"></div>
+                </div>
+            {% endfor %}
+        </div>
+
+    </div>
