@@ -2,9 +2,9 @@ import pytest
 from freezegun import freeze_time
 
 from apps.events.models import EventActionType, TimePeriod
-from apps.experiments.models import ExperimentRoute, SyntheticVoice
+from apps.experiments.models import ExperimentRoute, ParticipantData, SyntheticVoice
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory, SyntheticVoiceFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -132,3 +132,32 @@ class TestExperimentSession:
 
         assert len(session2.get_participant_scheduled_messages()) == 1
         assert len(session.get_participant_scheduled_messages()) == 2
+
+    @pytest.mark.django_db()
+    @freeze_time("2022-01-01 08:00:00")
+    @pytest.mark.parametrize("use_participant_tz", [False, True])
+    def test_get_participant_data_timezone(self, use_participant_tz):
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant, team=participant.team)
+        event_action = event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS)
+        ScheduledMessageFactory(
+            experiment=session.experiment,
+            team=session.team,
+            participant=session.participant,
+            action=event_action,
+        )
+        ParticipantData.objects.create(
+            content_object=session.experiment,
+            participant=participant,
+            team=participant.team,
+            data={"name": "Tester", "timezone": "Africa/Johannesburg"},
+        )
+        timezone_time = "10:00:00 SAST" if use_participant_tz else "08:00:00 UTC"
+        expected_data = {
+            "name": "Tester",
+            "timezone": "Africa/Johannesburg",
+            "scheduled_messages": [
+                f"Test: Every 1 days on Sunday for 1 times (next trigger is Sunday, 02 January 2022 {timezone_time})"
+            ],
+        }
+        assert session.get_participant_data(use_participant_tz=use_participant_tz) == expected_data

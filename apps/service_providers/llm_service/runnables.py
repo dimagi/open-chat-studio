@@ -107,7 +107,7 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 
     @property
     def participant_data(self):
-        return self.experiment.get_participant_data(self.session.participant) or ""
+        return self.session.get_participant_data(use_participant_tz=True) or ""
 
 
 class ExperimentRunnable(BaseExperimentRunnable):

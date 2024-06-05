@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 
+import pytz
 from dateutil.relativedelta import relativedelta
+from django.utils.timezone import get_current_timezone_name
 
 
 def seconds_to_human(value):
@@ -25,6 +27,9 @@ def timedelta_to_relative_delta(timedelta: timedelta):
     return relativedelta(seconds=timedelta.total_seconds())
 
 
-def pretty_date(date: datetime) -> str:
+def pretty_date(date: datetime, as_timezone: str | None = None) -> str:
+    as_timezone = as_timezone or get_current_timezone_name()
     """Returns the date like this: 'Monday, 1 January 2024 08:00:00 UTC'"""
+    if as_timezone:
+        date = date.astimezone(pytz.timezone(as_timezone))
     return date.strftime("%A, %d %B %Y %H:%M:%S %Z")
