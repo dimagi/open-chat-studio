@@ -66,8 +66,10 @@ def test_runnable(runnable, session, fake_llm):
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
         {
-            "system": """You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 
-            UTC (timezone preserved)"""
+            "system": (
+                "You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 "
+                "UTC (timezone preserved)"
+            )
         },
         {"human": "hi"},
     ]
