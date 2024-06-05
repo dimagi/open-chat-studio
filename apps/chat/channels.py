@@ -208,7 +208,7 @@ class ChannelBase:
         if not self.is_message_type_supported():
             return self._handle_unsupported_message()
 
-        if self.experiment_channel.platform != "web":
+        if self.experiment_channel.platform != ChannelPlatform.WEB:
             if self._is_reset_conversation_request():
                 # Webchats' statuses are updated through an "external" flow
                 return
@@ -393,13 +393,9 @@ class ChannelBase:
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        if self.experiment_session and not self.experiment_channel:
-            # TODO: Remove
-            # Since web channels doesn't have channel records (atm), they will only have experiment sessions
-            # so we don't create channel_sessions for them.
+        if self.experiment_session and self.experiment_channel.platform == ChannelPlatform.WEB:
             return
 
-        # We override `self.experiment_session`, since we must always use the latest (or "active") session
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
