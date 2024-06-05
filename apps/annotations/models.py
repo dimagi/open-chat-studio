@@ -22,7 +22,8 @@ from apps.users.models import CustomUser
 )
 class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
-    created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
+    is_system_tag = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("Tag")
@@ -42,7 +43,7 @@ class Tag(TagBase, BaseTeamModel):
     "content_type",
 )
 class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
-    user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items", on_delete=models.CASCADE)
 
     class Meta:
