@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
     "log": actions.LogAction,
+    "pipeline_start": actions.PipelineStartAction,
+    "schedule_trigger": actions.ScheduleTriggerAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
     "summarize": actions.SummarizeConversationAction,
-    "schedule_trigger": actions.ScheduleTriggerAction,
 }
 
 
@@ -34,6 +35,7 @@ class EventActionType(models.TextChoices):
     SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
+    PIPELINE_START = ("pipeline_start", "Start a pipeline")
 
 
 class EventAction(BaseModel):

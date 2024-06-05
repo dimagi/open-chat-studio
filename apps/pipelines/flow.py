@@ -23,4 +23,5 @@ class Flow(pydantic.BaseModel):
 
 
 class PipelineData(pydantic.BaseModel):
+    name: str
     data: Flow

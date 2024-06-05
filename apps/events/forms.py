@@ -5,6 +5,7 @@ from langchain.memory.prompt import SUMMARY_PROMPT
 from apps.events.models import TimePeriod
 from apps.experiments.models import Experiment, ExperimentRoute
 from apps.generics.type_select_form import TypeSelectForm
+from apps.pipelines.models import Pipeline
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
 
@@ -34,6 +35,22 @@ class SendMessageToBotForm(forms.Form):
         if not data:
             return "The user hasn't responded, please prompt them again."
         return data
+
+
+class PipelineStartForm(forms.Form):
+    pipeline_id = forms.ModelChoiceField(
+        queryset=None,
+        label="Select a pipeline",
+        required=True,
+    )
+
+    def __init__(self, *args, **kwargs):
+        team_id = kwargs.pop("team_id")
+        super().__init__(*args, **kwargs)
+        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(team_id=team_id)
+
+    def clean_pipeline_id(self):
+        return self.cleaned_data["pipeline_id"].id
 
 
 class EmptyForm(forms.Form):
@@ -98,16 +115,20 @@ class EventActionTypeSelectForm(TypeSelectForm):
         return instance
 
 
-def get_action_params_form(data=None, instance=None, experiment_id=None):
-    initial = instance.params if instance else None
+def get_action_params_form(data=None, instance=None, team_id=None, experiment_id=None):
+    form_kwargs = {
+        "data": data,
+        "initial": instance.params if instance else None,
+    }
     return EventActionTypeSelectForm(
         primary=EventActionForm(data=data, instance=instance),
         secondary={
-            "log": EmptyForm(data=data, initial=initial),
-            "send_message_to_bot": SendMessageToBotForm(data=data, initial=initial),
-            "end_conversation": EmptyForm(data=data, initial=initial),
-            "summarize": SummarizeConversationForm(data=data, initial=initial),
-            "schedule_trigger": ScheduledMessageConfigForm(data=data, initial=initial, experiment_id=experiment_id),
+            "log": EmptyForm(**form_kwargs),
+            "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
+            "end_conversation": EmptyForm(**form_kwargs),
+            "summarize": SummarizeConversationForm(**form_kwargs),
+            "schedule_trigger": ScheduledMessageConfigForm(experiment_id=experiment_id, **form_kwargs),
+            "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
         },
         secondary_key_field="action_type",
     )
