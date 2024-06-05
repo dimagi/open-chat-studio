@@ -33,6 +33,18 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 class TopicBot:
+    """
+    Parameters
+    ----------
+    session:
+        The session to provide the chat history. New messages will be saved to this session.
+    experiment: (optional)
+        The experiment to provide the source material and other data for the LLM.
+        NOTE: Only use this if you know what you are doing. Normally this should be left empty, in which case
+        the session's own experiment will be used. This is used in a multi-bot setup where the user might want
+        a specific bot to handle a scheduled message.
+    """
+
     def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
         self.experiment = experiment or session.experiment
         self.prompt = self.experiment.prompt_text
