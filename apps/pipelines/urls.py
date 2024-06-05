@@ -1,10 +1,13 @@
 from django.urls import path
 
+from apps.generics.urls import make_crud_urls
+
 from . import views
 
 app_name = "pipelines"
 
 urlpatterns = [
-    path("", views.pipeline_builder, name="pipeline_builder"),
-    path("<int:pk>/", views.get_pipeline, name="get_pipeline"),
+    path("data/<int:pk>/", views.pipeline_data, name="pipeline_data"),
 ]
+
+urlpatterns.extend(make_crud_urls(views, "Pipeline"))

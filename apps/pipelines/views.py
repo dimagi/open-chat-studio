@@ -1,19 +1,69 @@
 import inspect
 
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.db.models import Count
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import TemplateView
+from django_tables2 import SingleTableView
 from pydantic import BaseModel
 
 from apps.pipelines.flow import PipelineData
 from apps.pipelines.models import Pipeline
+from apps.pipelines.tables import PipelineTable
 from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-@login_and_team_required
-def pipeline_builder(request, team_slug: str):
-    context = {"input_types": _pipeline_node_input_types()}
-    return render(request, "pipelines/pipeline_builder.html", context=context)
+class PipelineHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        return {
+            "active_tab": "pipelines",
+            "title": "Pipelines",
+            "new_object_url": reverse("pipelines:new", args=[team_slug]),
+            "table_url": reverse("pipelines:table", args=[team_slug]),
+        }
+
+
+class PipelineTableView(SingleTableView):
+    model = Pipeline
+    paginate_by = 25
+    table_class = PipelineTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return Pipeline.objects.filter(team=self.request.team).annotate(run_count=Count("runs"))
+
+
+class CreatePipeline(TemplateView):
+    template_name = "pipelines/pipeline_builder.html"
+
+    def get(self, request, *args, **kwargs):
+        pipeline = Pipeline.objects.create(
+            team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
+        )
+        return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
+
+
+class EditPipeline(TemplateView):
+    template_name = "pipelines/pipeline_builder.html"
+
+    def get_context_data(self, **kwargs):
+        data = super().get_context_data(**kwargs)
+        return {**data, "pipeline_id": kwargs["pk"], "input_types": _pipeline_node_input_types()}
+
+
+class DeletePipeline(LoginAndTeamRequiredMixin, View):
+    def delete(self, request, team_slug: str, pk: int):
+        pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
+        pipeline.delete()
+        messages.success(request, f"{pipeline.name} deleted")
+        return HttpResponse()
 
 
 def _pipeline_node_input_types():
@@ -53,7 +103,7 @@ def _pipeline_node_input_types():
 
 @login_and_team_required
 @csrf_exempt
-def get_pipeline(request, team_slug: str, pk: int):
+def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
         pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
         data = PipelineData.model_validate_json(request.body)

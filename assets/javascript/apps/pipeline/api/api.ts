@@ -1,5 +1,5 @@
-import axios, {AxiosInstance} from "axios";
-import {PipelineType} from "../types/pipeline";
+import axios, { AxiosInstance } from "axios";
+import { PipelineType } from "../types/pipeline";
 
 class ApiClient {
   private team: string | null;
@@ -13,11 +13,14 @@ class ApiClient {
 
   public async updatePipeline(
     pipelineId: number,
-    updatedPipeline: PipelineType
+    updatedPipeline: PipelineType,
   ): Promise<PipelineType> {
-    const client = this.createClient()
+    const client = this.createClient();
     try {
-      const response = await client.post(`/pipelines/${pipelineId}/`, updatedPipeline);
+      const response = await client.post(
+        `/pipelines/data/${pipelineId}/`,
+        updatedPipeline,
+      );
 
       if (response?.status !== 200) {
         throw new Error(`HTTP error! status: ${response?.status}`);
@@ -30,9 +33,9 @@ class ApiClient {
   }
 
   public async getPipeline(pipelineId: number): Promise<PipelineType> {
-    const client = this.createClient()
+    const client = this.createClient();
     try {
-      const response = await client.get(`/pipelines/${pipelineId}`);
+      const response = await client.get(`/pipelines/data/${pipelineId}`);
       if (response.status !== 200) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -50,4 +53,4 @@ class ApiClient {
   }
 }
 
-export const apiClient = new ApiClient()
+export const apiClient = new ApiClient();

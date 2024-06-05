@@ -15,7 +15,7 @@
   <script type="module">
     let nodeInputTypes = JSON.parse(document.getElementById('node-input-types').textContent);
     document.addEventListener('DOMContentLoaded', () => {
-      SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", 1, nodeInputTypes);
+      SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }}, nodeInputTypes);
     }
     )
   </script>
