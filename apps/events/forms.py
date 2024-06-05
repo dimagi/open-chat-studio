@@ -55,7 +55,7 @@ class ScheduledMessageConfigForm(forms.Form):
         help_text="Indicates how many times this should go on for. Specify '1' for a one time event",
     )
     experiment_id = forms.ChoiceField(
-        label="Experiment", help_text="Select the child experiment to process this scheduled message"
+        label="Experiment", help_text="Select the experiment to process this scheduled message"
     )
 
     def __init__(self, *args, **kwargs):
