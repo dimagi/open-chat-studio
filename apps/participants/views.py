@@ -80,3 +80,15 @@ class ParticipantTableView(SingleTableView):
 
     def get_queryset(self):
         return Participant.objects.filter(team=self.request.team)
+
+
+class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "experiments.view_participant"
+    template_name = "participants/single_participant_home.html"
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        participant = Participant.objects.get(id=self.kwargs["participant_id"])
+        context["active_tab"] = "participants"
+        context["participant"] = participant
+        return context

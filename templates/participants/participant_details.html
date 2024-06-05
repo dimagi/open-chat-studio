@@ -1,0 +1,26 @@
+<div>
+    <div class="pl-4">
+        <dl class="divide-y divide-gray-100">
+            <div class="py-3 grid grid-cols-3 sm:gap-4">
+                <dt class="text-sm font-medium leading-6">Identifier</dt>
+                <dd class="text-sm col-span-2">{{ participant.identifier }}</dd>
+            </div>
+            <div class="py-3 grid grid-cols-3 sm:gap-4">
+                <dt class="text-sm font-medium leading-6">Public ID</dt>
+                <dd class="text-sm col-span-2">{{ participant.public_id }}</dd>
+            </div>
+            <div class="py-3 grid grid-cols-3 sm:gap-4">
+                <dt class="text-sm font-medium leading-6">User</dt>
+                <dd class="text-sm col-span-2">{{ participant.user|default:"" }}</dd>
+            </div>
+            <div class="py-3 grid grid-cols-3 sm:gap-4">
+                <dt class="text-sm font-medium leading-6">Joined on</dt>
+                <dd class="text-sm col-span-2">{{ participant.created_at }}</dd>
+            </div>
+            <div class="py-3 grid grid-cols-3 sm:gap-4">
+                <dt class="text-sm font-medium leading-6">Last seen</dt>
+                <dd class="text-sm col-span-2">{{ participant.last_seen }}</dd>
+            </div>
+        </dl>
+    </div>
+</div>

@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from functools import cached_property
+from datetime import datetime
 
 import markdown
 import pytz
@@ -475,8 +476,17 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
+    def last_seen(self) -> datetime:
+        latest_session = self.experimentsession_set.order_by("-created_at").values("id")[:1]
+        return (
+            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
+            .order_by("-created_at")
+            .first()
+            .created_at
+        )
+
     def get_absolute_url(self):
-        return reverse("participants:participant_edit", args=[self.team.slug, self.id])
+        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
 
     class Meta:
         ordering = ["identifier"]
