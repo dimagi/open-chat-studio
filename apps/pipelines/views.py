@@ -116,6 +116,7 @@ def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
         pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
         data = PipelineData.model_validate_json(request.body)
+        pipeline.name = data.name
         pipeline.data = data.data.model_dump()
         pipeline.save()
         return JsonResponse({"data": {"message": "Pipeline saved"}})
