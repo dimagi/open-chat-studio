@@ -26,7 +26,7 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
 
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
-        action_form = get_action_params_form(request.POST, team_id=request.team.id)
+        action_form = get_action_params_form(request.POST, team_id=request.team.id, experiment_id=experiment_id)
         trigger_form = trigger_form_class(request.POST)
         if action_form.is_valid() and trigger_form.is_valid():
             saved_action = action_form.save(experiment_id=experiment_id)
@@ -35,7 +35,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
             trigger.save()
             return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
-        action_form = get_action_params_form(team_id=request.team.id)
+        action_form = get_action_params_form(team_id=request.team.id, experiment_id=experiment_id)
         trigger_form = trigger_form_class()
     context = {
         "action_form": action_form,
@@ -67,7 +67,9 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     if request.method == "POST":
-        action_form = get_action_params_form(request.POST, instance=trigger.action, team_id=request.team.id)
+        action_form = get_action_params_form(
+            request.POST, instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
+        )
         trigger_form = trigger_form_class(request.POST, instance=trigger)
 
         if action_form.is_valid() and trigger_form.is_valid():
@@ -75,7 +77,9 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
             trigger = trigger_form.save(experiment_id=experiment_id)
             return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
     else:
-        action_form = get_action_params_form(instance=trigger.action, team_id=request.team.id)
+        action_form = get_action_params_form(
+            instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
+        )
         trigger_form = trigger_form_class(instance=trigger)
 
     context = {

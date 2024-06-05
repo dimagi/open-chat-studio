@@ -6,7 +6,7 @@ from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
@@ -33,21 +33,36 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 class TopicBot:
-    def __init__(self, session: ExperimentSession):
-        experiment = session.experiment
-        self.prompt = experiment.prompt_text
-        self.input_formatter = experiment.input_formatter
-        self.llm = experiment.get_chat_model()
-        self.source_material = experiment.source_material.material if experiment.source_material else None
-        self.safety_layers = experiment.safety_layers.all()
+    """
+    Parameters
+    ----------
+    session:
+        The session to provide the chat history. New messages will be saved to this session.
+    experiment: (optional)
+        The experiment to provide the source material and other data for the LLM.
+        NOTE: Only use this if you know what you are doing. Normally this should be left empty, in which case
+        the session's own experiment will be used. This is used in a multi-bot setup where the user might want
+        a specific bot to handle a scheduled message, in which case it would be useful for the LLM to have the
+        conversation history of the participant's chat with the router / main bot.
+    """
+
+    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
+        self.experiment = experiment or session.experiment
+        self.prompt = self.experiment.prompt_text
+        self.input_formatter = self.experiment.input_formatter
+        self.llm = self.experiment.get_chat_model()
+        self.source_material = self.experiment.source_material.material if self.experiment.source_material else None
+        self.safety_layers = self.experiment.safety_layers.all()
         self.chat = session.chat
         self.session = session
-        self.max_token_limit = experiment.max_token_limit
+        self.max_token_limit = self.experiment.max_token_limit
         self.input_tokens = 0
         self.output_tokens = 0
 
         # maps keywords to child experiments.
-        self.child_experiment_routes = ExperimentRoute.objects.select_related("child").filter(parent=experiment).all()
+        self.child_experiment_routes = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment).all()
+        )
         self.child_chains = {}
         self.default_child_chain = None
         self._initialize()
@@ -59,7 +74,7 @@ class TopicBot:
             if child_route.is_default:
                 self.default_child_chain = child_runnable
 
-        self.chain = create_experiment_runnable(self.session.experiment, self.session)
+        self.chain = create_experiment_runnable(self.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
