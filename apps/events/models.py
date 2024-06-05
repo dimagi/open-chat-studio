@@ -257,8 +257,12 @@ class ScheduledMessage(BaseTeamModel):
         delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
         utc_now = timezone.now()
 
-        experiment_session = self.participant.get_latest_session()
-        experiment_session.ad_hoc_bot_message(self.action.params["prompt_text"], fail_silently=False)
+        experiment_id = self.action.params.get("experiment_id", self.experiment.id)
+        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        experiment_to_use = Experiment.objects.get(id=experiment_id)
+        experiment_session.ad_hoc_bot_message(
+            self.action.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
+        )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1

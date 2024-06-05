@@ -1,27 +1,29 @@
 import logging
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
 from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
-def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
+def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
     params = {
         "name": "Test",
         "time_period": time_period,
         "frequency": frequency,
         "repetitions": repetitions,
         "prompt_text": "",
+        "experiment_id": experiment_id,
     }
     return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
@@ -31,7 +33,7 @@ def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1)
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(time_period=TimePeriod(period))
+    event_action, params = _construct_event_action(time_period=TimePeriod(period), experiment_id=session.experiment.id)
     with freeze_time("2024-01-01"):
         message = ScheduledMessage.objects.create(
             participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
@@ -44,7 +46,9 @@ def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
 @pytest.mark.django_db()
 def test_get_messages_to_fire():
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+    )
     with freeze_time("2024-04-01"), patch("apps.chat.tasks.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
@@ -103,7 +107,9 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
         assert scheduled_message.is_complete == expected_is_complete
 
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod(period), repetitions=2)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod(period), repetitions=2, experiment_id=session.experiment.id
+    )
     delta = relativedelta(**{params["time_period"]: params["frequency"]})
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
@@ -111,7 +117,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     with freeze_time("2024-04-01") as frozen_time, patch("apps.chat.tasks.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
-            team=session.team, participant=session.participant, action=event_action
+            team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
         )
         # Set the DB time to now
 
@@ -157,13 +163,17 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
     pending messages"""
 
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS, repetitions=2)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
+    )
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
         patch("apps.chat.tasks.functions.Now") as db_time,
     ):
-        sm = ScheduledMessageFactory(participant=session.participant, action=event_action, team=session.team)
+        sm = ScheduledMessageFactory(
+            participant=session.participant, action=event_action, team=session.team, experiment=session.experiment
+        )
 
         # Let's put the DB time ahead of the scheduled message
         utc_now = timezone.now()
@@ -195,7 +205,9 @@ def test_schedule_update():
     experiment = session.experiment
     team = experiment.team
     session2 = ExperimentSessionFactory(team=team, experiment=experiment)
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.WEEKS, repetitions=4, experiment_id=session.experiment.id
+    )
 
     message1 = ScheduledMessage.objects.create(
         participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
@@ -253,7 +265,9 @@ def test_schedule_update():
 def test_get_participant_scheduled_messages():
     with freeze_time("2024-01-01"):
         session = ExperimentSessionFactory()
-        event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
+        event_action = event_action, params = _construct_event_action(
+            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+        )
         ScheduledMessageFactory.create_batch(
             size=2,
             experiment=session.experiment,
@@ -292,10 +306,38 @@ def test_get_participant_scheduled_messages_includes_child_experiments():
     team = session.team
     participant = session.participant
     session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
-    event_action = event_action, params = _construct_event_action(time_period=TimePeriod.DAYS)
+    event_action = event_action, params = _construct_event_action(
+        time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+    )
     ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
     ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
     ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
 
     assert len(session2.get_participant_scheduled_messages()) == 1
     assert len(session.get_participant_scheduled_messages()) == 2
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("use_custom_experiment", [False, True])
+def test_scheduled_message_experiment(use_custom_experiment):
+    """ScheduledMessages should use the experiment specified in the linked action's params"""
+    custom_experiment = ExperimentFactory() if use_custom_experiment else None
+    session = ExperimentSessionFactory()
+    event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
+    if custom_experiment:
+        event_action_kwargs["experiment_id"] = custom_experiment.id
+
+    event_action, params = _construct_event_action(**event_action_kwargs)
+    trigger_action = ScheduleTriggerAction()
+    trigger_action.invoke(session, action=event_action)
+
+    session.ad_hoc_bot_message = Mock()
+    message = ScheduledMessage.objects.get(action=event_action)
+    message.participant.get_latest_session = lambda *args, **kwargs: session
+    message.safe_trigger()
+
+    experiment_used = session.ad_hoc_bot_message.call_args_list[0].kwargs["use_experiment"]
+    if use_custom_experiment:
+        assert experiment_used == custom_experiment
+    else:
+        assert experiment_used == session.experiment

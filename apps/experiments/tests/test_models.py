@@ -1,9 +1,43 @@
+from unittest.mock import Mock, patch
+
 import pytest
 
 from apps.experiments.models import SyntheticVoice
-from apps.utils.factories.experiment import SyntheticVoiceFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
+
+
+@pytest.fixture()
+def experiment_session():
+    return ExperimentSessionFactory()
+
+
+class TestExperimentSession:
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("fail_silently", [True, False])
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.chat.bots.TopicBot.process_input")
+    def test_ad_hoc_message(self, process_input, from_experiment_session, fail_silently, experiment_session):
+        mock_channel = Mock()
+        mock_channel.new_bot_message = Mock()
+        if not fail_silently:
+            mock_channel.new_bot_message.side_effect = Exception("Cannot send message")
+        from_experiment_session.return_value = mock_channel
+        process_input.return_value = "We're testing"
+
+        def _test():
+            experiment_session.ad_hoc_bot_message(
+                instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
+            )
+            call = mock_channel.new_bot_message.mock_calls[0]
+            assert call.args[0] == "We're testing"
+
+        if not fail_silently:
+            with pytest.raises(Exception, match="Cannot send message"):
+                _test()
+        else:
+            _test()
 
 
 class TestSyntheticVoice:

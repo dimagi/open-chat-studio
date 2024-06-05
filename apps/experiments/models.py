@@ -476,8 +476,8 @@ class Participant(BaseTeamModel):
     def __str__(self):
         return self.identifier
 
-    def get_latest_session(self) -> "ExperimentSession":
-        return self.experimentsession_set.order_by("-created_at").first()
+    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
+        return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     class Meta:
         ordering = ["identifier"]
@@ -637,21 +637,27 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
-    def ad_hoc_bot_message(self, instruction_prompt: str, fail_silently=True):
+    def ad_hoc_bot_message(self, instruction_prompt: str, fail_silently=True, use_experiment: Experiment | None = None):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
-        this session's history"""
+        this session's history.
 
-        bot_message = self._bot_prompt_for_user(prompt_instruction=instruction_prompt)
+        Parameters:
+            instruction_prompt: The instruction prompt for the LLM
+            fail_silently: Exceptions will not be suppresed if this is True
+            use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
+            specific child bot to handle the check-in.
+        """
+        bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
         self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
-    def _bot_prompt_for_user(self, prompt_instruction: str) -> str:
-        """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+    def _bot_prompt_for_user(self, instruction_prompt: str, use_experiment: Experiment | None = None) -> str:
+        """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import TopicBot
 
-        topic_bot = TopicBot(self)
-        return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
+        topic_bot = TopicBot(self, experiment=use_experiment)
+        return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
