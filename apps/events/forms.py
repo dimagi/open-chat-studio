@@ -5,7 +5,7 @@ from langchain.memory.prompt import SUMMARY_PROMPT
 from apps.events.models import TimePeriod
 from apps.experiments.models import Experiment, ExperimentRoute
 from apps.generics.type_select_form import TypeSelectForm
-from apps.pipelines.models import Pipeline
+from apps.pipelines.models import Pipeline, PipelineEventInputs
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
 
@@ -41,6 +41,11 @@ class PipelineStartForm(forms.Form):
     pipeline_id = forms.ModelChoiceField(
         queryset=None,
         label="Select a pipeline",
+        required=True,
+    )
+    input_type = forms.ChoiceField(
+        choices=PipelineEventInputs.choices,
+        label="Input to pipeline",
         required=True,
     )
 
