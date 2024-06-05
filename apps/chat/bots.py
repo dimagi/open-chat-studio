@@ -42,7 +42,8 @@ class TopicBot:
         The experiment to provide the source material and other data for the LLM.
         NOTE: Only use this if you know what you are doing. Normally this should be left empty, in which case
         the session's own experiment will be used. This is used in a multi-bot setup where the user might want
-        a specific bot to handle a scheduled message.
+        a specific bot to handle a scheduled message, in which case it would be useful for the LLM to have the
+        conversation history of the participant's chat with the router / main bot.
     """
 
     def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
