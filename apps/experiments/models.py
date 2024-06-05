@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from functools import cached_property
 
 import markdown
 import pytz
@@ -699,19 +700,23 @@ class ExperimentSession(BaseTeamModel):
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
         return scheduled_messages
 
-    def _get_participant_data_from_experiment(self) -> "ParticipantData":
+    @cached_property
+    def participant_data_from_experiment(self) -> "ParticipantData":
         try:
             return self.experiment.participant_data.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
-            return None
+            return {}
+
+    def get_participant_timezone(self):
+        return self.participant_data_from_experiment.get("timezone")
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
         will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self._get_participant_data_from_experiment() or {}
+        participant_data = self.participant_data_from_experiment
         as_timezone = None
         if use_participant_tz:
-            as_timezone = participant_data.get("timezone", as_timezone)
+            as_timezone = self.get_participant_timezone()
 
         scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
         if scheduled_messages:
@@ -719,7 +724,7 @@ class ExperimentSession(BaseTeamModel):
         return participant_data
 
     def get_participant_data_json(self):
-        participant_data = self._get_participant_data_from_experiment() or {}
+        participant_data = self.participant_data_from_experiment
         scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}

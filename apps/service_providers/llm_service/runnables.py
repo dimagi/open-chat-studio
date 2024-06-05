@@ -185,8 +185,10 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        current_datetime = pretty_date(timezone.now())
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
+        participant_tz = self.session.get_participant_timezone()
+        current_datetime = pretty_date(timezone.now(), participant_tz)
+        # The bot converts to UTC unless we tell it to preserve the given timezone
+        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime} (timezone preserved)"
         system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
