@@ -40,6 +40,7 @@ team_urlpatterns = [
     path("pipelines/", include("apps.pipelines.urls")),
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls", namespace="annotations")),
+    path("participants/", include("apps.participants.urls", namespace="participants")),
 ]
 
 urlpatterns = [
