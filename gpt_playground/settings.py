@@ -89,6 +89,7 @@ PROJECT_APPS = [
     "apps.events",
     "apps.annotations",
     "apps.pipelines",
+    "apps.participants",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
