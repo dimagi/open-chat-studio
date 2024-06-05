@@ -4,6 +4,9 @@ from apps.experiments.models import Participant
 
 
 class ParticipantForm(forms.ModelForm):
+    identifier = forms.CharField(disabled=True)
+    public_id = forms.CharField(disabled=True)
+
     class Meta:
         model = Participant
-        fields = ["identifier", "public_id", "user"]
+        fields = ("identifier", "public_id", "user")

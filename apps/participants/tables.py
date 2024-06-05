@@ -10,14 +10,14 @@ class ParticpantTable(tables.Table):
         template_name="generic/crud_actions_column.html",
         extra_context={
             "actions": [
-                actions.edit_action(url_name="participants:participants_edit"),
+                actions.edit_action(url_name="participants:participant_edit"),
             ]
         },
     )
 
     class Meta:
         model = Participant
-        fields = ("identifier", "public_id", "user")
+        fields = ("identifier",)
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No participants found."

@@ -475,6 +475,9 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
+    def get_absolute_url(self):
+        return reverse("participants:participant_edit", args=[self.team.slug, self.id])
+
     class Meta:
         ordering = ["identifier"]
         unique_together = [("team", "identifier")]
