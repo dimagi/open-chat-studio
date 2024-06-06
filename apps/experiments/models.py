@@ -508,7 +508,9 @@ class Participant(BaseTeamModel):
         participant_session_ids = ExperimentSession.objects.filter(
             participant=self, experiment_id=OuterRef("id")
         ).values("id")
-
+        # TODO: We use a template tag to filter each experiment's sessions for those belonging to the participant.
+        # There must be a way to include the participant's sessions in this query. Maybe we should use another
+        # query?
         return (
             Experiment.objects.annotate(
                 joined_on=Subquery(joined_on),
