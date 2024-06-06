@@ -9,6 +9,7 @@ import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
@@ -498,13 +499,23 @@ class Participant(BaseTeamModel):
     def get_experiments_for_display(self):
         """Used by the html templates to display various stats about the participant's participation."""
         exp_scoped_human_message = ChatMessage.objects.filter(
-            message_type="human", chat__experiment_session__experiment__id=OuterRef("id")
+            chat__experiment_session__participant=self,
+            message_type="human",
+            chat__experiment_session__experiment__id=OuterRef("id"),
         )
         joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
+        participant_session_ids = ExperimentSession.objects.filter(
+            participant=self, experiment_id=OuterRef("id")
+        ).values("id")
+
         return (
-            Experiment.objects.annotate(joined_on=Subquery(joined_on), last_message=Subquery(last_message))
-            .filter(sessions__participant=self)
+            Experiment.objects.annotate(
+                joined_on=Subquery(joined_on),
+                last_message=Subquery(last_message),
+                participant_sessions=ArrayAgg("sessions", filter=Q(sessions__id=Subquery(participant_session_ids))),
+            )
+            .exclude(participant_sessions=[])
             .distinct()
             .prefetch_related("sessions", "sessions__chat__tags")
         )

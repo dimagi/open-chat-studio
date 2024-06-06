@@ -1,7 +1,6 @@
+{% load participants %}
+
 <table class="pg-table min-w-full divide-y divide-gray-300" >
-  <caption class="text-left pb-2">
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Sessions</h3>
-  </caption>
   <thead>
     <tr>
       <td>#</td>
@@ -10,7 +9,8 @@
     </tr>
   </thead>
   <tbody>
-    {% for session in experiment.sessions.all %}
+    {% participant_sessions experiment participant as sessions %}
+    {% for session in sessions %}
       <tr
         class="cursor-pointer"
         x-on:click="window.location.href='{{ session.get_absolute_edit_url }}'"
