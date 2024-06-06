@@ -15,11 +15,15 @@
   <div class="app-card">
     <div class="flex">
       <div class="flex-1">
-        <h1 class="pg-title">{{ participant.identifier }}</h1>
+        <h1 class="pg-title">Participant details</h1>
       </div>
     </div>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include 'participants/participant_details.html' %}
+      {% include 'participants/partials/participant_summary.html' %}
+    </div>
+    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiments</h3>
+    <div class="max-w-5xl mt-4 border rounded-2xl">
+      {% include 'participants/partials/participant_experiments.html' %}
     </div>
   </div>
 {% endblock %}

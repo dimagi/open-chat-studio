@@ -488,6 +488,21 @@ class Participant(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
 
+    def get_experiments_for_display(self):
+        from django.db.models import OuterRef, Subquery
+
+        experiment_specific_message = ChatMessage.objects.filter(
+            message_type="human", chat__experiment_session__experiment__id=OuterRef("id")
+        )
+        joined_on = experiment_specific_message.order_by("created_at")[:1].values("created_at")
+        last_activity = experiment_specific_message.order_by("-created_at")[:1].values("created_at")
+        return (
+            Experiment.objects.annotate(joined_on=Subquery(joined_on), last_activity=Subquery(last_activity))
+            .filter(sessions__participant=self)
+            .distinct()
+            .prefetch_related("sessions")
+        )
+
     class Meta:
         ordering = ["identifier"]
         unique_together = [("team", "identifier")]

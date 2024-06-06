@@ -52,17 +52,17 @@
           </a>
         </li>
       {% endif %}
-      {% if perms.experiments.view_participant %}
-        <li>
-          <a href="{% url 'participants:participant_home' request.team.slug %}"
-             {% if active_tab == 'participants' %}class="active"{% endif %}>
-            <i class="fa fa-users" aria-hidden="true"></i></i>
-          {% translate "Participants" %}
-        </a>
-        </li>
-      {% endif %}
     </ul>
   </li>
+  {% if perms.experiments.view_participant %}
+    <li>
+      <a href="{% url 'participants:participant_home' request.team.slug %}"
+         {% if active_tab == 'participants' %}class="active"{% endif %}>
+        <i class="fa fa-users" aria-hidden="true"></i></i>
+      {% translate "Participants" %}
+    </a>
+    </li>
+  {% endif %}
   <li>
     <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>
       <i class="fa fa-ruler fa-fw"></i>
