@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -477,30 +477,36 @@ class Participant(BaseTeamModel):
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     def last_seen(self) -> datetime:
-        latest_session = self.experimentsession_set.order_by("-created_at").values("id")[:1]
-        return (
+        """Gets the "last seen" date for this participant based on their last message"""
+        latest_session = (
+            self.experimentsession_set.annotate(chat_count=Count("chat__messages"))
+            .exclude(chat_count=0)
+            .order_by("-created_at")
+            .values("id")[:1]
+        )
+
+        message = (
             ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
             .order_by("-created_at")
             .first()
-            .created_at
         )
+        return message.created_at if message else None
 
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
 
     def get_experiments_for_display(self):
-        from django.db.models import OuterRef, Subquery
-
-        experiment_specific_message = ChatMessage.objects.filter(
+        """Used by the html templates to display various stats about the participant's participation."""
+        exp_scoped_human_message = ChatMessage.objects.filter(
             message_type="human", chat__experiment_session__experiment__id=OuterRef("id")
         )
-        joined_on = experiment_specific_message.order_by("created_at")[:1].values("created_at")
-        last_activity = experiment_specific_message.order_by("-created_at")[:1].values("created_at")
+        joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
+        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         return (
-            Experiment.objects.annotate(joined_on=Subquery(joined_on), last_activity=Subquery(last_activity))
+            Experiment.objects.annotate(joined_on=Subquery(joined_on), last_message=Subquery(last_message))
             .filter(sessions__participant=self)
             .distinct()
-            .prefetch_related("sessions")
+            .prefetch_related("sessions", "sessions__chat__tags")
         )
 
     class Meta:
@@ -638,6 +644,11 @@ class ExperimentSession(BaseTeamModel):
         self.status = new_status
         if commit:
             self.save()
+
+    def get_absolute_edit_url(self):
+        return reverse(
+            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.public_id]
+        )
 
     def end(self, commit: bool = True, propagate: bool = True):
         """

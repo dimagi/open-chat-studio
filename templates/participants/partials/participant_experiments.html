@@ -3,7 +3,7 @@
     <tr>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Experiment</th>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Joined on</th>
-      <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Last activity</th>
+      <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Last message received</th>
     </tr>
   </thead>
   <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
@@ -13,15 +13,13 @@
         x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
         x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
       >
-        <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-200">{{ experiment.name }}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
-        <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_activity }}</td>
+        <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
       </tr>
-      <tr
-        x-show="experimentsRow === {{ forloop.counter }}"
-        x-cloak>
-        <td class="px-3 py-2">
-          Session data
+      <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
+        <td colspan="100%" class="px-3 py-2">
+          {% include 'participants/partials/experiment_sessions.html' %}
         </td>
       </tr>
     {% endfor %}

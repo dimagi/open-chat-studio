@@ -1,0 +1,28 @@
+<table class="pg-table min-w-full divide-y divide-gray-300" >
+  <caption class="text-left pb-2">
+    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Sessions</h3>
+  </caption>
+  <thead>
+    <tr>
+      <td>#</td>
+      <td>Started</td>
+      <td>Tags</td>
+    </tr>
+  </thead>
+  <tbody>
+    {% for session in experiment.sessions.all %}
+      <tr
+        class="cursor-pointer"
+        x-on:click="window.location.href='{{ session.get_absolute_edit_url }}'"
+      >
+        <td>{{ forloop.counter }}</td>
+        <td>{{ session.created_at }}</td>
+        <td>
+          {% with tags=session.chat.tags.all %}
+            {% include 'experiments/components/experiment_sessions_list_tags.html' %}
+          {% endwith %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
