@@ -1,5 +1,3 @@
-{% load participants %}
-
 <table class="pg-table min-w-full divide-y divide-gray-300" >
   <thead>
     <tr>
@@ -9,7 +7,6 @@
     </tr>
   </thead>
   <tbody>
-    {% participant_sessions experiment participant as sessions %}
     {% for session in sessions %}
       <tr
         class="cursor-pointer"

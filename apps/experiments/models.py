@@ -511,7 +511,7 @@ class Participant(BaseTeamModel):
         # TODO: We use a template tag to filter each experiment's sessions for those belonging to the participant.
         # There must be a way to include the participant's sessions in this query. Maybe we should use another
         # query?
-        return (
+        experiments = (
             Experiment.objects.annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
@@ -521,6 +521,11 @@ class Participant(BaseTeamModel):
             .distinct()
             .prefetch_related("sessions", "sessions__chat__tags")
         )
+        experiment_info = []
+        for experiment in experiments:
+            experiment_info.append({"experiment": experiment, "sessions": experiment.sessions.filter(participant=self)})
+
+        return experiment_info
 
     class Meta:
         ordering = ["identifier"]

@@ -1,3 +1,5 @@
+{% load form_tags %}
+
 <table class="min-w-full divide-y divide-gray-300">
   <thead>
     <tr>
@@ -7,29 +9,31 @@
     </tr>
   </thead>
   <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
-    {% for experiment in participant.get_experiments_for_display %}
-      <tr
-        class="cursor-pointer"
-        x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
-        x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
-      >
-        <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
-        <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
-        <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
-      </tr>
-      <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
-        <td colspan="100%" class="px-3 py-2">
-          <div role="tablist" class="tabs tabs-bordered">
-            <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" checked />
-            <div role="tabpanel" class="tab-content">
-              {% include 'participants/partials/experiment_sessions.html' %}
-            </div>
-            <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Participant Data" />
-            <div role="tabpanel" class="tab-content">
-              {% include 'participants/partials/participant_data.html' %}
-            </div>
-          </td>
+    {% for experiment_data in participant.get_experiments_for_display %}
+      {% with experiment=experiment_data|dict_lookup:"experiment" sessions=experiment_data|dict_lookup:"sessions" %}
+        <tr
+          class="cursor-pointer"
+          x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
+          x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
+        >
+          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
+          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
+          <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
         </tr>
+        <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
+          <td colspan="100%" class="px-3 py-2">
+            <div role="tablist" class="tabs tabs-bordered">
+              <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" checked />
+              <div role="tabpanel" class="tab-content">
+                {% include 'participants/partials/experiment_sessions.html' %}
+              </div>
+              <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Participant Data" />
+              <div role="tabpanel" class="tab-content">
+                {% include 'participants/partials/participant_data.html' %}
+              </div>
+            </td>
+          </tr>
+      {% endwith %}
     {% endfor %}
   </tbody>
 </table>
