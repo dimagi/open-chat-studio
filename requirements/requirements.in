@@ -1,52 +1,48 @@
-anthropic
-boto3
 Django
+Markdown
+anthropic
+azure-cognitiveservices-speech
+boto3
+celery
+celery-progress
+celery[redis]
 django-allauth
 django-allauth-2fa
-django-tables2
-django-waffle
-psycopg2-binary
+django-anymail
 django-cryptography
 django-environ
+django-field-audit>=1.2.7
+django-hijack
 django-redis
+django-storages[s3]
+django-tables2
+django-taggit
+django-tz-detect
+django-waffle
+django_celery_beat
 djangorestframework
 djangorestframework-api-key
 drf-spectacular
-django-anymail
-django-hijack
-django-storages[s3]
-celery-progress
-celery
-celery[redis]
+fbmessenger
+ffmpeg # Audio transcription
 httpx
+jinja2
+langchain
+langchain-anthropic
+langchain-openai
+langgraph
 loguru
 openai
 pandas
-sentry-sdk
-tenacity
-whitenoise[brotli]
-langchain
-langchain-openai
-langchain-anthropic
-langgraph
-Markdown
-# unstructured  # langchain loaders
-# chromadb  # langchain queries
-# beautifulsoup4  # web page parsing
+psycopg2-binary
 pyTelegramBotAPI==4.12.0
-pydub # Audio transcription
-ffmpeg # Audio transcription
-twilio
 pydantic
-django_celery_beat
-azure-cognitiveservices-speech
+pydub # Audio transcription
+sentry-sdk
 taskbadger
+tenacity
 tiktoken
-fbmessenger
-django-field-audit>=1.2.7
-turn-python>=0.2.0
-jinja2
-django-taggit
 transformers # this is required by the tokenizer that langchain uses
-# See https://github.com/langchain-ai/langchain/blob/ad3fd44a7f83e3c5e6b25024ce1b49f1a828defe/libs/core/langchain_core/language_models/base.py#L43
-django-tz-detect
+turn-python>=0.2.0
+twilio
+whitenoise[brotli]
