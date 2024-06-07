@@ -35,7 +35,11 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     if upgrade_all and upgrade_package:
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
     args = " -U" if upgrade_all else ""
-    cmd_base = "pip-compile --resolver=backtracking"
+    has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
+    if has_uv.ok:
+        cmd_base = "uv pip compile"
+    else:
+        cmd_base = "pip-compile --resolver=backtracking"
     env = {"CUSTOM_COMPILE_COMMAND": "inv requirements"}
     if upgrade_package:
         cmd_base += f" --upgrade-package {upgrade_package}"
