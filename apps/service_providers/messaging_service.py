@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
+from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
@@ -8,6 +9,7 @@ import pydantic
 import requests
 from botocore.client import Config
 from django.conf import settings
+from slack_sdk import WebClient
 from telebot.util import smart_split
 from turn import TurnClient
 from twilio.rest import Client
@@ -139,3 +141,24 @@ class SlackService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.SLACK]
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    slack_team_id: str
+    slack_installation_id: int
+
+    @cached_property
+    def client(self) -> WebClient:
+        from apps.slack.client import get_slack_client
+
+        return get_slack_client(self.slack_installation_id)
+
+    def get_channels(self):
+        channels = {}
+        for page in self.client.conversations_list():
+            for ch in page["channels"]:
+                channels[ch["id"]] = ch
+        return channels
+
+    def get_channel_by_name(self, name):
+        for channel in self.get_channels().values():
+            if channel["name"] == name:
+                return channel

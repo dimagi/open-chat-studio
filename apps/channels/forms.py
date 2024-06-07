@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django import forms
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -36,6 +38,11 @@ class ChannelForm(forms.ModelForm):
 
 
 class ExtraFormBase(forms.Form):
+    @cached_property
+    def messaging_provider(self) -> MessagingProvider | None:
+        if provider_id := self.data.get("messaging_provider"):
+            return MessagingProvider.objects.filter(id=provider_id).first()
+
     def get_success_message(self, channel: ExperimentChannel):
         pass
 
@@ -96,3 +103,24 @@ class FacebookChannelForm(ExtraFormBase):
     def get_success_message(self, channel: ExperimentChannel):
         """The message to be displayed when the channel is successfully linked"""
         return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+
+class SlackChannelForm(ExtraFormBase):
+    slack_channel_name = forms.CharField(label="Slack Channel", max_length=100)
+    slack_channel_id = forms.CharField(widget=forms.HiddenInput(), required=False)
+
+    def clean_slack_channel_name(self):
+        name = self.cleaned_data["slack_channel_name"].strip()
+        if name.startswith("#"):
+            name = name[1:]
+        return name
+
+    def clean(self):
+        if self.messaging_provider:
+            service = self.messaging_provider.get_messaging_service()
+            channel_name = self.cleaned_data["slack_channel_name"]
+            channel = service.get_channel_by_name(channel_name)
+            if not channel:
+                raise forms.ValidationError(f"No channel found with name {channel_name}")
+            self.cleaned_data["slack_channel_id"] = channel["id"]
+        return self.cleaned_data

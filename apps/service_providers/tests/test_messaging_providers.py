@@ -51,7 +51,7 @@ def test_platform_supported_platforms(platform: str, expected_provider_types: li
 
 
 def _test_messaging_provider_error(provider_type: MessagingProviderType, data):
-    form = provider_type.form_cls(data=data)
+    form = provider_type.form_cls(None, data=data)
     assert not form.is_valid()
 
     with pytest.raises(ValidationError):
@@ -59,7 +59,7 @@ def _test_messaging_provider_error(provider_type: MessagingProviderType, data):
 
 
 def _test_messaging_provider(team, provider_type: MessagingProviderType, data):
-    form = provider_type.form_cls(data=data)
+    form = provider_type.form_cls(None, data=data)
     assert form.is_valid()
     MessagingProvider.objects.create(
         team=team,

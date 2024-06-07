@@ -59,8 +59,7 @@ class ChannelPlatform(models.TextChoices):
             case self.FACEBOOK:
                 return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
             case self.SLACK:
-                # TODO
-                pass
+                return forms.SlackChannelForm(*args, **kwargs)
 
     @property
     def channel_identifier_key(self) -> str:
@@ -72,8 +71,7 @@ class ChannelPlatform(models.TextChoices):
             case self.FACEBOOK:
                 return "page_id"
             case self.SLACK:
-                # TODO
-                pass
+                return "slack_channel_id"
 
 
 class ExperimentChannelObjectManager(AuditingManager):
