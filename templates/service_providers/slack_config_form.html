@@ -1,0 +1,11 @@
+{% load i18n %}
+<div class="my-4">
+  {% if object.config.slack_team_id %}
+    <p>Connected workspace: {{ form.get_slack_installation.slack_team_name }}</p>
+  {% else %}
+    <a href="{% url "slack:install" team.slug %}" class="btn btn-accent">
+      {% translate "Connect Slack" %}
+    </a>
+    <p class="pg-text-muted">Note: you'll have to be a workspace administrator to add the app.</p>
+  {% endif %}
+</div>

@@ -87,7 +87,11 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
             forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
 
         return get_service_provider_config_form(
-            self.provider_type, data=data, instance=self.get_object(), exclude_forms=forms_to_exclude
+            self.provider_type,
+            team=self.request.team,
+            data=data,
+            instance=self.get_object(),
+            exclude_forms=forms_to_exclude,
         )
 
     @transaction.atomic()

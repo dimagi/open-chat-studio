@@ -20,6 +20,10 @@ class ProviderTypeConfigForm(forms.Form):
     allow_file_upload = False
     file_formset_form = None
 
+    def __init__(self, team, *args, **kwargs):
+        self.team = team
+        super().__init__(*args, **kwargs)
+
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
@@ -157,3 +161,17 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     username = forms.CharField(label=_("Username"))
     api_key = forms.CharField(label=_("API Key"))
+
+
+class SlackMessagingConfigForm(ProviderTypeConfigForm):
+    obfuscate_fields = ["bot_token"]
+    custom_template = "service_providers/slack_config_form.html"
+
+    slack_team_id = forms.CharField(widget=forms.HiddenInput())
+    slack_installation_id = forms.CharField(widget=forms.HiddenInput())
+
+    def get_slack_installation(self):
+        from apps.slack.models import SlackInstallation
+
+        if team_id := self.initial.get("slack_team_id"):
+            return SlackInstallation.objects.filter(team=self.team, slack_team_id=team_id).first()

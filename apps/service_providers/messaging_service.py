@@ -132,3 +132,10 @@ class TurnIOService(MessagingService):
         response = self.client.media.get_media(message.media_id)
         ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+
+class SlackService(MessagingService):
+    _type: ClassVar[str] = "slack"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.SLACK]
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]

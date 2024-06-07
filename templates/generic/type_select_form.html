@@ -10,16 +10,20 @@
         {% render_form_fields form.primary %}
         {% for key, form in form.secondary.items %}
           <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
-            {% render_form_fields form %}
+            {% if form.custom_template %}
+              {% include form.custom_template with object=object form=form %}
+            {% else %}
+              {% render_form_fields form %}
 
-            {% if form.allow_file_upload %}
-              <hr class="my-4">
-              {% if not object.id %}
-                {% include "files/partials/file_formset.html" %}
-              {% else %}
-                {% with delete_url=object.remove_file_url upload_url=object.add_file_url %}
-                  {% include "files/partials/file_list.html" with files=object.get_files nested=True %}
-                {% endwith %}
+              {% if form.allow_file_upload %}
+                <hr class="my-4">
+                {% if not object.id %}
+                  {% include "files/partials/file_formset.html" %}
+                {% else %}
+                  {% with delete_url=object.remove_file_url upload_url=object.add_file_url %}
+                    {% include "files/partials/file_list.html" with files=object.get_files nested=True %}
+                  {% endwith %}
+                {% endif %}
               {% endif %}
             {% endif %}
           </div>

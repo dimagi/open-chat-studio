@@ -21,6 +21,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
 from apps.web.urls import team_urlpatterns as web_team_urls
@@ -40,6 +41,7 @@ team_urlpatterns = [
     path("pipelines/", include("apps.pipelines.urls")),
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls", namespace="annotations")),
+    path("slack/", include("apps.slack.urls")),
 ]
 
 urlpatterns = [
@@ -54,6 +56,7 @@ urlpatterns = [
     path("users/", include("apps.users.urls")),
     path("teams/", include("apps.teams.urls")),
     path("", include("apps.web.urls")),
+    path("", include(slack_global_urls)),
     path("support/", include("apps.support.urls")),
     path("celery-progress/", include("celery_progress.urls")),
     # API docs

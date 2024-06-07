@@ -33,6 +33,7 @@ SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Application definition
 
@@ -89,6 +90,7 @@ PROJECT_APPS = [
     "apps.events",
     "apps.annotations",
     "apps.pipelines",
+    "apps.slack",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
@@ -511,3 +513,24 @@ FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.audit
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
+
+# slack
+SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")
+SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
+SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
+SLACK_SCOPES = [
+    "channels:history",
+    "channels:join",
+    "channels:read",
+    "chat:write",
+    "chat:write.public",
+    "groups:history",
+    "groups:read",
+    "im:history",
+    "im:read",
+    "mpim:history",
+    "mpim:read",
+    "users:read",
+]
+SLACK_USER_SCOPES = []
+SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
