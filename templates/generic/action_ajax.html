@@ -6,17 +6,18 @@
         hx-swap="outerHTML"
 
         {% if confirm_message %}
-            hx-trigger="confirmed"
-            onClick="Swal.fire({
-                     title: 'Confirm',
-                     text: '{{ confirm_message|escapejs }}',
-                     }).then(function(result) {
-                     if(result.isConfirmed){
-                     htmx.trigger('#action-{{ action_id }}', 'confirmed');
-                     }
-                     })"
+          hx-trigger="confirmed"
+          onClick="alertify.confirm().setting({
+                   title: 'Confirm',
+                   message: '{{ confirm_message|escapejs }}',
+                   transition: 'fade',
+                   onok: function() {
+                   htmx.trigger('#action-{{ action_id }}', 'confirmed');
+                   },
+                   }).show();
+                  "
         {% endif %}
 >
-    <i class="{{ icon_class }} htmx-hide"></i>
-    <span class="loading loading-spinner loading-xs htmx-show"></span>
+  <i class="{{ icon_class }} htmx-hide"></i>
+  <span class="loading loading-spinner loading-xs htmx-show"></span>
 </button>
