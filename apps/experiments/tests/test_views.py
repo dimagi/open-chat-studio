@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from waffle.testutils import override_flag
 
+from apps.chat.channels import WebChannel
 from apps.experiments.models import (
     AgentTools,
     Experiment,
@@ -15,7 +16,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import ExperimentForm, _start_experiment_session, _validate_prompt_variables
+from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -135,7 +136,7 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
         user = experiment.team.members.first()
         identifier = user.email
 
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment,
         experiment_channel=channel,
         participant_user=user,
@@ -189,7 +190,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         user = team.members.first()
         identifier = user.email
 
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment1,
         experiment_channel=channel1,
         participant_user=user,
@@ -204,7 +205,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     experiment2 = ExperimentFactory(team=team)
     channel2 = ExperimentChannelFactory(experiment=experiment2)
 
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment2,
         experiment_channel=channel2,
         participant_user=user,
@@ -230,7 +231,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         user = team.members.first()
         identifier = user.email
 
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment1,
         experiment_channel=channel1,
         participant_user=user,
@@ -250,7 +251,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     experiment2 = ExperimentFactory(team=new_team)
     channel2 = ExperimentChannelFactory(experiment=experiment2)
 
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment2,
         experiment_channel=channel2,
         participant_user=user,
@@ -339,7 +340,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
         team=experiment2.team, participant=participant, content_object=experiment2
     )
 
-    _start_experiment_session(
+    WebChannel.start_new_session(
         experiment,
         experiment_channel=channel,
         participant_identifier=identifier,

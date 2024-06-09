@@ -6,6 +6,7 @@ from typing import ClassVar
 
 import requests
 from django.conf import settings
+from django.db import transaction
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
@@ -16,9 +17,17 @@ from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerExcepti
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.users.models import CustomUser
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
@@ -500,6 +509,32 @@ class WebChannel(ChannelBase):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
 
+    @staticmethod
+    def start_new_session(
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+    ):
+        session = _start_experiment_session(
+            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+        )
+        WebChannel.check_and_process_seed_message(session)
+        return WebChannel(experiment_channel, session)
+
+    @staticmethod
+    def check_and_process_seed_message(session: ExperimentSession):
+        from apps.experiments.tasks import get_response_for_webchat_task
+
+        if session.experiment.seed_message:
+            session.seed_task_id = get_response_for_webchat_task.delay(
+                session.id, message_text=session.experiment.seed_message
+            ).task_id
+            session.save()
+        return session
+
 
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
@@ -659,3 +694,54 @@ class ApiChannel(ChannelBase):
     def new_bot_message(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
+
+
+def _start_experiment_session(
+    experiment: Experiment,
+    experiment_channel: ExperimentChannel,
+    participant_identifier: str,
+    participant_user: CustomUser | None = None,
+    session_status: SessionStatus = SessionStatus.ACTIVE,
+    timezone: str | None = None,
+) -> ExperimentSession:
+    if not participant_identifier and not participant_user:
+        raise ValueError("Either participant_identifier or participant_user must be specified!")
+
+    if participant_user and participant_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
+
+    with transaction.atomic():
+        try:
+            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+            if participant_user and participant.user is None:
+                # If a participant becomes a user, we must reconcile the user and participant
+                participant.user = participant_user
+                participant.save()
+        except Participant.DoesNotExist:
+            participant = Participant.objects.create(
+                user=participant_user,
+                identifier=participant_identifier,
+                team=experiment.team,
+            )
+        session = ExperimentSession.objects.create(
+            team=experiment.team,
+            experiment=experiment,
+            llm=experiment.llm,
+            experiment_channel=experiment_channel,
+            status=session_status,
+            participant=participant,
+        )
+
+        # Record the participant's timezone
+        if timezone:
+            data_records = ParticipantData.objects.filter(participant=participant)
+            for data_record in data_records:
+                data_record.data["timezone"] = timezone
+                data_record.save()
+            ParticipantData.objects.bulk_update(data_records, fields=["data"])
+
+    if participant.experimentsession_set.count() == 1:
+        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
+    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
+    return session

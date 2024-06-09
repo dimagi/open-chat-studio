@@ -31,17 +31,16 @@ from waffle import flag_is_active
 from apps.annotations.models import Tag
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.channels import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
-    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.events.tables import (
     EventsTable,
 )
-from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.decorators import experiment_session_view, set_session_access_cookie, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
@@ -56,8 +55,6 @@ from apps.experiments.models import (
     AgentTools,
     Experiment,
     ExperimentSession,
-    Participant,
-    ParticipantData,
     SessionStatus,
     SyntheticVoice,
 )
@@ -69,7 +66,6 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.users.models import CustomUser
 
 
 @login_and_team_required
@@ -567,66 +563,6 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
-def _start_experiment_session(
-    experiment: Experiment,
-    experiment_channel: ExperimentChannel,
-    participant_identifier: str,
-    participant_user: CustomUser | None = None,
-    session_status: SessionStatus = SessionStatus.ACTIVE,
-    timezone: str | None = None,
-) -> ExperimentSession:
-    if not participant_identifier and not participant_user:
-        raise ValueError("Either participant_identifier or participant_user must be specified!")
-
-    if participant_user and participant_identifier != participant_user.email:
-        # This should technically never happen, since we disable the input for logged in users
-        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
-
-    with transaction.atomic():
-        try:
-            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
-            if participant_user and participant.user is None:
-                # If a participant becomes a user, we must reconcile the user and participant
-                participant.user = participant_user
-                participant.save()
-        except Participant.DoesNotExist:
-            participant = Participant.objects.create(
-                user=participant_user,
-                identifier=participant_identifier,
-                team=experiment.team,
-            )
-        session = ExperimentSession.objects.create(
-            team=experiment.team,
-            experiment=experiment,
-            llm=experiment.llm,
-            experiment_channel=experiment_channel,
-            status=session_status,
-            participant=participant,
-        )
-
-        # Record the participant's timezone
-        if timezone:
-            data_records = ParticipantData.objects.filter(participant=participant)
-            for data_record in data_records:
-                data_record.data["timezone"] = timezone
-                data_record.save()
-            ParticipantData.objects.bulk_update(data_records, fields=["data"])
-
-    if participant.experimentsession_set.count() == 1:
-        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
-    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
-    return _check_and_process_seed_message(session)
-
-
-def _check_and_process_seed_message(session: ExperimentSession):
-    if session.experiment.seed_message:
-        session.seed_task_id = get_response_for_webchat_task.delay(
-            session.id, message_text=session.experiment.seed_message
-        ).task_id
-        session.save()
-    return session
-
-
 @require_POST
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int):
@@ -634,7 +570,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment_channel = _ensure_experiment_channel_exists(
         experiment=experiment, platform="web", name=f"{experiment.id}-web"
     )
-    session = _start_experiment_session(
+    session = WebChannel.start_new_session(
         experiment,
         experiment_channel=experiment_channel,
         participant_user=request.user,
@@ -765,7 +701,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 # The identifier field will be disabled, so we must generate one
                 identifier = user.email if user else str(uuid.uuid4())
 
-            session = _start_experiment_session(
+            session = WebChannel.start_new_session(
                 experiment,
                 experiment_channel=experiment_channel,
                 participant_user=user,
@@ -819,7 +755,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             else:
                 with transaction.atomic():
                     channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                    session = _start_experiment_session(
+                    session = WebChannel.start_new_session(
                         experiment=experiment,
                         experiment_channel=channel,
                         participant_identifier=post_form.cleaned_data["email"],
@@ -906,7 +842,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            _check_and_process_seed_message(experiment_session)
+            WebChannel.check_and_process_seed_message(experiment_session)
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:
