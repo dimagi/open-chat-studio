@@ -109,7 +109,7 @@ class ExperimentChannel(BaseModel):
         ordering = ["name"]
 
     def __str__(self):
-        return f"name: {self.name}"
+        return f"Channel: {self.name} ({self.platform})"
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

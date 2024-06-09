@@ -43,6 +43,9 @@ class ExtraFormBase(forms.Form):
         if provider_id := self.data.get("messaging_provider"):
             return MessagingProvider.objects.filter(id=provider_id).first()
 
+    def post_save(self, channel: ExperimentChannel):
+        pass
+
     def get_success_message(self, channel: ExperimentChannel):
         pass
 
@@ -124,3 +127,8 @@ class SlackChannelForm(ExtraFormBase):
                 raise forms.ValidationError(f"No channel found with name {channel_name}")
             self.cleaned_data["slack_channel_id"] = channel["id"]
         return self.cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        if self.messaging_provider:
+            service = self.messaging_provider.get_messaging_service()
+            service.join_channel(self.cleaned_data["slack_channel_id"])

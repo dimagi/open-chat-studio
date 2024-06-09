@@ -519,8 +519,8 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
         form.save(experiment, config_data)
         if extra_form:
-            message = extra_form.get_success_message(channel=form.instance)
-            if message:
+            extra_form.post_save(channel=form.instance)
+            if message := extra_form.get_success_message(channel=form.instance):
                 messages.info(request, message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 

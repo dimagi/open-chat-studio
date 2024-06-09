@@ -162,3 +162,9 @@ class SlackService(MessagingService):
         for channel in self.get_channels().values():
             if channel["name"] == name:
                 return channel
+
+    def join_channel(self, channel_id: str):
+        if channel_id not in self.get_channels():
+            return
+
+        self.client.conversations_join(channel=channel_id)
