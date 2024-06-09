@@ -393,9 +393,6 @@ class ChannelBase:
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        if self.experiment_session and self.experiment_channel.platform == ChannelPlatform.WEB:
-            return
-
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
@@ -498,6 +495,10 @@ class WebChannel(ChannelBase):
     def new_bot_message(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
         pass
+
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise MessageHandlerException("WebChannel requires an existing session")
 
 
 class TelegramChannel(ChannelBase):
