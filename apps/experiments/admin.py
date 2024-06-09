@@ -89,9 +89,9 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "created_at",
         "llm",
     )
-    search_fields = ("public_id", "experiment__name", "participant__identifier")
+    search_fields = ("external_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
-    readonly_fields = ("public_id",)
+    readonly_fields = ("external_id",)
 
     @admin.display(description="Team")
     def team(self, obj):

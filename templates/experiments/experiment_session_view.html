@@ -9,7 +9,7 @@
       <ul>
         <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
         <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
-        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment_session.public_id }}</li>
+        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment_session.external_id }}</li>
       </ul>
     </div>
   {% endif %}
@@ -21,7 +21,7 @@
         <h1 class="pg-title">Experiment Review</h1>
       </div>
       {% if request.user.is_authenticated %}
-        {% url 'experiments:experiment_session_pagination_view' team.slug experiment.public_id experiment_session.public_id as paginate_url %}
+        {% url 'experiments:experiment_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
         <div class="justify-self-end">
           <div class="join">
             <a class="btn join-item"

@@ -43,7 +43,7 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
                 str(session.participant.user),
                 _format_tags(message.chat.tags.all()),
                 _format_comments(message.chat.comments.all()),
-                session.public_id,
+                session.external_id,
                 session.llm,
                 experiment.public_id,
                 experiment.name,

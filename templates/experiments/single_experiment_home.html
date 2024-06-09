@@ -141,7 +141,7 @@
                   <td>
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.public_id %}"
+                         href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"

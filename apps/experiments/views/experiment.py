@@ -860,7 +860,7 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
 @permission_required("experiments.invite_participants", raise_exception=True)
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)
+    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
     send_experiment_invitation(session)
     return TemplateResponse(
         request,
@@ -882,7 +882,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
     response = HttpResponseRedirect(
         reverse(
             redirct_url_name,
-            args=[team_slug, experiment_session.experiment.public_id, experiment_session.public_id],
+            args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
     return set_session_access_cookie(response, experiment_session)
@@ -891,7 +891,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
+    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
     consent = experiment.consent_form
 
     initial = {
@@ -1063,7 +1063,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
 def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
-    query = ExperimentSession.objects.exclude(public_id=session_id).filter(experiment=experiment)
+    query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
     if request.GET.get("dir", "next") == "next":
         next_session = query.filter(created_at__lte=session.created_at).first()
     else:
@@ -1073,4 +1073,4 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
         messages.warning(request, "No more sessions to paginate")
         return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
 
-    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.public_id)
+    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)

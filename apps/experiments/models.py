@@ -145,7 +145,7 @@ class Survey(BaseTeamModel):
         participant_public_id = participant.public_id if participant else "[anonymous]"
         return self.url.format(
             participant_id=participant_public_id,
-            session_id=experiment_session.public_id,
+            session_id=experiment_session.external_id,
             experiment_id=experiment_session.experiment.public_id,
         )
 
@@ -529,7 +529,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     objects = ExperimentSessionObjectManager()
-    public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -581,7 +581,7 @@ class ExperimentSession(BaseTeamModel):
         return absolute_url(
             reverse(
                 "experiments:start_session_from_invite",
-                args=[self.team.slug, self.experiment.public_id, self.public_id],
+                args=[self.team.slug, self.experiment.public_id, self.external_id],
             )
         )
 
