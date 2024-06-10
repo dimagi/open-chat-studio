@@ -1,8 +1,14 @@
 import dataclasses
 import uuid
+from collections.abc import Callable
 
+from django.http import HttpRequest
 from django.template import Context
 from django.template.loader import get_template
+
+
+def display_condition(request: HttpRequest, record: Context) -> bool:
+    return not record.is_system_tag
 
 
 @dataclasses.dataclass
@@ -13,8 +19,7 @@ class Action:
     icon_class: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
-
-    display_condition: callable = None
+    display_condition: Callable[[HttpRequest, Context], bool] = display_condition
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
 
@@ -79,7 +84,11 @@ class AjaxAction(Action):
         return ctxt
 
 
-def edit_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
+def edit_action(
+    url_name: str,
+    required_permissions: list = None,
+    display_condition: callable = lambda request, record: not record.is_system_tag,
+):
     return Action(
         url_name,
         icon_class="fa-solid fa-pencil",
@@ -91,7 +100,7 @@ def edit_action(url_name: str, required_permissions: list = None, display_condit
 def delete_action(
     url_name: str,
     required_permissions: list = None,
-    display_condition: callable = None,
+    display_condition: callable = lambda request, record: not record.is_system_tag,
     confirm_message: str = None,
 ):
     return AjaxAction(
