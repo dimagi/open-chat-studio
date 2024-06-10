@@ -100,7 +100,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
             sessions = participant.experimentsession_set.filter(experiment=experiment).all()
             experiment_data[experiment] = {
                 "sessions": sessions,
-                "participant_data": sessions.first().participant_data_from_experiment,
+                "participant_data": json.dumps(sessions.first().participant_data_from_experiment.data),
             }
         context["experiment_data"] = experiment_data
         return context
@@ -111,7 +111,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
         experiment = Experiment.objects.get(team__slug=team_slug, id=experiment_id)
         participant = Participant.objects.get(id=participant_id)
         new_data = json.loads(request.POST["data"])
-
+        # TODO: Validate JSON structure
         ParticipantData.objects.update_or_create(
             participant=participant,
             content_type__model="experiment",
