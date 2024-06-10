@@ -93,6 +93,10 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         # return [{"user": item.user.username, "tag": item.tag.name} for item in self.tagged_items.all()]
         return [item.tag.name for item in self.tagged_items.all()]
 
+    @property
+    def get_system_tags(self):
+        return self.tags.filter(is_system_tag=True)
+
 
 class UserComment(BaseTeamModel):
     user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
