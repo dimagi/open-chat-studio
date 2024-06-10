@@ -1,12 +1,14 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.experiments.models import Participant
+from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.participants.forms import ParticipantForm
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -102,3 +104,21 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
             }
         context["experiment_data"] = experiment_data
         return context
+
+
+class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    def post(self, request, team_slug, participant_id, experiment_id):
+        experiment = Experiment.objects.get(team__slug=team_slug, id=experiment_id)
+        participant = Participant.objects.get(id=participant_id)
+        new_data = json.loads(request.POST["data"])
+
+        ParticipantData.objects.update_or_create(
+            participant=participant,
+            content_type__model="experiment",
+            object_id=experiment_id,
+            team=request.team,
+            defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
+        )
+        return HttpResponseRedirect(
+            reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id])
+        )

@@ -1,0 +1,10 @@
+
+<form method="post" action="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
+    {% csrf_token %}
+    <div class="mb-4">
+        <textarea name="data" class="form-textarea mt-1 block w-full h-96">{{ participant_data.data }}</textarea>
+    </div>
+    <div class="flex items-center justify-between">
+        <button class="btn btn-primary" type="submit">Update</button>
+    </div>
+</form>

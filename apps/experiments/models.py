@@ -758,15 +758,16 @@ class ExperimentSession(BaseTeamModel):
         try:
             return self.experiment.participant_data.get(participant=self.participant)
         except ParticipantData.DoesNotExist:
-            return {}
+            return None
 
     def get_participant_timezone(self):
-        return self.participant_data_from_experiment.get("timezone")
+        return self.participant_data_from_experiment.data.get("timezone")
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
         will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self.participant_data_from_experiment.data
+        participant_data = self.participant_data_from_experiment
+        participant_data = participant_data.data if participant_data else {}
         as_timezone = None
         if use_participant_tz:
             as_timezone = self.get_participant_timezone()
@@ -777,7 +778,8 @@ class ExperimentSession(BaseTeamModel):
         return participant_data
 
     def get_participant_data_json(self):
-        participant_data = self.participant_data_from_experiment.data
+        participant_data = self.participant_data_from_experiment
+        participant_data = participant_data.data if participant_data else {}
         scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
