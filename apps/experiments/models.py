@@ -761,7 +761,8 @@ class ExperimentSession(BaseTeamModel):
             return None
 
     def get_participant_timezone(self):
-        return self.participant_data_from_experiment.data.get("timezone")
+        participant_data = self.participant_data_from_experiment
+        return participant_data.data.get("timezone") if participant_data else ""
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages

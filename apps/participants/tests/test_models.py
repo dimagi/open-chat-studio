@@ -10,7 +10,7 @@ def test_get_experiments_for_display():
     session = ExperimentSessionFactory(participant=participant)
     message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
     # Add a session, but with no messages yet
-    ExperimentSessionFactory(participant=participant)
+    ExperimentSessionFactory(participant=participant, experiment=session.experiment)
 
     experiment = participant.get_experiments_for_display()[0]
     assert experiment.joined_on == message.created_at
