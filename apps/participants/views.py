@@ -100,7 +100,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
             sessions = participant.experimentsession_set.filter(experiment=experiment).all()
             experiment_data[experiment] = {
                 "sessions": sessions,
-                "participant_data": json.dumps(sessions.first().participant_data_from_experiment.data),
+                "participant_data": json.dumps(sessions.first().participant_data_from_experiment),
             }
         context["experiment_data"] = experiment_data
         return context
