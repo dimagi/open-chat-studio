@@ -479,18 +479,16 @@ class Participant(BaseTeamModel):
     def last_seen(self) -> datetime:
         """Gets the "last seen" date for this participant based on their last message"""
         latest_session = (
-            self.experimentsession_set.annotate(chat_count=Count("chat__messages"))
-            .exclude(chat_count=0)
+            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
+            .exclude(message_count=0)
             .order_by("-created_at")
             .values("id")[:1]
         )
-
-        message = (
+        return (
             ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
-            .order_by("-created_at")
-            .first()
+            .order_by("-created_at")[:1]
+            .values_list("created_at", flat=True)[0]
         )
-        return message.created_at if message else None
 
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
@@ -533,10 +531,6 @@ class ParticipantData(BaseTeamModel):
         # Multiple bots can have a link to the same ParticipantData record
         # A participant can have many participant data records
         unique_together = ("participant", "content_type", "object_id")
-
-    @property
-    def as_json(self):
-        return json.dumps(self.data, indent=2)
 
 
 class SessionStatus(models.TextChoices):
@@ -762,7 +756,7 @@ class ExperimentSession(BaseTeamModel):
 
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
-        return participant_data.get("timezone") if participant_data else ""
+        return participant_data.get("timezone")
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
