@@ -1,15 +1,14 @@
 import json
 import logging
 import uuid
-from functools import cached_property
 from datetime import datetime
+from functools import cached_property
 
 import markdown
 import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
@@ -505,27 +504,14 @@ class Participant(BaseTeamModel):
         )
         joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
-        participant_session_ids = ExperimentSession.objects.filter(
-            participant=self, experiment_id=OuterRef("id")
-        ).values("id")
-        # TODO: We use a template tag to filter each experiment's sessions for those belonging to the participant.
-        # There must be a way to include the participant's sessions in this query. Maybe we should use another
-        # query?
-        experiments = (
+        return (
             Experiment.objects.annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
-                participant_sessions=ArrayAgg("sessions", filter=Q(sessions__id=Subquery(participant_session_ids))),
             )
-            .exclude(participant_sessions=[])
+            .filter(sessions__participant=self)
             .distinct()
-            .prefetch_related("sessions", "sessions__chat__tags")
         )
-        experiment_info = []
-        for experiment in experiments:
-            experiment_info.append({"experiment": experiment, "sessions": experiment.sessions.filter(participant=self)})
-
-        return experiment_info
 
     class Meta:
         ordering = ["identifier"]
@@ -547,6 +533,10 @@ class ParticipantData(BaseTeamModel):
         # Multiple bots can have a link to the same ParticipantData record
         # A participant can have many participant data records
         unique_together = ("participant", "content_type", "object_id")
+
+    @property
+    def as_json(self):
+        return json.dumps(self.data, indent=2)
 
 
 class SessionStatus(models.TextChoices):
@@ -766,7 +756,7 @@ class ExperimentSession(BaseTeamModel):
     @cached_property
     def participant_data_from_experiment(self) -> "ParticipantData":
         try:
-            return self.experiment.participant_data.get(participant=self.participant).data
+            return self.experiment.participant_data.get(participant=self.participant)
         except ParticipantData.DoesNotExist:
             return {}
 
@@ -776,7 +766,7 @@ class ExperimentSession(BaseTeamModel):
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
         will be represented in the timezone that the participant is in if that information is available"""
-        participant_data = self.participant_data_from_experiment
+        participant_data = self.participant_data_from_experiment.data
         as_timezone = None
         if use_participant_tz:
             as_timezone = self.get_participant_timezone()
@@ -787,7 +777,7 @@ class ExperimentSession(BaseTeamModel):
         return participant_data
 
     def get_participant_data_json(self):
-        participant_data = self.participant_data_from_experiment
+        participant_data = self.participant_data_from_experiment.data
         scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}

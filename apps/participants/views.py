@@ -88,7 +88,17 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
-        participant = Participant.objects.get(id=self.kwargs["participant_id"])
+        participant = Participant.objects.prefetch_related("experimentsession_set").get(
+            id=self.kwargs["participant_id"]
+        )
         context["active_tab"] = "participants"
         context["participant"] = participant
+        experiment_data = {}
+        for experiment in participant.get_experiments_for_display():
+            sessions = participant.experimentsession_set.filter(experiment=experiment).all()
+            experiment_data[experiment] = {
+                "sessions": sessions,
+                "participant_data": sessions.first().participant_data_from_experiment,
+            }
+        context["experiment_data"] = experiment_data
         return context

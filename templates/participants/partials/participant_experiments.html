@@ -9,8 +9,8 @@
     </tr>
   </thead>
   <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
-    {% for experiment_data in participant.get_experiments_for_display %}
-      {% with experiment=experiment_data|dict_lookup:"experiment" sessions=experiment_data|dict_lookup:"sessions" %}
+    {% for experiment, info in experiment_data.items %}
+      {% with sessions=info|dict_lookup:"sessions" participant_data=info|dict_lookup:"participant_data" %}
         <tr
           class="cursor-pointer"
           x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
@@ -23,11 +23,11 @@
         <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
           <td colspan="100%" class="px-3 py-2">
             <div role="tablist" class="tabs tabs-bordered">
-              <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" checked />
+              <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Sessions" checked />
               <div role="tabpanel" class="tab-content">
                 {% include 'participants/partials/experiment_sessions.html' %}
               </div>
-              <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Participant Data" />
+              <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Participant Data" />
               <div role="tabpanel" class="tab-content">
                 {% include 'participants/partials/participant_data.html' %}
               </div>
