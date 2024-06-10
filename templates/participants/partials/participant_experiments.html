@@ -22,17 +22,21 @@
         </tr>
         <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
           <td colspan="100%" class="px-3 py-2">
-            <div role="tablist" class="tabs tabs-bordered">
-              <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Sessions" checked />
-              <div role="tabpanel" class="tab-content">
-                {% include 'participants/partials/experiment_sessions.html' %}
-              </div>
-              <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Participant Data" />
-              <div role="tabpanel" class="tab-content">
-                {% include 'participants/partials/participant_data.html' %}
-              </div>
-            </td>
-          </tr>
+            {% if perms.experiments.change_participantdata %}
+              <div role="tablist" class="tabs tabs-bordered">
+                <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Sessions" checked />
+                <div role="tabpanel" class="tab-content">
+                  {% include 'participants/partials/experiment_sessions.html' %}
+                </div>
+                <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Participant Data" />
+                <div role="tabpanel" class="tab-content">
+                  {% include 'participants/partials/participant_data.html' %}
+                </div>
+            {% else %}
+              {% include 'participants/partials/experiment_sessions.html' %}
+            {% endif %}
+          </td>
+        </tr>
       {% endwith %}
     {% endfor %}
   </tbody>
