@@ -22,7 +22,7 @@ class TagTable(tables.Table):
 
     class Meta:
         model = Tag
-        fields = ("name",)
+        fields = ("name", "is_system_tag")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No tags found."
