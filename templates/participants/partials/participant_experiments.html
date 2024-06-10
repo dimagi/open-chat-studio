@@ -24,11 +24,11 @@
           <td colspan="100%" class="px-3 py-2">
             {% if perms.experiments.change_participantdata %}
               <div role="tablist" class="tabs tabs-bordered">
-                <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Sessions" checked />
+                <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Sessions" checked />
                 <div role="tabpanel" class="tab-content">
                   {% include 'participants/partials/experiment_sessions.html' %}
                 </div>
-                <input type="radio" name="experiment_tabs" role="tab" class="tab" aria-label="Participant Data" />
+                <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Participant Data" />
                 <div role="tabpanel" class="tab-content">
                   {% include 'participants/partials/participant_data.html' %}
                 </div>
