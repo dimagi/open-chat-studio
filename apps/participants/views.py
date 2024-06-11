@@ -2,8 +2,8 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -122,6 +122,4 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             team=request.team,
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
-        return HttpResponseRedirect(
-            reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id])
-        )
+        return redirect(reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id]))
