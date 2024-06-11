@@ -125,7 +125,7 @@ def test_form_fields(_get_for_team_mock):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     """For each new experiment session, a participant should be created and linked to the session"""
     identifier = "someone@example.com"
@@ -150,7 +150,7 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, client):
     """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
     the case where it's an external user, use a UUID as the identifier"""
@@ -176,7 +176,7 @@ def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, clie
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
@@ -219,7 +219,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     """A new participant should be created for each team when a user uses the same identifier"""
     experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
@@ -267,7 +267,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     """When a non platform user starts a session, a participant without a user is created. When they then sign up
     and start another session, their participant user should be populated
@@ -303,7 +303,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_user_email_used_for_participant_identifier(_trigger_mock, client):
     """With the `capture_identifier` field enabled on the consent record, logged in users' consent form will
     not contain the `identifier` field, so we pass it as initial data to the form. This test simulates a logged
@@ -326,7 +326,7 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.views.experiment.enqueue_static_triggers")
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
     experiment = ExperimentFactory(team=TeamWithUsersFactory())

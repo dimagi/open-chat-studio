@@ -34,13 +34,14 @@ class ObfuscatingMixin:
 
     obfuscate_fields = []
 
-    def __init__(self, initial=None, *args, **kwargs):
-        self.initial_raw = initial
-        if initial:
-            initial = initial.copy()
+    def __init__(self, *args, **kwargs):
+        self.initial_raw = kwargs.get("initial")
+        if self.initial_raw:
+            initial = self.initial_raw.copy()
             for field in self.obfuscate_fields:
                 initial[field] = obfuscate_value(initial.get(field, ""))
-        super().__init__(initial=initial, *args, **kwargs)
+            kwargs["initial"] = initial
+        super().__init__(*args, **kwargs)
 
     def clean(self):
         cleaned_data = super().clean()

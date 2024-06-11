@@ -13,6 +13,6 @@ def test_commcare_auth_provider(team_with_users):
 
 
 def _test_provider(team, provider_type: AuthProviderType, data):
-    form = provider_type.form_cls(data=data)
+    form = provider_type.form_cls(team, data=data)
     assert form.is_valid()
     assert form.cleaned_data == data

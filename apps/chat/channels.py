@@ -172,18 +172,18 @@ class ChannelBase:
         platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
-            PlatformMessageHandlerClass = TelegramChannel
+            channel_cls = TelegramChannel
         elif platform == "web":
-            PlatformMessageHandlerClass = WebChannel
+            channel_cls = WebChannel
         elif platform == "whatsapp":
-            PlatformMessageHandlerClass = WhatsappChannel
+            channel_cls = WhatsappChannel
         elif platform == "facebook":
-            PlatformMessageHandlerClass = FacebookMessengerChannel
+            channel_cls = FacebookMessengerChannel
         elif platform == "api":
-            PlatformMessageHandlerClass = ApiChannel
+            channel_cls = ApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
-        return PlatformMessageHandlerClass(
+        return channel_cls(
             experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
@@ -522,7 +522,7 @@ class WebChannel(ChannelBase):
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
         WebChannel.check_and_process_seed_message(session)
-        return WebChannel(experiment_channel, session)
+        return session
 
     @staticmethod
     def check_and_process_seed_message(session: ExperimentSession):
