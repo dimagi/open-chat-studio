@@ -1,8 +1,17 @@
-import {addEdge, applyEdgeChanges, applyNodeChanges, Edge, EdgeChange, Node, NodeChange,} from "reactflow";
-import {create} from "zustand";
-import {PipelineStoreType} from "../types/pipelineStore";
+import {
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
+  Edge,
+  EdgeChange,
+  getConnectedEdges,
+  Node,
+  NodeChange,
+} from "reactflow";
+import { create } from "zustand";
+import { PipelineStoreType } from "../types/pipelineStore";
 import usePipelineManagerStore from "./pipelineManagerStore";
-import {getNodeId} from "../utils";
+import { getNodeId } from "../utils";
 import { cloneDeep } from "lodash";
 
 const usePipelineStore = create<PipelineStoreType>((set, get) => ({
@@ -73,6 +82,13 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     return get().nodes.find((node) => node.id === id);
   },
   deleteNode: (nodeId) => {
+    const node = get().nodes.filter((node) => node.id === nodeId)[0];
+    const connectedEdges = getConnectedEdges([node], get().edges);
+    const remainingEdges = get().edges.filter(
+      (edge) => !connectedEdges.includes(edge),
+    );
+    get().setEdges(remainingEdges);
+
     get().setNodes(
       get().nodes.filter((node) =>
         typeof nodeId === "string"
