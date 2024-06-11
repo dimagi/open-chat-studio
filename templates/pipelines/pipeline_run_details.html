@@ -30,6 +30,7 @@
                                     {% endif %}
                                    ">{{ pipeline_run.status|upper }}</div>
                     </div>
+                    {% include "pipelines/components/experiment_session_view_button.html" with record=pipeline_run %}
                 </div>
             </div>
             {% include "pipelines/components/pipeline_run_detail_tabs.html" %}
