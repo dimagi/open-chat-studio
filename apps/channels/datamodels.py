@@ -193,3 +193,8 @@ class ApiMessage(BaseModel):
     @property
     def message_text(self) -> str:
         return self.message
+
+
+class SlackMessage(BaseModel):
+    thread_ts: str
+    message_text: str

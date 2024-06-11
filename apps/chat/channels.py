@@ -1,6 +1,7 @@
 import logging
 from abc import abstractmethod
 from enum import Enum
+from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
@@ -111,7 +112,7 @@ class ChannelBase:
         pass
 
     @property
-    def chat_id(self) -> int:
+    def chat_id(self) -> str:
         if self.experiment_session and self.experiment_session.participant.identifier:
             return self.experiment_session.participant.identifier
         return self.get_chat_id_from_message(self.message)
@@ -696,6 +697,64 @@ class ApiChannel(ChannelBase):
         pass
 
 
+class SlackChannel(ChannelBase):
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
+        send_response_to_user: bool = True,
+    ):
+        """
+        Args:
+            send_response_to_user: A boolean indicating whether the handler should send the response to the user.
+                This is useful when the message sending is handled outside the handler
+                (e.g., in a slack event listener)
+        """
+        super().__init__(experiment_channel, experiment_session)
+        self.send_response_to_user = send_response_to_user
+
+    @cached_property
+    def messaging_service(self):
+        return self.experiment_channel.messaging_provider.get_messaging_service()
+
+    @property
+    def message_content_type(self):
+        return MESSAGE_TYPES.TEXT
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def send_text_to_user(self, text: str):
+        if not self.send_response_to_user:
+            return
+
+        channel_id = self.experiment_channel.extra_data.get("slack_channel_id")
+        thread_ts = self.message.thread_ts
+        self.messaging_service.send_text_message(
+            text,
+            from_="",
+            to=channel_id,
+            platform=ChannelPlatform.SLACK,
+            thread_ts=thread_ts,
+        )
+
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise MessageHandlerException("WebChannel requires an existing session")
+
+    @staticmethod
+    def start_new_session(
+        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, slack_thread_ts: str
+    ):
+        return _start_experiment_session(
+            experiment, experiment_channel, participant_identifier, session_external_id=slack_thread_ts
+        )
+
+
 def _start_experiment_session(
     experiment: Experiment,
     experiment_channel: ExperimentChannel,
@@ -703,6 +762,7 @@ def _start_experiment_session(
     participant_user: CustomUser | None = None,
     session_status: SessionStatus = SessionStatus.ACTIVE,
     timezone: str | None = None,
+    session_external_id: str | None = None,
 ) -> ExperimentSession:
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
@@ -731,6 +791,7 @@ def _start_experiment_session(
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,
+            external_id=session_external_id,
         )
 
         # Record the participant's timezone

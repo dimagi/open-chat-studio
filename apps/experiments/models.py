@@ -557,6 +557,8 @@ class ExperimentSession(BaseTeamModel):
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
+        if not self.external_id:
+            self.external_id = str(uuid.uuid4())
 
         super().save(*args, **kwargs)
 

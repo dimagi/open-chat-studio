@@ -6,7 +6,7 @@ from apps.slack.models import SlackInstallation
 from apps.slack.slack_app import app
 
 
-def get_slack_client(installation_id: str, do_retries: bool = False) -> WebClient:
+def get_slack_client(installation_id: int, do_retries: bool = False) -> WebClient:
     installation = SlackInstallation.objects.get(id=installation_id)
     # this handles token expiration and rotation
     auth_result = app._authorize(

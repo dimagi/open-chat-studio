@@ -27,10 +27,12 @@ class MessagingService(pydantic.BaseModel):
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types: ClassVar[list] = []
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         raise NotImplementedError
 
-    def send_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform):
+    def send_voice_message(
+        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+    ):
         raise NotImplementedError
 
     def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
@@ -91,12 +93,14 @@ class TwilioService(MessagingService):
             ExpiresIn=360,
         )
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
             self.client.messages.create(from_=f"{prefix}:{from_}", body=message_text, to=f"{prefix}:{to}")
 
-    def send_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform):
+    def send_voice_message(
+        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+    ):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=f"{prefix}:{from_}", to=f"{prefix}:{to}", media_url=[public_url])
@@ -121,10 +125,12 @@ class TurnIOService(MessagingService):
     def client(self) -> TurnClient:
         return TurnClient(token=self.auth_token)
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         self.client.messages.send_text(to, message)
 
-    def send_voice_message(self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform):
+    def send_voice_message(
+        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+    ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
         media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
@@ -144,6 +150,15 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
+
+    def send_text_message(
+        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
+    ):
+        self.client.chat_postMessage(
+            channel=to,
+            text=message,
+            thread_ts=thread_ts,
+        )
 
     @cached_property
     def client(self) -> WebClient:
