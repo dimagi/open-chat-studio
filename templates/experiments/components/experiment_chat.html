@@ -13,7 +13,7 @@
             {% if perms.annotations.add_customtaggeditem %}
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Tags</th>
             {% endif %}
-            {% if perms.annotations.add_customtaggeditem %}
+            {% if perms.annotations.view_customtaggeditem %}
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">System Tags</th>
             {% endif %}
           </tr>
@@ -50,9 +50,11 @@
                   {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.tags.all %}
                 </td>
               {% endif %}
-              <td scope="col" class="w-1/4 overflow-y-visible">
-                {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.get_system_tags %}
-              </td>
+              {% if perms.annotations.view_customtaggeditem %}
+                <td scope="col" class="w-1/4 overflow-y-visible">
+                  {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.get_system_tags %}
+                </td>
+              {% endif %}
               {% if perms.annotations.add_usercomment %}
                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                   <i class="fa-regular fa-comment"></i> <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
