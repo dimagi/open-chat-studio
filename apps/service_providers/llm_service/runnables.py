@@ -133,7 +133,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
         self._populate_memory()
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(input, ChatMessageType.HUMAN)
+            self._save_message_to_history(
+                input, ChatMessageType.HUMAN, config.get("configurable", {}).get("add_experiment_tag", False)
+            )
 
         output = self._get_output_check_cancellation(input, config)
         result = ChainOutput(
@@ -143,7 +145,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
             raise GenerationCancelled(result)
 
         if config.get("configurable", {}).get("save_output_to_history", True):
-            self._save_message_to_history(output, ChatMessageType.AI)
+            self._save_message_to_history(
+                output, ChatMessageType.AI, config.get("configurable", {}).get("add_experiment_tag", False)
+            )
         return result
 
     def _get_output_check_cancellation(self, input, config):
@@ -205,16 +209,17 @@ class ExperimentRunnable(BaseExperimentRunnable):
         messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
         self.memory.chat_memory.messages = messages
 
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
+    def _save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
         )
-        experiment_route = ExperimentRoute.objects.filter(team=self.session.team, child=self.experiment.id).first()
-        if not Tag.objects.filter(name=experiment_route.keyword, team=self.session.team).exists() and experiment_route:
-            chat_message.tags.create(team=self.session.team, name=experiment_route.keyword, is_system_tag=True)
-        chat_message.add_tags([experiment_route.keyword], team=self.session.team, added_by=None)
+        if add_experiment_tag:
+            exp_route = ExperimentRoute.objects.filter(team=self.session.team, child=self.experiment.id).first()
+            if not Tag.objects.filter(name=exp_route.keyword, team=self.session.team).exists() and exp_route:
+                chat_message.tags.create(team=self.session.team, name=exp_route.keyword, is_system_tag=True)
+            chat_message.add_tags([exp_route.keyword], team=self.session.team, added_by=None)
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
