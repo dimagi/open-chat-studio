@@ -7,7 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
 
 from apps.api.permissions import HasUserAPIKey
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment
+from apps.participants.models import Participant, ParticipantData
 
 require_view_experiment = permission_required("experiments.view_experiment")
 
@@ -28,7 +29,7 @@ class ExperimentsView(ListAPIView):
 
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
-@permission_required("experiments.change_participantdata")
+@permission_required("participants.change_participantdata")
 def update_participant_data(request, participant_id: str):
     """
     Upsert participant data for all specified experiments in the payload

@@ -231,7 +231,7 @@ class ScheduledMessage(BaseTeamModel):
     action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
-        "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
+        "participants.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
     next_trigger_date = models.DateTimeField(null=True)
     last_triggered_at = models.DateTimeField(null=True)

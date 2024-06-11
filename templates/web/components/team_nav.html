@@ -54,7 +54,7 @@
       {% endif %}
     </ul>
   </li>
-  {% if perms.experiments.view_participant %}
+  {% if perms.participants.view_participant %}
     <li>
       <a href="{% url 'participants:participant_home' request.team.slug %}"
          {% if active_tab == 'participants' %}class="active"{% endif %}>

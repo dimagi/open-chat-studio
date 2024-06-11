@@ -1,6 +1,6 @@
 from django import forms
 
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 
 
 class ParticipantForm(forms.ModelForm):

@@ -56,8 +56,6 @@ from apps.experiments.models import (
     AgentTools,
     Experiment,
     ExperimentSession,
-    Participant,
-    ParticipantData,
     SessionStatus,
     SyntheticVoice,
 )
@@ -66,6 +64,7 @@ from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
+from apps.participants.models import Participant, ParticipantData
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin

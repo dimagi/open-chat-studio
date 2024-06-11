@@ -11,7 +11,8 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.participants.models import Participant
 from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
 

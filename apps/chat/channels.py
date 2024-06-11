@@ -16,7 +16,8 @@ from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerExcepti
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.participants.models import Participant
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 

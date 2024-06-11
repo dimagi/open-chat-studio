@@ -8,8 +8,9 @@ from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment
 from apps.participants.forms import ParticipantForm
+from apps.participants.models import Participant, ParticipantData
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from .tables import ParticpantTable
@@ -17,7 +18,7 @@ from .tables import ParticpantTable
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
-    permission_required = "experiments.view_participant"
+    permission_required = "participants.view_participant"
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
@@ -29,7 +30,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
 
 
 class CreateParticipant(CreateView, PermissionRequiredMixin):
-    permission_required = "experiments.add_participant"
+    permission_required = "participants.add_participant"
     model = Participant
     form_class = ParticipantForm
     template_name = "generic/object_form.html"
@@ -49,7 +50,7 @@ class CreateParticipant(CreateView, PermissionRequiredMixin):
 
 
 class EditParticipant(UpdateView, PermissionRequiredMixin):
-    permission_required = "experiments.change_participant"
+    permission_required = "participants.change_participant"
     model = Participant
     form_class = ParticipantForm
     template_name = "generic/object_form.html"
@@ -67,7 +68,7 @@ class EditParticipant(UpdateView, PermissionRequiredMixin):
 
 
 class DeleteParticipant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "experiments.delete_participant"
+    permission_required = "participants.delete_participant"
 
     def delete(self, request, team_slug: str, pk: int):
         messages.error(request, "Cannot delete a Participant")
@@ -85,7 +86,7 @@ class ParticipantTableView(SingleTableView):
 
 
 class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
-    permission_required = "experiments.view_participant"
+    permission_required = "participants.view_participant"
     template_name = "participants/single_participant_home.html"
 
     def get_context_data(self, *args, **kwargs):

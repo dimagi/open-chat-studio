@@ -3,7 +3,7 @@ import json
 import pytest
 from django.urls import reverse
 
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient

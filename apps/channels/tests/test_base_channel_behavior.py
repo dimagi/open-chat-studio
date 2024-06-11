@@ -10,7 +10,8 @@ import pytest
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase, TelegramChannel
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.participants.models import Participant
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
