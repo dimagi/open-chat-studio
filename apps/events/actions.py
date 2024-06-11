@@ -125,4 +125,4 @@ class PipelineStartAction(EventActionHandlerBase):
             input = "\n".join(message.pretty_repr() for message in messages)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
             input = session.chat.messages.last().to_langchain_message().pretty_repr()
-        return pipeline.invoke(PipelineState(messages=[input]))
+        return pipeline.invoke(PipelineState(messages=[input]), session)
