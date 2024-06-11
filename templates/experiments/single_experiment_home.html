@@ -121,7 +121,43 @@
   </div>
 
   <div role="tablist" class="tabs tabs-bordered">
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" checked />
+    {% if perms.chat.view_chat %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" checked/>
+      <div role="tabpanel" class="tab-content">
+        <div class="app-card">
+          <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
+            <div class="grid grid-flow-col auto-cols-max gap-x-2">
+              {% if perms.experiments.download_chats %}
+                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+                  {% csrf_token %}
+                  <input name="tags" class="hidden" x-bind:value="tags" />
+                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+                </form>
+              {% endif %}
+              {% if perms.annotations.view_customtaggeditem %}
+                <div class="w-96 my-2">
+                  <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
+                    <option value="">Filter tags...</option>
+                    {% for tag in available_tags %}
+                      <option value="{{ tag.name }}">{{ tag.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              {% endif %}
+            </div>
+            <div
+              id="sessions-table"
+              hx-trigger="load, tagFilter"
+              hx-target="this"
+              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+              hx-swap="innerHTML"
+            ></div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions"/>
     <div role="tabpanel" class="tab-content">
       <div class="app-card">
         <div class="overflow-x-auto">
@@ -157,42 +193,6 @@
         </div>
       </div>
     </div>
-
-    {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions"/>
-      <div role="tabpanel" class="tab-content">
-        <div class="app-card">
-          <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
-            <div class="grid grid-flow-col auto-cols-max gap-x-2">
-              {% if perms.experiments.download_chats %}
-                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
-                  {% csrf_token %}
-                  <input name="tags" class="hidden" x-bind:value="tags" />
-                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
-                </form>
-              {% endif %}
-              {% if perms.annotations.view_customtaggeditem %}
-                <div class="w-96 my-2">
-                  <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
-                    <option value="">Filter tags...</option>
-                    {% for tag in available_tags %}
-                      <option value="{{ tag.name }}">{{ tag.name }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-              {% endif %}
-            </div>
-            <div
-              id="sessions-table"
-              hx-trigger="load, tagFilter"
-              hx-target="this"
-              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-              hx-swap="innerHTML"
-            ></div>
-          </div>
-        </div>
-      </div>
-    {% endif %}
 
     {% flag "events" %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events"/>
