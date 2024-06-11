@@ -1,3 +1,4 @@
+from enum import Enum
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -14,6 +15,10 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
 
 
+class TagCategories(Enum):
+    BOT_RESPONSE = "Bot Response"
+
+
 @audit_fields(
     "name",
     "slug",
@@ -24,11 +29,13 @@ class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
     created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     is_system_tag = models.BooleanField(default=False)
+    category_choices = [(category.value, category.name) for category in TagCategories]
+    category = models.CharField(choices=category_choices, default=TagCategories.BOT_RESPONSE.value)
 
     class Meta:
         verbose_name = _("Tag")
         verbose_name_plural = _("Tags")
-        unique_together = ("team", "name")
+        unique_together = ("team", "name", "is_system_tag", "category")
         ordering = ["name"]
 
     def get_absolute_url(self):
