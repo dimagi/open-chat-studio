@@ -62,3 +62,5 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             ]
         }
     )
+    assert pipeline.runs.count() == 1
+    assert pipeline.runs.first().session_id == session.id
