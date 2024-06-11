@@ -92,6 +92,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)
 
+    def to_langchain_message(self) -> BaseMessage:
+        return messages_from_dict([self.to_langchain_dict()])[0]
+
     def summary_to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.summary, ChatMessageType.SYSTEM)
 
