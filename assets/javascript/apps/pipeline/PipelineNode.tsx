@@ -52,21 +52,26 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       <div
         className={classNames(
           selected ? "border border-primary" : "border",
-          "w-100 rounded relative flex flex-col justify-center bg-base-100",
+          "px-4 py-2 shadow-md rounded-md border-2 border-stone-400 bg-base-100",
         )}
       >
         <Handle type="target" position={Position.Left} id="input" />
-        <div className="m-1 text-center">{data.label}</div>
-        {data.inputParams.map((inputParam) => (
-          <React.Fragment key={inputParam.name}>
-            <div className="m-1 text-center">{inputParam.name}</div>
-            <textarea
-              name={inputParam.name}
-              onChange={updateParamValue}
-              value={params[inputParam.name] || ""}
-            ></textarea>
-          </React.Fragment>
-        ))}
+        <div className="ml-2">
+          <div className="m-1 text-lg font-bold text-center">{data.label}</div>
+          {data.inputParams.map((inputParam) => (
+            <React.Fragment key={inputParam.name}>
+              <div className="m-1 font-medium text-center">
+                {inputParam.name}
+              </div>
+              <textarea
+                className="textarea textarea-bordered w-full"
+                name={inputParam.name}
+                onChange={updateParamValue}
+                value={params[inputParam.name] || ""}
+              ></textarea>
+            </React.Fragment>
+          ))}
+        </div>
         <Handle type="source" position={Position.Right} id="output" />
       </div>
     </>

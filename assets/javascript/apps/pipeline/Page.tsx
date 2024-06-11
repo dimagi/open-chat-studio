@@ -45,7 +45,7 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
           </div>
         </div>
       </div>
-      <div>
+      <div className="ml-2">
         <SidePanel inputTypes={props.inputTypes} />
       </div>
     </div>
