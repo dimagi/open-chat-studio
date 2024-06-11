@@ -182,6 +182,8 @@ class ChannelBase:
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
             channel_cls = ApiChannel
+        elif platform == "slack":
+            channel_cls = SlackChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls(

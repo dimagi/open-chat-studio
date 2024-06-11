@@ -2,6 +2,7 @@ from functools import cached_property
 
 from django import forms
 
+from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -131,4 +132,7 @@ class SlackChannelForm(ExtraFormBase):
     def post_save(self, channel: ExperimentChannel):
         if self.messaging_provider:
             service = self.messaging_provider.get_messaging_service()
-            service.join_channel(self.cleaned_data["slack_channel_id"])
+            try:
+                service.join_channel(self.cleaned_data["slack_channel_id"])
+            except Exception as e:
+                raise ExperimentChannelException("Failed to join the channel") from e

@@ -29,6 +29,7 @@ from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
+from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
@@ -515,9 +516,13 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
         form.save(experiment, config_data)
         if extra_form:
-            extra_form.post_save(channel=form.instance)
-            if message := extra_form.get_success_message(channel=form.instance):
-                messages.info(request, message)
+            try:
+                extra_form.post_save(channel=form.instance)
+            except ExperimentChannelException as e:
+                messages.error("Error saving channel: " + str(e))
+            else:
+                if message := extra_form.get_success_message(channel=form.instance):
+                    messages.info(request, message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 

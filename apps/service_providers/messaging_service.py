@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -10,6 +11,7 @@ import requests
 from botocore.client import Config
 from django.conf import settings
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
 from turn import TurnClient
 from twilio.rest import Client
@@ -18,7 +20,10 @@ from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
+
+logger = logging.getLogger(__name__)
 
 
 class MessagingService(pydantic.BaseModel):
@@ -166,20 +171,21 @@ class SlackService(MessagingService):
 
         return get_slack_client(self.slack_installation_id)
 
-    def get_channels(self):
-        channels = {}
+    def iter_channels(self):
         for page in self.client.conversations_list():
-            for ch in page["channels"]:
-                channels[ch["id"]] = ch
-        return channels
+            yield from page["channels"]
 
     def get_channel_by_name(self, name):
-        for channel in self.get_channels().values():
+        for channel in self.iter_channels():
             if channel["name"] == name:
                 return channel
 
     def join_channel(self, channel_id: str):
-        if channel_id not in self.get_channels():
-            return
+        try:
+            self.client.channels_info(channel=channel_id)
+        except SlackApiError as e:
+            message = "Error joining slack channel"
+            logger.exception(message)
+            raise ServiceProviderConfigError(self._type, message) from e
 
         self.client.conversations_join(channel=channel_id)
