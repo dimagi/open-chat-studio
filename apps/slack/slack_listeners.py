@@ -8,6 +8,7 @@ Manage event subscriptions at:
 """
 
 import logging
+import re
 
 from slack_bolt import BoltContext
 
@@ -66,7 +67,7 @@ def app_mentioned(slack_install, event, context: BoltContext):
         )
 
     # strip out the mention
-    message_text = event["text"].replace(f"<{slack_install.bot_user_id}>", "")
+    message_text = re.sub(rf"<@?{slack_install.bot_user_id}>", "", event["text"])
     message = SlackMessage(thread_ts=thread_ts, message_text=message_text)
 
     ocs_channel = SlackChannel(experiment_channel, session, send_response_to_user=False)
