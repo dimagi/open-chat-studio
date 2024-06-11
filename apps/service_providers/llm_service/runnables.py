@@ -28,7 +28,7 @@ from apps.annotations.models import Tag
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
@@ -211,9 +211,10 @@ class ExperimentRunnable(BaseExperimentRunnable):
             message_type=type_.value,
             content=message,
         )
-        if not Tag.objects.filter(name=self.experiment.name, team=self.session.team).exists():
-            chat_message.tags.create(team=self.session.team, name=self.experiment.name, is_system_tag=True)
-        chat_message.add_tags([self.experiment.name], team=self.session.team, added_by=None)
+        experiment_route = ExperimentRoute.objects.filter(team=self.session.team, child=self.experiment.id).first()
+        if not Tag.objects.filter(name=experiment_route.keyword, team=self.session.team).exists() and experiment_route:
+            chat_message.tags.create(team=self.session.team, name=experiment_route.keyword, is_system_tag=True)
+        chat_message.add_tags([experiment_route.keyword], team=self.session.team, added_by=None)
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
