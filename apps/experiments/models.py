@@ -1,22 +1,20 @@
 import json
 import logging
 import uuid
-from datetime import datetime
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 import markdown
 import pytz
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.postgres.fields import ArrayField
-from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
-from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -25,6 +23,10 @@ from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
+
+if TYPE_CHECKING:
+    from apps.participants.models import ParticipantData
+
 
 log = logging.getLogger(__name__)
 
@@ -405,7 +407,7 @@ class Experiment(BaseTeamModel):
         help_text="This tells the bot when to reply with voice messages",
     )
     files = models.ManyToManyField("files.File", blank=True)
-    participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
+    participant_data = GenericRelation("participants.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
@@ -460,79 +462,6 @@ class ExperimentRoute(BaseTeamModel):
         )
 
 
-class Participant(BaseTeamModel):
-    identifier = models.CharField(max_length=320, blank=True)  # max email length
-    public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
-
-    @property
-    def email(self):
-        validate_email(self.identifier)
-        return self.identifier
-
-    def __str__(self):
-        return self.identifier
-
-    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
-        return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
-
-    def last_seen(self) -> datetime:
-        """Gets the "last seen" date for this participant based on their last message"""
-        latest_session = (
-            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
-            .exclude(message_count=0)
-            .order_by("-created_at")
-            .values("id")[:1]
-        )
-        return (
-            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
-            .order_by("-created_at")[:1]
-            .values_list("created_at", flat=True)[0]
-        )
-
-    def get_absolute_url(self):
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
-
-    def get_experiments_for_display(self):
-        """Used by the html templates to display various stats about the participant's participation."""
-        exp_scoped_human_message = ChatMessage.objects.filter(
-            chat__experiment_session__participant=self,
-            message_type="human",
-            chat__experiment_session__experiment__id=OuterRef("id"),
-        )
-        joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
-        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
-        return (
-            Experiment.objects.annotate(
-                joined_on=Subquery(joined_on),
-                last_message=Subquery(last_message),
-            )
-            .filter(sessions__participant=self)
-            .distinct()
-        )
-
-    class Meta:
-        ordering = ["identifier"]
-        unique_together = [("team", "identifier")]
-
-
-class ParticipantData(BaseTeamModel):
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
-    data = encrypt(models.JSONField(default=dict))
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey("content_type", "object_id")
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["content_type", "object_id"]),
-        ]
-        # A bot cannot have a link to multiple data entries for the same Participant
-        # Multiple bots can have a link to the same ParticipantData record
-        # A participant can have many participant data records
-        unique_together = ("participant", "content_type", "object_id")
-
-
 class SessionStatus(models.TextChoices):
     SETUP = "setup", gettext("Setting Up")
     PENDING = "pending", gettext("Awaiting participant")
@@ -566,7 +495,7 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
+    participant = models.ForeignKey("participants.Participant", on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the experiment (chat) ended.")
@@ -749,6 +678,8 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def participant_data_from_experiment(self) -> "ParticipantData":
+        from apps.participants.models import ParticipantData
+
         try:
             return self.experiment.participant_data.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:

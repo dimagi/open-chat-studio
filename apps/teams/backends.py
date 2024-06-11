@@ -63,8 +63,6 @@ CONTENT_TYPES = {
         "experimentroute",
         "experimentsession",
         "noactivitymessageconfig",
-        "participant",
-        "participantdata",
         "promptbuilderhistory",
         "safetylayer",
         "sourcematerial",
@@ -76,7 +74,7 @@ CONTENT_TYPES = {
     "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
-    "participants": [],
+    "participants": ["participant", "participantdata"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
