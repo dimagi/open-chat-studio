@@ -6,6 +6,7 @@ from django.db import models
 from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
+from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
 from apps.teams.models import BaseTeamModel
@@ -25,13 +26,13 @@ class Pipeline(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
-    def invoke(self, input: PipelineState) -> PipelineState:
+    def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
 
         pipeline_run = PipelineRun.objects.create(
-            pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}
+            pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}, session=session
         )
 
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
@@ -57,6 +58,7 @@ class PipelineRun(BaseModel):
     input = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
     output = models.JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
     log = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, related_name="pipeline_runs", null=True)
 
     def get_absolute_url(self):
         return reverse("pipelines:run_details", args=[self.pipeline.team.slug, self.pipeline_id, self.id])
