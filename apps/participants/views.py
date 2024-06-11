@@ -80,6 +80,7 @@ class ParticipantTableView(SingleTableView):
     paginate_by = 25
     table_class = ParticpantTable
     template_name = "table/single_table.html"
+    permission_required = "experiments.view_participant"
 
     def get_queryset(self):
         return Participant.objects.filter(team=self.request.team)
@@ -108,6 +109,8 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
 
 class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "experiments.change_participantdata"
+
     def post(self, request, team_slug, participant_id, experiment_id):
         experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
         participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
