@@ -3,8 +3,8 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
-from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -70,7 +70,7 @@ class EditTag(UpdateView, PermissionRequiredMixin):
         pk = kwargs.get("pk")
         queryset = self.get_queryset()
         if not queryset.filter(pk=pk).exists():
-            return HttpResponseRedirect(reverse("annotations:tag_home", args=[self.request.team.slug]))
+            return redirect("annotations:tag_home", team_slug=self.request.team.slug)
         return super().get(request, *args, **kwargs)
 
 
