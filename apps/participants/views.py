@@ -3,6 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -108,8 +109,8 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
 class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     def post(self, request, team_slug, participant_id, experiment_id):
-        experiment = Experiment.objects.get(team__slug=team_slug, id=experiment_id)
-        participant = Participant.objects.get(id=participant_id)
+        experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
+        participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
         new_data = json.loads(request.POST["data"])
         ParticipantData.objects.update_or_create(
             participant=participant,
