@@ -18,6 +18,35 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const [params, setParams] = useState(data.params || {});
+  function getInputWidget(inputParam) {
+    switch (inputParam.type) {
+      case "LlmProviderId":
+        return (
+          <input type="number" className="form-input border rounded p-2" />
+        );
+      case "LlmModel":
+        return <input type="text" className="form-input border rounded p-2" />;
+      case "LlmTemperature":
+        return (
+          <input
+            type="number"
+            step="0.1"
+            className="form-input border rounded p-2"
+            placeholder="0.7"
+            required
+          />
+        );
+      default:
+        return (
+          <textarea
+            className="form-input border rounded p-2"
+            name={inputParam.name}
+            onChange={updateParamValue}
+            value={params[inputParam.name] || ""}
+          ></textarea>
+        );
+    }
+  }
 
   const updateParamValue = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -60,11 +89,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
         {data.inputParams.map((inputParam) => (
           <React.Fragment key={inputParam.name}>
             <div className="m-1 text-center">{inputParam.name}</div>
-            <textarea
-              name={inputParam.name}
-              onChange={updateParamValue}
-              value={params[inputParam.name] || ""}
-            ></textarea>
+            {getInputWidget(inputParam)}
           </React.Fragment>
         ))}
         <Handle type="source" position={Position.Right} id="output" />
