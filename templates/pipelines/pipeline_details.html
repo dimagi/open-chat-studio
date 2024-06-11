@@ -1,0 +1,43 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'pipelines:home' request.team.slug %}">Pipelines</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">"{{ pipeline.name }}"</li>
+    </ul>
+  </div>
+{% endblock %}
+{% block app %}
+  <div class="max-w-7xl mx-auto">
+    <div class="app-card">
+      <div class="flex">
+        <div class="flex-1">
+          <h1 class="pg-title">Pipeline: {{ pipeline.name }}</h1>
+        </div>
+        <div class="justify-self-end">
+          <div class="join">
+            <div class="tooltip" data-tip="Edit">
+              <a class="btn btn-primary join-item btn-sm"
+                 href="{% url 'pipelines:edit' team.slug pipeline.id %}">
+                <i class="fa-solid fa-pencil"></i>
+              </a>
+            </div>
+            <div class="tooltip" data-tip="Delete">
+              <a class="btn btn-primary join-item rounded-r-full btn-sm"
+                 href="{% url 'pipelines:delete' team.slug pipeline.id %}">
+                <i class="fa-solid fa-trash"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="app-card">
+      <h2 class="font-semibold">Runs</h2>
+      <div hx-get="{% url "pipelines:runs_table" request.team.slug pipeline.pk %}" hx-trigger="load" hx-swap="outerHTML">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    </div>
+  </div>
+{% endblock %}

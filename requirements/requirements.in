@@ -19,6 +19,7 @@ celery-progress
 celery
 celery[redis]
 httpx
+loguru
 openai
 pandas
 sentry-sdk
@@ -27,6 +28,7 @@ whitenoise[brotli]
 langchain
 langchain-openai
 langchain-anthropic
+langgraph
 Markdown
 # unstructured  # langchain loaders
 # chromadb  # langchain queries

@@ -6,7 +6,7 @@ import pytest
 from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -26,7 +26,7 @@ def fake_llm():
 def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
-    session.experiment.tools_enabled = True
+    session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
     return session
 
 
@@ -65,7 +65,12 @@ def test_runnable(runnable, session, fake_llm):
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
-        {"system": "You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
+        {
+            "system": (
+                "You are a helpful assistant\nThe current datetime is Thursday, 08 February 2024 13:00:08 "
+                "UTC (timezone preserved)"
+            )
+        },
         {"human": "hi"},
     ]
     if runnable.expect_tools:
@@ -84,7 +89,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm):
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = (
         "System prompt with this is the source material"
-        + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+        + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC (timezone preserved)"
     )
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
@@ -97,7 +102,7 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = (
-        "System prompt with " + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+        "System prompt with " + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC (timezone preserved)"
     )
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
@@ -137,7 +142,10 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
-        {"system": experiment.prompt_text + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"},
+        {
+            "system": experiment.prompt_text
+            + "\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC (timezone preserved)"
+        },
         {"human": "Hello"},
         {"human": "hi"},
     ]

@@ -29,6 +29,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 
     @property
     def participant_data(self):
-        return self.experiment.get_participant_data(self.session.participant) or ""
+        return self.session.get_participant_data(use_participant_tz=True) or ""
 
 
 class ExperimentRunnable(BaseExperimentRunnable):
@@ -185,8 +186,10 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        current_datetime = timezone.now().strftime("%A, %d %B %Y %H:%M:%S %Z")
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
+        participant_tz = self.session.get_participant_timezone()
+        current_datetime = pretty_date(timezone.now(), participant_tz)
+        # The bot converts to UTC unless we tell it to preserve the given timezone
+        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime} (timezone preserved)"
         system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [

@@ -1,0 +1,39 @@
+{% extends 'web/app/app_base.html' %}
+{% load form_tags %}
+{% block breadcrumbs %}
+    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+        <ul>
+            <li><a href="{% url 'pipelines:home' request.team.slug %}">Pipelines</a></li>
+            <li><a href="{% url 'pipelines:details' request.team.slug pipeline_run.pipeline_id %}">"{{ pipeline_run.pipeline.name }}"</a>
+            </li>
+            <li class="pg-breadcrumb-active" aria-current="page">
+                Run {{ pipeline_run.id }}
+            </li>
+        </ul>
+    </div>
+{% endblock %}
+{% block app %}
+    <div class="max-w-7xl mx-auto">
+        <div class="app-card">
+            <div class="flex">
+                <div class="flex-1">
+                    <h1 class="pg-title">{{ pipeline_run.pipeline.name }}: Run {{ pipeline_run.created_at }}</h1>
+                </div>
+                <div class="justify-self-end">
+                    <div id="run-group-status-buttons"
+                         class="inline">
+                        <div class="rounded-lg font-semibold shadow-sm p-2 inline text-sm hover:cursor-auto
+                                    {% if pipeline_run.status == "running" %}bg-primary text-primary-content
+                                    {% elif pipeline_run.status == "success" %}bg-success text-success-content
+                                    {% elif pipeline_run.status == "error" %}bg-error text-error-content
+                                    {% else %}bg-neutral text-neutral-content
+                                    {% endif %}
+                                   ">{{ pipeline_run.status|upper }}</div>
+                    </div>
+                    {% include "pipelines/components/experiment_session_view_button.html" with record=pipeline_run %}
+                </div>
+            </div>
+            {% include "pipelines/components/pipeline_run_detail_tabs.html" %}
+        </div>
+    </div>
+{% endblock %}

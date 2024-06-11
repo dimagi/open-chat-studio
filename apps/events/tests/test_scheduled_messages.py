@@ -14,8 +14,15 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
-def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1) -> tuple:
-    params = {"time_period": time_period, "frequency": frequency, "repetitions": repetitions, "prompt_text": ""}
+def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
+    params = {
+        "name": "Test",
+        "time_period": time_period,
+        "frequency": frequency,
+        "repetitions": repetitions,
+        "prompt_text": "",
+        "experiment_id": experiment_id,
+    }
     return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
 
@@ -24,10 +31,10 @@ def _construct_event_action(time_period: TimePeriod, frequency=1, repetitions=1)
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(time_period=TimePeriod(period))
+    event_action, params = _construct_event_action(time_period=TimePeriod(period), experiment_id=session.experiment.id)
     with freeze_time("2024-01-01"):
         message = ScheduledMessage.objects.create(
-            participant=session.participant, team=session.team, action=event_action
+            participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
         )
         delta = relativedelta(**{params["time_period"]: params["frequency"]})
         rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
@@ -37,7 +44,9 @@ def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
 @pytest.mark.django_db()
 def test_get_messages_to_fire():
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+    )
     with freeze_time("2024-04-01"), patch("apps.chat.tasks.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
@@ -96,7 +105,9 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
         assert scheduled_message.is_complete == expected_is_complete
 
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod(period), repetitions=2)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod(period), repetitions=2, experiment_id=session.experiment.id
+    )
     delta = relativedelta(**{params["time_period"]: params["frequency"]})
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
@@ -104,7 +115,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     with freeze_time("2024-04-01") as frozen_time, patch("apps.chat.tasks.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
-            team=session.team, participant=session.participant, action=event_action
+            team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
         )
         # Set the DB time to now
 
@@ -150,13 +161,17 @@ def test_error_when_sending_sending_message_to_a_user(caplog):
     pending messages"""
 
     session = ExperimentSessionFactory()
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS, repetitions=2)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
+    )
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
         patch("apps.chat.tasks.functions.Now") as db_time,
     ):
-        sm = ScheduledMessageFactory(participant=session.participant, action=event_action, team=session.team)
+        sm = ScheduledMessageFactory(
+            participant=session.participant, action=event_action, team=session.team, experiment=session.experiment
+        )
 
         # Let's put the DB time ahead of the scheduled message
         utc_now = timezone.now()
@@ -188,14 +203,19 @@ def test_schedule_update():
     experiment = session.experiment
     team = experiment.team
     session2 = ExperimentSessionFactory(team=team, experiment=experiment)
-    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
+    event_action, params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.WEEKS, repetitions=4, experiment_id=session.experiment.id
+    )
 
-    message1 = ScheduledMessage.objects.create(participant=session.participant, team=session.team, action=event_action)
+    message1 = ScheduledMessage.objects.create(
+        participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
+    )
     message2 = ScheduledMessage.objects.create(
         participant=session2.participant,
         team=session.team,
         action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=5),
+        experiment=session2.experiment,
     )
     message3 = ScheduledMessage.objects.create(
         participant=session2.participant,
@@ -203,6 +223,7 @@ def test_schedule_update():
         action=event_action,
         last_triggered_at=timezone.now() - relativedelta(days=1),
         is_complete=True,
+        experiment=session2.experiment,
     )
     message3_next_trigger_data = message3.next_trigger_date
 

@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from functools import cached_property
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -13,6 +14,7 @@ from apps.events import actions
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +22,10 @@ logger = logging.getLogger(__name__)
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
     "log": actions.LogAction,
+    "pipeline_start": actions.PipelineStartAction,
+    "schedule_trigger": actions.ScheduleTriggerAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
     "summarize": actions.SummarizeConversationAction,
-    "schedule_trigger": actions.ScheduleTriggerAction,
 }
 
 
@@ -32,6 +35,7 @@ class EventActionType(models.TextChoices):
     SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
+    PIPELINE_START = ("pipeline_start", "Start a pipeline")
 
 
 class EventAction(BaseModel):
@@ -225,6 +229,7 @@ class TimePeriod(models.TextChoices):
 
 class ScheduledMessage(BaseTeamModel):
     action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
@@ -232,6 +237,7 @@ class ScheduledMessage(BaseTeamModel):
     last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
+    custom_schedule_params = models.JSONField(blank=True, default=dict)
 
     class Meta:
         indexes = [models.Index(fields=["is_complete"])]
@@ -253,8 +259,12 @@ class ScheduledMessage(BaseTeamModel):
         delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
         utc_now = timezone.now()
 
-        experiment_session = self.participant.get_latest_session()
-        experiment_session.ad_hoc_bot_message(self.action.params["prompt_text"], fail_silently=False)
+        experiment_id = self.action.params.get("experiment_id", self.experiment.id)
+        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        experiment_to_use = Experiment.objects.get(id=experiment_id)
+        experiment_session.ad_hoc_bot_message(
+            self.action.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
+        )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1
@@ -264,3 +274,32 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = utc_now + delta
 
         self.save()
+
+    @cached_property
+    def name(self) -> str:
+        return self.action.params["name"]
+
+    @cached_property
+    def frequency(self) -> str:
+        return self.action.params["frequency"]
+
+    @cached_property
+    def time_period(self) -> str:
+        return self.action.params["time_period"]
+
+    @cached_property
+    def repetitions(self) -> str:
+        return self.action.params["repetitions"]
+
+    def as_string(self, as_timezone: str | None = None):
+        schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
+        if self.time_period not in ["hour", "day"]:
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule = (
+                f"{self.name}: Every {self.frequency} {self.time_period} on {weekday} for {self.repetitions} times"
+            )
+        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        return f"{schedule} (next trigger is {next_trigger})"
+
+    def __str__(self):
+        return self.as_string()

@@ -1,8 +1,10 @@
 import json
 import logging
 import uuid
+from functools import cached_property
 
 import markdown
+import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -290,6 +292,12 @@ class VoiceResponseBehaviours(models.TextChoices):
     NEVER = "never", gettext("Never")
 
 
+class AgentTools(models.TextChoices):
+    RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
+    ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
+    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -324,13 +332,6 @@ class Experiment(BaseTeamModel):
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
-    )
-    tools_enabled = models.BooleanField(
-        default=False,
-        help_text=(
-            "If checked, this bot will be able to use prebuilt tools (set reminders etc). This uses more tokens, "
-            "so it will cost more. This doesn't currently work with Anthropic models."
-        ),
     )
 
     source_material = models.ForeignKey(
@@ -407,6 +408,7 @@ class Experiment(BaseTeamModel):
     children = models.ManyToManyField(
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
+    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -417,6 +419,10 @@ class Experiment(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def tools_enabled(self):
+        return len(self.tools) > 0
 
     @property
     def event_triggers(self):
@@ -431,12 +437,6 @@ class Experiment(BaseTeamModel):
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
-
-    def get_participant_data(self, participant: "Participant") -> "ParticipantData":
-        try:
-            return self.participant_data.get(participant=participant).data
-        except ParticipantData.DoesNotExist:
-            return None
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
@@ -472,8 +472,8 @@ class Participant(BaseTeamModel):
     def __str__(self):
         return self.identifier
 
-    def get_latest_session(self) -> "ExperimentSession":
-        return self.experimentsession_set.order_by("-created_at").first()
+    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
+        return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     class Meta:
         ordering = ["identifier"]
@@ -633,21 +633,27 @@ class ExperimentSession(BaseTeamModel):
 
             enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
 
-    def ad_hoc_bot_message(self, instruction_prompt: str, fail_silently=True):
+    def ad_hoc_bot_message(self, instruction_prompt: str, fail_silently=True, use_experiment: Experiment | None = None):
         """Sends a bot message to this session. The bot message will be crafted using `instruction_prompt` and
-        this session's history"""
+        this session's history.
 
-        bot_message = self._bot_prompt_for_user(self, prompt_instruction=instruction_prompt)
-        self.try_send_message(self, message=bot_message, fail_silently=fail_silently)
+        Parameters:
+            instruction_prompt: The instruction prompt for the LLM
+            fail_silently: Exceptions will not be suppresed if this is True
+            use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
+            specific child bot to handle the check-in.
+        """
+        bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
+        self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
-    def _bot_prompt_for_user(self, prompt_instruction: str) -> str:
-        """Sends the `prompt_instruction` along with the chat history to the LLM to formulate an appropriate prompt
+    def _bot_prompt_for_user(self, instruction_prompt: str, use_experiment: Experiment | None = None) -> str:
+        """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import TopicBot
 
-        topic_bot = TopicBot(self)
-        return topic_bot.process_input(user_input=prompt_instruction, save_input_to_history=False)
+        topic_bot = TopicBot(self, experiment=use_experiment)
+        return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
@@ -663,8 +669,69 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_data(self):
-        return self.experiment.get_participant_data(self.participant)
+    def get_participant_scheduled_messages(self, as_dict=False, as_timezone: str | None = None):
+        """
+        Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent
+
+        Parameters:
+        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        timezone: The timezone to use for the dates. Defaults to the active timezone.
+        """
+        from apps.events.models import ScheduledMessage
+
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
+        messages = ScheduledMessage.objects.filter(
+            Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+            participant=self.participant,
+            team=self.team,
+        ).select_related("action")
+
+        scheduled_messages = []
+        as_timezone = as_timezone or timezone.get_current_timezone_name()
+
+        for message in messages:
+            next_trigger_date = message.next_trigger_date.astimezone(pytz.timezone(as_timezone))
+            if as_dict:
+                scheduled_messages.append(
+                    {
+                        "name": message.name,
+                        "frequency": message.frequency,
+                        "time_period": message.time_period,
+                        "repetitions": message.repetitions,
+                        "next_trigger_date": next_trigger_date.isoformat(),
+                    }
+                )
+            else:
+                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
+        return scheduled_messages
+
+    @cached_property
+    def participant_data_from_experiment(self) -> "ParticipantData":
+        try:
+            return self.experiment.participant_data.get(participant=self.participant).data
+        except ParticipantData.DoesNotExist:
+            return {}
+
+    def get_participant_timezone(self):
+        return self.participant_data_from_experiment.get("timezone")
+
+    def get_participant_data(self, use_participant_tz=False):
+        """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
+        will be represented in the timezone that the participant is in if that information is available"""
+        participant_data = self.participant_data_from_experiment
+        as_timezone = None
+        if use_participant_tz:
+            as_timezone = self.get_participant_timezone()
+
+        scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
+        if scheduled_messages:
+            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
+        return participant_data
 
     def get_participant_data_json(self):
-        return json.dumps(self.experiment.get_participant_data(self.participant), indent=2)
+        participant_data = self.participant_data_from_experiment
+        scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
+        if scheduled_messages:
+            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
+        return json.dumps(participant_data, indent=2)

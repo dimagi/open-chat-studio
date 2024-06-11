@@ -30,7 +30,7 @@ def new_twilio_message(request):
     message_data = json.dumps(request.POST.dict())
     tasks.handle_twilio_message.delay(
         message_data=message_data,
-        request_url=request.build_absolute_uri(),
+        request_uri=request.build_absolute_uri(),
         signature=request.headers.get("X-Twilio-Signature"),
     )
     return HttpResponse()
