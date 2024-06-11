@@ -71,3 +71,9 @@ class LogEntry(pydantic.BaseModel):
 
     class Config:
         json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")}
+
+
+class PipelineEventInputs(models.TextChoices):
+    FULL_HISTORY = "full_history", "Full History"
+    HISTORY_LAST_SUMMARY = "history_last_summary", "History to last summary"
+    LAST_MESSAGE = "last_message", "Last message"
