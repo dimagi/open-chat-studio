@@ -25,12 +25,11 @@ bolt_logger = get_bolt_logger(App)
 
 
 def get_slack_app():
-    client_id, client_secret, signing_secret, scopes, user_scopes = (
+    client_id, client_secret, signing_secret, scopes = (
         settings.SLACK_CLIENT_ID,
         settings.SLACK_CLIENT_SECRET,
         settings.SLACK_SIGNING_SECRET,
         settings.SLACK_SCOPES,
-        settings.SLACK_USER_SCOPES,
     )
 
     return App(
@@ -43,7 +42,7 @@ def get_slack_app():
                 client_id=client_id,
                 client_secret=client_secret,
                 scopes=scopes,
-                user_scopes=user_scopes,
+                user_scopes=[],
                 redirect_uri=get_redirect_uri(),
                 install_page_rendering_enabled=False,
                 # If you want to test token rotation, enabling the following line will make it easy

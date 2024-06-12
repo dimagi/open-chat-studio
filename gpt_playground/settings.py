@@ -464,7 +464,7 @@ LOGGING = {
             "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
         },
         "httpx": {"handlers": ["console"], "level": "WARN"},
-        "slack_bolt": {"handlers": ["console"], "level": "WARN"},
+        "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
     },
 }
 
@@ -531,7 +531,6 @@ SLACK_SCOPES = [
     "im:read",
     "mpim:history",
     "mpim:read",
-    "users:read",
+    "users.profile:read",
 ]
-SLACK_USER_SCOPES = []
 SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
