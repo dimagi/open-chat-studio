@@ -30,7 +30,8 @@ def render_field(form_field):
 
 @register.simple_tag
 def render_text_input(form_field):
-    TEXT_INPUT_TEMPLATE = """<div class="form-control w-full">
+    TEXT_INPUT_TEMPLATE = """
+    <div class="form-control w-full" {% include "generic/attrs.html" with attrs=control_attrs %}>
       <label class="label font-bold" for="{{ form_field.id_for_label }}">{{ form_field.label }}</label>
       {{ form_field }}
       <small class="form-text text-muted">{{ form_field.help_text|safe }}</small>
@@ -42,7 +43,8 @@ def render_text_input(form_field):
 
 @register.simple_tag
 def render_select_input(form_field):
-    SELECT_INPUT_TEMPLATE = """<div class="form-control w-full">
+    SELECT_INPUT_TEMPLATE = """
+    <div class="form-control w-full" {% include "generic/attrs.html" with attrs=control_attrs %}>
       <label class="label font-bold" for="{{ form_field.id_for_label }}">{{ form_field.label }}</label>
       {{ form_field }}
       <small class="form-text text-muted">{{ form_field.help_text|safe }}</small>
@@ -55,7 +57,7 @@ def render_select_input(form_field):
 @register.simple_tag
 def render_checkbox_input(form_field):
     CHECKBOX_INPUT_TEMPLATE = """
-    <div class="form-control">
+    <div class="form-control" {% include "generic/attrs.html" with attrs=control_attrs %}>
       <div class="form-check">
         <label class="label font-bold cursor-pointer">
           <span class="label-text">{{ form_field.label }}</span> 
@@ -70,9 +72,10 @@ def render_checkbox_input(form_field):
 
 
 def _render_field(template_text, form_field):
+    control_attrs = form_field.field.widget.attrs.pop("control_attrs", None) or {}
     if not form_field.is_hidden:
         template_object = template.Template(template_text)
     else:
         template_object = template.Template("{{ form_field }}")
-    context = template.Context({"form_field": form_field})
+    context = template.Context({"form_field": form_field, "control_attrs": control_attrs})
     return template_object.render(context)

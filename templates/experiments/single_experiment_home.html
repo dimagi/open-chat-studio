@@ -73,7 +73,9 @@
       <dialog id="channel_{{ channel.id }}_modal" class="modal">
         <div class="modal-box">
           <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
-          <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}">
+          <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
+                {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}
+          >
             {% csrf_token %}
             {% render_form_fields channel.form %}
             {% if channel.extra_form %}
@@ -100,7 +102,9 @@
         </ul>
       </div>
       {% for platform in platforms %}
-        <dialog id="{{ platform.value }}_modal" class="modal">
+        <dialog id="{{ platform.value }}_modal" class="modal"
+                {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}
+        >
           <div class="modal-box">
             <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
             <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}">
@@ -110,7 +114,7 @@
                 {% render_form_fields platform.extra_form %}
               {% endif %}
               <div class="modal-action">
-                <button class="btn btn-primary" type="submit">Create Link</button>
+                <button class="btn btn-primary" type="submit">Create</button>
                 <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()">Close</button>
               </div>
             </form>

@@ -1,0 +1,1 @@
+SLACK_ALL_CHANNELS = "*"

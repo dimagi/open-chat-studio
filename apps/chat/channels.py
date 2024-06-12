@@ -12,6 +12,7 @@ from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
+from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
@@ -734,7 +735,14 @@ class SlackChannel(ChannelBase):
         if not self.send_response_to_user:
             return
 
-        channel_id = self.experiment_channel.extra_data.get("slack_channel_id")
+        channel_id = self.message.channel_id
+        assigned_channel_id = self.experiment_channel.extra_data.get("slack_channel_id")
+        if assigned_channel_id != SLACK_ALL_CHANNELS and assigned_channel_id != channel_id:
+            raise MessageHandlerException(
+                f"Attempt to send message to an unassigned channel: "
+                f"'{channel_id}' (assigned to '{assigned_channel_id}'"
+            )
+
         thread_ts = self.message.thread_ts
         self.messaging_service.send_text_message(
             text,
