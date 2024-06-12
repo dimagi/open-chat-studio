@@ -12,7 +12,6 @@ from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
-from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import TopicBot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
@@ -29,6 +28,7 @@ from apps.experiments.models import (
 )
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.slack.utils import parse_session_external_id
 from apps.users.models import CustomUser
 
 USER_CONSENT_TEXT = "1"
@@ -713,7 +713,7 @@ class SlackChannel(ChannelBase):
         """
         Args:
             send_response_to_user: A boolean indicating whether the handler should send the response to the user.
-                This is useful when the message sending is handled outside the handler
+                This is useful when the message sending happens as part of the slack event handler
                 (e.g., in a slack event listener)
         """
         super().__init__(experiment_channel, experiment_session)
@@ -735,15 +735,12 @@ class SlackChannel(ChannelBase):
         if not self.send_response_to_user:
             return
 
-        channel_id = self.message.channel_id
-        assigned_channel_id = self.experiment_channel.extra_data.get("slack_channel_id")
-        if assigned_channel_id != SLACK_ALL_CHANNELS and assigned_channel_id != channel_id:
-            raise MessageHandlerException(
-                f"Attempt to send message to an unassigned channel: "
-                f"'{channel_id}' (assigned to '{assigned_channel_id}'"
-            )
+        if not self.message:
+            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        else:
+            channel_id = self.message.channel_id
+            thread_ts = self.message.thread_ts
 
-        thread_ts = self.message.thread_ts
         self.messaging_service.send_text_message(
             text,
             from_="",
@@ -758,10 +755,10 @@ class SlackChannel(ChannelBase):
 
     @staticmethod
     def start_new_session(
-        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, slack_thread_ts: str
+        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, external_id: str
     ):
         return _start_experiment_session(
-            experiment, experiment_channel, participant_identifier, session_external_id=slack_thread_ts
+            experiment, experiment_channel, participant_identifier, session_external_id=external_id
         )
 
 

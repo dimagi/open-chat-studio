@@ -20,6 +20,7 @@ from apps.chat.channels import SlackChannel
 from apps.experiments.models import ExperimentSession
 from apps.slack.models import SlackInstallation
 from apps.slack.slack_app import app
+from apps.slack.utils import make_session_external_id
 
 logger = logging.getLogger("slack.events")
 
@@ -33,12 +34,14 @@ def register_listeners():
 
 def new_message(event, context: BoltContext):
     thread_ts = event.get("thread_ts", None)
+    channel_id = event.get("channel")
+
+    session = None
+    if thread_ts:
+        session = get_session_for_thread(context["team"], channel_id, thread_ts)
+
     is_bot_mention = context.bot_user_id in event.get("text", "")
-
-    if is_bot_mention:
-        respond_to_message(event, context)
-
-    if thread_ts and (session := get_session_for_thread(context["team"], thread_ts)):
+    if is_bot_mention or session:
         respond_to_message(event, context, session)
 
 
@@ -55,8 +58,9 @@ def respond_to_message(event, context: BoltContext, session=None):
     slack_user = event.get("user")
 
     if not session:
+        external_id = make_session_external_id(channel_id, thread_ts)
         session = SlackChannel.start_new_session(
-            experiment_channel.experiment, experiment_channel, slack_user, slack_thread_ts=thread_ts
+            experiment_channel.experiment, experiment_channel, slack_user, external_id=external_id
         )
 
     # strip out the mention
@@ -84,9 +88,10 @@ def load_installation_and_team(context: BoltContext, next):
     next()
 
 
-def get_session_for_thread(team, thread_ts: str):
+def get_session_for_thread(team, channel_id: str, thread_ts: str):
+    external_id = make_session_external_id(channel_id, thread_ts)
     try:
-        return ExperimentSession.objects.select_related("team", "participant").get(team=team, external_id=thread_ts)
+        return ExperimentSession.objects.select_related("team", "participant").get(team=team, external_id=external_id)
     except ExperimentSession.DoesNotExist:
         pass
 
