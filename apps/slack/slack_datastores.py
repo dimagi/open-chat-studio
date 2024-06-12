@@ -8,7 +8,6 @@ from slack_sdk.oauth import InstallationStore, OAuthStateStore
 from slack_sdk.oauth.installation_store import Bot, Installation
 
 from . import const
-from .exceptions import DuplicateInstallationError
 from .models import SlackBot, SlackInstallation, SlackOAuthState
 
 
@@ -44,18 +43,13 @@ class DjangoInstallationStore(InstallationStore):
             SlackInstallation.objects.filter(client_id=self.client_id)
             .filter(enterprise_id=installation.enterprise_id)
             .filter(slack_team_id=installation.team_id)
+            .filter(team=installation_data["team"])
         )
-        row_to_update = base_qs.filter(team=installation_data["team"]).first()
+        row_to_update = base_qs.first()
         if row_to_update is not None:
             for key, value in installation_data.items():
                 setattr(row_to_update, key, value)
             row_to_update.save()
-        elif base_qs.exclude(team=installation_data["team"]).exists():
-            # don't allow creating a new installation for a different team
-            raise DuplicateInstallationError(
-                f"Another installation for {installation_data['slack_team_name']} was already found. "
-                f"Sign in with Slack to join that team."
-            )
         else:
             slack_installation = SlackInstallation(**remove_nulls(installation_data))
             slack_installation.save()

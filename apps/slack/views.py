@@ -1,9 +1,7 @@
 from django.contrib import messages
-from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from slack_bolt.adapter.django.handler import to_bolt_request, to_django_response
 
-from apps.slack.exceptions import DuplicateInstallationError
 from apps.slack.models import SlackOAuthState
 from apps.slack.slack_app import app, handler
 from apps.teams.decorators import login_and_team_required
@@ -34,12 +32,9 @@ def slack_oauth_redirect(request):
         state_obj = SlackOAuthState.objects.filter(state=state).first()
         if state_obj:
             bolt_request.context.update(state_obj.get_request_context())
-    try:
-        bolt_resp = app.oauth_flow.handle_callback(bolt_request)
-        return bolt_resp_to_django_resp(request, bolt_resp)
-    except DuplicateInstallationError as e:
-        messages.error(request, str(e))
-        return redirect("web:home")
+
+    bolt_resp = app.oauth_flow.handle_callback(bolt_request)
+    return bolt_resp_to_django_resp(request, bolt_resp)
 
 
 @csrf_exempt
