@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from unittest import mock
+from unittest.mock import patch
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
@@ -101,14 +102,14 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
-    original = experiment.get_llm_service
+    def fake_llm_service(self):
+        return FakeLlmService(llm=FakeLlm(responses=responses, token_counts=token_counts or [0]))
 
-    experiment.get_llm_service = lambda: FakeLlmService(
-        llm=FakeLlm(responses=responses, token_counts=token_counts or [0])
-    )
-    if experiment.assistant_id:
-        experiment.assistant.get_assistant = lambda: FakeAssistant(responses=responses)
-    try:
+    def fake_get_assistant(self):
+        return FakeAssistant(responses=responses)
+
+    with (
+        patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
+        patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
+    ):
         yield
-    finally:
-        experiment.get_llm_service = original

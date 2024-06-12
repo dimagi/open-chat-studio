@@ -86,6 +86,6 @@ def load_installation_and_team(context: BoltContext, next):
 
 def get_session_for_thread(team, thread_ts: str):
     try:
-        return ExperimentSession.objects.get(team=team, external_id=thread_ts)
+        return ExperimentSession.objects.select_related("team", "participant").get(team=team, external_id=thread_ts)
     except ExperimentSession.DoesNotExist:
         pass
