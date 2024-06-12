@@ -1,5 +1,6 @@
 import pytest
 from django.test import override_settings
+from langchain_core.messages.base import get_msg_title_repr
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -8,6 +9,7 @@ from apps.events.models import (
     StaticTrigger,
     StaticTriggerType,
 )
+from apps.pipelines.models import PipelineEventInputs
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
@@ -40,7 +42,8 @@ def test_end_conversation_runs_pipeline(session, pipeline):
     static_trigger = StaticTrigger.objects.create(
         experiment=session.experiment,
         action=EventAction.objects.create(
-            action_type=EventActionType.PIPELINE_START, params={"pipeline_id": pipeline.id}
+            action_type=EventActionType.PIPELINE_START,
+            params={"pipeline_id": pipeline.id, "input_type": PipelineEventInputs.LAST_MESSAGE},
         ),
         type=StaticTriggerType.CONVERSATION_END,
     )
@@ -48,12 +51,16 @@ def test_end_conversation_runs_pipeline(session, pipeline):
     assert static_trigger.event_logs.count() == 1
     log = static_trigger.event_logs.first()
     assert log.status == "success"
+
+    output_message = f"{get_msg_title_repr('Human Message')}\n\n{input}"
     assert log.log == str(
         {
             "messages": [
-                input,  # output of pipeline
-                input,  # output of first node / input to the second node
-                input,  # input to pipeline
+                output_message,  # output of pipeline
+                output_message,  # output of first node / input to the second node
+                output_message,  # input to pipeline
             ]
         }
     )
+    assert pipeline.runs.count() == 1
+    assert pipeline.runs.first().session_id == session.id

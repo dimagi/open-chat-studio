@@ -4,6 +4,7 @@ from langchain.memory.summary import SummarizerMixin
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.models import PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.django_db import MakeInterval
 
@@ -112,5 +113,16 @@ class PipelineStartAction(EventActionHandlerBase):
             raise ValueError("The action is missing the pipeline id")
         except Pipeline.DoesNotExist:
             raise ValueError("The selected pipeline does not exist, maybe it was deleted?")
-        last_message = session.chat.messages.last().content
-        return pipeline.invoke(PipelineState(messages=[last_message]))
+        try:
+            input_type = action.params["input_type"]
+        except KeyError:
+            raise ValueError("The action is missing the input type")
+        if input_type == PipelineEventInputs.FULL_HISTORY:
+            messages = session.chat.get_langchain_messages()
+            input = "\n".join(message.pretty_repr() for message in messages)
+        elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
+            messages = session.chat.get_langchain_messages_until_summary()
+            input = "\n".join(message.pretty_repr() for message in messages)
+        elif input_type == PipelineEventInputs.LAST_MESSAGE:
+            input = session.chat.messages.last().to_langchain_message().pretty_repr()
+        return pipeline.invoke(PipelineState(messages=[input]), session)
