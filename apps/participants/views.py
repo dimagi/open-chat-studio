@@ -13,7 +13,7 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.participants.forms import ParticipantForm
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from .tables import ParticpantTable
+from .tables import ParticipantTable
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -79,7 +79,7 @@ class DeleteParticipant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin
 class ParticipantTableView(SingleTableView):
     model = Participant
     paginate_by = 25
-    table_class = ParticpantTable
+    table_class = ParticipantTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_participant"
 

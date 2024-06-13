@@ -5,7 +5,7 @@ from apps.experiments.models import Participant
 from apps.generics import actions
 
 
-class ParticpantTable(tables.Table):
+class ParticipantTable(tables.Table):
     created_at = columns.DateTimeColumn(verbose_name="Created On", format="Y-m-d H:i:s")
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
