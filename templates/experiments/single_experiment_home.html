@@ -97,7 +97,7 @@
         <button tabindex="0" class="btn btn-ghost btn-sm">
           <i class="fa-regular fa-plus"></i>
         </button>
-        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border">
+        <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
           {% for platform in platforms %}
             <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
           {% endfor %}
