@@ -216,7 +216,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
             content=message,
         )
         if add_experiment_tag:
-            exp_route = ExperimentRoute.objects.filter(team=self.session.team, child=self.experiment.id).first()
+            exp_route = ExperimentRoute.objects.filter(
+                team=self.session.team, child=self.experiment.id, parent=self.session.experiment
+            ).first()
             if not Tag.objects.filter(name=exp_route.keyword, team=self.session.team).exists() and exp_route:
                 chat_message.tags.create(team=self.session.team, name=exp_route.keyword, is_system_tag=True)
             chat_message.add_tags([exp_route.keyword], team=self.session.team, added_by=None)
