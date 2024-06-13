@@ -49,6 +49,7 @@ class DjangoInstallationStore(InstallationStore):
             for key, value in installation_data.items():
                 setattr(row_to_update, key, value)
             row_to_update.save()
+            installation.set_custom_value(const.DJANGO_ID, row_to_update.id)
         else:
             slack_installation = SlackInstallation(**remove_nulls(installation_data))
             slack_installation.save()
