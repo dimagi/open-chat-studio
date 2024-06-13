@@ -651,7 +651,7 @@ class ExperimentSession(BaseTeamModel):
 
     def get_absolute_edit_url(self):
         return reverse(
-            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.public_id]
+            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
         )
 
     def end(self, commit: bool = True, propagate: bool = True):
