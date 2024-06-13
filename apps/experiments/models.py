@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from datetime import datetime
 from functools import cached_property
 
 import markdown
@@ -11,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -475,6 +476,41 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
+    def last_seen(self) -> datetime:
+        """Gets the "last seen" date for this participant based on their last message"""
+        latest_session = (
+            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
+            .exclude(message_count=0)
+            .order_by("-created_at")
+            .values("id")[:1]
+        )
+        return (
+            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
+            .order_by("-created_at")[:1]
+            .values_list("created_at", flat=True)[0]
+        )
+
+    def get_absolute_url(self):
+        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+
+    def get_experiments_for_display(self):
+        """Used by the html templates to display various stats about the participant's participation."""
+        exp_scoped_human_message = ChatMessage.objects.filter(
+            chat__experiment_session__participant=self,
+            message_type="human",
+            chat__experiment_session__experiment__id=OuterRef("id"),
+        )
+        joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
+        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
+        return (
+            Experiment.objects.annotate(
+                joined_on=Subquery(joined_on),
+                last_message=Subquery(last_message),
+            )
+            .filter(sessions__participant=self)
+            .distinct()
+        )
+
     class Meta:
         ordering = ["identifier"]
         unique_together = [("team", "identifier")]
@@ -613,6 +649,11 @@ class ExperimentSession(BaseTeamModel):
         if commit:
             self.save()
 
+    def get_absolute_edit_url(self):
+        return reverse(
+            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.public_id]
+        )
+
     def end(self, commit: bool = True, propagate: bool = True):
         """
         Ends this experiment session
@@ -716,7 +757,8 @@ class ExperimentSession(BaseTeamModel):
             return {}
 
     def get_participant_timezone(self):
-        return self.participant_data_from_experiment.get("timezone")
+        participant_data = self.participant_data_from_experiment
+        return participant_data.get("timezone")
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages

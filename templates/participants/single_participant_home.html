@@ -1,0 +1,26 @@
+{% extends 'web/app/app_base.html' %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'participants:participant_home' request.team.slug %}">Participants</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ participant.identifier }}</li>
+    </ul>
+  </div>
+{% endblock %}
+{% block app %}
+  <div class="app-card">
+    <div class="flex">
+      <div class="flex-1">
+        <h1 class="pg-title">Participant details</h1>
+      </div>
+    </div>
+    <div class="max-w-5xl mt-4 border rounded-2xl">
+      {% include 'participants/partials/participant_summary.html' %}
+    </div>
+    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiments</h3>
+    <div class="max-w-5xl mt-4 border rounded-2xl">
+      {% include 'participants/partials/participant_experiments.html' %}
+    </div>
+  </div>
+{% endblock %}

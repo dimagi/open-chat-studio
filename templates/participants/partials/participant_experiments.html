@@ -1,0 +1,67 @@
+{% load form_tags %}
+
+<table class="min-w-full divide-y divide-gray-300">
+  <thead>
+    <tr>
+      <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Experiment</th>
+      <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Joined on</th>
+      <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Last message received at</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
+    {% for experiment, info in experiment_data.items %}
+      {% with sessions=info|dict_lookup:"sessions" participant_data=info|dict_lookup:"participant_data" %}
+        <tr
+          class="cursor-pointer"
+          x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
+          x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
+        >
+          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
+          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
+          <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
+        </tr>
+        <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
+          <td colspan="100%" class="px-3 py-2">
+            {% if perms.experiments.change_participantdata %}
+              <div role="tablist" class="tabs tabs-bordered">
+                <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Sessions" checked />
+                <div role="tabpanel" class="tab-content">
+                  {% include 'participants/partials/experiment_sessions.html' %}
+                </div>
+                <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Participant Data" />
+                <div role="tabpanel" class="tab-content">
+                  {% include 'participants/partials/participant_data.html' %}
+                </div>
+            {% else %}
+              {% include 'participants/partials/experiment_sessions.html' %}
+            {% endif %}
+          </td>
+        </tr>
+      {% endwith %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  function isValidJSON(data) {
+    try {
+      JSON.parse(data);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // This enables tab completion in the textarea where we edit participant data
+  document.getElementsByName("participant-data-textarea").forEach(element => {
+    element.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.substring(0, start) + '\t' + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = start + 1;
+      }
+    });
+  })
+</script>
