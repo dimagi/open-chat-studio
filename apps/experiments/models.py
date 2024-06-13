@@ -487,7 +487,8 @@ class Participant(BaseTeamModel):
         return (
             ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
             .order_by("-created_at")[:1]
-            .values_list("created_at", flat=True)[0]
+            .values_list("created_at", flat=True)
+            .first()
         )
 
     def get_absolute_url(self):
