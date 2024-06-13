@@ -74,7 +74,8 @@
         <div class="modal-box">
           <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
           <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
-                x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
+                x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
             {% csrf_token %}
             {% render_form_fields channel.form %}
             {% if channel.extra_form %}
