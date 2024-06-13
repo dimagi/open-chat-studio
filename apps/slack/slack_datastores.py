@@ -1,7 +1,6 @@
 from logging import Logger
 from uuid import uuid4
 
-from django.db.models import F
 from django.utils import timezone
 from django.utils.timezone import is_naive, make_aware
 from slack_sdk.oauth import InstallationStore, OAuthStateStore
@@ -90,25 +89,25 @@ class DjangoInstallationStore(InstallationStore):
         t_id = team_id or None
         if is_enterprise_install:
             t_id = None
-        rows = (
+        bot = (
             SlackBot.objects.filter(client_id=self.client_id)
             .filter(enterprise_id=e_id)
             .filter(slack_team_id=t_id)
-            .order_by(F("installed_at").desc())[:1]
+            .order_by("-installed_at")
+            .first()
         )
-        if len(rows) > 0:
-            b = rows[0]
+        if bot:
             return Bot(
-                app_id=b.app_id,
-                enterprise_id=b.enterprise_id,
-                team_id=b.slack_team_id,
-                bot_token=b.bot_token,
-                bot_refresh_token=b.bot_refresh_token,
-                bot_token_expires_at=b.bot_token_expires_at,
-                bot_id=b.bot_id,
-                bot_user_id=b.bot_user_id,
-                bot_scopes=b.bot_scopes,
-                installed_at=b.installed_at,
+                app_id=bot.app_id,
+                enterprise_id=bot.enterprise_id,
+                team_id=bot.slack_team_id,
+                bot_token=bot.bot_token,
+                bot_refresh_token=bot.bot_refresh_token,
+                bot_token_expires_at=bot.bot_token_expires_at,
+                bot_id=bot.bot_id,
+                bot_user_id=bot.bot_user_id,
+                bot_scopes=bot.bot_scopes,
+                installed_at=bot.installed_at,
             )
         return None
 
@@ -124,61 +123,54 @@ class DjangoInstallationStore(InstallationStore):
         t_id = team_id or None
         if is_enterprise_install:
             t_id = None
-        if user_id is None:
-            rows = (
-                SlackInstallation.objects.filter(client_id=self.client_id)
-                .filter(enterprise_id=e_id)
-                .filter(slack_team_id=t_id)
-                .order_by(F("installed_at").desc())[:1]
-            )
-        else:
-            rows = (
-                SlackInstallation.objects.filter(client_id=self.client_id)
-                .filter(enterprise_id=e_id)
-                .filter(slack_team_id=t_id)
-                .filter(user_id=user_id)
-                .order_by(F("installed_at").desc())[:1]
-            )
 
-        if len(rows) > 0:
-            i = rows[0]
+        query = (
+            SlackInstallation.objects.filter(client_id=self.client_id)
+            .filter(enterprise_id=e_id)
+            .filter(slack_team_id=t_id)
+        )
+        if user_id is not None:
+            query = query.filter(user_id=user_id)
+
+        installation = query.order_by("-installed_at").first()
+        if installation:
             if user_id is not None:
                 # Fetch the latest bot token
-                latest_bot_rows = (
+                bot = (
                     SlackInstallation.objects.filter(client_id=self.client_id)
                     .exclude(bot_token__isnull=True)
                     .filter(enterprise_id=e_id)
                     .filter(slack_team_id=t_id)
-                    .order_by(F("installed_at").desc())[:1]
+                    .order_by("-installed_at")
+                    .first()
                 )
-                if len(latest_bot_rows) > 0:
-                    b = latest_bot_rows[0]
-                    i.bot_id = b.bot_id
-                    i.bot_user_id = b.bot_user_id
-                    i.bot_scopes = b.bot_scopes
-                    i.bot_token = b.bot_token
-                    i.bot_refresh_token = b.bot_refresh_token
-                    i.bot_token_expires_at = b.bot_token_expires_at
+                if bot:
+                    installation.bot_id = bot.bot_id
+                    installation.bot_user_id = bot.bot_user_id
+                    installation.bot_scopes = bot.bot_scopes
+                    installation.bot_token = bot.bot_token
+                    installation.bot_refresh_token = bot.bot_refresh_token
+                    installation.bot_token_expires_at = bot.bot_token_expires_at
 
             return Installation(
-                app_id=i.app_id,
-                enterprise_id=i.enterprise_id,
-                team_id=i.slack_team_id,
-                bot_token=i.bot_token,
-                bot_refresh_token=i.bot_refresh_token,
-                bot_token_expires_at=i.bot_token_expires_at,
-                bot_id=i.bot_id,
-                bot_user_id=i.bot_user_id,
-                bot_scopes=i.bot_scopes,
-                user_id=i.user_id,
-                user_token=i.user_token,
-                user_refresh_token=i.user_refresh_token,
-                user_token_expires_at=i.user_token_expires_at,
-                user_scopes=i.user_scopes,
-                incoming_webhook_url=i.incoming_webhook_url,
-                incoming_webhook_channel_id=i.incoming_webhook_channel_id,
-                incoming_webhook_configuration_url=i.incoming_webhook_configuration_url,
-                installed_at=i.installed_at,
+                app_id=installation.app_id,
+                enterprise_id=installation.enterprise_id,
+                team_id=installation.slack_team_id,
+                bot_token=installation.bot_token,
+                bot_refresh_token=installation.bot_refresh_token,
+                bot_token_expires_at=installation.bot_token_expires_at,
+                bot_id=installation.bot_id,
+                bot_user_id=installation.bot_user_id,
+                bot_scopes=installation.bot_scopes,
+                user_id=installation.user_id,
+                user_token=installation.user_token,
+                user_refresh_token=installation.user_refresh_token,
+                user_token_expires_at=installation.user_token_expires_at,
+                user_scopes=installation.user_scopes,
+                incoming_webhook_url=installation.incoming_webhook_url,
+                incoming_webhook_channel_id=installation.incoming_webhook_channel_id,
+                incoming_webhook_configuration_url=installation.incoming_webhook_configuration_url,
+                installed_at=installation.installed_at,
             )
         return None
 
