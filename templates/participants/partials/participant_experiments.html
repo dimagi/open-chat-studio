@@ -6,6 +6,7 @@
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Experiment</th>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Joined on</th>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Last message received at</th>
+      <th scope="col" class=""></th>
     </tr>
   </thead>
   <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
@@ -19,6 +20,10 @@
           <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
           <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
           <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
+          <td class="">
+            <i class="fa-solid fa-chevron-down" x-show="experimentsRow !== {{ forloop.counter }}"></i>
+            <i class="fa-solid fa-chevron-up" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></i>
+          </td>
         </tr>
         <tr x-show="experimentsRow === {{ forloop.counter }}" x-cloak>
           <td colspan="100%" class="px-3 py-2">
