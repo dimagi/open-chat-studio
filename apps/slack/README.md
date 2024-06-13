@@ -3,6 +3,9 @@
 This Django app integrates with Slack using the [Slack Bolt framework](https://slack.dev/bolt-python/concepts).
 The app supports to connecting OCS with Slack workspaces, handles OAuth authentication, and responds to Slack events.
 
+Each OCS instance must use a separate Slack App (configured in `settings.py`) since each Slack App can only forward
+events to a single URL.
+
 ## How it works
 
 * Slack messaging provider configured using oauth
