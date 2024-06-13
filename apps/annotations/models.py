@@ -1,4 +1,3 @@
-from enum import Enum
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -15,8 +14,8 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
 
 
-class TagCategories(Enum):
-    BOT_RESPONSE = "Bot Response"
+class TagCategories(models.TextChoices):
+    BOT_RESPONSE = "bot_response", _("Bot Response")
 
 
 @audit_fields(
@@ -29,8 +28,7 @@ class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
     created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     is_system_tag = models.BooleanField(default=False)
-    category_choices = [(category.value, category.name) for category in TagCategories]
-    category = models.CharField(choices=category_choices, default=TagCategories.BOT_RESPONSE.value)
+    category = models.CharField(choices=TagCategories.choices, default="bot_response")
 
     class Meta:
         verbose_name = _("Tag")
