@@ -182,7 +182,7 @@ class SlackService(MessagingService):
 
     def join_channel(self, channel_id: str):
         try:
-            self.client.channels_info(channel=channel_id)
+            self.client.conversations_info(channel=channel_id)
         except SlackApiError as e:
             message = "Error joining slack channel"
             logger.exception(message)
