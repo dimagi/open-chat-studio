@@ -519,7 +519,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
             try:
                 extra_form.post_save(channel=form.instance)
             except ExperimentChannelException as e:
-                messages.error("Error saving channel: " + str(e))
+                messages.error(request, "Error saving channel: " + str(e))
             else:
                 if message := extra_form.get_success_message(channel=form.instance):
                     messages.info(request, message)
