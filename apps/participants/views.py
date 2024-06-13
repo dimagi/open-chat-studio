@@ -114,7 +114,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     def post(self, request, team_slug, participant_id, experiment_id):
         experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
         participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
-        new_data = json.loads(request.POST["data"])
+        new_data = json.loads(request.POST["participant-data"])
         ParticipantData.objects.update_or_create(
             participant=participant,
             content_type__model="experiment",
