@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db import transaction
 from django.http import HttpResponse
@@ -8,7 +9,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.models import VoiceProviderType
+from apps.service_providers.models import MessagingProviderType, VoiceProviderType
 
 from ..generics.views import BaseTypeSelectFormView
 from .utils import ServiceProvider, get_service_provider_config_form
@@ -85,6 +86,9 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         forms_to_exclude = []
         if not flag_is_active(self.request, "open_ai_voice_engine"):
             forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
+
+        if not settings.SLACK_ENABLED:
+            forms_to_exclude.append(MessagingProviderType.slack)
 
         return get_service_provider_config_form(
             self.provider_type,

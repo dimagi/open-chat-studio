@@ -34,12 +34,14 @@ class ChannelPlatform(models.TextChoices):
 
     @classmethod
     def for_dropdown(cls):
-        return [
+        available = [
             cls.TELEGRAM,
             cls.WHATSAPP,
             cls.FACEBOOK,
-            cls.SLACK,
         ]
+        if settings.SLACK_ENABLED:
+            available.append(cls.SLACK)
+        return available
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm

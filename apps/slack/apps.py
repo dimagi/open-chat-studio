@@ -8,7 +8,7 @@ class SlackConfig(AppConfig):
     _registered_listeners = False
 
     def ready(self):
-        if not self._registered_listeners and settings.SLACK_CLIENT_ID and settings.SLACK_CLIENT_SECRET:
+        if not self._registered_listeners and settings.SLACK_ENABLED:
             # don't do this in tests
             from apps.slack.slack_listeners import register_listeners
 
