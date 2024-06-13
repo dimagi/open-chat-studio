@@ -384,6 +384,10 @@ shellingham==1.5.4
     # via typer
 six==1.16.0
     # via python-dateutil
+slack-bolt==1.18.1
+    # via -r requirements/requirements.in
+slack-sdk==3.27.2
+    # via slack-bolt
 sniffio==1.3.0
     # via
     #   anthropic

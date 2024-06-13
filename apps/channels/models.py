@@ -30,14 +30,18 @@ class ChannelPlatform(models.TextChoices):
     WHATSAPP = "whatsapp", "WhatsApp"
     FACEBOOK = "facebook", "Facebook"
     API = "api", "API"
+    SLACK = "slack", "Slack"
 
     @classmethod
     def for_dropdown(cls):
-        return [
+        available = [
             cls.TELEGRAM,
             cls.WHATSAPP,
             cls.FACEBOOK,
         ]
+        if settings.SLACK_ENABLED:
+            available.append(cls.SLACK)
+        return available
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm
@@ -56,6 +60,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
             case self.FACEBOOK:
                 return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
+            case self.SLACK:
+                return forms.SlackChannelForm(*args, **kwargs)
 
     @property
     def channel_identifier_key(self) -> str:
@@ -66,6 +72,8 @@ class ChannelPlatform(models.TextChoices):
                 return "number"
             case self.FACEBOOK:
                 return "page_id"
+            case self.SLACK:
+                return "slack_channel_id"
 
 
 class ExperimentChannelObjectManager(AuditingManager):
@@ -84,7 +92,6 @@ class ExperimentChannelObjectManager(AuditingManager):
 class ExperimentChannel(BaseModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
-    PLATFORM = ((TELEGRAM, "Telegram"), (WEB, "Web"), (WHATSAPP, "WhatsApp"), (FACEBOOK, "Facebook"))
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -104,7 +111,7 @@ class ExperimentChannel(BaseModel):
         ordering = ["name"]
 
     def __str__(self):
-        return f"name: {self.name}"
+        return f"Channel: {self.name} ({self.platform})"
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

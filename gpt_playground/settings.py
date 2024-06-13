@@ -33,6 +33,7 @@ SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Application definition
 
@@ -89,6 +90,7 @@ PROJECT_APPS = [
     "apps.events",
     "apps.annotations",
     "apps.pipelines",
+    "apps.slack",
     "apps.participants",
 ]
 
@@ -463,6 +465,7 @@ LOGGING = {
             "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
         },
         "httpx": {"handlers": ["console"], "level": "WARN"},
+        "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
     },
 }
 
@@ -512,3 +515,24 @@ FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.audit
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
+
+# slack
+SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")
+SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
+SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
+SLACK_SCOPES = [
+    "channels:history",
+    "channels:join",
+    "channels:read",
+    "chat:write",
+    "chat:write.public",
+    "groups:history",
+    "groups:read",
+    "im:history",
+    "im:read",
+    "mpim:history",
+    "mpim:read",
+    "users.profile:read",
+]
+SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
+SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET

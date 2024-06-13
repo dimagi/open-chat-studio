@@ -14,3 +14,15 @@ def twilio_provider(db):
 @pytest.fixture()
 def turn_io_provider():
     return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
+
+
+@pytest.fixture()
+def slack_provider():
+    return MessagingProviderFactory(
+        name="slack",
+        type=MessagingProviderType.slack,
+        config={
+            "slack_channel_id": "CHANNEL_ID",
+            "slack_installation_id": 1,
+        },
+    )

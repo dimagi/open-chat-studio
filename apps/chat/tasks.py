@@ -161,7 +161,7 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
             reverse(
                 "experiments:experiment_session_view",
                 kwargs={
-                    "session_id": experiment_session.public_id,
+                    "session_id": experiment_session.external_id,
                     "experiment_id": experiment.public_id,
                     "team_slug": experiment.team.slug,
                 },

@@ -193,3 +193,9 @@ class ApiMessage(BaseModel):
     @property
     def message_text(self) -> str:
         return self.message
+
+
+class SlackMessage(BaseModel):
+    channel_id: str
+    thread_ts: str
+    message_text: str

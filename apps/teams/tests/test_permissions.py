@@ -57,6 +57,7 @@ IGNORE_APPS = {
     "field_audit",
     "taggit",
     "tz_detect",
+    "slack",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

@@ -1,11 +1,13 @@
 import logging
 from abc import abstractmethod
 from enum import Enum
+from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
 import requests
 from django.conf import settings
+from django.db import transaction
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
@@ -16,9 +18,18 @@ from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerExcepti
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.slack.utils import parse_session_external_id
+from apps.users.models import CustomUser
 
 USER_CONSENT_TEXT = "1"
 UNSUPPORTED_MESSAGE_BOT_PROMPT = """
@@ -102,7 +113,7 @@ class ChannelBase:
         pass
 
     @property
-    def chat_id(self) -> int:
+    def chat_id(self) -> str:
         if self.experiment_session and self.experiment_session.participant.identifier:
             return self.experiment_session.participant.identifier
         return self.get_chat_id_from_message(self.message)
@@ -163,18 +174,20 @@ class ChannelBase:
         platform = experiment_session.experiment_channel.platform
 
         if platform == "telegram":
-            PlatformMessageHandlerClass = TelegramChannel
+            channel_cls = TelegramChannel
         elif platform == "web":
-            PlatformMessageHandlerClass = WebChannel
+            channel_cls = WebChannel
         elif platform == "whatsapp":
-            PlatformMessageHandlerClass = WhatsappChannel
+            channel_cls = WhatsappChannel
         elif platform == "facebook":
-            PlatformMessageHandlerClass = FacebookMessengerChannel
+            channel_cls = FacebookMessengerChannel
         elif platform == "api":
-            PlatformMessageHandlerClass = ApiChannel
+            channel_cls = ApiChannel
+        elif platform == "slack":
+            channel_cls = SlackChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
-        return PlatformMessageHandlerClass(
+        return channel_cls(
             experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
@@ -393,9 +406,6 @@ class ChannelBase:
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        if self.experiment_session and self.experiment_channel.platform == ChannelPlatform.WEB:
-            return
-
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
@@ -498,6 +508,36 @@ class WebChannel(ChannelBase):
     def new_bot_message(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
         pass
+
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise MessageHandlerException("WebChannel requires an existing session")
+
+    @staticmethod
+    def start_new_session(
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+    ):
+        session = _start_experiment_session(
+            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+        )
+        WebChannel.check_and_process_seed_message(session)
+        return session
+
+    @staticmethod
+    def check_and_process_seed_message(session: ExperimentSession):
+        from apps.experiments.tasks import get_response_for_webchat_task
+
+        if session.experiment.seed_message:
+            session.seed_task_id = get_response_for_webchat_task.delay(
+                session.id, message_text=session.experiment.seed_message
+            ).task_id
+            session.save()
+        return session
 
 
 class TelegramChannel(ChannelBase):
@@ -658,3 +698,118 @@ class ApiChannel(ChannelBase):
     def new_bot_message(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
+
+
+class SlackChannel(ChannelBase):
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
+        send_response_to_user: bool = True,
+    ):
+        """
+        Args:
+            send_response_to_user: A boolean indicating whether the handler should send the response to the user.
+                This is useful when the message sending happens as part of the slack event handler
+                (e.g., in a slack event listener)
+        """
+        super().__init__(experiment_channel, experiment_session)
+        self.send_response_to_user = send_response_to_user
+
+    @cached_property
+    def messaging_service(self):
+        return self.experiment_channel.messaging_provider.get_messaging_service()
+
+    @property
+    def message_content_type(self):
+        return MESSAGE_TYPES.TEXT
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+    def send_text_to_user(self, text: str):
+        if not self.send_response_to_user:
+            return
+
+        if not self.message:
+            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        else:
+            channel_id = self.message.channel_id
+            thread_ts = self.message.thread_ts
+
+        self.messaging_service.send_text_message(
+            text,
+            from_="",
+            to=channel_id,
+            platform=ChannelPlatform.SLACK,
+            thread_ts=thread_ts,
+        )
+
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise MessageHandlerException("WebChannel requires an existing session")
+
+    @staticmethod
+    def start_new_session(
+        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, external_id: str
+    ):
+        return _start_experiment_session(
+            experiment, experiment_channel, participant_identifier, session_external_id=external_id
+        )
+
+
+def _start_experiment_session(
+    experiment: Experiment,
+    experiment_channel: ExperimentChannel,
+    participant_identifier: str,
+    participant_user: CustomUser | None = None,
+    session_status: SessionStatus = SessionStatus.ACTIVE,
+    timezone: str | None = None,
+    session_external_id: str | None = None,
+) -> ExperimentSession:
+    if not participant_identifier and not participant_user:
+        raise ValueError("Either participant_identifier or participant_user must be specified!")
+
+    if participant_user and participant_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
+
+    with transaction.atomic():
+        try:
+            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+            if participant_user and participant.user is None:
+                # If a participant becomes a user, we must reconcile the user and participant
+                participant.user = participant_user
+                participant.save()
+        except Participant.DoesNotExist:
+            participant = Participant.objects.create(
+                user=participant_user,
+                identifier=participant_identifier,
+                team=experiment.team,
+            )
+        session = ExperimentSession.objects.create(
+            team=experiment.team,
+            experiment=experiment,
+            llm=experiment.llm,
+            experiment_channel=experiment_channel,
+            status=session_status,
+            participant=participant,
+            external_id=session_external_id,
+        )
+
+        # Record the participant's timezone
+        if timezone:
+            data_records = ParticipantData.objects.filter(participant=participant)
+            for data_record in data_records:
+                data_record.data["timezone"] = timezone
+                data_record.save()
+            ParticipantData.objects.bulk_update(data_records, fields=["data"])
+
+    if participant.experimentsession_set.count() == 1:
+        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
+    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
+    return session
