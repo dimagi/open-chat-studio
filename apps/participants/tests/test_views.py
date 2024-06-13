@@ -31,7 +31,7 @@ def test_edit_participant_data(client, team_with_users):
 
     data["name"] = "B"
     query_data = QueryDict("", mutable=True)
-    query_data.update({"data": json.dumps(data)})
+    query_data.update({"participant-data-textarea": json.dumps(data)})
     client.post(url, query_data)
     participant_data.refresh_from_db()
     assert participant_data.data["name"] == "B"
