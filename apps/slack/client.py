@@ -26,6 +26,6 @@ def get_slack_client(installation_id: int, do_retries: bool = False) -> WebClien
         ssl=app.client.ssl,
         proxy=app.client.proxy,
         headers=app.client.headers,
-        team_id=installation.team_id,
+        team_id=installation.slack_team_id,
         retry_handlers=[RateLimitErrorRetryHandler()] if do_retries else None,
     )

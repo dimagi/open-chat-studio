@@ -175,4 +175,4 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
         from apps.slack.models import SlackInstallation
 
         if team_id := self.initial.get("slack_team_id"):
-            return SlackInstallation.objects.filter(team=self.team, slack_team_id=team_id).first()
+            return SlackInstallation.objects.filter(slack_team_id=team_id).first()

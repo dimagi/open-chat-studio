@@ -2,9 +2,10 @@ from django.db import models
 
 from apps.slack.const import INSTALLATION_CONFIG
 from apps.teams.models import BaseTeamModel
+from apps.utils.models import BaseModel
 
 
-class SlackBot(BaseTeamModel):
+class SlackBot(BaseModel):
     """Copied from the example app:
     https://github.com/slackapi/bolt-python/tree/main/examples/django/oauth_app
     """
@@ -27,11 +28,11 @@ class SlackBot(BaseTeamModel):
 
     class Meta:
         indexes = [
-            models.Index(fields=["client_id", "enterprise_id", "team_id", "installed_at"]),
+            models.Index(fields=["client_id", "enterprise_id", "slack_team_id", "installed_at"]),
         ]
 
 
-class SlackInstallation(BaseTeamModel):
+class SlackInstallation(BaseModel):
     """Copied from the example app:
     https://github.com/slackapi/bolt-python/tree/main/examples/django/oauth_app
     """
@@ -63,16 +64,13 @@ class SlackInstallation(BaseTeamModel):
     token_type = models.CharField(null=True, max_length=32)  # noqa: DJ001
     installed_at = models.DateTimeField(null=False)
 
-    # custom config data
-    import_all_channels = models.BooleanField(default=True)
-
     class Meta:
         indexes = [
             models.Index(
                 fields=[
                     "client_id",
                     "enterprise_id",
-                    "team_id",
+                    "slack_team_id",
                     "user_id",
                     "installed_at",
                 ]

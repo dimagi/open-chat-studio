@@ -69,7 +69,6 @@ class CustomOauthFlow(OAuthFlow):
     def store_installation(self, request: BoltRequest, installation: Installation):
         """Overridden so that we can add the team to the installation data. This
         gets passed through to the Django model in the data store."""
-        installation.set_custom_value("team", request.context["team"])
         for key, value in request.context[INSTALLATION_CONFIG].items():
             installation.set_custom_value(key, value)
         super().store_installation(request, installation)

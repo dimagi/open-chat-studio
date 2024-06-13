@@ -42,7 +42,6 @@ class DjangoInstallationStore(InstallationStore):
             SlackInstallation.objects.filter(client_id=self.client_id)
             .filter(enterprise_id=installation.enterprise_id)
             .filter(slack_team_id=installation.team_id)
-            .filter(team=installation_data["team"])
         )
         row_to_update = base_qs.first()
         if row_to_update is not None:
@@ -69,7 +68,6 @@ class DjangoInstallationStore(InstallationStore):
             SlackBot.objects.filter(client_id=self.client_id)
             .filter(enterprise_id=bot.enterprise_id)
             .filter(slack_team_id=bot.team_id)
-            .filter(team=bot_data["team"])
             .first()
         )
         if row_to_update is not None:

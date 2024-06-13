@@ -18,6 +18,7 @@ from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
 from apps.experiments.models import ExperimentSession
+from apps.slack.exceptions import TeamAccessException
 from apps.slack.models import SlackInstallation
 from apps.slack.slack_app import app
 from apps.slack.utils import make_session_external_id
@@ -28,7 +29,7 @@ logger = logging.getLogger("slack.events")
 def register_listeners():
     """Register these after DB setup is complete to avoid hitting the
     wrong DB e.g. during tests"""
-    app.use(load_installation_and_team)
+    app.use(load_installation)
     app.event({"type": "message"})(new_message)
 
 
@@ -38,7 +39,7 @@ def new_message(event, context: BoltContext):
 
     session = None
     if thread_ts:
-        session = get_session_for_thread(context["team"], channel_id, thread_ts)
+        session = get_session_for_thread(channel_id, thread_ts)
 
     is_bot_mention = context.bot_user_id in event.get("text", "")
     if is_bot_mention or session:
@@ -50,10 +51,13 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     channel_id = event.get("channel")
     thread_ts = event.get("thread_ts", None) or event["ts"]
-    experiment_channel = get_experiment_channel(context["team"], channel_id)
+    experiment_channel = get_experiment_channel(channel_id)
     if not experiment_channel:
         context.say("There are no bots associated with this channel.", thread_ts=thread_ts)
         return
+
+    if session and session.team_id != experiment_channel.experiment.team_id:
+        raise TeamAccessException("Session and Channel teams do not match")
 
     slack_user = event.get("user")
 
@@ -72,7 +76,7 @@ def respond_to_message(event, context: BoltContext, session=None):
     context.say(response, thread_ts=thread_ts)
 
 
-def load_installation_and_team(context: BoltContext, next):
+def load_installation(context: BoltContext, next):
     """Middleware to handle loading of team etc."""
     try:
         installation = SlackInstallation.objects.get(
@@ -84,19 +88,18 @@ def load_installation_and_team(context: BoltContext, next):
         return BoltResponse(status=200, body="")
 
     context["slack_install"] = installation
-    context["team"] = installation.team
     next()
 
 
-def get_session_for_thread(team, channel_id: str, thread_ts: str):
+def get_session_for_thread(channel_id: str, thread_ts: str):
     external_id = make_session_external_id(channel_id, thread_ts)
     try:
-        return ExperimentSession.objects.select_related("team", "participant").get(team=team, external_id=external_id)
+        return ExperimentSession.objects.select_related("team", "participant").get(external_id=external_id)
     except ExperimentSession.DoesNotExist:
         pass
 
 
-def get_experiment_channel(team, channel_id) -> ExperimentChannel | None:
+def get_experiment_channel(channel_id) -> ExperimentChannel | None:
     """Get the experiment channel for the given team and channel_id. This searches for exact matches
     on the channel ID and also for the special case of bots that are listening in all channels."""
     channel_filter = Q(extra_data__contains={"slack_channel_id": channel_id}) | Q(
@@ -104,8 +107,8 @@ def get_experiment_channel(team, channel_id) -> ExperimentChannel | None:
     )
     channels = (
         ExperimentChannel.objects.filter(channel_filter)
-        .filter(experiment__team__slug=team.slug, platform=ChannelPlatform.SLACK)
-        .select_related("messaging_provider")
+        .filter(platform=ChannelPlatform.SLACK)
+        .select_related("experiment", "messaging_provider")
         .all()
     )
     if not channels:

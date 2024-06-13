@@ -134,9 +134,8 @@ def test_response_to_mention_in_non_session_thread(bolt_context):
 
 
 @pytest.fixture()
-def slack_install(team_with_users):
+def slack_install():
     return SlackInstallation.objects.create(
-        team=team_with_users,
         client_id="123",
         app_id="test app",
         user_id="123",
@@ -152,7 +151,6 @@ def bolt_context(slack_install):
         {
             "team_id": "SLACK_TEAM_ID",
             "slack_install": slack_install,
-            "team": slack_install.team,
             "bot_user_id": BOT_USER_ID,
             "say": Mock(),
         }
