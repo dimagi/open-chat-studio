@@ -26,6 +26,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "new_object_url": reverse("participants:participant_new", args=[team_slug]),
             "table_url": reverse("participants:participant_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -83,7 +84,11 @@ class ParticipantTableView(SingleTableView):
     permission_required = "experiments.view_participant"
 
     def get_queryset(self):
-        return Participant.objects.filter(team=self.request.team)
+        query = Participant.objects.filter(team=self.request.team)
+        search = self.request.GET.get("search")
+        if search:
+            query = query.filter(identifier__icontains=search)
+        return query
 
 
 class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):

@@ -6,6 +6,7 @@ from apps.generics import actions
 
 
 class ParticpantTable(tables.Table):
+    created_at = columns.DateTimeColumn(verbose_name="Created On", format="Y-m-d H:i:s")
     actions = columns.TemplateColumn(
         template_name="generic/crud_actions_column.html",
         extra_context={
@@ -17,7 +18,6 @@ class ParticpantTable(tables.Table):
 
     class Meta:
         model = Participant
-        fields = ("identifier",)
+        fields = ("identifier", "created_at")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
         empty_text = "No participants found."
