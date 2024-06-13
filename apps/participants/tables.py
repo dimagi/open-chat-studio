@@ -21,3 +21,4 @@ class ParticpantTable(tables.Table):
         fields = ("identifier", "created_at")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         empty_text = "No participants found."
+        order_by = ("-created_at", "identifier")
