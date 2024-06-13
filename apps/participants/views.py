@@ -13,7 +13,7 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.participants.forms import ParticipantForm
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from .tables import ParticpantTable
+from .tables import ParticipantTable
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -26,6 +26,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "new_object_url": reverse("participants:participant_new", args=[team_slug]),
             "table_url": reverse("participants:participant_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -78,12 +79,16 @@ class DeleteParticipant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin
 class ParticipantTableView(SingleTableView):
     model = Participant
     paginate_by = 25
-    table_class = ParticpantTable
+    table_class = ParticipantTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_participant"
 
     def get_queryset(self):
-        return Participant.objects.filter(team=self.request.team)
+        query = Participant.objects.filter(team=self.request.team)
+        search = self.request.GET.get("search")
+        if search:
+            query = query.filter(identifier__icontains=search)
+        return query
 
 
 class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
