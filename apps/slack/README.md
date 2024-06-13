@@ -11,6 +11,17 @@ The app supports to connecting OCS with Slack workspaces, handles OAuth authenti
 * The bot will only respond to messages if it is directly mentioned or if the message is part of a slakc thread
   that is linked to a session (see [below](#slack-threads-and-experiment-sessions) on threads and sessions).
 
+### Oauth and Slack App Installation
+
+The app uses the Slack OAuth flow to authenticate with a workspace and install the app. The app is installed in a
+workspace by a user with the necessary permissions. The app is then able to listen to events in that workspace and
+forward them to OCS.
+
+In OCS we save a record of the 'installation'. This `SlackInstallation` model is a global model and reused across
+OCS teams. When a user in a different team adds a Slack messaging provider they will still need to authenticate
+with Slack, but the installation record in OCS will be shared and attached to two different messaging providers
+in the different OCS teams.
+
 ### ALL channels listener
 
 In addition to linking an experiment to a single channel, there can be one experiment that will respond to mentions

@@ -33,7 +33,13 @@ class SlackBot(BaseModel):
 
 
 class SlackInstallation(BaseModel):
-    """Copied from the example app:
+    """
+    This is a global model and shared across teams that have installed the app into the same Slack workspace.
+    Each OCS team will have a separate MessagingProvider instance pointing to the same SlackInstallation.
+
+    A separate SlackInstallation will be used for each Slack workspace that the app is installed into.
+
+    Copied from the example app:
     https://github.com/slackapi/bolt-python/tree/main/examples/django/oauth_app
     """
 
