@@ -53,7 +53,7 @@
   }
 
   // This enables tab completion in the textarea where we edit participant data
-  document.getElementsByName("participant-data-textarea").forEach(element => {
+  document.getElementsByName("participant-data").forEach(element => {
     element.addEventListener('keydown', function(e) {
       if (e.key === 'Tab') {
         e.preventDefault();
