@@ -10,5 +10,5 @@ The app supports to connecting OCS with Slack workspaces, handles OAuth authenti
 * Slack events are handled by the app and respond directly to messages (not using Celery)
 
 ### ALL channels listener
-In addition to linking an experiment to a single channel, there can be one experiment what will respond to mentions
+In addition to linking an experiment to a single channel, there can be one experiment that will respond to mentions
 from any channel that it is invited to (provided there isn't already an experiment linked directly to that channel).
