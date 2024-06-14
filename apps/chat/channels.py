@@ -213,12 +213,12 @@ class ChannelBase:
         if self.experiment_channel.platform != ChannelPlatform.WEB:
             if self._is_reset_conversation_request():
                 # Webchats' statuses are updated through an "external" flow
-                return
+                return ""
 
             if self.experiment.conversational_consent_enabled:
                 if self._should_handle_pre_conversation_requirements():
                     self._handle_pre_conversation_requirements()
-                    return
+                    return ""
             else:
                 # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
                 # is ACTIVE
