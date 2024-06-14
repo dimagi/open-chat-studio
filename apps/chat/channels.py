@@ -120,7 +120,7 @@ class ChannelBase:
         raise NotImplementedError()
 
     def get_message_audio(self) -> BytesIO:
-        raise NotImplementedError()
+        return self.messaging_service.get_message_audio(message=self.message)
 
     @abstractmethod
     def transcription_started(self):
@@ -566,9 +566,6 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    def get_message_audio(self) -> BytesIO:
-        return self.messaging_service.get_message_audio(message=self.message)
-
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
@@ -597,9 +594,6 @@ class FacebookMessengerChannel(ChannelBase):
     @property
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
-
-    def get_message_audio(self) -> BytesIO:
-        return self.messaging_service.get_message_audio(message=self.message)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
