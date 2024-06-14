@@ -108,22 +108,19 @@ class ChannelBase:
             return self.experiment_session.participant.identifier
         return self.message.participant_id
 
-    @abstractmethod
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         if self.voice_replies_supported:
             raise Exception(
                 "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
             )
-        pass
 
     @abstractmethod
     def send_text_to_user(self, text: str):
         """Channel specific way of sending text back to the user"""
-        pass
+        raise NotImplementedError()
 
-    @abstractmethod
     def get_message_audio(self) -> BytesIO:
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def transcription_started(self):

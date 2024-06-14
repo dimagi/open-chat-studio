@@ -19,7 +19,6 @@ from .message_examples import telegram_messages
 
 
 @pytest.fixture()
-@patch("apps.channels.models._set_telegram_webhook")
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     experiment.conversational_consent_enabled = False
@@ -256,10 +255,9 @@ def test_pre_conversation_flow(_get_llm_response, send_text_to_user_mock, genera
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TopicBot")
-@patch("apps.channels.models._set_telegram_webhook")
-def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, topic_bot, send_text_to_user):
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TopicBot", Mock())
+def test_unsupported_message_type_creates_system_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
@@ -277,10 +275,7 @@ def test_unsupported_message_type_creates_system_message(_set_telegram_webhook, 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.ChannelBase._unsupported_message_type_response")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.channels.models._set_telegram_webhook")
-def test_unsupported_message_type_triggers_bot_response(
-    _set_telegram_webhook, send_text_to_user, _unsupported_message_type_response
-):
+def test_unsupported_message_type_triggers_bot_response(send_text_to_user, _unsupported_message_type_response):
     bot_response = "Nope, not suppoerted laddy"
     _unsupported_message_type_response.return_value = bot_response
     experiment = ExperimentFactory(conversational_consent_enabled=True)
@@ -470,7 +465,7 @@ def test_missing_channel_raises_error(twilio_provider):
 )
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-def test_new_bot_message(
+def test_send_message_to_user(
     send_text_to_user, _reply_voice_messagem, expected_message_type, response_behaviour, telegram_channel
 ):
     """A simple test to make sure that when we call `channel_instance.new_bot_message`, the correct message format
@@ -493,10 +488,9 @@ def test_new_bot_message(
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.models._set_telegram_webhook")
+@patch("apps.chat.channels.TelegramChannel._send_message_to_user", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
-@patch("apps.chat.channels.TelegramChannel._send_message_to_user")
-def test_participant_reused_accross_experiments(_send_message_to_user, _get_llm_response, _set_telegram_webhook):
+def test_participant_reused_across_experiments(_get_llm_response):
     """A single participant should be linked to multiple sessions per team"""
     _get_llm_response.return_value = "Hi human"
     chat_id = 123
