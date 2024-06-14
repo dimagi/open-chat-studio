@@ -330,9 +330,9 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
-    experiment2 = ExperimentFactory()
-    channel = ExperimentChannelFactory(experiment=experiment)
     team = experiment.team
+    experiment2 = ExperimentFactory(team=team)
+    channel = ExperimentChannelFactory(experiment=experiment)
     identifier = "someone@example.com"
     participant = Participant.objects.create(identifier=identifier, team=team)
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, content_object=experiment)
