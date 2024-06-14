@@ -10,14 +10,6 @@ class BaseMessage(BaseModel):
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
 
 
-class WebMessage(BaseMessage):
-    """
-    A wrapper class for user messages coming from the UI. It's easier to pass this object to the WebChannel
-    and expose some attributes/methods to access chat specific data from the message. This follows a similar
-    pattern then that of other channels
-    """
-
-
 class TelegramMessage(BaseMessage):
     media_id: str | None
     content_type_unparsed: str | None = Field(default=None)
@@ -143,12 +135,6 @@ class FacebookMessage(BaseMessage):
             content_type=content_type,
             content_type_unparsed=content_type,
         )
-
-
-class ApiMessage(BaseMessage):
-    """
-    A wrapper class for user messages coming from the API
-    """
 
 
 class SlackMessage(BaseMessage):

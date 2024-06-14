@@ -7,7 +7,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.datamodels import ApiMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import BaseMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
@@ -97,6 +97,6 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
 
 def handle_api_message(experiment_channel: ExperimentChannel, message_data: dict):
     """Synchronously handles the message coming from the API"""
-    message = ApiMessage(participant_id=message_data["participant_id"], message_text=message_data["message"])
+    message = BaseMessage(participant_id=message_data["participant_id"], message_text=message_data["message"])
     channel = ApiChannel(experiment_channel=experiment_channel)
     return channel.new_user_message(message)
