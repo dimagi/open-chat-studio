@@ -525,12 +525,11 @@ class Participant(BaseTeamModel):
         experiment:
             If specified, only the data for this experiment will be updated
         """
+        experiments = Experiment.objects.filter(team=self.team).prefetch_related(
+            Prefetch("participant_data", queryset=ParticipantData.objects.filter(participant=self))
+        )
         if experiment:
-            experiments = [experiment]
-        else:
-            experiments = Experiment.objects.filter(team=self.team).prefetch_related(
-                Prefetch("participant_data", queryset=ParticipantData.objects.filter(participant=self))
-            )
+            experiments = experiments.filter(id=experiment.id)
 
         records_to_update = []
         for experiment in experiments:
