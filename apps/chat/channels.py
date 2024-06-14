@@ -1,5 +1,5 @@
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
@@ -46,7 +46,7 @@ class MESSAGE_TYPES(Enum):
         return any(value == item.value for item in MESSAGE_TYPES)
 
 
-class ChannelBase:
+class ChannelBase(ABC):
     """
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
@@ -128,10 +128,9 @@ class ChannelBase:
         return self.message.participant_id
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        if self.voice_replies_supported:
-            raise Exception(
-                "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
-            )
+        raise NotImplementedError(
+            "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
+        )
 
     @abstractmethod
     def send_text_to_user(self, text: str):
@@ -141,17 +140,14 @@ class ChannelBase:
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
-    @abstractmethod
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
 
-    @abstractmethod
     def transcription_finished(self, transcript: str):
         """Callback indicating that the transcription is finished"""
         pass
 
-    @abstractmethod
     def submit_input_to_llm(self):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
@@ -469,7 +465,7 @@ class WebChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def send_message_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
         pass
 
@@ -605,7 +601,7 @@ class ApiChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def send_message_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
