@@ -58,7 +58,7 @@ class TestTwilio:
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
-    @patch("apps.chat.channels.FacebookMessengerChannel._get_llm_response")
+    @patch("apps.chat.channels.FacebookMessengerChannel._get_experiment_response")
     def test_twilio_uses_facebook_channel_implementation(
         self,
         get_llm_response_mock,

@@ -304,7 +304,8 @@ class ChannelBase:
         send_message_func(bot_message)
 
     def _handle_supported_message(self):
-        response = self._get_llm_response(self.user_query)
+        self.submit_input_to_llm()
+        response = self._get_experiment_response(message=self.user_query)
         self.send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -340,14 +341,6 @@ class ChannelBase:
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-
-    def _get_llm_response(self, text: str) -> str:
-        """
-        Handles a user message by sending it for experiment response and replying with the answer.
-        """
-        self.submit_input_to_llm()
-
-        return self._get_experiment_response(message=text)
 
     def _get_experiment_response(self, message: str) -> str:
         experiment_bot = TopicBot(self.experiment_session)
