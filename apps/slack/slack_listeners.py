@@ -96,7 +96,9 @@ def load_installation(context: BoltContext, next):
 def get_session_for_thread(channel_id: str, thread_ts: str):
     external_id = make_session_external_id(channel_id, thread_ts)
     try:
-        return ExperimentSession.objects.select_related("team", "participant").get(external_id=external_id)
+        return ExperimentSession.objects.select_related("team", "participant", "experiment_channel").get(
+            external_id=external_id
+        )
     except ExperimentSession.DoesNotExist:
         pass
 
