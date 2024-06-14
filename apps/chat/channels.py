@@ -97,6 +97,27 @@ class ChannelBase:
         self.message = None
         self._user_query = None
 
+    @classmethod
+    def start_new_session(
+        cls,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        session_external_id: str | None = None,
+    ):
+        return _start_experiment_session(
+            experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            session_external_id,
+        )
+
     @cached_property
     def messaging_service(self):
         return self.experiment_channel.messaging_provider.get_messaging_service()
@@ -403,20 +424,12 @@ class ChannelBase:
         """Creates a new experiment session. If one already exists, the participant will be transfered to the new
         session
         """
-        if not self.experiment_session:
-            participant, _ = Participant.objects.get_or_create(
-                identifier=self.participant_identifier, team=self.experiment.team
-            )
-        else:
-            participant = self.experiment_session.participant
-        self.experiment_session = ExperimentSession.objects.create(
-            team=self.experiment.team,
-            participant=participant,
+        self.experiment_session = self.start_new_session(
             experiment=self.experiment,
-            llm=self.experiment.llm,
             experiment_channel=self.experiment_channel,
+            participant_identifier=self.participant_identifier,
+            session_status=SessionStatus.SETUP,
         )
-        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.CONVERSATION_START)
 
     def _is_reset_conversation_request(self):
         return self.user_query == ExperimentChannel.RESET_COMMAND
@@ -465,23 +478,14 @@ class WebChannel(ChannelBase):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
 
-    @staticmethod
-    def start_new_session(
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        participant_identifier: str,
-        participant_user: CustomUser | None = None,
-        session_status: SessionStatus = SessionStatus.ACTIVE,
-        timezone: str | None = None,
-    ):
-        session = _start_experiment_session(
-            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
-        )
+    @classmethod
+    def start_new_session(cls, *args, **kwargs):
+        session = super().start_new_session(*args, **kwargs)
         WebChannel.check_and_process_seed_message(session)
         return session
 
-    @staticmethod
-    def check_and_process_seed_message(session: ExperimentSession):
+    @classmethod
+    def check_and_process_seed_message(cls, session: ExperimentSession):
         from apps.experiments.tasks import get_response_for_webchat_task
 
         if session.experiment.seed_message:
@@ -647,14 +651,6 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
-
-    @staticmethod
-    def start_new_session(
-        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, external_id: str
-    ):
-        return _start_experiment_session(
-            experiment, experiment_channel, participant_identifier, session_external_id=external_id
-        )
 
 
 def _start_experiment_session(

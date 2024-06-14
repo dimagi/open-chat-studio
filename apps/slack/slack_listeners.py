@@ -64,7 +64,7 @@ def respond_to_message(event, context: BoltContext, session=None):
     if not session:
         external_id = make_session_external_id(channel_id, thread_ts)
         session = SlackChannel.start_new_session(
-            experiment_channel.experiment, experiment_channel, slack_user, external_id=external_id
+            experiment_channel.experiment, experiment_channel, slack_user, session_external_id=external_id
         )
 
     # strip out the mention

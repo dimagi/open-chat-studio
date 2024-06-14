@@ -18,7 +18,7 @@ def test_handle_user_message(process_input, slack_channel):
         slack_channel.experiment,
         slack_channel,
         "SLACK_USER_ID",
-        make_session_external_id("channel_id", "thread_ts"),
+        session_external_id=make_session_external_id("channel_id", "thread_ts"),
     )
     message = SlackMessage(
         participant_id="SLACK_USER_ID",
@@ -39,7 +39,7 @@ def test_ad_hoc_bot_message(messaging_service, process_input, slack_channel):
         slack_channel.experiment,
         slack_channel,
         "SLACK_USER_ID",
-        make_session_external_id("channel_id", "thread_ts"),
+        session_external_id=make_session_external_id("channel_id", "thread_ts"),
     )
     session.ad_hoc_bot_message("Hello")
     assert messaging_service.send_text_message.call_args_list == [

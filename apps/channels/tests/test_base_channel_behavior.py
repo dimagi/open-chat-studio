@@ -194,12 +194,13 @@ def _simulate_user_message(channel_instance, user_message: str):
 
 
 @pytest.mark.django_db()
+@patch("apps.chat.channels.TelegramChannel.submit_input_to_llm", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
 @patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_user):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
-    user and bot must first go through the pre concersation flow. The following needs to happen:
+    user and bot must first go through the pre conversation flow. The following needs to happen:
     - The user must give consent
     - The user must indicate that they filled out the survey
     """
