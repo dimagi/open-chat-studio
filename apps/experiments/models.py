@@ -11,8 +11,8 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
-from django.db import models
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db import models, transaction
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -511,6 +511,38 @@ class Participant(BaseTeamModel):
             .filter(sessions__participant=self)
             .distinct()
         )
+
+    @transaction.atomic()
+    def update_memory(self, data: dict, experiment: Experiment | None = None):
+        """
+        Updates this participant's data records by merging `data` with the existing data. By default, data for all
+        experiments the this participant participated in will be updated. If there are no records for a specific
+        experiment, one will be created.
+
+        Paramters
+        data:
+            A dictionary containing the new data
+        experiment:
+            If specified, only the data for this experiment will be updated
+        """
+        experiments = Experiment.objects.filter(team=self.team).prefetch_related(
+            Prefetch("participant_data", queryset=ParticipantData.objects.filter(participant=self))
+        )
+        if experiment:
+            experiments = experiments.filter(id=experiment.id)
+
+        records_to_update = []
+        for experiment in experiments:
+            participant_data = experiment.participant_data.first()
+            # We cannot update the participant data using a single query, since the `data` field is encrypted at
+            # the application level
+            if participant_data:
+                participant_data.data = participant_data.data | data
+                records_to_update.append(participant_data)
+            else:
+                ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
+
+        ParticipantData.objects.bulk_update(records_to_update, fields=["data"])
 
     class Meta:
         ordering = ["identifier"]
