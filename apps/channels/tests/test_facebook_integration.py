@@ -36,7 +36,7 @@ class TestTwilio:
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
         assert whatsapp_message.platform == ChannelPlatform.FACEBOOK
-        assert whatsapp_message.chat_id == whatsapp_message.from_
+        assert whatsapp_message.participant_id == "27456897512"
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None

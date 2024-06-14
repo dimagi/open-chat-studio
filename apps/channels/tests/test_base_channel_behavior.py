@@ -3,7 +3,7 @@ This test suite is designed to ensure that the base channel functionality is wor
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
 
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -397,11 +397,10 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     ("message_func", "message_type"),
     [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
 )
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-@patch("apps.chat.channels.TelegramChannel._get_llm_response")
-def test_user_query_extracted_for_pre_conversation_flow(
-    _get_llm_response, send_text_to_user_mock, message_func, message_type
-):
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_llm_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._add_message_to_history", Mock())
+def test_user_query_extracted_for_pre_conversation_flow(message_func, message_type):
     """The user query need to be available during the pre-conversation flow. Simply looking at `message_text` for
     this is erroneous, since it will not be available when the user sends a voice message.
 
@@ -416,16 +415,20 @@ def test_user_query_extracted_for_pre_conversation_flow(
     telegram_chat_id = "123"
     assert pre_survey
 
-    with patch("apps.chat.channels.TelegramChannel._get_voice_transcript") as _get_voice_transcript:
-        with patch("apps.chat.channels.TelegramChannel.message_text", new_callable=PropertyMock) as message_text_mock:
-            _get_voice_transcript.return_value = "Hi botty"
-            message_text_mock.return_value = "Hi botty"
+    with (
+        patch("apps.chat.channels.TelegramChannel._get_voice_transcript") as _get_voice_transcript,
+        patch("apps.chat.channels.TelegramChannel._inform_user_of_error") as _inform_user_of_error,
+    ):
+        _get_voice_transcript.return_value = "Hi botty"
 
-            channel.new_user_message(message_func(chat_id=telegram_chat_id))
-            if message_type == "voice":
-                _get_voice_transcript.assert_called()
-            elif message_type == "text":
-                message_text_mock.assert_called()
+        message = message_func(chat_id=telegram_chat_id)
+        channel.new_user_message(message)
+        if message_type == "voice":
+            _get_voice_transcript.assert_called()
+        elif message_type == "text":
+            _get_voice_transcript.assert_not_called()
+
+        _inform_user_of_error.assert_not_called()
 
 
 @pytest.mark.django_db()

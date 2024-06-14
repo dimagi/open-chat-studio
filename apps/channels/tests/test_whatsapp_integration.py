@@ -45,7 +45,7 @@ class TestTwilio:
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
-        assert whatsapp_message.chat_id == whatsapp_message.from_
+        assert whatsapp_message.participant_id == "+27456897512"
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None
@@ -98,9 +98,9 @@ class TestTurnio:
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
-        assert message.at_id == "27456897512"
+        assert message.participant_id == "27456897512"
         if message_type == "text":
-            assert message.body == "Hi there!"
+            assert message.message_text == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT
         else:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
