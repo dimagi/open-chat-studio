@@ -108,7 +108,7 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
 
     @property
     def is_unauthorized_participant(self):
-        """Returns false if a participant is unauthorized. A participant is considered authorized when the
+        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
         following conditions are met:
         For web channels:
         - They are a platform user
