@@ -77,8 +77,7 @@ class ChannelBase:
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
     Public API:
         new_user_message: Handles a message coming from the user.
-        new_bot_message: Handles a message coming from the bot.
-        get_chat_id_from_message: Returns the unique identifier of the chat from the message object.
+        send_message_to_user: Handles a message coming from the bot.
     """
 
     voice_replies_supported: ClassVar[bool] = False
@@ -136,10 +135,6 @@ class ChannelBase:
     def submit_input_to_llm(self):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
-
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        self._send_message_to_user(bot_message)
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
@@ -250,7 +245,7 @@ class ChannelBase:
         # This is technically the start of the conversation
         if self.experiment.seed_message:
             bot_response = self._generate_response_for_user(self.experiment.seed_message)
-            self.new_bot_message(bot_response)
+            self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -294,7 +289,7 @@ class ChannelBase:
                 raise e
         return self.message.message_text
 
-    def _send_message_to_user(self, bot_message: str):
+    def send_message_to_user(self, bot_message: str):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         send_message_func = self.send_text_to_user
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
@@ -310,7 +305,7 @@ class ChannelBase:
 
     def _handle_supported_message(self):
         response = self._get_llm_response(self.user_query)
-        self._send_message_to_user(response)
+        self.send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
@@ -455,7 +450,7 @@ class ChannelBase:
             try again later
             """
         )
-        self.new_bot_message(bot_message)
+        self.send_message_to_user(bot_message)
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
@@ -469,7 +464,7 @@ class WebChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def new_bot_message(self, bot_message: str):
+    def send_message_to_user(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
         pass
 
@@ -614,7 +609,7 @@ class ApiChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def new_bot_message(self, bot_message: str):
+    def send_message_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 

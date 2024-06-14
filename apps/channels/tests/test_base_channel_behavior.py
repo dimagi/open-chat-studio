@@ -468,7 +468,7 @@ def test_missing_channel_raises_error(twilio_provider):
 def test_send_message_to_user(
     send_text_to_user, _reply_voice_messagem, expected_message_type, response_behaviour, telegram_channel
 ):
-    """A simple test to make sure that when we call `channel_instance.new_bot_message`, the correct message format
+    """A simple test to make sure that when we call `channel_instance.send_message_to_user`, the correct message format
     will be used
     """
 
@@ -477,7 +477,7 @@ def test_send_message_to_user(
     experiment.save()
     bot_message = "Hi user"
 
-    telegram_channel.new_bot_message(bot_message)
+    telegram_channel.send_message_to_user(bot_message)
 
     if expected_message_type == "text":
         send_text_to_user.assert_called()
@@ -488,7 +488,7 @@ def test_send_message_to_user(
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.TelegramChannel._send_message_to_user", Mock())
+@patch("apps.chat.channels.TelegramChannel.send_message_to_user", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_llm_response")
 def test_participant_reused_across_experiments(_get_llm_response):
     """A single participant should be linked to multiple sessions per team"""
