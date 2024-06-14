@@ -106,11 +106,10 @@ class ChannelBase:
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
-        self.initialize()
 
-    @abstractmethod
-    def initialize(self):
-        pass
+    @cached_property
+    def messaging_service(self):
+        return self.experiment_channel.messaging_provider.get_messaging_service()
 
     @property
     def chat_id(self) -> str:
@@ -544,7 +543,10 @@ class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
-    def initialize(self):
+    def __init__(
+        self, experiment_channel: ExperimentChannel | None = None, experiment_session: ExperimentSession | None = None
+    ):
+        super().__init__(experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def get_chat_id_from_message(self, message):
@@ -588,9 +590,6 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
-    def initialize(self):
-        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
         to_number = self.chat_id
@@ -636,9 +635,6 @@ class WhatsappChannel(ChannelBase):
 
 
 class FacebookMessengerChannel(ChannelBase):
-    def initialize(self):
-        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
@@ -718,10 +714,6 @@ class SlackChannel(ChannelBase):
         """
         super().__init__(experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
-
-    @cached_property
-    def messaging_service(self):
-        return self.experiment_channel.messaging_provider.get_messaging_service()
 
     @property
     def message_content_type(self):
