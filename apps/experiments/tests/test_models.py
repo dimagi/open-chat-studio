@@ -260,7 +260,7 @@ class TestParticipant:
     def test_update_memory_for_specific_experiment(self):
         participant = ParticipantFactory()
         team = participant.team
-        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team)
+        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team, experiment__team=team)
         experiment = sessions[0].experiment
         participant.update_memory({"first_name": "Will"}, experiment=experiment)
         assert ParticipantData.objects.count() == 1
