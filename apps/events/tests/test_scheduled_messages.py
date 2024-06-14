@@ -156,7 +156,8 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
 
 
 @pytest.mark.django_db()
-def test_error_when_sending_sending_message_to_a_user(caplog):
+@patch("apps.channels.models._set_telegram_webhook")
+def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, caplog):
     """This test makes sure that any error that happens when sending a message to a user does not affect other
     pending messages"""
 

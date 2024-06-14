@@ -22,7 +22,6 @@ from apps.experiments.models import (
     Experiment,
     ExperimentSession,
     Participant,
-    ParticipantData,
     SessionStatus,
     VoiceResponseBehaviours,
 )
@@ -682,6 +681,7 @@ def _start_experiment_session(
                 identifier=participant_identifier,
                 team=experiment.team,
             )
+
         session = ExperimentSession.objects.create(
             team=experiment.team,
             experiment=experiment,
@@ -694,11 +694,7 @@ def _start_experiment_session(
 
         # Record the participant's timezone
         if timezone:
-            data_records = ParticipantData.objects.filter(participant=participant)
-            for data_record in data_records:
-                data_record.data["timezone"] = timezone
-                data_record.save()
-            ParticipantData.objects.bulk_update(data_records, fields=["data"])
+            participant.update_memory(data={"timezone": timezone})
 
     if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)

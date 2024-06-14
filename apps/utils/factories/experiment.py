@@ -89,3 +89,4 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     team = factory.LazyAttribute(lambda obj: obj.experiment.team)
     chat = factory.SubFactory(ChatFactory)
     participant = factory.SubFactory(ParticipantFactory)
+    experiment_channel = factory.SubFactory("apps.utils.factories.channels.ExperimentChannelFactory")

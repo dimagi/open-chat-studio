@@ -231,3 +231,42 @@ class TestExperimentSession:
                 _test()
         else:
             _test()
+
+
+class TestParticipant:
+    @pytest.mark.django_db()
+    def test_update_memory_updates_all_data(self):
+        participant = ParticipantFactory()
+        team = participant.team
+        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team, experiment__team=team)
+        # let the participant be linked to an experiment in another team as well. That experiment should be unaffected
+        ExperimentSessionFactory(participant=participant)
+        existing_data_obj = ParticipantData.objects.create(
+            team=team,
+            content_object=sessions[0].experiment,
+            data={"first_name": "Jack", "last_name": "Turner"},
+            participant=participant,
+        )
+        participant.update_memory({"first_name": "Elizabeth"})
+        participant_data_query = ParticipantData.objects.filter(team=team, participant=participant)
+        assert participant_data_query.count() == 3
+        for p_data in participant_data_query.all():
+            if p_data == existing_data_obj:
+                assert p_data.data == {"first_name": "Elizabeth", "last_name": "Turner"}
+            else:
+                assert p_data.data == {"first_name": "Elizabeth"}
+
+    @pytest.mark.django_db()
+    def test_update_memory_for_specific_experiment(self):
+        participant = ParticipantFactory()
+        team = participant.team
+        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team, experiment__team=team)
+        experiment = sessions[0].experiment
+        participant.update_memory({"first_name": "Will"}, experiment=experiment)
+        assert ParticipantData.objects.count() == 1
+        assert experiment.participant_data.filter(participant=participant).first().data == {"first_name": "Will"}
+        participant.update_memory({"first_name": "Bootstrap Bill", "last_name": "Turner"}, experiment=experiment)
+        assert experiment.participant_data.filter(participant=participant).first().data == {
+            "first_name": "Bootstrap Bill",
+            "last_name": "Turner",
+        }

@@ -24,6 +24,7 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -106,7 +107,20 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
         return input
 
     @property
+    def is_unauthorized_participant(self):
+        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
+        following conditions are met:
+        For web channels:
+        - They are a platform user
+        All other channels:
+        - Always True, since the external channel handles authorization
+        """
+        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
+
+    @property
     def participant_data(self):
+        if self.is_unauthorized_participant:
+            return ""
         return self.session.get_participant_data(use_participant_tz=True) or ""
 
 
