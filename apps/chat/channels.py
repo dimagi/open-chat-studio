@@ -64,19 +64,10 @@ class ChannelBase:
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
-    Properties:
-        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier
-            of the chat.
-        message_content_type: An abstract property that must be implemented in subclasses to return the type
-            of message content (e.g., text, voice).
-        message_text: An abstract property that must be implemented in subclasses to return the text
-            content of the message.
-
     Class variables:
         supported_message_types: A list of message content types that are supported by this channel
 
     Abstract methods:
-        initialize: (Optional) Performs any necessary initialization
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
             if voice_replies_supported is True
         send_text_to_user: Implementation of sending text to the user. Typically this is the reply from the bot
