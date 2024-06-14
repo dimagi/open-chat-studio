@@ -69,7 +69,9 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     # strip out the mention
     message_text = re.sub(rf"<@?{context.bot_user_id}>", "", event["text"])
-    message = SlackMessage(channel_id=channel_id, thread_ts=thread_ts, message_text=message_text)
+    message = SlackMessage(
+        participant_id=slack_user, channel_id=channel_id, thread_ts=thread_ts, message_text=message_text
+    )
 
     # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
     # it here using the already authenticated client.

@@ -21,6 +21,7 @@ def test_handle_user_message(process_input, slack_channel):
         make_session_external_id("channel_id", "thread_ts"),
     )
     message = SlackMessage(
+        participant_id="SLACK_USER_ID",
         channel_id="channel_id",
         thread_ts="thread_ts",
         message_text="Hello",
