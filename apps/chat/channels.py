@@ -117,16 +117,6 @@ class ChannelBase:
             return self.experiment_session.participant.identifier
         return self.message.participant_id
 
-    @property
-    @abstractmethod
-    def message_content_type(self):
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def message_text(self):
-        raise NotImplementedError()
-
     @abstractmethod
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         if self.voice_replies_supported:
@@ -308,18 +298,18 @@ class ChannelBase:
         return self.user_query.strip() == USER_CONSENT_TEXT
 
     def _extract_user_query(self) -> str:
-        if self.message_content_type == MESSAGE_TYPES.VOICE:
+        if self.message.content_type == MESSAGE_TYPES.VOICE:
             try:
                 return self._get_voice_transcript()
             except Exception as e:
                 self._inform_user_of_error()
                 raise e
-        return self.message_text
+        return self.message.message_text
 
     def _send_message_to_user(self, bot_message: str):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         send_message_func = self.send_text_to_user
-        user_sent_voice = self.message and self.message_content_type == MESSAGE_TYPES.VOICE
+        user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
@@ -456,7 +446,7 @@ class ChannelBase:
         return self.user_query == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
-        return self.message_content_type is not None and self.message_content_type in self.supported_message_types
+        return self.message.content_type is not None and self.message.content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
@@ -490,14 +480,6 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
-
-    @property
-    def message_text(self):
-        return self.message.message_text
 
     def new_bot_message(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
@@ -543,14 +525,6 @@ class TelegramChannel(ChannelBase):
     ):
         super().__init__(experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
-
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.body
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         antiflood(
@@ -604,14 +578,6 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
@@ -644,14 +610,6 @@ class FacebookMessengerChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
@@ -673,14 +631,6 @@ class ApiChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
-
-    @property
-    def message_text(self):
-        return self.message.message_text
 
     def new_bot_message(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
@@ -705,14 +655,6 @@ class SlackChannel(ChannelBase):
         """
         super().__init__(experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
-
-    @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
-
-    @property
-    def message_text(self):
-        return self.message.message_text
 
     def send_text_to_user(self, text: str):
         if not self.send_response_to_user:

@@ -7,6 +7,7 @@ from apps.chat.channels import MESSAGE_TYPES
 class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
+    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
 
 
 class WebMessage(BaseMessage):
@@ -18,7 +19,6 @@ class WebMessage(BaseMessage):
 
 
 class TelegramMessage(BaseMessage):
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None
     content_type_unparsed: str | None = Field(default=None)
     message_id: int
@@ -47,7 +47,6 @@ class TwilioMessage(BaseMessage):
     """
 
     to: str
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
@@ -81,7 +80,6 @@ class TwilioMessage(BaseMessage):
 
 class TurnWhatsappMessage(BaseMessage):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
 
@@ -114,7 +112,6 @@ class FacebookMessage(BaseMessage):
     """
 
     page_id: str
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = None
     content_type_unparsed: str | None = Field(default=None)
 
