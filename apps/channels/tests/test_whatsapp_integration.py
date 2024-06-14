@@ -98,7 +98,7 @@ class TestTurnio:
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
-        assert message.chat_id == "27456897512"
+        assert message.at_id == "27456897512"
         if message_type == "text":
             assert message.body == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT

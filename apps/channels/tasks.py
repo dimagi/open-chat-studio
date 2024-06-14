@@ -97,6 +97,6 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
 
 def handle_api_message(experiment_channel: ExperimentChannel, message_data: dict):
     """Synchronously handles the message coming from the API"""
-    message = ApiMessage(participant_id=message_data["participant_id"], message=message_data["message"])
+    message = ApiMessage(participant_id=message_data["participant_id"], message_text=message_data["message"])
     channel = ApiChannel(experiment_channel=experiment_channel)
     return channel.new_user_message(message)

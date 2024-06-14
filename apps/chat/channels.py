@@ -112,14 +112,10 @@ class ChannelBase:
         return self.experiment_channel.messaging_provider.get_messaging_service()
 
     @property
-    def chat_id(self) -> str:
+    def participant_identifier(self) -> str:
         if self.experiment_session and self.experiment_session.participant.identifier:
             return self.experiment_session.participant.identifier
-        return self.get_chat_id_from_message(self.message)
-
-    @abstractmethod
-    def get_chat_id_from_message(self, message):
-        raise NotImplementedError()
+        return self.message.participant_id
 
     @property
     @abstractmethod
@@ -408,7 +404,7 @@ class ChannelBase:
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment,
-                participant__identifier=str(self.chat_id),
+                participant__identifier=str(self.participant_identifier),
             )
             .order_by("-created_at")
             .first()
@@ -442,7 +438,9 @@ class ChannelBase:
         session
         """
         if not self.experiment_session:
-            participant, _ = Participant.objects.get_or_create(identifier=self.chat_id, team=self.experiment.team)
+            participant, _ = Participant.objects.get_or_create(
+                identifier=self.participant_identifier, team=self.experiment.team
+            )
         else:
             participant = self.experiment_session.participant
         self.experiment_session = ExperimentSession.objects.create(
@@ -492,9 +490,6 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
 
     @property
     def message_content_type(self):
@@ -549,9 +544,6 @@ class TelegramChannel(ChannelBase):
         super().__init__(experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
-
     @property
     def message_content_type(self):
         return self.message.content_type
@@ -562,12 +554,15 @@ class TelegramChannel(ChannelBase):
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         antiflood(
-            self.telegram_bot.send_voice, self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration
+            self.telegram_bot.send_voice,
+            self.participant_identifier,
+            voice=synthetic_voice.audio,
+            duration=synthetic_voice.duration,
         )
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
-            antiflood(self.telegram_bot.send_message, self.chat_id, text=message_text)
+            antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
@@ -578,21 +573,21 @@ class TelegramChannel(ChannelBase):
 
     def submit_input_to_llm(self):
         # Indicate to the user that the bot is busy processing the message
-        self.telegram_bot.send_chat_action(chat_id=self.chat_id, action="typing")
+        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="typing")
 
     def transcription_started(self):
-        self.telegram_bot.send_chat_action(chat_id=self.chat_id, action="upload_voice")
+        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
 
     def transcription_finished(self, transcript: str):
         self.telegram_bot.send_message(
-            self.chat_id, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
+            self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
 
 
 class WhatsappChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
-        to_number = self.chat_id
+        to_number = self.participant_identifier
         self.messaging_service.send_text_message(
             text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
@@ -628,7 +623,7 @@ class WhatsappChannel(ChannelBase):
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.chat_id
+        to_number = self.participant_identifier
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
@@ -637,10 +632,9 @@ class WhatsappChannel(ChannelBase):
 class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
+        self.messaging_service.send_text_message(
+            text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+        )
 
     @property
     def voice_replies_supported(self) -> bool:
@@ -670,7 +664,7 @@ class FacebookMessengerChannel(ChannelBase):
         """
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+            synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
         )
 
 
@@ -679,9 +673,6 @@ class ApiChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
 
     @property
     def message_content_type(self):
