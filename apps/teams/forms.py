@@ -106,6 +106,11 @@ class TeamChangeForm(forms.ModelForm):
             "slug": _("A unique ID for your team. No spaces are allowed!"),
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+        cleaned_data["slug"] = cleaned_data["slug"].lower()
+        return cleaned_data
+
 
 class InvitationForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
