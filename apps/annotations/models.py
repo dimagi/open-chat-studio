@@ -28,7 +28,7 @@ class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
     created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     is_system_tag = models.BooleanField(default=False)
-    category = models.CharField(choices=TagCategories.choices, default="bot_response")
+    category = models.CharField(choices=TagCategories.choices, blank=True, default="")
 
     class Meta:
         verbose_name = _("Tag")
