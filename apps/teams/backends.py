@@ -62,7 +62,6 @@ CONTENT_TYPES = {
         "experiment",
         "experimentroute",
         "experimentsession",
-        "noactivitymessageconfig",
         "participant",
         "participantdata",
         "promptbuilderhistory",

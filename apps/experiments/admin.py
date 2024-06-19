@@ -125,14 +125,3 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
     @admin.display(description="Team")
     def team(self, obj):
         return obj.voice_provider.team.name if obj.voice_provider else ""
-
-
-@admin.register(models.NoActivityMessageConfig)
-class NoActivityMessageConfigAdmin(admin.ModelAdmin):
-    list_display = (
-        "team",
-        "message_for_bot",
-        "name",
-        "max_pings",
-    )
-    list_filter = ("team",)
