@@ -127,8 +127,15 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        Use {source_material} to place source material in the prompt. Use {participant_data} to place participant
-        data in the prompt.
+        <div class="tooltip" data-tip="
+            Available variables: {source_material}, {participant_data} and {current_datetime}. Use
+             {source_material} to place source material, {participant_data} to place participant specific data and
+             {current_datetime} to give the LLM knowledge of the current date and time. The date and time is
+             required for bots using tools.
+            ">
+            <i class="text-xs fa fa-circle-question">
+            </i>
+        </div>
     """
     type = forms.ChoiceField(
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
@@ -245,6 +252,13 @@ def _validate_prompt_variables(form_data):
     available_variables = set(["participant_data", "current_datetime"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
+
+    if form_data.get("tools"):
+        if "current_datetime" not in required_variables:
+            available_variables.remove("current_datetime")
+        # if there are "tools" then current_datetime is always required
+        required_variables.add("current_datetime")
+
     missing_vars = required_variables - available_variables
     known_vars = {"source_material", "participant_data", "current_datetime"}
     if missing_vars:
