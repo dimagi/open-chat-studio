@@ -13,6 +13,8 @@ export default function SidePanel(props: { inputTypes: NodeInputTypes[] }) {
 
   return (
     <div className="w-full">
+      <h2 className="text-xl text-center font-bold">Available Components</h2>
+      Drag into the workflow editor to use
       {props.inputTypes.map((inputType) => {
         return (
           <Component

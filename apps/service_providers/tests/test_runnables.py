@@ -1,18 +1,20 @@
 import dataclasses
 from collections.abc import Sequence
+from unittest.mock import patch
 
 import freezegun
 import pytest
 from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import AgentTools, SourceMaterial
+from apps.experiments.models import AgentTools, ParticipantData, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
     ExperimentRunnable,
     SimpleExperimentRunnable,
 )
+from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import FakeLlm, FakeLlmService
 
@@ -150,6 +152,49 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
         {"human": "hi"},
     ]
     assert chat.messages.count() == 3
+
+
+@pytest.mark.django_db()
+@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
+@pytest.mark.parametrize(
+    ("participant_with_user", "is_web_session", "considered_authorized"),
+    [(True, True, True), (False, True, False), (True, False, True), (False, False, True)],
+)
+@patch("apps.channels.models._set_telegram_webhook")
+def test_runnable_with_participant_data(
+    _set_telegram_webhook, participant_with_user, is_web_session, considered_authorized, runnable, session, fake_llm
+):
+    """Participant data should be included in the prompt only for authorized users"""
+    session.experiment_channel = ExperimentChannelFactory(
+        experiment=session.experiment, platform=ChannelPlatform.WEB if is_web_session else ChannelPlatform.TELEGRAM
+    )
+    session.save()
+
+    participant = session.participant
+    if participant_with_user:
+        participant.user = session.experiment.owner
+    else:
+        participant.user = None
+    participant.save()
+
+    ParticipantData.objects.create(
+        team=session.team, content_object=session.experiment, participant=participant, data={"name": "Tester"}
+    )
+    session.experiment.prompt_text = "System prompt with {participant_data}"
+    chain = runnable.build(experiment=session.experiment, session=session)
+    chain.invoke("hi")
+
+    if considered_authorized:
+        expected_prompt = (
+            "System prompt with {'name': 'Tester'}\nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+            " (timezone preserved)"
+        )
+    else:
+        expected_prompt = (
+            "System prompt with \nThe current datetime is Thursday, 08 February 2024 13:00:08 UTC"
+            " (timezone preserved)"
+        )
+    assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_prompt)
 
 
 def _messages_to_dict(messages: Sequence[BaseMessage]) -> list[dict]:

@@ -75,46 +75,46 @@ urlpatterns = [
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
     path("e/<slug:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
-    path("e/<slug:experiment_id>/invitations/send/<slug:session_id>/", views.send_invitation, name="send_invitation"),
+    path("e/<slug:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
     path("e/<int:experiment_id>/download_chats/", views.download_experiment_chats, name="download_experiment_chats"),
     # public links
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/",
+        "e/<slug:experiment_id>/s/<str:session_id>/",
         views.start_session_from_invite,
         name="start_session_from_invite",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/pre-survey/",
+        "e/<slug:experiment_id>/s/<str:session_id>/pre-survey/",
         views.experiment_pre_survey,
         name="experiment_pre_survey",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/chat/",
+        "e/<slug:experiment_id>/s/<str:session_id>/chat/",
         views.experiment_chat,
         name="experiment_chat",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/end/",
+        "e/<slug:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/review/",
+        "e/<slug:experiment_id>/s/<str:session_id>/review/",
         views.experiment_review,
         name="experiment_review",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/complete/",
+        "e/<slug:experiment_id>/s/<str:session_id>/complete/",
         views.experiment_complete,
         name="experiment_complete",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/view/",
+        "e/<slug:experiment_id>/s/<str:session_id>/view/",
         views.experiment_session_details_view,
         name="experiment_session_view",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/paginate/",
+        "e/<slug:experiment_id>/s/<str:session_id>/paginate/",
         views.experiment_session_pagination_view,
         name="experiment_session_pagination_view",
     ),

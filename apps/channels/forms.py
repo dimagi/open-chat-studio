@@ -1,5 +1,9 @@
+from functools import cached_property
+
 from django import forms
 
+from apps.channels.const import SLACK_ALL_CHANNELS
+from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -36,6 +40,18 @@ class ChannelForm(forms.ModelForm):
 
 
 class ExtraFormBase(forms.Form):
+    form_attrs = {}
+    """Additional HTML attributes to be added to the form element"""
+
+    @cached_property
+    def messaging_provider(self) -> MessagingProvider | None:
+        if provider_id := self.data.get("messaging_provider"):
+            return MessagingProvider.objects.filter(id=provider_id).first()
+
+    def post_save(self, channel: ExperimentChannel):
+        """Override this method to perform any additional actions after the channel has been saved"""
+        pass
+
     def get_success_message(self, channel: ExperimentChannel):
         pass
 
@@ -96,3 +112,55 @@ class FacebookChannelForm(ExtraFormBase):
     def get_success_message(self, channel: ExperimentChannel):
         """The message to be displayed when the channel is successfully linked"""
         return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+
+class SlackChannelForm(ExtraFormBase):
+    channel_mode = forms.ChoiceField(
+        label="Channel Mode",
+        choices=[("channel", "Listen on a specific channel"), ("all", "Listen on all unassigned channels")],
+        widget=forms.RadioSelect(attrs={"x-model": "channelMode"}),
+    )
+    slack_channel_name = forms.CharField(
+        label="Slack Channel",
+        max_length=100,
+        widget=forms.TextInput(attrs={"control_attrs": {"x-show": "channelMode === 'channel'"}}),
+        required=False,
+    )
+    slack_channel_id = forms.CharField(widget=forms.HiddenInput(), required=False)
+
+    def __init__(self, *args, **kwargs):
+        initial = kwargs.setdefault("initial", {})
+        if initial.get("slack_channel_id") == SLACK_ALL_CHANNELS:
+            initial["channel_mode"] = "all"
+        else:
+            initial["channel_mode"] = "channel"
+        self.form_attrs = {"x-data": '{"channelMode": "%s"}' % initial["channel_mode"]}
+        super().__init__(*args, **kwargs)
+
+    def clean_slack_channel_name(self):
+        name = self.cleaned_data["slack_channel_name"].strip()
+        if name.startswith("#"):
+            name = name[1:]
+        return name
+
+    def clean(self):
+        if self.cleaned_data["channel_mode"] == "all":
+            self.cleaned_data["slack_channel_id"] = SLACK_ALL_CHANNELS
+            self.cleaned_data["slack_channel_name"] = SLACK_ALL_CHANNELS
+        elif self.messaging_provider:
+            service = self.messaging_provider.get_messaging_service()
+            channel_name = self.cleaned_data["slack_channel_name"]
+            channel = service.get_channel_by_name(channel_name)
+            if not channel:
+                raise forms.ValidationError(f"No channel found with name {channel_name}")
+            self.cleaned_data["slack_channel_id"] = channel["id"]
+        return self.cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        channel_id = self.cleaned_data["slack_channel_id"]
+        if channel_id != SLACK_ALL_CHANNELS and self.messaging_provider:
+            service = self.messaging_provider.get_messaging_service()
+            try:
+                service.join_channel(channel_id)
+            except Exception as e:
+                raise ExperimentChannelException("Failed to join the channel") from e

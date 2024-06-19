@@ -25,7 +25,7 @@ def experiment_session_view(allowed_states=None):
         def decorated_view(request, team_slug: str, experiment_id: str, session_id: str):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
             request.experiment_session = get_object_or_404(
-                ExperimentSession, experiment=request.experiment, public_id=session_id, team=request.team
+                ExperimentSession, experiment=request.experiment, external_id=session_id, team=request.team
             )
 
             if allowed_states and request.experiment_session.status not in allowed_states:
@@ -87,7 +87,7 @@ def verify_session_access_cookie(view):
 def _get_access_cookie_data(experiment_session):
     return {
         "experiment_id": str(experiment_session.experiment.public_id),
-        "session_id": str(experiment_session.public_id),
+        "session_id": str(experiment_session.external_id),
         "participant_id": experiment_session.participant_id,
         "user_id": experiment_session.participant.user_id,
     }
@@ -98,7 +98,7 @@ def _validate_access_cookie_data(experiment_session, access_data):
 
 
 def _redirect_for_state(request, experiment_session, team_slug):
-    view_args = [team_slug, experiment_session.experiment.public_id, experiment_session.public_id]
+    view_args = [team_slug, experiment_session.experiment.public_id, experiment_session.external_id]
     if experiment_session.status in [SessionStatus.SETUP, SessionStatus.PENDING]:
         return HttpResponseRedirect(reverse("experiments:start_session_from_invite", args=view_args))
     elif experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:

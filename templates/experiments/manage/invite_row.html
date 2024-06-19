@@ -1,4 +1,4 @@
-<li class="flex items-center justify-between gap-x-6 py-5" id="session-{{ session.public_id }}">
+<li class="flex items-center justify-between gap-x-6 py-5" id="session-{{ session.external_id }}">
   <div class="min-w-0">
     <div class="flex items-start gap-x-3">
       <p class="text-sm font-semibold leading-6 text-gray-900">{{ session.get_participant_display }}</p>
@@ -9,8 +9,8 @@
     </div>
   </div>
   <div class="flex flex-none items-center gap-x-4">
-    <form hx-post="{% url 'experiments:send_invitation' request.team.slug experiment.id session.public_id %}"
-          hx-target="#session-{{ session.public_id }}"
+    <form hx-post="{% url 'experiments:send_invitation' request.team.slug experiment.id session.external_id %}"
+          hx-target="#session-{{ session.external_id }}"
           hx-swap="outerHTML">
       {% csrf_token %}
       <input type="submit" class="btn btn-sm btn-outline btn-primary"

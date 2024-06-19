@@ -61,7 +61,7 @@ class ServiceProvider(ServiceProviderType, Enum):
 
 
 def get_service_provider_config_form(
-    provider: ServiceProvider, exclude_forms: list, data=None, instance=None
+    provider: ServiceProvider, team, exclude_forms: list, data=None, instance=None
 ) -> TypeSelectForm:
     """Return the form for the service provider. This is a 'type select form' which will include the main form
     and the config form for the selected provider type.
@@ -79,7 +79,7 @@ def get_service_provider_config_form(
     return TypeSelectForm(
         primary=main_form,
         secondary={
-            str(subtype): subtype.form_cls(data=data.copy() if data else None, initial=initial_config)
+            str(subtype): subtype.form_cls(team=team, data=data.copy() if data else None, initial=initial_config)
             for subtype in provider.subtype
             if subtype not in exclude_forms
         },

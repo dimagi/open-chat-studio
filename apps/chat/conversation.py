@@ -131,11 +131,7 @@ def _compress_chat_history(
         log.info("Skipping chat history compression: %s <= %s", current_token_count, max_token_limit)
         return history
 
-    log.debug(
-        "Compressing chat history: current length %s > max %s",
-        max_token_limit,
-        current_token_count,
-    )
+    log.debug("Compressing chat history: current length %s > max %s", current_token_count, max_token_limit)
 
     history, last_message, summary = compress_chat_history_from_messages(
         llm, history, keep_history_len, max_token_limit

@@ -6,7 +6,7 @@
     <p class="py-4">Once you end the experiment you will no longer be able to chat with the bot.</p>
     <p class="pb-4">You will be taken to a final page where you'll be asked to provide feedback on the experiment.</p>
     <div class="modal-action">
-      <form method="post" action="{% url 'experiments:end_experiment' request.team.slug experiment.public_id session.public_id %}">
+      <form method="post" action="{% url 'experiments:end_experiment' request.team.slug experiment.public_id session.external_id %}">
         {% csrf_token %}
         <input type="submit" value="End Experiment" class="btn btn-warning">
       </form>

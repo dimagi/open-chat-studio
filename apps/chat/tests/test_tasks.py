@@ -2,10 +2,10 @@ import pytest
 from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
+from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
-from apps.experiments.views.experiment import _start_experiment_session
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -58,12 +58,12 @@ class TasksTest(TestCase):
         assert messages[0].content == expected_ping_message
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
-        experiment_session = _start_experiment_session(
-            experiment, experiment_channel=self.experiment_channel, participant_identifier=self.telegram_chat_id
+        return _start_experiment_session(
+            experiment,
+            experiment_channel=self.experiment_channel,
+            participant_identifier=self.telegram_chat_id,
+            session_status=session_status,
         )
-        experiment_session.status = session_status
-        experiment_session.save()
-        return experiment_session
 
     def _add_chats(self, experiment_session: ExperimentSession, last_message_type: ChatMessageType):
         ChatMessage.objects.create(chat=experiment_session.chat, message_type=ChatMessageType.HUMAN, content="Hi")

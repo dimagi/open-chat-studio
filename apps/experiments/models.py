@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from datetime import datetime
 from functools import cached_property
 
 import markdown
@@ -10,8 +11,8 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
-from django.db import models
-from django.db.models import Q
+from django.db import models, transaction
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -145,7 +146,7 @@ class Survey(BaseTeamModel):
         participant_public_id = participant.public_id if participant else "[anonymous]"
         return self.url.format(
             participant_id=participant_public_id,
-            session_id=experiment_session.public_id,
+            session_id=experiment_session.external_id,
             experiment_id=experiment_session.experiment.public_id,
         )
 
@@ -475,6 +476,74 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
+    def last_seen(self) -> datetime:
+        """Gets the "last seen" date for this participant based on their last message"""
+        latest_session = (
+            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
+            .exclude(message_count=0)
+            .order_by("-created_at")
+            .values("id")[:1]
+        )
+        return (
+            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
+            .order_by("-created_at")
+            .values_list("created_at", flat=True)
+            .first()
+        )
+
+    def get_absolute_url(self):
+        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+
+    def get_experiments_for_display(self):
+        """Used by the html templates to display various stats about the participant's participation."""
+        exp_scoped_human_message = ChatMessage.objects.filter(
+            chat__experiment_session__participant=self,
+            message_type="human",
+            chat__experiment_session__experiment__id=OuterRef("id"),
+        )
+        joined_on = exp_scoped_human_message.order_by("created_at")[:1].values("created_at")
+        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
+        return (
+            Experiment.objects.annotate(
+                joined_on=Subquery(joined_on),
+                last_message=Subquery(last_message),
+            )
+            .filter(sessions__participant=self)
+            .distinct()
+        )
+
+    @transaction.atomic()
+    def update_memory(self, data: dict, experiment: Experiment | None = None):
+        """
+        Updates this participant's data records by merging `data` with the existing data. By default, data for all
+        experiments the this participant participated in will be updated. If there are no records for a specific
+        experiment, one will be created.
+
+        Paramters
+        data:
+            A dictionary containing the new data
+        experiment:
+            If specified, only the data for this experiment will be updated
+        """
+        experiments = Experiment.objects.filter(team=self.team).prefetch_related(
+            Prefetch("participant_data", queryset=ParticipantData.objects.filter(participant=self))
+        )
+        if experiment:
+            experiments = experiments.filter(id=experiment.id)
+
+        records_to_update = []
+        for experiment in experiments:
+            participant_data = experiment.participant_data.first()
+            # We cannot update the participant data using a single query, since the `data` field is encrypted at
+            # the application level
+            if participant_data:
+                participant_data.data = participant_data.data | data
+                records_to_update.append(participant_data)
+            else:
+                ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
+
+        ParticipantData.objects.bulk_update(records_to_update, fields=["data"])
+
     class Meta:
         ordering = ["identifier"]
         unique_together = [("team", "identifier")]
@@ -529,7 +598,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     objects = ExperimentSessionObjectManager()
-    public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -557,6 +626,8 @@ class ExperimentSession(BaseTeamModel):
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
+        if not self.external_id:
+            self.external_id = str(uuid.uuid4())
 
         super().save(*args, **kwargs)
 
@@ -581,7 +652,7 @@ class ExperimentSession(BaseTeamModel):
         return absolute_url(
             reverse(
                 "experiments:start_session_from_invite",
-                args=[self.team.slug, self.experiment.public_id, self.public_id],
+                args=[self.team.slug, self.experiment.public_id, self.external_id],
             )
         )
 
@@ -610,6 +681,11 @@ class ExperimentSession(BaseTeamModel):
         self.status = new_status
         if commit:
             self.save()
+
+    def get_absolute_edit_url(self):
+        return reverse(
+            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+        )
 
     def end(self, commit: bool = True, propagate: bool = True):
         """
@@ -714,7 +790,8 @@ class ExperimentSession(BaseTeamModel):
             return {}
 
     def get_participant_timezone(self):
-        return self.participant_data_from_experiment.get("timezone")
+        participant_data = self.participant_data_from_experiment
+        return participant_data.get("timezone")
 
     def get_participant_data(self, use_participant_tz=False):
         """Returns the participant's data. If `use_participant_tz` is `True`, the dates of the scheduled messages
