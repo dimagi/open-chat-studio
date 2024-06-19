@@ -242,11 +242,11 @@ class ExperimentForm(forms.ModelForm):
 
 def _validate_prompt_variables(form_data):
     required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
-    available_variables = set(["participant_data"])
+    available_variables = set(["participant_data", "current_datetime"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
     missing_vars = required_variables - available_variables
-    known_vars = {"source_material", "participant_data"}
+    known_vars = {"source_material", "participant_data", "current_datetime"}
     if missing_vars:
         errors = []
         unknown_vars = missing_vars - known_vars

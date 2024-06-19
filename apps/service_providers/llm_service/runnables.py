@@ -14,7 +14,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -123,6 +123,11 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
             return ""
         return self.session.get_participant_data(use_participant_tz=True) or ""
 
+    @property
+    def current_datetime(self):
+        participant_tz = self.session.get_participant_timezone()
+        return pretty_date(timezone.now(), participant_tz)
+
 
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
@@ -199,14 +204,10 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        participant_tz = self.session.get_participant_timezone()
-        current_datetime = pretty_date(timezone.now(), participant_tz)
         # The bot converts to UTC unless we tell it to preserve the given timezone
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime} (timezone preserved)"
-        system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
-                system_prompt,
+                ("system", self.experiment.prompt_text),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
@@ -233,6 +234,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -254,6 +256,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
             | RunnableLambda(self.format_input)
             | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         )
@@ -300,7 +303,9 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        new_instructions = self.experiment.assistant.instructions.format(participant_data=self.participant_data)
+        new_instructions = self.experiment.assistant.instructions.format(
+            participant_data=self.participant_data, current_datetime=self.current_datetime
+        )
         input_dict["instructions"] = new_instructions
 
         response = self._get_response_with_retries(config, input_dict, thread_id)
