@@ -17,6 +17,7 @@ from apps.pipelines.nodes.base import PipelineNode
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 
 class RenderTemplate(PipelineNode):
@@ -100,3 +101,20 @@ class Passthrough(PipelineNode):
             return input
 
         return RunnableLambda(fn, name=self.__class__.__name__)
+
+
+class ExperimentNode(PipelineNode):
+    __human_name__ = "Experiment"
+    experiment_id: str
+
+    def get_runnable(self, node: Node) -> Runnable:
+        from apps.experiments.models import Experiment
+
+        try:
+            experiment = Experiment.objects.get(id=self.experiment_id)
+        except Experiment.DoesNotExist:
+            raise PipelineNodeBuildError(f"Experiment with id {self.experiment_id} does not exist")
+
+        return create_experiment_runnable(
+            experiment,
+        )
