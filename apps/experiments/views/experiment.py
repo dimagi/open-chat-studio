@@ -128,11 +128,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
         <div class="tooltip" data-tip="
-            Available variables: {source_material}, {participant_data} and {current_datetime}. Use
-             {source_material} to place source material, {participant_data} to place participant specific data and
-             {current_datetime} to give the LLM knowledge of the current date and time. The date and time is
-             required for bots using tools.
-            ">
+            Available variables to include in your prompt: {source_material}, {participant_data}, and
+            {current_datetime}.
+            {source_material} should be included when there is source material linked to the experiment.
+            {participant_data} is optional.
+            {current_datetime} is only required when the bot is using a tool.
+        ">
             <i class="text-xs fa fa-circle-question">
             </i>
         </div>
@@ -268,7 +269,10 @@ def _validate_prompt_variables(form_data):
             errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
             missing_vars -= unknown_vars
         if missing_vars:
-            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+            errors.append(
+                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
+                "usage."
+            )
         raise forms.ValidationError({"prompt_text": errors})
 
 
