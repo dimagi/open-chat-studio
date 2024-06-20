@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
+from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -187,13 +188,16 @@ class TimeoutTrigger(BaseModel):
         )
         return sessions.select_related("experiment_channel", "experiment").all()
 
-    def fire(self, session):
+    def fire(self, session) -> str | None:
         last_human_message = ChatMessage.objects.filter(
             chat_id=session.chat_id,
             message_type=ChatMessageType.HUMAN,
         ).last()
+
+        result = None
+
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action.params)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -210,14 +214,24 @@ class TimeoutTrigger(BaseModel):
         return result
 
     def _has_triggers_left(self, session, message):
-        return (
+        has_succeeded = (
             self.event_logs.filter(
                 session=session,
                 chat_message=message,
                 status=EventLogStatusChoices.SUCCESS,
             ).count()
-            < self.total_num_triggers
+            >= self.total_num_triggers
         )
+        failed = (
+            self.event_logs.filter(
+                session=session,
+                chat_message=message,
+                status=EventLogStatusChoices.FAILURE,
+            ).count()
+            >= TOTAL_FAILURES
+        )
+
+        return not (has_succeeded or failed)
 
 
 class TimePeriod(models.TextChoices):
