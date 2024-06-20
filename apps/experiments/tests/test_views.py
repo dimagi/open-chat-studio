@@ -25,7 +25,8 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
 
-def test_create_experiment_success(db, client, team_with_users):
+@pytest.mark.django_db()
+def test_create_experiment_success(client, team_with_users):
     user = team_with_users.members.first()
     source_material = SourceMaterialFactory(team=team_with_users)
     consent_form = ConsentFormFactory(team=team_with_users)
@@ -36,7 +37,7 @@ def test_create_experiment_success(db, client, team_with_users):
         "name": "some name",
         "description": "Some description",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant",
+        "prompt_text": "You are a helpful assistant. The current date time is {current_datetime}",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
         "temperature": 0.7,

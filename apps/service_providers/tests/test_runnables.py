@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import BaseMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import AgentTools, ParticipantData, SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -29,6 +29,7 @@ def session(fake_llm):
     session = ExperimentSessionFactory()
     session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
     session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
+    session.get_participant_data = lambda *args, **kwargs: {"name": "Tester"}
     return session
 
 
@@ -145,8 +146,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
 @freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 @pytest.mark.parametrize(
     ("participant_with_user", "is_web_session", "considered_authorized"),
-    [(True, True, True)],
-    # [(True, True, True), (False, True, False), (True, False, True), (False, False, True)],
+    [(True, True, True), (False, True, False), (True, False, True), (False, False, True)],
 )
 @patch("apps.channels.models._set_telegram_webhook")
 def test_runnable_with_participant_data(
@@ -166,9 +166,6 @@ def test_runnable_with_participant_data(
         participant.user = None
     participant.save()
 
-    ParticipantData.objects.create(
-        team=session.team, content_object=session.experiment, participant=participant, data={"name": "Tester"}
-    )
     session.experiment.prompt_text = "System prompt. Participant data: {participant_data}"
     chain = runnable.build(experiment=session.experiment, session=session)
     chain.invoke("hi")

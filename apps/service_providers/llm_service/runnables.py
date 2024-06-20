@@ -204,7 +204,6 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        # The bot converts to UTC unless we tell it to preserve the given timezone
         return ChatPromptTemplate.from_messages(
             [
                 ("system", self.experiment.prompt_text),
