@@ -2,13 +2,17 @@
 
 from django.db import migrations
 
-from apps.events.models import EventActionType
+from apps.events.models import EventActionType, EventLogStatusChoices
 
 
 def convert_no_activity_pings_to_event(apps, schema_editor):
+    ContentType = apps.get_model('contenttypes', 'ContentType')
     NoActivityMessageConfig = apps.get_model("experiments", "NoActivityMessageConfig")
     TimeoutTrigger = apps.get_model("events", "TimeoutTrigger")
     EventAction = apps.get_model("events", "EventAction")
+    EventLog = apps.get_model("events", "EventLog")
+
+    timeout_trigger_content_type = ContentType.objects.get_for_model(TimeoutTrigger)
 
     for no_activity_ping in NoActivityMessageConfig.objects.all():
         for experiment in no_activity_ping.experiment_set.all():
@@ -16,12 +20,22 @@ def convert_no_activity_pings_to_event(apps, schema_editor):
                 action_type=EventActionType.SEND_MESSAGE_TO_BOT,
                 params={"message_to_bot": no_activity_ping.message_for_bot}
             )
-            TimeoutTrigger.objects.create(
+            trigger = TimeoutTrigger.objects.create(
                 action=action,
                 experiment=experiment,
                 delay=no_activity_ping.ping_after * 60,
                 total_num_triggers=no_activity_ping.max_pings,
             )
+            for session in experiment.sessions.all():
+                for _ in range(session.no_activity_ping_count):
+                    EventLog.objects.create(
+                        object_id=trigger.id,
+                        content_type=timeout_trigger_content_type,
+                        session=session,
+                        status=EventLogStatusChoices.SUCCESS,
+                        log="Automatically generated from no activity ping migration"
+
+                    )
             experiment.no_activity_config = None
             experiment.save()
 
