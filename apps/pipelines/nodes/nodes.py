@@ -13,7 +13,7 @@ from langchain_core.runnables.utils import Input
 
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
-from apps.pipelines.nodes.base import PipelineNode
+from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -23,7 +23,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def get_runnable(self, node: Node) -> Runnable:
+    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
         def fn(input: Input):
             env = SandboxedEnvironment()
             try:
@@ -49,7 +49,7 @@ class LLMResponse(PipelineNode):
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
 
-    def get_runnable(self, node: Node) -> Runnable:
+    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
         from apps.service_providers.models import LlmProvider
 
         try:
@@ -72,7 +72,7 @@ class CreateReport(LLMResponse):
         "Output it as JSON with a single key called 'summary' with the summary."
     )
 
-    def get_runnable(self, node: Node) -> Runnable:
+    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
         return PromptTemplate.from_template(template=self.prompt) | super().get_runnable(node)
 
 
@@ -81,7 +81,7 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def get_runnable(self, node: Node) -> RunnableLambda:
+    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
         def fn(input: Input):
             send_email_from_pipeline.delay(
                 recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
@@ -94,7 +94,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def get_runnable(self, node: Node) -> RunnableLambda:
+    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
         def fn(input: Input, config: RunnableConfig):
             self.logger(config).debug(f"Returning input: '{input}' without modification")
             return input
