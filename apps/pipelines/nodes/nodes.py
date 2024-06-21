@@ -1,4 +1,5 @@
 import json
+from functools import partial
 
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
@@ -10,7 +11,9 @@ from langchain_core.runnables import (
     RunnableLambda,
 )
 from langchain_core.runnables.utils import Input
+from pydantic import Field, create_model
 
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -100,3 +103,61 @@ class Passthrough(PipelineNode):
             return input
 
         return RunnableLambda(fn, name=self.__class__.__name__)
+
+
+class ExtractStructuredData(LLMResponse):
+    __human_name__ = "Extract structured data"
+    data_schema: str
+
+    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
+        json_schema = self.to_json_schema(json.loads(self.data_schema))
+        """
+        TODO
+        - Pass in the participan'ts current data set as well
+        - Handle nested objects? Maybe we should let the user create multiple pipelines for nested objects?
+        """
+        return super().get_runnable(node, state).with_structured_output(json_schema)
+
+    def to_json_schema(self, data: dict):
+        pydantic_schema = {}
+        for k, v in data.items():
+            pydantic_schema[k] = (str, Field(description=v))
+        Model = create_model("DataModel", **pydantic_schema)
+        schema = Model.model_json_schema()
+        # The schema needs a description in order to comply with the API in the case where LangChain is using function
+        # calling
+        schema["description"] = ""
+        return schema
+
+
+class UpdateParticipantMemory(PipelineNode):
+    """A simple component to merge the the input data into the participant's memory data. If key_name is specified
+    the input data will be merged with `key_name` as the key name.
+    """
+
+    __human_name__ = "Update participant memory"
+    key_name: str | None = None
+
+    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
+        node = node
+
+        def fn(input: Input, config: RunnableConfig, state: PipelineState):
+            """Input should be a python dictionary"""
+            session = ExperimentSession.objects.get(id=state.get("experiment_session_id"))
+            extracted_data = {self.key_name: input} if self.key_name else input
+            try:
+                participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
+                    participant=session.participant
+                )
+                participant_data.data = participant_data.data | extracted_data
+                participant_data.save()
+            except ParticipantData.DoesNotExist:
+                ParticipantData.objects.create(
+                    participant=session.participant,
+                    content_type__model="experiment",
+                    object_id=session.experiment.id,
+                    team=session.team,
+                    data=extracted_data,
+                )
+
+        return RunnableLambda(partial(fn, state=state), name=self.__class__.__name__)
