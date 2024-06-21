@@ -23,6 +23,7 @@ def add_messages(left: list, right: list):
 
 class PipelineState(TypedDict):
     messages: Annotated[Sequence[Any], add_messages]
+    experiment_session_id: int
 
 
 class PipelineNode(BaseModel, ABC):
