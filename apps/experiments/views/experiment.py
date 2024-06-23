@@ -437,7 +437,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
-            "available_tags": experiment.team.tag_set.all(),
+            "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
             "filter_tags_url": reverse(
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
@@ -947,7 +947,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "survey_link": survey_link,
             "survey_text": survey_text,
             "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         },
     )
 
@@ -987,7 +987,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 (gettext("Experiment"), experiment.name),
                 (gettext("Platform"), session.get_platform_name),
             ],
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
             "event_triggers": [
                 {
                     "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),

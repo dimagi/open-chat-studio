@@ -3,8 +3,8 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -61,10 +61,17 @@ class EditTag(UpdateView, PermissionRequiredMixin):
     }
 
     def get_queryset(self):
-        return Tag.objects.filter(team=self.request.team)
+        return Tag.objects.filter(team=self.request.team, is_system_tag=False)
 
     def get_success_url(self):
         return reverse("annotations:tag_home", args=[self.request.team.slug])
+
+    def get(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        queryset = self.get_queryset()
+        if not queryset.filter(pk=pk).exists():
+            return redirect("annotations:tag_home", team_slug=self.request.team.slug)
+        return super().get(request, *args, **kwargs)
 
 
 class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -72,6 +79,8 @@ class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
     def delete(self, request, team_slug: str, pk: int):
         tag = get_object_or_404(Tag, id=pk, team=request.team)
+        if tag.is_system_tag:
+            return HttpResponseForbidden("System tags cannot be deleted.")
         tag.delete()
         messages.success(request, "Tag Deleted")
         return HttpResponse()
