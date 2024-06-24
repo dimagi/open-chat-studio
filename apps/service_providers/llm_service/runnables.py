@@ -144,7 +144,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        self._populate_memory()
+        self._populate_memory(input)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self._save_message_to_history(input, ChatMessageType.HUMAN)
@@ -197,6 +197,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
+    def _input_chain(self) -> Runnable[dict[str, Any], Any]:
+        raise NotImplementedError
+
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
@@ -215,10 +218,13 @@ class ExperimentRunnable(BaseExperimentRunnable):
             ]
         )
 
-    def _populate_memory(self):
+    def _populate_memory(self, input: str):
         # TODO: convert to use BaseChatMessageHistory object
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
+        input_messages = self._input_messages(input)
+        messages = compress_chat_history(
+            self.session.chat, llm=model, max_token_limit=self.experiment.max_token_limit, input_messages=input_messages
+        )
         self.memory.chat_memory.messages = messages
 
     def _save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
@@ -237,8 +243,15 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+    def _input_messages(self, input: str):
+        chain = self._input_chain()
+        return chain.invoke(input).messages
+
+    def _build_chain(self):
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        return self._input_chain() | model | StrOutputParser()
+
+    def _input_chain(self) -> Runnable[dict[str, Any], str]:
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
@@ -248,8 +261,6 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             )
             | RunnableLambda(self.format_input)
             | self.prompt
-            | model
-            | StrOutputParser()
         )
 
 
@@ -257,16 +268,18 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def _parse_output(self, output):
         return output.get("output", "")
 
-    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        assert self.experiment.tools_enabled
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        tools = get_tools(self.session)
-        agent = (
+    def _input_chain(self) -> Runnable[dict[str, Any], dict]:
+        return (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
             | RunnableLambda(self.format_input)
-            | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         )
+
+    def _build_chain(self):
+        assert self.experiment.tools_enabled
+        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        tools = get_tools(self.session)
+        agent = self._input_chain() | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
@@ -279,6 +292,16 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def prompt(self):
         prompt = super().prompt
         return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
+
+    def _input_messages(self, input: str):
+        chain = (
+            self._input_chain()
+            # Since it's hard to guess what the agent_scratchpad will look like, let's just assume its empty
+            | RunnablePassthrough.assign(agent_scratchpad=lambda x: [])
+            | self.prompt
+        )
+        chain = {"input": RunnablePassthrough()} | chain
+        return chain.invoke(input).messages
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):
