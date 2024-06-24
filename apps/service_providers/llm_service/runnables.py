@@ -147,9 +147,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         self._populate_memory()
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(
-                input, ChatMessageType.HUMAN, config.get("configurable", {}).get("add_experiment_tag", False)
-            )
+            self._save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = self._get_output_check_cancellation(input, config)
         result = ChainOutput(
