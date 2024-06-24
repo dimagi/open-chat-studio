@@ -105,8 +105,8 @@ class Passthrough(PipelineNode):
         return RunnableLambda(fn, name=self.__class__.__name__)
 
 
-class ExtractStructuredData(LLMResponse):
-    __human_name__ = "Extract structured data"
+class ExtractStructuredDataBasic(LLMResponse):
+    __human_name__ = "Extract structured data (Basic)"
     data_schema: str
 
     def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
