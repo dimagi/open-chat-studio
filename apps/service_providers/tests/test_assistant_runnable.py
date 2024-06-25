@@ -31,6 +31,7 @@ def session():
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
     session.get_participant_data = lambda *args, **kwargs: None
+    session.get_participant_timezone = lambda *args, **kwargs: ""
     return session
 
 

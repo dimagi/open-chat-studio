@@ -129,8 +129,16 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        Use {source_material} to place source material in the prompt. Use {participant_data} to place participant
-        data in the prompt.
+        <div class="tooltip" data-tip="
+            Available variables to include in your prompt: {source_material}, {participant_data}, and
+            {current_datetime}.
+            {source_material} should be included when there is source material linked to the experiment.
+            {participant_data} is optional.
+            {current_datetime} is only required when the bot is using a tool.
+        ">
+            <i class="text-xs fa fa-circle-question">
+            </i>
+        </div>
     """
     type = forms.ChoiceField(
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
@@ -244,11 +252,18 @@ class ExperimentForm(forms.ModelForm):
 
 def _validate_prompt_variables(form_data):
     required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
-    available_variables = set(["participant_data"])
+    available_variables = set(["participant_data", "current_datetime"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
+
+    if form_data.get("tools"):
+        if "current_datetime" not in required_variables:
+            available_variables.remove("current_datetime")
+        # if there are "tools" then current_datetime is always required
+        required_variables.add("current_datetime")
+
     missing_vars = required_variables - available_variables
-    known_vars = {"source_material", "participant_data"}
+    known_vars = {"source_material", "participant_data", "current_datetime"}
     if missing_vars:
         errors = []
         unknown_vars = missing_vars - known_vars
@@ -256,7 +271,10 @@ def _validate_prompt_variables(form_data):
             errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
             missing_vars -= unknown_vars
         if missing_vars:
-            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+            errors.append(
+                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
+                "usage."
+            )
         raise forms.ValidationError({"prompt_text": errors})
 
 
