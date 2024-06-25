@@ -53,10 +53,9 @@ class LLMResponse(PipelineNode):
 
         try:
             provider = LlmProvider.objects.get(id=self.llm_provider_id)
+            service = provider.get_llm_service()
         except LlmProvider.DoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
-        try:
-            service = provider.get_llm_service()
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 

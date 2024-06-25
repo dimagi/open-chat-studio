@@ -78,7 +78,9 @@ def test_full_email_sending_pipeline(provider):
             }
         )
 
-    runnable.invoke(PipelineState(messages=["Ice is not a liquid. When it is melted it turns into water."]))
+    runnable.invoke(
+        PipelineState(messages=["Ice is not a liquid. When it is melted it turns into water."], experiment_session_id=1)
+    )
     assert len(mail.outbox) == 1
     assert mail.outbox[0].subject == "This is an interesting email"
     assert mail.outbox[0].to == ["test@example.com"]
