@@ -442,6 +442,22 @@ class Experiment(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
+    def new_api_session(self, participant: "Participant") -> "ExperimentSession":
+        from apps.channels.models import ChannelPlatform, ExperimentChannel
+
+        session = ExperimentSession.objects.create(
+            team=self.team,
+            participant=participant,
+            experiment=self,
+            llm=self.llm,
+            experiment_channel=ExperimentChannel.objects.create(
+                experiment=self,
+                platform=ChannelPlatform.API,
+                name=f"{self.id}-api",
+            ),
+        )
+        return session
+
 
 class ExperimentRoute(BaseTeamModel):
     """
