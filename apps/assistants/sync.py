@@ -171,13 +171,24 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
 
 
 def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[str]):
-    vector_store_files = (file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_id))
+    kwargs = {}
     to_delete_remote = []
-    for file_id in vector_store_files:
-        try:
-            files_ids.remove(file_id)
-        except ValueError:
-            to_delete_remote.append(file_id)
+
+    while True:
+        vector_store_files = client.beta.vector_stores.files.list(
+            order='asc',
+            vector_store_id=vector_store_id,
+            **kwargs,
+        )
+        for v_file in vector_store_files.data:
+            try:
+                files_ids.remove(v_file.id)
+            except ValueError:
+                to_delete_remote.append(v_file.id)
+
+        if not vector_store_files.has_more:
+            break
+        kwargs['after'] = vector_store_files.last_id
 
     for file_id in to_delete_remote:
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
