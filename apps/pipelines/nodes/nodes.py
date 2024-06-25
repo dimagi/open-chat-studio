@@ -5,11 +5,7 @@ from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import (
-    Runnable,
-    RunnableConfig,
-    RunnableLambda,
-)
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.utils import Input
 from pydantic import Field, create_model
 
@@ -76,7 +72,7 @@ class CreateReport(LLMResponse):
     )
 
     def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
-        return PromptTemplate.from_template(template=self.prompt) | super().get_runnable(node)
+        return PromptTemplate.from_template(template=self.prompt) | super().get_runnable(node, state)
 
 
 class SendEmail(PipelineNode):
@@ -111,21 +107,23 @@ class ExtractStructuredDataBasic(LLMResponse):
 
     def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
-        """
-        TODO
-        - Pass in the participan'ts current data set as well
-        - Handle nested objects? Maybe we should let the user create multiple pipelines for nested objects?
-        """
-        return super().get_runnable(node, state).with_structured_output(json_schema)
+        session = ExperimentSession.objects.get(id=state.get("experiment_session_id"))
+        participant_data = session.get_participant_data()
+        prompt = PromptTemplate.from_template(template="{input}.\nCurrent user data: {participant_data}")
+        return (
+            {"input": RunnablePassthrough()}
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: participant_data))
+            | prompt
+            | super().get_runnable(node, state).with_structured_output(json_schema)
+        )
 
     def to_json_schema(self, data: dict):
         pydantic_schema = {}
         for k, v in data.items():
-            pydantic_schema[k] = (str, Field(description=v))
+            pydantic_schema[k] = (str | None, Field(description=v))
         Model = create_model("DataModel", **pydantic_schema)
         schema = Model.model_json_schema()
-        # The schema needs a description in order to comply with the API in the case where LangChain is using function
-        # calling
+        # The schema needs a description in order to comply with function calling APIs
         schema["description"] = ""
         return schema
 
