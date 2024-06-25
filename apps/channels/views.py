@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 
 
 @csrf_exempt
@@ -51,9 +51,13 @@ def new_turn_message(request, experiment_id: uuid):
 @permission_classes([HasUserAPIKey])
 def new_api_message(request, experiment_id: uuid):
     """
-    Expected body: {"message": ""}
+    Expected body: {"message": "", "session_id": ""}
+
+    If session_id is specified, then that session will be used to handle the user's query. If session_id is None,
+    a new session will be created.
     """
     message_data = request.data.copy()
+
     message_data["participant_id"] = request.user.email
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_channel, _created = ExperimentChannel.objects.get_or_create(
@@ -61,5 +65,9 @@ def new_api_message(request, experiment_id: uuid):
         experiment=experiment,
         platform=ChannelPlatform.API,
     )
-    response = tasks.handle_api_message(experiment_channel, message_data=message_data)
-    return Response(data={"response": response})
+    session = None
+    if session_id := message_data.get("session_id", None):
+        session = ExperimentSession.objects.filter(external_id=session_id).first()
+
+    response, session_id = tasks.handle_api_message(experiment_channel, message_data=message_data, session=session)
+    return Response(data={"response": response, "session_id": session_id})

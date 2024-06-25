@@ -8,24 +8,32 @@ headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-
 
 # List experiments
 response = requests.get("https://chatbots.dimagi.com/api/experiments", headers=headers)
-experiments = response.json()
+experiments = response.json()["results"]
 experiment_id = experiments[0]["experiment_id"]
 
 # Start a conversation with the experiment bot
 data = {"message": "Hi there"}
 response = requests.post(
     f"https://chatbots.dimagi.com/channels/api/{experiment_id}/incoming_message",
-    data=data,
+    json=data,
     headers=headers
 )
-data = response.json()
+bot_response = response.json()["response"]
+session_id = response.json()["session_id"]
+# Now to reuse this session:
+data = {"message": "Tell me something short", "session_id": session_id}
+response = requests.post(
+    f"https://chatbots.dimagi.com/channels/api/{experiment_id}/incoming_message",
+    json=data,
+    headers=headers
+)
 
 # Set up an experiment session with prepopulated history
 
 data = {
     "ephemeral": False,
     "user_input": "Tell me something",
-    "history" = [
+    "history": [
         {"type": "human", "message": "Hi there"},
         {"type": "ai", "message": "Hi, how can I assist you today?"}
     ]
@@ -33,7 +41,7 @@ data = {
 
 response = requests.post(
     f"https://chatbots.dimagi.com/api/experiments/{experiment_id}/sessions/new",
-    data=data,
+    json=data,
     headers=headers
 )
 data = response.json()

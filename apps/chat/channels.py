@@ -698,6 +698,21 @@ class ApiChannel(ChannelBase):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise MessageHandlerException("ApiChannel requires an existing session")
+
+    @staticmethod
+    def start_new_session(
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        external_id: str | None = None,
+    ):
+        return _start_experiment_session(
+            experiment, experiment_channel, participant_identifier, session_external_id=external_id
+        )
+
 
 class SlackChannel(ChannelBase):
     voice_replies_supported = False
@@ -750,7 +765,7 @@ class SlackChannel(ChannelBase):
 
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
-            raise MessageHandlerException("WebChannel requires an existing session")
+            raise MessageHandlerException("SlackChannel requires an existing session")
 
     @staticmethod
     def start_new_session(
