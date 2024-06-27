@@ -25,7 +25,7 @@ data = response.json()
 data = {
     "session_id": "", # Optional: The session to use
     "user_input": "Tell me something",
-    "history" = [ # Optional: History that you want to have in your session
+    "history": [ # Optional: History that you want to have in your session
         {"type": "human", "message": "Hi there"},
         {"type": "ai", "message": "Hi, how can I assist you today?"}
     ]
