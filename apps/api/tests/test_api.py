@@ -109,12 +109,11 @@ class TestCreateCustomSession:
     def setup(self):
         self.experiment = ExperimentFactory(team=TeamWithUsersFactory())
         self.user = self.experiment.team.members.first()
-        self.client = ApiTestClient(self.user, self.experiment.team)
+        self.client = ApiTestClient(self.user, team=self.experiment.team)
 
     @pytest.mark.django_db()
     def test_create_new_session(self, get_llm_service_mock):
         data = {
-            "ephemeral": False,
             "user_input": "Are you alive?",
             "history": [{"type": "human", "message": "Hi there"}, {"type": "ai", "message": "Hi there human"}],
         }
@@ -128,24 +127,43 @@ class TestCreateCustomSession:
         assert session.chat.messages.count() == 4
 
     @pytest.mark.django_db()
-    def test_create_new_ephemeral_session(self, get_llm_service_mock):
+    @patch("apps.chat.bots.TopicBot.process_input")
+    def test_use_existing_session(self, process_input, get_llm_service_mock):
+        process_input.return_value = "This is a test message"
+        # Let's make a first call to create a new session for us
         data = {
-            "ephemeral": True,
-            "user_input": "Hi there",
+            "user_input": "Are you alive?",
             "history": [{"type": "human", "message": "Hi there"}, {"type": "ai", "message": "Hi there human"}],
         }
         url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
 
         response = self.client.post(url, json.dumps(data), content_type="application/json")
         assert response.status_code == 200
-        participant = Participant.objects.get(team=self.experiment.team, identifier=self.user.email)
-        assert ExperimentSession.objects.filter(participant=participant, experiment=self.experiment).exists() is False
-        assert response.json() == {"session_id": None, "response": "This is a test message"}
+        session_id = response.json()["session_id"]
+
+        # Let's reuse the session
+        data = {
+            "user_input": "Are you alive?",
+            "session_id": session_id,
+        }
+        with patch("apps.experiments.models.Experiment.new_api_session") as new_api_session:
+            response = self.client.post(url, json.dumps(data), content_type="application/json")
+            assert response.status_code == 200
+            assert response.json() == {"session_id": session_id, "response": "This is a test message"}
+            new_api_session.assert_not_called()
 
     @pytest.mark.django_db()
-    def test_create_custom_session_returns_422(self, get_llm_service_mock):
-        data = {"ephemeral": False, "user_input": "Hi", "history": [{"type": "sheep", "message": "bah"}]}
+    def test_status_422_with_unknown_message_type(self, get_llm_service_mock):
+        data = {"user_input": "Hi", "history": [{"type": "sheep", "message": "bah"}]}
         url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
         response = self.client.post(url, json.dumps(data), content_type="application/json")
         assert response.status_code == 422
         assert response.json() == {"error": "Unknown message type 'sheep'"}
+
+    @pytest.mark.django_db()
+    def test_status_422_with_ambiguous_request(self, get_llm_service_mock):
+        data = {"session_id": "something", "user_input": "Hi", "history": [{"type": "ai", "message": "ok"}]}
+        url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
+        response = self.client.post(url, json.dumps(data), content_type="application/json")
+        assert response.status_code == 422
+        assert response.json() == {"error": "Ambiguous request. Both `session_id` and `history` is specified."}

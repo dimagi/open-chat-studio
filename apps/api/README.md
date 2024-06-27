@@ -20,16 +20,18 @@ response = requests.post(
 )
 data = response.json()
 
-# Set up an experiment session with prepopulated history
+# Set up an experiment session with prepopulated history, or use an existing one
 
 data = {
-    "ephemeral": False,
+    "session_id": "", # Optional: The session to use
     "user_input": "Tell me something",
-    "history" = [
+    "history" = [ # Optional: History that you want to have in your session
         {"type": "human", "message": "Hi there"},
         {"type": "ai", "message": "Hi, how can I assist you today?"}
     ]
 }
+Please note that `session_id` and `history` cannot be specified in the same request. Whenever `session_id` is not
+specified, a new session with `history` will be created.
 
 response = requests.post(
     f"https://chatbots.dimagi.com/api/experiments/{experiment_id}/sessions/new",
@@ -39,4 +41,3 @@ response = requests.post(
 data = response.json()
 # Example response: {"session_id": "77e2b985-0931-4236-a46f-ccdced7159b4", "response": "Ok, here's something ..."}
 ```
-If `ephemeral` is true, then the created session will be deleted and `session_id` will be None.
