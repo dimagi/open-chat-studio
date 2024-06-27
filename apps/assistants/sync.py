@@ -176,7 +176,7 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
 
     while True:
         vector_store_files = client.beta.vector_stores.files.list(
-            order='asc',
+            order="asc",
             vector_store_id=vector_store_id,
             **kwargs,
         )
@@ -188,7 +188,7 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
 
         if not vector_store_files.has_more:
             break
-        kwargs['after'] = vector_store_files.last_id
+        kwargs["after"] = vector_store_files.last_id
 
     for file_id in to_delete_remote:
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
