@@ -30,7 +30,6 @@ class Pipeline(BaseTeamModel):
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
-        # TODO: Include state instance in the state ist is id
         pipeline_run = PipelineRun.objects.create(
             pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}, session=session
         )

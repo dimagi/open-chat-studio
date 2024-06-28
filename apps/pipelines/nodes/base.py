@@ -11,6 +11,7 @@ from langchain_core.runnables import (
 from pydantic import BaseModel
 from pydantic_core import ValidationError
 
+from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -91,3 +92,6 @@ class PipelineNode(BaseModel, ABC):
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
         raise AttributeError("No logger found")
+
+    def experiment_session(self, state: PipelineState) -> ExperimentSession:
+        return ExperimentSession.objects.get(id=state["experiment_session_id"])

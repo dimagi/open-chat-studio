@@ -158,3 +158,33 @@ def test_render_template():
         }
     )
     assert runnable.invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1] == "Cycling is cool"
+
+
+@pytest.mark.django_db()
+def test_extract_structured_data_basic(provider):
+    service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
+    with (
+        mock.patch("apps.pipelines.nodes.nodes.LLMResponse.get_llm_service", return_value=service),
+        mock.patch("apps.pipelines.nodes.nodes.ExtractStructuredDataBasic.get_participant_data", return_value={}),
+    ):
+        runnable = PipelineGraph.build_runnable_from_json(
+            {
+                "edges": [],
+                "nodes": [
+                    {
+                        "data": {
+                            "id": "llm-GUk0C",
+                            "label": "Extract some data",
+                            "type": "ExtractStructuredDataBasic",
+                            "params": {
+                                "llm_provider_id": provider.id,
+                                "llm_model": "fake-model",
+                                "data_schema": '{"name": "the name of the user"}',
+                            },
+                        },
+                        "id": "llm-GUk0C",
+                    },
+                ],
+            }
+        )
+    assert runnable.invoke(PipelineState(messages=["ai: hi user\nhuman: hi there"]))["messages"][-1] == "123"
