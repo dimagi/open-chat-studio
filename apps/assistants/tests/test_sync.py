@@ -3,6 +3,7 @@ from io import BytesIO
 from unittest.mock import call, patch
 
 import pytest
+from openai.pagination import SyncCursorPage
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
@@ -71,7 +72,13 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
     )
     search_resource.files.set(files[2:])
 
-    vs_files_list.return_value = []
+    vs_files_list.return_value = SyncCursorPage(
+        data=[],
+        object="list",
+        first_id=None,
+        last_id=None,
+        has_more=False,
+    )
 
     openai_files = FileObjectFactory.create_batch(2)
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
