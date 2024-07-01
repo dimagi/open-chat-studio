@@ -3,6 +3,7 @@
 from django.db import migrations
 
 from apps.events.models import EventActionType, EventLogStatusChoices
+from apps.chat.models import ChatMessageType
 
 
 def convert_no_activity_pings_to_event(apps, schema_editor):
@@ -11,6 +12,7 @@ def convert_no_activity_pings_to_event(apps, schema_editor):
     TimeoutTrigger = apps.get_model("events", "TimeoutTrigger")
     EventAction = apps.get_model("events", "EventAction")
     EventLog = apps.get_model("events", "EventLog")
+    ChatMessage = apps.get_model("chat", "ChatMessage")
 
     timeout_trigger_content_type = ContentType.objects.get_for_model(TimeoutTrigger)
 
@@ -26,11 +28,20 @@ def convert_no_activity_pings_to_event(apps, schema_editor):
                 delay=no_activity_ping.ping_after * 60,
                 total_num_triggers=no_activity_ping.max_pings,
             )
-            for session in experiment.sessions.all():
+            for session in experiment.sessions.filter(no_activity_ping_count__gte=1):
+                last_human_message_id = (
+                    ChatMessage.objects.filter(
+                        chat__experiment_session=session,
+                        message_type=ChatMessageType.HUMAN,
+                    )
+                    .order_by("-created_at")
+                    .values("id")[:1]
+                )
                 for _ in range(session.no_activity_ping_count):
                     EventLog.objects.create(
                         object_id=trigger.id,
                         content_type=timeout_trigger_content_type,
+                        chat_message_id=last_human_message_id,
                         session=session,
                         status=EventLogStatusChoices.SUCCESS,
                         log="Automatically generated from no activity ping migration"
