@@ -1,17 +1,23 @@
 import json
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 
-from apps.experiments.models import Participant
+from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.langchain import FakeLlm, FakeLlmService
 from apps.utils.tests.clients import ApiTestClient
 
 
 @pytest.fixture()
 def experiment(db):
     return ExperimentFactory(team=TeamWithUsersFactory())
+
+
+def fake_llm():
+    return FakeLlm(responses=[["This", " is", " a", " test", " message"]], token_counts=[30, 20, 10])
 
 
 @pytest.mark.django_db()
@@ -96,3 +102,68 @@ def test_update_participant_data_returns_404():
     assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
     # Assert that nothing was created
     assert experiment.participant_data.filter(participant=participant).exists() is False
+
+
+@patch("apps.experiments.models.Experiment.get_llm_service", return_value=FakeLlmService(llm=fake_llm()))
+class TestCreateCustomSession:
+    def setup(self):
+        self.experiment = ExperimentFactory(team=TeamWithUsersFactory())
+        self.user = self.experiment.team.members.first()
+        self.client = ApiTestClient(self.user, team=self.experiment.team)
+
+    @pytest.mark.django_db()
+    def test_create_new_session(self, get_llm_service_mock):
+        data = {
+            "user_input": "Are you alive?",
+            "history": [{"type": "human", "message": "Hi there"}, {"type": "ai", "message": "Hi there human"}],
+        }
+        url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
+
+        response = self.client.post(url, json.dumps(data), content_type="application/json")
+        assert response.status_code == 200
+        participant = Participant.objects.get(team=self.experiment.team, identifier=self.user.email)
+        session = ExperimentSession.objects.get(participant=participant, experiment=self.experiment)
+        assert response.json() == {"session_id": str(session.external_id), "response": "This is a test message"}
+        assert session.chat.messages.count() == 4
+
+    @pytest.mark.django_db()
+    @patch("apps.chat.bots.TopicBot.process_input")
+    def test_use_existing_session(self, process_input, get_llm_service_mock):
+        process_input.return_value = "This is a test message"
+        # Let's make a first call to create a new session for us
+        data = {
+            "user_input": "Are you alive?",
+            "history": [{"type": "human", "message": "Hi there"}, {"type": "ai", "message": "Hi there human"}],
+        }
+        url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
+
+        response = self.client.post(url, json.dumps(data), content_type="application/json")
+        assert response.status_code == 200
+        session_id = response.json()["session_id"]
+
+        # Let's reuse the session
+        data = {
+            "user_input": "Are you alive?",
+            "session_id": session_id,
+        }
+        with patch("apps.experiments.models.Experiment.new_api_session") as new_api_session:
+            response = self.client.post(url, json.dumps(data), content_type="application/json")
+            assert response.status_code == 200
+            assert response.json() == {"session_id": session_id, "response": "This is a test message"}
+            new_api_session.assert_not_called()
+
+    @pytest.mark.django_db()
+    def test_status_422_with_unknown_message_type(self, get_llm_service_mock):
+        data = {"user_input": "Hi", "history": [{"type": "sheep", "message": "bah"}]}
+        url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
+        response = self.client.post(url, json.dumps(data), content_type="application/json")
+        assert response.status_code == 422
+        assert response.json() == {"error": "Unknown message type 'sheep'"}
+
+    @pytest.mark.django_db()
+    def test_status_422_with_ambiguous_request(self, get_llm_service_mock):
+        data = {"session_id": "something", "user_input": "Hi", "history": [{"type": "ai", "message": "ok"}]}
+        url = reverse("api:new-session", kwargs={"experiment_id": self.experiment.public_id})
+        response = self.client.post(url, json.dumps(data), content_type="application/json")
+        assert response.status_code == 422
+        assert response.json() == {"error": "Ambiguous request. Both `session_id` and `history` is specified."}

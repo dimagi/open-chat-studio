@@ -1,4 +1,7 @@
+from uuid import UUID
+
 from django.contrib.auth.decorators import permission_required
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -7,7 +10,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
 
 from apps.api.permissions import HasUserAPIKey
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.chat.bots import TopicBot
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 require_view_experiment = permission_required("experiments.view_experiment")
 
@@ -55,3 +60,52 @@ def update_participant_data(request, participant_id: str):
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
     return HttpResponse()
+
+
+@api_view(["POST"])
+@permission_classes([HasUserAPIKey])
+@permission_required("experiments.change_participantdata")
+@transaction.atomic()
+def new_session(request, experiment_id: UUID):
+    """
+    Expected body:
+    {
+        "session_id": "",
+        "user_input": "",
+        "history" = [
+            {"type": "human", "message": "Hi there"},
+            {"type": "ai", "message": "Hi, how can I assist you today?"}
+        ]
+    }
+    """
+    history_messages = request.data.get("history", [])
+    user_input = request.data["user_input"]
+    session_id = request.data.get("session_id", None)
+
+    if session_id and history_messages:
+        return JsonResponse({"error": "Ambiguous request. Both `session_id` and `history` is specified."}, status=422)
+
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    participant, _created = Participant.objects.get_or_create(
+        identifier=request.user.email, team=request.team, user=request.user
+    )
+    if session_id:
+        session = get_object_or_404(ExperimentSession, external_id=session_id)
+    else:
+        session = experiment.new_api_session(participant)
+        chat_messages = []
+        for message_data in history_messages:
+            message_type, content = message_data.values()
+            if message_type not in ChatMessageType.values:
+                return JsonResponse({"error": f"Unknown message type '{message_type}'"}, status=422)
+
+            chat_messages.append(
+                ChatMessage(chat=session.chat, message_type=ChatMessageType(message_type), content=content)
+            )
+        ChatMessage.objects.bulk_create(chat_messages)
+
+    experiment_bot = TopicBot(session)
+    response = experiment_bot.process_input(user_input)
+
+    session_id = session_id or session.external_id
+    return JsonResponse(data={"session_id": session_id, "response": response})
