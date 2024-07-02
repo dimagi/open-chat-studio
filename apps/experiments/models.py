@@ -739,7 +739,7 @@ class ExperimentSession(BaseTeamModel):
 
         try:
             channel = ChannelBase.from_experiment_session(self)
-            channel.new_bot_message(message)
+            channel.send_message_to_user(message)
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

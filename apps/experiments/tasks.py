@@ -5,7 +5,7 @@ from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.channels.datamodels import WebMessage
+from apps.channels.datamodels import BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
@@ -20,7 +20,7 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
     web_channel = WebChannel(
         experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
     )
-    message = WebMessage(chat_id=experiment_session.participant.identifier, message_text=message_text)
+    message = BaseMessage(participant_id=experiment_session.participant.identifier, message_text=message_text)
     update_taskbadger_data(self, web_channel, message)
     return web_channel.new_user_message(message)
 
