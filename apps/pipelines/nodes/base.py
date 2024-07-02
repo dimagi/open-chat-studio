@@ -11,6 +11,7 @@ from langchain_core.runnables import (
 from pydantic import BaseModel
 from pydantic_core import ValidationError
 
+from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import Node
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -23,6 +24,7 @@ def add_messages(left: list, right: list):
 
 class PipelineState(TypedDict):
     messages: Annotated[Sequence[Any], add_messages]
+    experiment_session_id: int
 
 
 class PipelineNode(BaseModel, ABC):
@@ -56,22 +58,21 @@ class PipelineNode(BaseModel, ABC):
     @classmethod
     def build(cls, node: Node) -> Callable[[dict], dict]:
         try:
-            built_node = cls(**node.params)
+            return cls(**node.params)
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
-
-        return built_node.get_runnable(node)
 
     @classmethod
     def get_callable(cls, node: Node) -> Callable:
         built_node = cls.build(node)
 
         def fn(state: PipelineState) -> PipelineState:
-            if isinstance(built_node, BasePromptTemplate):
+            runnable = built_node.get_runnable(node, state=state)
+            if isinstance(runnable, BasePromptTemplate):
                 input = {"input": state["messages"][-1]}
             else:
                 input = state["messages"][-1]
-            result = built_node.invoke(input)
+            result = runnable.invoke(input)
             if isinstance(result, BaseMessage):
                 output = result.content
             elif isinstance(result, StringPromptValue):
@@ -82,7 +83,7 @@ class PipelineNode(BaseModel, ABC):
 
         return fn
 
-    def get_runnable(self, node: Node) -> Runnable:
+    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
         """Get a predefined runnable to be used in the pipeline"""
         raise NotImplementedError
 
@@ -91,3 +92,6 @@ class PipelineNode(BaseModel, ABC):
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
         raise AttributeError("No logger found")
+
+    def experiment_session(self, state: PipelineState) -> ExperimentSession:
+        return ExperimentSession.objects.get(id=state["experiment_session_id"])

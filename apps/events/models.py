@@ -105,7 +105,7 @@ class StaticTrigger(BaseModel):
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
 
     @transaction.atomic()

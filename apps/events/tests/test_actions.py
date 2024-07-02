@@ -59,7 +59,8 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 output_message,  # output of pipeline
                 output_message,  # output of first node / input to the second node
                 output_message,  # input to pipeline
-            ]
+            ],
+            "experiment_session_id": session.id,
         }
     )
     assert pipeline.runs.count() == 1

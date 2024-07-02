@@ -54,7 +54,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
     error_message = "Bad things are afoot"
 
     class FailingPassthrough(PipelineNode):
-        def get_runnable(self, node) -> RunnableLambda:
+        def get_runnable(self, node, state) -> RunnableLambda:
             def fn(input, config):
                 raise Exception(error_message)
 

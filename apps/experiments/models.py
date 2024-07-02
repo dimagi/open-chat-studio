@@ -549,7 +549,17 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "identifier")]
 
 
+class ParticipantDataObjectManager(models.Manager):
+    def for_experiment(self, experiment: Experiment):
+        return (
+            super()
+            .get_queryset()
+            .filter(content_type__model="experiment", object_id=experiment.id, team=experiment.team)
+        )
+
+
 class ParticipantData(BaseTeamModel):
+    objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
