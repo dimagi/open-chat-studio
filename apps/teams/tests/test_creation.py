@@ -39,6 +39,23 @@ def test_slug_generation_on_team_creation(client):
 
 
 @pytest.mark.django_db()
+def test_slug_unchanged_on_team_name_update(client):
+    user = UserFactory()
+    client.force_login(user)
+
+    client.post(reverse("teams:create_team"), {"name": "Foo"})
+    team = Team.objects.get(name="Foo")
+    assert team.slug == "foo"
+
+    client.post(reverse("single_team:manage_team", args=[team.slug]), {"name": "Bar"})
+
+    # Changing the name should not change the slug
+    team.refresh_from_db()
+    assert team.name == "Bar"
+    assert team.slug == "foo"
+
+
+@pytest.mark.django_db()
 def test_group_owner_assignment_on_team_creation(client):
     """Test to make sure that user is assigned as group owner when they create a team"""
     user = UserFactory()
