@@ -198,6 +198,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def _input_chain(self) -> Runnable[dict[str, Any], Any]:
+        """Return a langchain runnable that when invoked, will return
+        the fully populated LLM input. This will be used during history compression.
+        """
         raise NotImplementedError
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
