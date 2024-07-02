@@ -7,7 +7,7 @@ from django_celery_beat.models import ClockedSchedule, IntervalSchedule, Periodi
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
-from apps.events.models import ScheduledMessage
+from apps.events.models import EventActionType, ScheduledMessage
 from apps.experiments.models import AgentTools, ExperimentSession
 from apps.utils.time import pretty_date
 
@@ -51,13 +51,13 @@ class RecurringReminderTool(CustomBaseTool):
         message: str,
         **kwargs,
     ):
-        interval_schedule, _created = IntervalSchedule.objects.get_or_create(every=every, period=period)
-        create_periodic_task(
+        create_schedule_message(
             self.experiment_session,
             message=message,
-            start_time=datetime_due,
-            expires=datetime_end,
-            interval=interval_schedule,
+            trigger_date=datetime_due,
+            time_period=period,
+            frequency=every,
+            repetitions= (datetime_end - datetime_due) // every
         )
         return "Success"
 
@@ -74,11 +74,11 @@ class OneOffReminderTool(CustomBaseTool):
         message: str,
         **kwargs,
     ):
-        create_periodic_task(
+        create_schedule_message(
             self.experiment_session,
             message=message,
-            clocked=ClockedSchedule.objects.create(clocked_time=datetime_due),
-            one_off=True,
+            trigger_date=datetime_due,
+            repetitions=0,
         )
         return "Success"
 
@@ -124,23 +124,20 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
     day_diff = new_weekday - current_weekday
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
-
-def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
-    task_kwargs = json.dumps(
-        {
-            "chat_ids": [experiment_session.participant.identifier],
-            "message": message,
-            "is_bot_instruction": False,
-            "experiment_public_id": str(experiment_session.experiment.public_id),
-        }
+def create_schedule_message(experiment_session: ExperimentSession, message: str, trigger_date: datetime, **kwargs):
+    from apps.utils.factories.events import EventActionFactory
+    additional_params = {
+        "name": f"reminder-{experiment_session.id}-{uuid.uuid4()}",
+        'prompt_text': message,
+    }
+    params = {**kwargs, **additional_params}
+    ScheduledMessage.objects.create(
+        participant=experiment_session.participant,
+        team=experiment_session.team,
+        action=EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER),
+        experiment=experiment_session.experiment,
+        next_trigger_date=trigger_date,
     )
-    PeriodicTask.objects.create(
-        name=f"reminder-{experiment_session.id}-{uuid.uuid4()}",
-        task=BOT_MESSAGE_FOR_USER_TASK,
-        kwargs=task_kwargs,
-        **kwargs,
-    )
-
 
 TOOL_CLASS_MAP = {
     AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
