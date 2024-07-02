@@ -14,7 +14,6 @@ class TeamFactory(factory.django.DjangoModelFactory):
         skip_postgeneration_save = True
 
     name = factory.Faker("text", max_nb_chars=20)
-    slug = factory.Sequence(lambda x: f"team-{x}")
 
 
 class MembershipFactory(factory.django.DjangoModelFactory):
