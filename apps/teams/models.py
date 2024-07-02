@@ -16,7 +16,6 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 from . import roles
-from .helpers import get_next_unique_team_slug
 
 
 class TeamObjectManager(AuditingManager):
@@ -39,6 +38,8 @@ class Team(BaseModel):
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
 
     def save(self, *args, **kwargs):
+        from .helpers import get_next_unique_team_slug
+
         if not self.slug:
             self.slug = get_next_unique_team_slug(self.name)
         super().save(*args, **kwargs)
