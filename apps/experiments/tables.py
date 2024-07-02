@@ -5,6 +5,7 @@ from django_tables2 import columns, tables
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
+    ExperimentRoute,
     ExperimentSession,
     NoActivityMessageConfig,
     SafetyLayer,
@@ -178,3 +179,32 @@ class ExperimentSessionsTable(tables.Table):
         row_attrs = {"class": "text-sm"}
         orderable = False
         empty_text = "No sessions yet!"
+
+
+class ActionsColumn(columns.Column):
+    def render(self, value, record):
+        return f"edit: {record.parent.id}, {record.id}, delete"
+
+
+class ExperimentRoutesTable(tables.Table):
+    actions = columns.TemplateColumn(
+        template_name="generic/crud_actions_column.html",
+        extra_context={
+            "actions": [
+                actions.edit_action(
+                    url_name="experiments:experiment_route_edit", template="experiments/experiment_route_actions.html"
+                ),
+                actions.delete_action(
+                    url_name="experiments:experiment_route_delete",
+                    template="experiments/experiment_route_actions_ajax.html",
+                ),
+            ]
+        },
+    )
+
+    class Meta:
+        model = ExperimentRoute
+        fields = ["child", "keyword", "is_default", "actions"]
+        orderable = False
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        empty_text = "No routes yet!"
