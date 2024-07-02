@@ -29,7 +29,7 @@ class MembershipObjectManager(AuditingManager):
 @audit_fields(*model_audit_fields.TEAM_FIELDS, audit_special_queryset_writes=True)
 class Team(BaseModel):
     """
-    A Team, with members.
+    A team, with members.
     """
 
     objects = TeamObjectManager()
@@ -37,7 +37,12 @@ class Team(BaseModel):
     slug = models.SlugField(unique=True)
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
 
-    # your team customizations go here.
+    def save(self, *args, **kwargs):
+        from .helpers import get_next_unique_team_slug
+
+        if not self.slug:
+            self.slug = get_next_unique_team_slug(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

@@ -1,12 +1,19 @@
+import logging
 from functools import cached_property
 
 from django import forms
+from django.conf import settings
+from django.urls import reverse
+from telebot import TeleBot, apihelper, types
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
+from apps.web.meta import absolute_url
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelForm(forms.ModelForm):
@@ -58,6 +65,26 @@ class ExtraFormBase(forms.Form):
 
 class TelegramChannelForm(ExtraFormBase):
     bot_token = forms.CharField(label="Bot Token", max_length=100)
+
+    def post_save(self, channel: ExperimentChannel):
+        try:
+            self._set_telegram_webhook(channel)
+        except apihelper.ApiTelegramException as e:
+            logger.exception("Error setting Telegram webhook")
+            raise ExperimentChannelException("Error setting Telegram webhook") from e
+
+    def _set_telegram_webhook(self, experiment_channel: ExperimentChannel):
+        """
+        Set the webhook at Telegram to allow message forwarding to this platform
+        """
+        tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
+        if experiment_channel.deleted:
+            webhook_url = None
+        else:
+            webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
+
+        tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
+        tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
 
 
 class WhatsappChannelForm(ExtraFormBase):

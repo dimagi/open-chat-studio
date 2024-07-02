@@ -18,7 +18,7 @@ def experiment(db):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_llm_response")
+@patch("apps.chat.channels.ApiChannel._get_experiment_response")
 def test_new_message_creates_a_channel(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
     user = experiment.team.members.first()

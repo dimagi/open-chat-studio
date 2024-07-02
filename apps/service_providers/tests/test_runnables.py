@@ -148,7 +148,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     ("participant_with_user", "is_web_session", "considered_authorized"),
     [(True, True, True), (False, True, False), (True, False, True), (False, False, True)],
 )
-@patch("apps.channels.models._set_telegram_webhook")
+@patch("apps.channels.forms.TelegramChannelForm._set_telegram_webhook")
 def test_runnable_with_participant_data(
     _set_telegram_webhook, participant_with_user, is_web_session, considered_authorized, runnable, session, fake_llm
 ):
