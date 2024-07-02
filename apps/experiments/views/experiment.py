@@ -129,8 +129,16 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        Use {source_material} to place source material in the prompt. Use {participant_data} to place participant
-        data in the prompt.
+        <div class="tooltip" data-tip="
+            Available variables to include in your prompt: {source_material}, {participant_data}, and
+            {current_datetime}.
+            {source_material} should be included when there is source material linked to the experiment.
+            {participant_data} is optional.
+            {current_datetime} is only required when the bot is using a tool.
+        ">
+            <i class="text-xs fa fa-circle-question">
+            </i>
+        </div>
     """
     type = forms.ChoiceField(
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
@@ -244,11 +252,18 @@ class ExperimentForm(forms.ModelForm):
 
 def _validate_prompt_variables(form_data):
     required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
-    available_variables = set(["participant_data"])
+    available_variables = set(["participant_data", "current_datetime"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
+
+    if form_data.get("tools"):
+        if "current_datetime" not in required_variables:
+            available_variables.remove("current_datetime")
+        # if there are "tools" then current_datetime is always required
+        required_variables.add("current_datetime")
+
     missing_vars = required_variables - available_variables
-    known_vars = {"source_material", "participant_data"}
+    known_vars = {"source_material", "participant_data", "current_datetime"}
     if missing_vars:
         errors = []
         unknown_vars = missing_vars - known_vars
@@ -256,7 +271,10 @@ def _validate_prompt_variables(form_data):
             errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
             missing_vars -= unknown_vars
         if missing_vars:
-            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+            errors.append(
+                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
+                "usage."
+            )
         raise forms.ValidationError({"prompt_text": errors})
 
 
@@ -574,12 +592,9 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_channel = _ensure_experiment_channel_exists(
-        experiment=experiment, platform="web", name=f"{experiment.id}-web"
-    )
+
     session = WebChannel.start_new_session(
         experiment,
-        experiment_channel=experiment_channel,
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
@@ -587,11 +602,6 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
-
-
-def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
-    channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
-    return channel
 
 
 @login_and_team_required
@@ -699,9 +709,6 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            experiment_channel = _ensure_experiment_channel_exists(
-                experiment=experiment, platform="web", name=f"{experiment.id}-web"
-            )
             if consent.capture_identifier:
                 identifier = form.cleaned_data.get("identifier", None)
             else:
@@ -710,7 +717,6 @@ def start_session_public(request, team_slug: str, experiment_id: str):
 
             session = WebChannel.start_new_session(
                 experiment,
-                experiment_channel=experiment_channel,
                 participant_user=user,
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
@@ -761,10 +767,8 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
                 with transaction.atomic():
-                    channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
                     session = WebChannel.start_new_session(
                         experiment=experiment,
-                        experiment_channel=channel,
                         participant_identifier=post_form.cleaned_data["email"],
                         session_status=SessionStatus.SETUP,
                         timezone=request.session.get("detected_tz", None),
