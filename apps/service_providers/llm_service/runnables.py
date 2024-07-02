@@ -14,7 +14,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -24,11 +24,12 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
+from apps.annotations.models import Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,11 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
             return ""
         return self.session.get_participant_data(use_participant_tz=True) or ""
 
+    @property
+    def current_datetime(self):
+        participant_tz = self.session.get_participant_timezone()
+        return pretty_date(timezone.now(), participant_tz)
+
 
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
@@ -156,7 +162,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
             raise GenerationCancelled(result)
 
         if config.get("configurable", {}).get("save_output_to_history", True):
-            self._save_message_to_history(output, ChatMessageType.AI)
+            self._save_message_to_history(
+                output, ChatMessageType.AI, config.get("configurable", {}).get("add_experiment_tag", False)
+            )
         return result
 
     def _get_output_check_cancellation(self, input, config):
@@ -199,14 +207,9 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     @property
     def prompt(self):
-        participant_tz = self.session.get_participant_timezone()
-        current_datetime = pretty_date(timezone.now(), participant_tz)
-        # The bot converts to UTC unless we tell it to preserve the given timezone
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime} (timezone preserved)"
-        system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
-                system_prompt,
+                ("system", self.experiment.prompt_text),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
@@ -218,12 +221,19 @@ class ExperimentRunnable(BaseExperimentRunnable):
         messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
         self.memory.chat_memory.messages = messages
 
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
+    def _save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
+        chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
         )
+        if add_experiment_tag:
+            exp_route = ExperimentRoute.objects.filter(
+                team=self.session.team, child=self.experiment.id, parent=self.session.experiment
+            ).first()
+            if not Tag.objects.filter(name=exp_route.keyword, team=self.session.team).exists() and exp_route:
+                chat_message.tags.create(team=self.session.team, name=exp_route.keyword, is_system_tag=True)
+            chat_message.add_tags([exp_route.keyword], team=self.session.team, added_by=None)
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
@@ -233,6 +243,7 @@ class SimpleExperimentRunnable(ExperimentRunnable):
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
@@ -254,6 +265,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         agent = (
             RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
             | RunnableLambda(self.format_input)
             | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         )
@@ -300,7 +312,9 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        new_instructions = self.experiment.assistant.instructions.format(participant_data=self.participant_data)
+        new_instructions = self.experiment.assistant.instructions.format(
+            participant_data=self.participant_data, current_datetime=self.current_datetime
+        )
         input_dict["instructions"] = new_instructions
 
         response = self._get_response_with_retries(config, input_dict, thread_id)

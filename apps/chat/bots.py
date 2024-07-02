@@ -84,13 +84,16 @@ class TopicBot:
     def _call_predict(self, input_str, save_input_to_history=True):
         if self.child_chains:
             chain = self._get_child_chain(input_str)
+            add_experiment_tag = True
         else:
             chain = self.chain
+            add_experiment_tag = False
         result = chain.invoke(
             input_str,
             config={
                 "configurable": {
                     "save_input_to_history": save_input_to_history,
+                    "add_experiment_tag": add_experiment_tag,
                 }
             },
         )

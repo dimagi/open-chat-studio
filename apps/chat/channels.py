@@ -474,8 +474,20 @@ class WebChannel(ChannelBase):
             raise MessageHandlerException("WebChannel requires an existing session")
 
     @classmethod
-    def start_new_session(cls, *args, **kwargs):
-        session = super().start_new_session(*args, **kwargs)
+    def start_new_session(
+        cls,
+        experiment: Experiment,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+    ):
+        experiment_channel = _ensure_experiment_channel_exists(
+            experiment=experiment, platform="web", name=f"{experiment.id}-web"
+        )
+        session = super().start_new_session(
+            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+        )
         WebChannel.check_and_process_seed_message(session)
         return session
 
@@ -696,3 +708,8 @@ def _start_experiment_session(
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
+
+
+def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
+    channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
+    return channel

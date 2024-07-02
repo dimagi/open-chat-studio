@@ -13,7 +13,6 @@ class Action:
     icon_class: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
-
     display_condition: callable = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
@@ -79,7 +78,11 @@ class AjaxAction(Action):
         return ctxt
 
 
-def edit_action(url_name: str, required_permissions: list = None, display_condition: callable = None):
+def edit_action(
+    url_name: str,
+    required_permissions: list = None,
+    display_condition: callable = None,
+):
     return Action(
         url_name,
         icon_class="fa-solid fa-pencil",
