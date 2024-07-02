@@ -215,6 +215,18 @@
       </div>
     {% endflag %}
   </div>
+  <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes"/>
+  <div role="tabpanel" class="tab-content">
+    <div class="app-card">
+      {% if can_make_child_routes %}
+        <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_route_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+        {% render_table child_routes_table %}
+      {% else %}
+        This is a child of the following experiments:
+        {% render_table parent_routes_table %}
+      {% endif %}
+    </div>
+  </div>
   <script>
     let url = "{{ filter_tags_url|escapejs }}"
     function filterSessions(tags) {

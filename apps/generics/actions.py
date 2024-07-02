@@ -79,15 +79,17 @@ class AjaxAction(Action):
 
 
 def edit_action(
-    url_name: str,
-    required_permissions: list = None,
-    display_condition: callable = None,
+    url_name: str, required_permissions: list = None, display_condition: callable = None, template: str | None = None
 ):
+    kwargs = {}
+    if template:
+        kwargs["template"] = template
     return Action(
         url_name,
         icon_class="fa-solid fa-pencil",
         required_permissions=required_permissions,
         display_condition=display_condition,
+        **kwargs,
     )
 
 
@@ -96,7 +98,11 @@ def delete_action(
     required_permissions: list = None,
     display_condition: callable = None,
     confirm_message: str = None,
+    template: str | None = None,
 ):
+    kwargs = {}
+    if template:
+        kwargs["template"] = template
     return AjaxAction(
         url_name,
         icon_class="fa-solid fa-trash",
@@ -104,4 +110,5 @@ def delete_action(
         display_condition=display_condition,
         confirm_message=confirm_message,
         hx_method="delete",
+        **kwargs,
     )
