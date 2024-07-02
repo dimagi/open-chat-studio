@@ -171,7 +171,6 @@ class ExperimentForm(forms.ModelForm):
             "consent_form",
             "voice_provider",
             "synthetic_voice",
-            "no_activity_config",
             "safety_violation_notification_emails",
             "voice_response_behaviour",
             "tools",
@@ -203,7 +202,6 @@ class ExperimentForm(forms.ModelForm):
         self.fields["pre_survey"].queryset = team.survey_set
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
-        self.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
 
         # Alpine.js bindings
