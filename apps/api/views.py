@@ -1,15 +1,12 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils.decorators import method_decorator
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
 
-from apps.api.permissions import HasUserAPIKey
+from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
 from apps.experiments.models import Experiment, Participant, ParticipantData
-
-require_view_experiment = permission_required("experiments.view_experiment")
 
 
 class ExperimentSerializer(serializers.Serializer):
@@ -17,9 +14,8 @@ class ExperimentSerializer(serializers.Serializer):
     experiment_id = serializers.UUIDField(source="public_id")
 
 
-@method_decorator(require_view_experiment, name="get")
 class ExperimentsView(ListAPIView):
-    permission_classes = [HasUserAPIKey]
+    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
 
     def get_queryset(self):
