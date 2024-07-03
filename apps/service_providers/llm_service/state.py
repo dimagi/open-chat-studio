@@ -9,7 +9,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.time import pretty_date
 
 
@@ -107,7 +107,7 @@ class ChatRunnableState(RunnableState):
         pass
 
     @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
+    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         pass
 
     @abstractmethod
@@ -131,19 +131,15 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
     def get_source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
-    def save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
+    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
         )
-        if add_experiment_tag:
-            exp_route = ExperimentRoute.objects.filter(
-                team=self.session.team, child=self.experiment.id, parent=self.session.experiment
-            ).first()
-            if not Tag.objects.filter(name=exp_route.keyword, team=self.session.team).exists() and exp_route:
-                chat_message.tags.create(team=self.session.team, name=exp_route.keyword, is_system_tag=True)
-            chat_message.add_tags([exp_route.keyword], team=self.session.team, added_by=None)
+        if experiment_tag:
+            tag, _ = Tag.objects.get_or_create(name=experiment_tag, team=self.session.team, is_system_tag=True)
+            chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
