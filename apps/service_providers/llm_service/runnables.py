@@ -12,7 +12,9 @@ from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
+from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
@@ -143,12 +145,6 @@ class ExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         self.cancelled = self.state.check_cancellation()
         return self.cancelled
 
-    def _input_chain(self) -> Runnable[dict[str, Any], Any]:
-        """Return a langchain runnable that when invoked, will return
-        the fully populated LLM input. This will be used during history compression.
-        """
-        raise NotImplementedError
-
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
@@ -163,20 +159,25 @@ class ExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         )
 
     def _populate_memory(self, input: str):
-        # TODO: convert to use BaseChatMessageHistory object
-        input_messages = self._input_messages(input)
+        input_messages = self.get_input_messages(input)
         self.memory.chat_memory.messages = self.state.get_chat_history(input_messages)
+
+    def get_input_messages(self, input: str) -> list[BaseMessage]:
+        """Return a list of messages which represent the fully populated LLM input.
+        This will be used during history compression.
+        """
+        raise NotImplementedError
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _input_messages(self, input: str):
+    def get_input_messages(self, input: str):
         chain = self._input_chain()
-        return chain.invoke(input).messages
+        return chain.invoke(input).to_messages()
 
     def _build_chain(self):
         return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
 
-    def _input_chain(self):
+    def _input_chain(self) -> Runnable[str, PromptValue]:
         source_material = RunnableLambda(lambda x: self.state.get_source_material())
         participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
         current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
@@ -226,7 +227,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         prompt = super().prompt
         return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
 
-    def _input_messages(self, input: str):
+    def get_input_messages(self, input: str):
         chain = (
             self._input_chain()
             # Since it's hard to guess what the agent_scratchpad will look like, let's just assume its empty
@@ -234,7 +235,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
             | self.prompt
         )
         chain = {"input": RunnablePassthrough()} | chain
-        return chain.invoke(input).messages
+        return chain.invoke(input).to_messages()
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
