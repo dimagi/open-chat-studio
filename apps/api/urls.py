@@ -7,6 +7,7 @@ app_name = "api"
 
 router = routers.SimpleRouter()
 router.register(r"experiments", views.ExperimentViewSet, basename="experiment")
+router.register(r"sessions", views.ExperimentSessionViewSet, basename="session")
 
 urlpatterns = [
     path("participants/<str:participant_id>/", views.update_participant_data, name="update-participant-data"),
