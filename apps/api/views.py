@@ -1,19 +1,13 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import filters, mixins, serializers
+from rest_framework import filters, mixins
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
+from apps.api.serializers import ExperimentSerializer, ExperimentSessionSerializer
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
-from apps.teams.models import Team
-
-
-class ExperimentSerializer(serializers.Serializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:experiment-detail", lookup_field="public_id")
-    name = serializers.CharField()
-    experiment_id = serializers.UUIDField(source="public_id")
 
 
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
@@ -54,29 +48,6 @@ def update_participant_data(request, participant_id: str):
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
     return HttpResponse()
-
-
-class ParticipantSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Participant
-        fields = ["identifier"]
-
-
-class TeamSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Team
-        fields = ["name", "slug"]
-
-
-class ExperimentSessionSerializer(serializers.ModelSerializer):
-    session_id = serializers.ReadOnlyField(source="external_id")
-    team = TeamSerializer(read_only=True)
-    experiment = ExperimentSerializer(read_only=True)
-    participant = ParticipantSerializer(read_only=True)
-
-    class Meta:
-        model = ExperimentSession
-        fields = ["session_id", "team", "experiment", "participant", "created_at", "updated_at"]
 
 
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
