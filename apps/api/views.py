@@ -1,9 +1,9 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import serializers
+from rest_framework import mixins, serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import ListAPIView
+from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
 from apps.experiments.models import Experiment, Participant, ParticipantData
@@ -14,9 +14,10 @@ class ExperimentSerializer(serializers.Serializer):
     experiment_id = serializers.UUIDField(source="public_id")
 
 
-class ExperimentsView(ListAPIView):
+class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
+    lookup_field = "public_id"
 
     def get_queryset(self):
         return Experiment.objects.filter(team__slug=self.request.team.slug).all()
