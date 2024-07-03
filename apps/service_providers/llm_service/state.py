@@ -4,7 +4,7 @@ from functools import cache
 from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
@@ -138,7 +138,12 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
             content=message,
         )
         if experiment_tag:
-            tag, _ = Tag.objects.get_or_create(name=experiment_tag, team=self.session.team, is_system_tag=True)
+            tag, _ = Tag.objects.get_or_create(
+                name=experiment_tag,
+                team=self.session.team,
+                is_system_tag=True,
+                category=TagCategories.BOT_RESPONSE,
+            )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
     def check_cancellation(self):
