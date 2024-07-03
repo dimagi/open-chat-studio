@@ -14,6 +14,7 @@ from apps.service_providers.llm_service.runnables import (
     ExperimentRunnable,
     SimpleExperimentRunnable,
 )
+from apps.service_providers.llm_service.state import ChatExperimentState
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import FakeLlm, FakeLlmService
@@ -63,7 +64,7 @@ def runnable(request, session):
 @pytest.mark.django_db()
 @freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable(runnable, session, fake_llm):
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
@@ -82,7 +83,7 @@ def test_runnable(runnable, session, fake_llm):
 def test_runnable_with_source_material(runnable, session, fake_llm):
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with {source_material}"
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with this is the source material"
@@ -93,7 +94,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm):
 @freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with {source_material}"
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with "
@@ -102,7 +103,7 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm):
 
 @pytest.mark.django_db()
 def test_runnable_runnable_format_input(runnable, session, fake_llm):
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     session.experiment.input_formatter = "foo {input} bar"
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -112,7 +113,7 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm):
 
 @pytest.mark.django_db()
 def test_runnable_save_input_to_history(runnable, session, chat, fake_llm):
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     session.chat = chat
     assert chat.messages.count() == 1
 
@@ -130,7 +131,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     experiment.max_token_limit = 0  # disable compression
     session.chat = chat
     assert chat.messages.count() == 1
-    chain = runnable.build(experiment=experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm.get_calls()) == 1
@@ -167,7 +168,7 @@ def test_runnable_with_participant_data(
     participant.save()
 
     session.experiment.prompt_text = "System prompt. Participant data: {participant_data}"
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     chain.invoke("hi")
 
     if considered_authorized:
@@ -182,7 +183,7 @@ def test_runnable_with_participant_data(
 def test_runnable_with_current_datetime(runnable, session, fake_llm):
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with current datetime: {current_datetime}"
-    chain = runnable.build(experiment=session.experiment, session=session)
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with current datetime: Thursday, 08 February 2024 13:00:08 UTC"

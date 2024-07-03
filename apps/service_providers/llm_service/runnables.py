@@ -1,13 +1,12 @@
+import functools
 import logging
 import re
 import time
-from abc import ABC
 from operator import itemgetter
 from time import sleep
 from typing import Any, Literal
 
 import openai
-from django.utils import timezone
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
@@ -24,13 +23,14 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
-from apps.annotations.models import Tag
-from apps.channels.models import ChannelPlatform
-from apps.chat.agent.tools import get_tools
-from apps.chat.conversation import compress_chat_history
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession
-from apps.utils.time import pretty_date
+from apps.chat.models import Chat, ChatMessageType
+from apps.experiments.models import Experiment, ExperimentSession
+from apps.service_providers.llm_service.state import (
+    AssistantExperimentState,
+    AssistantState,
+    ChatExperimentState,
+    ChatRunnableState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,17 +44,18 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession) -> "BaseExperimentRunnable":
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
-        return AssistantExperimentRunnable(experiment=experiment, session=session)
+        return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
+    state = ChatExperimentState(experiment=experiment, session=session)
     if experiment.tools_enabled:
-        return AgentExperimentRunnable(experiment=experiment, session=session)
+        return AgentExperimentRunnable(state=state)
 
-    return SimpleExperimentRunnable(experiment=experiment, session=session)
+    return SimpleExperimentRunnable(state=state)
 
 
 class ChainOutput(Serializable):
@@ -78,63 +79,13 @@ class ChainOutput(Serializable):
         return ["ocs", "schema", "chain_output"]
 
 
-class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
-    experiment: Experiment
-    session: ExperimentSession
-    input_key: str = "input"
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    @property
-    def llm_service(self):
-        return self.experiment.get_llm_service()
-
-    @property
-    def callback_handler(self):
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        return self.llm_service.get_callback_handler(model)
-
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-        )
-
-    def format_input(self, input: dict):
-        if self.experiment.input_formatter:
-            input[self.input_key] = self.experiment.input_formatter.format(input=input[self.input_key])
-        return input
-
-    @property
-    def is_unauthorized_participant(self):
-        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
-        following conditions are met:
-        For web channels:
-        - They are a platform user
-        All other channels:
-        - Always True, since the external channel handles authorization
-        """
-        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
-
-    @property
-    def participant_data(self):
-        if self.is_unauthorized_participant:
-            return ""
-        return self.session.get_participant_data(use_participant_tz=True) or ""
-
-    @property
-    def current_datetime(self):
-        participant_tz = self.session.get_participant_timezone()
-        return pretty_date(timezone.now(), participant_tz)
-
-
-class ExperimentRunnable(BaseExperimentRunnable):
+class ExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+    state: ChatRunnableState
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
     check_every_ms: int = 1000
+    input_key: str = "input"
 
     class Config:
         arbitrary_types_allowed = True
@@ -144,7 +95,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         return False
 
     def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.callback_handler
+        callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
@@ -152,7 +103,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         self._populate_memory(input)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(input, ChatMessageType.HUMAN)
+            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = self._get_output_check_cancellation(input, config)
         result = ChainOutput(
@@ -162,9 +113,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
             raise GenerationCancelled(result)
 
         if config.get("configurable", {}).get("save_output_to_history", True):
-            self._save_message_to_history(
-                output, ChatMessageType.AI, config.get("configurable", {}).get("add_experiment_tag", False)
-            )
+            add_experiment_tag = config.get("configurable", {}).get("add_experiment_tag", False)
+            self.state.save_message_to_history(output, ChatMessageType.AI, add_experiment_tag)
         return result
 
     def _get_output_check_cancellation(self, input, config):
@@ -190,17 +140,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
         self.last_cancel_check = time.time()
 
-        self.session.chat.refresh_from_db(fields=["metadata"])
-        # temporary mechanism to cancel the chat
-        # TODO: change this to something specific to the current chat message
-        if self.session.chat.metadata.get("cancelled", False):
-            self.cancelled = True
-
+        self.cancelled = self.state.check_cancellation()
         return self.cancelled
-
-    @property
-    def source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def _input_chain(self) -> Runnable[dict[str, Any], Any]:
         """Return a langchain runnable that when invoked, will return
@@ -215,7 +156,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def prompt(self):
         return ChatPromptTemplate.from_messages(
             [
-                ("system", self.experiment.prompt_text),
+                ("system", self.state.get_prompt()),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
@@ -223,26 +164,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
     def _populate_memory(self, input: str):
         # TODO: convert to use BaseChatMessageHistory object
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         input_messages = self._input_messages(input)
-        messages = compress_chat_history(
-            self.session.chat, llm=model, max_token_limit=self.experiment.max_token_limit, input_messages=input_messages
-        )
-        self.memory.chat_memory.messages = messages
-
-    def _save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
-        chat_message = ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-        )
-        if add_experiment_tag:
-            exp_route = ExperimentRoute.objects.filter(
-                team=self.session.team, child=self.experiment.id, parent=self.session.experiment
-            ).first()
-            if not Tag.objects.filter(name=exp_route.keyword, team=self.session.team).exists() and exp_route:
-                chat_message.tags.create(team=self.session.team, name=exp_route.keyword, is_system_tag=True)
-            chat_message.add_tags([exp_route.keyword], team=self.session.team, added_by=None)
+        self.memory.chat_memory.messages = self.state.get_chat_history(input_messages)
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
@@ -251,19 +174,21 @@ class SimpleExperimentRunnable(ExperimentRunnable):
         return chain.invoke(input).messages
 
     def _build_chain(self):
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        return self._input_chain() | model | StrOutputParser()
+        return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
 
-    def _input_chain(self) -> Runnable[dict[str, Any], str]:
+    def _input_chain(self):
+        source_material = RunnableLambda(lambda x: self.state.get_source_material())
+        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
+        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
         return (
             {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
+            | RunnablePassthrough.assign(source_material=source_material)
+            | RunnablePassthrough.assign(participant_data=participant_data)
+            | RunnablePassthrough.assign(current_datetime=current_datetime)
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
-            | RunnableLambda(self.format_input)
+            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
             | self.prompt
         )
 
@@ -273,18 +198,21 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return output.get("output", "")
 
     def _input_chain(self) -> Runnable[dict[str, Any], dict]:
+        source_material = RunnableLambda(lambda x: self.state.get_source_material())
+        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
+        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
         return (
-            RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
-            | RunnableLambda(self.format_input)
+            RunnablePassthrough.assign(source_material=source_material)
+            | RunnablePassthrough.assign(participant_data=participant_data)
+            | RunnablePassthrough.assign(current_datetime=current_datetime)
+            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
         )
 
     def _build_chain(self):
-        assert self.experiment.tools_enabled
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        tools = get_tools(self.session)
-        agent = self._input_chain() | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
+        tools = self.state.get_tools()
+        agent = self._input_chain() | create_tool_calling_agent(
+            llm=self.state.get_chat_model(), tools=tools, prompt=self.prompt
+        )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
@@ -309,18 +237,15 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return chain.invoke(input).messages
 
 
-class AssistantExperimentRunnable(BaseExperimentRunnable):
+class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+    state: AssistantState
     input_key = "content"
 
     class Config:
         arbitrary_types_allowed = True
 
-    @property
-    def chat(self):
-        return self.session.chat
-
     def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.callback_handler
+        callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
@@ -328,33 +253,28 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         input_dict = {"content": input}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(input, ChatMessageType.HUMAN)
+            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
+        thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
         if thread_id:
             input_dict["thread_id"] = thread_id
 
-        # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
-        # override the instructions if we want to pass in dynamic data.
-        # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        new_instructions = self.experiment.assistant.instructions.format(
-            participant_data=self.participant_data, current_datetime=self.current_datetime
-        )
-        input_dict["instructions"] = new_instructions
+        input_dict["instructions"] = self.state.get_assistant_instructions()
 
         response = self._get_response_with_retries(config, input_dict, thread_id)
         if not thread_id:
-            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
         output = response.return_values["output"]
-        self._save_message_to_history(output, ChatMessageType.AI)
+        self.state.save_message_to_history(output, ChatMessageType.AI)
 
         return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
 
     def _get_response_with_retries(self, config, input_dict, thread_id):
-        assistant = self.experiment.assistant.get_assistant()
-        assistant_runnable = RunnableLambda(self.format_input) | assistant
+        assistant = self.state.get_openai_assistant()
+        format_input = functools.partial(self.state.format_input, self.input_key)
+        assistant_runnable = RunnableLambda(format_input) | assistant
         for i in range(3):
             try:
                 response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
