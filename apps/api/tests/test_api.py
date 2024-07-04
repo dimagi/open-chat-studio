@@ -21,7 +21,7 @@ def test_list_experiments(experiment):
     response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
     expected_json = {
-        "results": [{"name": experiment.name, "experiment_id": experiment.public_id}],
+        "results": [{"name": experiment.name, "id": experiment.public_id}],
         "next": None,
         "previous": None,
     }
@@ -32,9 +32,9 @@ def test_list_experiments(experiment):
 def test_retrieve_experiments(experiment):
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
-    response = client.get(reverse("api:experiment-detail", kwargs={"public_id": experiment.public_id}))
+    response = client.get(reverse("api:experiment-detail", kwargs={"id": experiment.public_id}))
     assert response.status_code == 200
-    assert response.json() == {"experiment_id": experiment.public_id, "name": experiment.name}
+    assert response.json() == {"id": experiment.public_id, "name": experiment.name}
 
 
 @pytest.mark.django_db()
@@ -51,13 +51,13 @@ def test_only_experiments_from_the_scoped_team_is_returned():
     response = client_team_1.get(reverse("api:experiment-list"))
     experiments = response.json()["results"]
     assert len(experiments) == 1
-    assert experiments[0]["experiment_id"] == experiment_team_1.public_id
+    assert experiments[0]["id"] == experiment_team_1.public_id
 
     # Fetch experiments from team 2
     response = client_team_2.get(reverse("api:experiment-list"))
     experiments = response.json()["results"]
     assert len(experiments) == 1
-    assert experiments[0]["experiment_id"] == experiment_team_2.public_id
+    assert experiments[0]["id"] == experiment_team_2.public_id
 
 
 @pytest.mark.django_db()

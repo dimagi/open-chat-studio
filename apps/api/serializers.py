@@ -15,7 +15,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Experiment
-        fields = ["experiment_id", "name", "url"]
+        fields = ["id", "name", "url"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -32,14 +32,14 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class ExperimentSessionSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
-    session_id = serializers.ReadOnlyField(source="external_id")
+    id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "session_id", "team", "experiment", "participant", "created_at", "updated_at"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at"]
 
 
 class MessageSerializer(serializers.Serializer):
