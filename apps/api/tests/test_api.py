@@ -21,7 +21,13 @@ def test_list_experiments(experiment):
     response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
     expected_json = {
-        "results": [{"name": experiment.name, "experiment_id": experiment.public_id}],
+        "results": [
+            {
+                "name": experiment.name,
+                "experiment_id": experiment.public_id,
+                "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+            }
+        ],
         "next": None,
         "previous": None,
     }
@@ -34,7 +40,11 @@ def test_retrieve_experiments(experiment):
     client = ApiTestClient(user, experiment.team)
     response = client.get(reverse("api:experiment-detail", kwargs={"public_id": experiment.public_id}))
     assert response.status_code == 200
-    assert response.json() == {"experiment_id": experiment.public_id, "name": experiment.name}
+    assert response.json() == {
+        "experiment_id": experiment.public_id,
+        "name": experiment.name,
+        "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+    }
 
 
 @pytest.mark.django_db()
