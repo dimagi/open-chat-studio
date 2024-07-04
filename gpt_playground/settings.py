@@ -334,7 +334,8 @@ SITE_ID = 1
 
 # DRF config
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.IsAuthenticatedOrHasUserAPIKey"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.HasUserAPIKey"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
@@ -349,9 +350,7 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
-    "APPEND_COMPONENTS": {
-        "securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "Authorization"}}
-    },
+    "APPEND_COMPONENTS": {"securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}}},
     "SECURITY": [
         {
             "ApiKeyAuth": [],
