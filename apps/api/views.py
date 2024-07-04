@@ -9,7 +9,12 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
-from apps.api.serializers import ExperimentSerializer, ExperimentSessionCreateSerializer, ExperimentSessionSerializer
+from apps.api.serializers import (
+    ExperimentSerializer,
+    ExperimentSessionCreateSerializer,
+    ExperimentSessionSerializer,
+    ParticipantExperimentData,
+)
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 
@@ -41,6 +46,20 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
         return Experiment.objects.filter(team__slug=self.request.team.slug).all()
 
 
+@extend_schema(
+    operation_id="update_participant_data",
+    summary="Update Participant Data",
+    request=ParticipantExperimentData(many=True),
+    responses={200: {}},
+    parameters=[
+        OpenApiParameter(
+            name="participant_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Channel specific participant identifier",
+        ),
+    ],
+)
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
 @permission_required("experiments.change_participantdata")
@@ -48,8 +67,10 @@ def update_participant_data(request, participant_id: str):
     """
     Upsert participant data for all specified experiments in the payload
     """
-    experiment_data = request.data
-    experiment_ids = experiment_data.keys()
+    serializer = ParticipantExperimentData(data=request.data, many=True).is_valid(raise_exception=True)
+    serializer.is_valid(raise_exception=True)
+    experiment_data = serializer.save()
+    experiment_ids = {data["experiment"] for data in experiment_data}
     experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=request.team)
     experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
     participant = get_object_or_404(Participant, identifier=participant_id, team=request.team)
@@ -59,15 +80,15 @@ def update_participant_data(request, participant_id: str):
         response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
         return JsonResponse(data=response, status=404)
 
-    for experiment_id, new_data in experiment_data.items():
-        experiment = experiment_map[experiment_id]
+    for data in experiment_data:
+        experiment = experiment_map[data["experiment"]]
 
         ParticipantData.objects.update_or_create(
             participant=participant,
             content_type__model="experiment",
             object_id=experiment.id,
             team=request.team,
-            defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
+            defaults={"team": experiment.team, "data": data["data"], "content_object": experiment},
         )
     return HttpResponse()
 

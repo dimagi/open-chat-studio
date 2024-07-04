@@ -89,3 +89,8 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
                 ]
             )
         return instance
+
+
+class ParticipantExperimentData(serializers.Serializer):
+    experiment = serializers.UUIDField(label="Experiment ID")
+    data = serializers.DictField(label="Participant Data")

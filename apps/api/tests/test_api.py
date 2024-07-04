@@ -70,7 +70,10 @@ def test_update_participant_data():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
-    data = {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}
+    data = [
+        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+    ]
     url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
@@ -81,7 +84,7 @@ def test_update_participant_data():
     assert participant_data_exp_2.data["name"] == "Doe"
 
     # Let's update the data
-    data[str(experiment.public_id)]["name"] = "Harry"
+    data = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
     client.post(url, json.dumps(data), content_type="application/json")
     participant_data_exp_1.refresh_from_db()
     assert participant_data_exp_1.data["name"] == "Harry"
@@ -98,7 +101,10 @@ def test_update_participant_data_returns_404():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData for team 1's experiment only
-    data = {str(experiment.public_id): {"name": "John"}, str(experiment2.public_id): {"name": "Doe"}}
+    data = [
+        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+    ]
     url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 404
