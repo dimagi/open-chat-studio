@@ -1,12 +1,13 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import filters, mixins
+from rest_framework import filters, mixins, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
-from apps.api.serializers import ExperimentSerializer, ExperimentSessionSerializer
+from apps.api.serializers import ExperimentSerializer, ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 
@@ -60,3 +61,11 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+
+    def create(self, request, *args, **kwargs):
+        serializer = ExperimentSessionCreateSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
+        headers = {"Location": str(output["url"])}
+        return Response(output, status=status.HTTP_201_CREATED, headers=headers)

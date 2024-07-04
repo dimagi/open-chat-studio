@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.fields import DateTimeField
 
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -33,8 +34,9 @@ def test_list_sessions(session):
 def get_session_json(session):
     experiment = session.experiment
     return {
+        "url": f"http://testserver/api/sessions/{session.external_id}/",
         "experiment": {
-            "experiment_id": experiment.public_id,
+            "experiment_id": str(experiment.public_id),
             "name": experiment.name,
             "url": f"http://testserver/api/experiments/{experiment.public_id}/",
         },
@@ -56,3 +58,15 @@ def test_retrieve_session(session):
     response = client.get(reverse("api:session-detail", kwargs={"external_id": session.external_id}))
     assert response.status_code == 200
     assert response.json() == get_session_json(session)
+
+
+@pytest.mark.django_db()
+def test_create_session(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+    data = {"experiment": experiment.public_id}
+    response = client.post(reverse("api:session-list"), data=data, format="json")
+    response_json = response.json()
+    assert response.status_code == 201, response_json
+    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    assert response_json == get_session_json(session)
