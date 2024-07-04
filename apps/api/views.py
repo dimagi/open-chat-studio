@@ -1,6 +1,8 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -11,10 +13,29 @@ from apps.api.serializers import ExperimentSerializer, ExperimentSessionCreateSe
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id="experiment_list",
+        summary="List Experiments",
+    ),
+    retrieve=extend_schema(
+        operation_id="experiment_retrieve",
+        summary="Retrieve Experiment",
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="Experiment ID",
+            ),
+        ],
+    ),
+)
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
+    lookup_url_kwarg = "id"
 
     def get_queryset(self):
         return Experiment.objects.filter(team__slug=self.request.team.slug).all()
@@ -51,6 +72,29 @@ def update_participant_data(request, participant_id: str):
     return HttpResponse()
 
 
+@extend_schema_view(
+    list=extend_schema(
+        operation_id="session_list",
+        summary="List Experiment Sessions",
+    ),
+    retrieve=extend_schema(
+        operation_id="session_retrieve",
+        summary="Retrieve Experiment Session",
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+    ),
+    create=extend_schema(
+        operation_id="session_create",
+        summary="Create Experiment Session",
+        request=ExperimentSessionCreateSerializer,
+    ),
+)
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
     serializer_class = ExperimentSessionSerializer
@@ -58,6 +102,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
     lookup_field = "external_id"
+    lookup_url_kwarg = "id"
 
     def get_queryset(self):
         return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()

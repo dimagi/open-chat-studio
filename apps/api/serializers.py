@@ -8,8 +8,10 @@ from apps.teams.models import Team
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:experiment-detail", lookup_field="public_id")
-    experiment_id = serializers.UUIDField(source="public_id")
+    url = serializers.HyperlinkedIdentityField(
+        view_name="api:experiment-detail", lookup_field="public_id", label="API URL"
+    )
+    id = serializers.UUIDField(source="public_id")
 
     class Meta:
         model = Experiment
@@ -47,8 +49,12 @@ class MessageSerializer(serializers.Serializer):
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
-    experiment = serializers.SlugRelatedField(slug_field="public_id", queryset=Experiment.objects)
-    participant = serializers.CharField(required=False)
+    experiment = serializers.SlugRelatedField(
+        slug_field="public_id", queryset=Experiment.objects, label="Experiment ID"
+    )
+    participant = serializers.CharField(
+        required=False, label="Participant identifier", help_text="Channel specific participant identifier"
+    )
     messages = MessageSerializer(many=True, required=False)
 
     class Meta:
