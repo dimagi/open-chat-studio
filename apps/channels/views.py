@@ -5,6 +5,9 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
@@ -47,12 +50,38 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
+@extend_schema(
+    operation_id="new_api_message",
+    summary="New API Message",
+    tags=["Channels"],
+    request=inline_serializer(
+        "NewAPIMessage",
+        fields={
+            "message": serializers.CharField(label="User message"),
+            "session": serializers.CharField(required=False, label="Optional session ID"),
+        },
+    ),
+    responses={
+        200: inline_serializer(
+            "NewAPIMessageResponse",
+            fields={
+                "response": serializers.CharField(label="AI response"),
+            },
+        )
+    },
+    parameters=[
+        OpenApiParameter(
+            name="experiment_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Experiment ID",
+        ),
+    ],
+)
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
 def new_api_message(request, experiment_id: uuid):
-    """
-    Expected body: {"message": "", "session": "optional session ID"}
-    """
+    """Chat with an experiment."""
     message_data = request.data.copy()
     message_data["participant"] = request.user.email
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)

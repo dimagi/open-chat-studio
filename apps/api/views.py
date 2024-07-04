@@ -22,10 +22,12 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
     list=extend_schema(
         operation_id="experiment_list",
         summary="List Experiments",
+        tags=["Experiments"],
     ),
     retrieve=extend_schema(
         operation_id="experiment_retrieve",
         summary="Retrieve Experiment",
+        tags=["Experiments"],
         parameters=[
             OpenApiParameter(
                 name="id",
@@ -49,6 +51,7 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 @extend_schema(
     operation_id="update_participant_data",
     summary="Update Participant Data",
+    tags=["Participants"],
     request=ParticipantExperimentData(many=True),
     responses={200: {}},
     parameters=[
@@ -97,10 +100,12 @@ def update_participant_data(request, participant_id: str):
     list=extend_schema(
         operation_id="session_list",
         summary="List Experiment Sessions",
+        tags=["Experiment Sessions"],
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
         summary="Retrieve Experiment Session",
+        tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
                 name="id",
@@ -113,6 +118,7 @@ def update_participant_data(request, participant_id: str):
     create=extend_schema(
         operation_id="session_create",
         summary="Create Experiment Session",
+        tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
 )
