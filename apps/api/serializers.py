@@ -42,18 +42,20 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
     experiment = serializers.SlugRelatedField(slug_field="public_id", queryset=Experiment.objects)
+    participant = serializers.CharField(required=False)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "experiment"]
+        fields = ["url", "experiment", "participant"]
 
     def create(self, validated_data):
         request = self.context["request"]
         experiment = validated_data["experiment"]
         if experiment.team_id != request.team.id:
             raise NotFound("Experiment not found")
+        participant_identifier = validated_data.get("participant", request.user.email)
         participant, _created = Participant.objects.get_or_create(
-            identifier=request.user.email, team=request.team, user=request.user
+            identifier=participant_identifier, team=request.team, user=request.user
         )
         validated_data["team"] = request.team
         validated_data["participant"] = participant

@@ -70,3 +70,16 @@ def test_create_session(experiment):
     assert response.status_code == 201, response_json
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])
     assert response_json == get_session_json(session)
+
+
+@pytest.mark.django_db()
+def test_create_session_new_participant(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+    data = {"experiment": experiment.public_id, "participant": "jack bean"}
+    response = client.post(reverse("api:session-list"), data=data, format="json")
+    response_json = response.json()
+    assert response.status_code == 201, response_json
+    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    assert session.participant.identifier == "jack bean"
+    assert response_json == get_session_json(session)
