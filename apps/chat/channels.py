@@ -623,7 +623,7 @@ class ApiChannel(ChannelBase):
         self,
         experiment_channel: ExperimentChannel | None = None,
         experiment_session: ExperimentSession | None = None,
-        user: settings.AUTH_USER_MODEL | None = None,
+        user=None,
     ):
         super().__init__(experiment_channel, experiment_session)
         self.user = user

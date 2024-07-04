@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 
 
 @csrf_exempt
@@ -51,11 +51,22 @@ def new_turn_message(request, experiment_id: uuid):
 @permission_classes([HasUserAPIKey])
 def new_api_message(request, experiment_id: uuid):
     """
-    Expected body: {"message": ""}
+    Expected body: {"message": "", "session": "optional session ID"}
     """
     message_data = request.data.copy()
-    message_data["participant_id"] = request.user.email
+    message_data["participant"] = request.user.email
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+
+    if session_id := message_data.get("session"):
+        session = get_object_or_404(
+            ExperimentSession,
+            external_id=session_id,
+            experiment=experiment,
+            team=request.team,
+            participant__user=request.user,
+        )
+        message_data["participant"] = session.participant.identifier
+
     experiment_channel, _created = ExperimentChannel.objects.get_or_create(
         name=f"{experiment.id}-api",
         experiment=experiment,
