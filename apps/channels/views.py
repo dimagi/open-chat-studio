@@ -61,5 +61,6 @@ def new_api_message(request, experiment_id: uuid):
         experiment=experiment,
         platform=ChannelPlatform.API,
     )
-    response = tasks.handle_api_message(experiment_channel, message_data=message_data)
+
+    response = tasks.handle_api_message(request.user, experiment_channel, message_data=message_data)
     return Response(data={"response": response})

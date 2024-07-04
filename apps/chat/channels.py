@@ -127,6 +127,11 @@ class ChannelBase(ABC):
             return self.experiment_session.participant.identifier
         return self.message.participant_id
 
+    @property
+    def participant_user(self):
+        if self.experiment_session:
+            return self.experiment_session.participant.user
+
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         raise NotImplementedError(
             "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
@@ -423,6 +428,7 @@ class ChannelBase(ABC):
             experiment=self.experiment,
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
+            participant_user=self.participant_user,
             session_status=SessionStatus.SETUP,
         )
 
@@ -612,6 +618,21 @@ class ApiChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
+        user: settings.AUTH_USER_MODEL | None = None,
+    ):
+        super().__init__(experiment_channel, experiment_session)
+        self.user = user
+        if not self.user and not self.experiment_session:
+            raise MessageHandlerException("ApiChannel requires either an existing session or a user")
+
+    @property
+    def participant_user(self):
+        return super().participant_user or self.user
 
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
