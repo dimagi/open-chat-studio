@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.models import ChatMessage
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
 
@@ -39,14 +40,20 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
         fields = ["url", "session_id", "team", "experiment", "participant", "created_at", "updated_at"]
 
 
+class MessageSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=["human", "ai"])
+    message = serializers.CharField()
+
+
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
     experiment = serializers.SlugRelatedField(slug_field="public_id", queryset=Experiment.objects)
     participant = serializers.CharField(required=False)
+    messages = MessageSerializer(many=True, required=False)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "experiment", "participant"]
+        fields = ["url", "experiment", "participant", "messages"]
 
     def create(self, validated_data):
         request = self.context["request"]
@@ -66,4 +73,13 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             name=f"{experiment.id}-api",
         )
         validated_data["experiment_channel"] = channel
-        return super().create(validated_data)
+        messages = validated_data.pop("messages", [])
+        instance = super().create(validated_data)
+        if messages:
+            ChatMessage.objects.bulk_create(
+                [
+                    ChatMessage(chat=instance.chat, message_type=message["type"], content=message["message"])
+                    for message in messages
+                ]
+            )
+        return instance

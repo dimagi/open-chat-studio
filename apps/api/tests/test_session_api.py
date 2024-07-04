@@ -73,6 +73,25 @@ def test_create_session(experiment):
 
 
 @pytest.mark.django_db()
+def test_create_session_with_messages(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+    data = {
+        "experiment": experiment.public_id,
+        "messages": [
+            {"type": "ai", "message": "hi"},
+            {"type": "human", "message": "hello"},
+        ],
+    }
+    response = client.post(reverse("api:session-list"), data=data, format="json")
+    response_json = response.json()
+    assert response.status_code == 201, response_json
+    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    assert response_json == get_session_json(session)
+    assert session.chat.messages.count() == 2
+
+
+@pytest.mark.django_db()
 def test_create_session_new_participant(experiment):
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
