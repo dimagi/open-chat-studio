@@ -693,7 +693,6 @@ def _start_experiment_session(
         session = ExperimentSession.objects.create(
             team=experiment.team,
             experiment=experiment,
-            llm=experiment.llm,
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,
