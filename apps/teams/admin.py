@@ -6,19 +6,19 @@ from .models import Flag, Invitation, Membership, Team
 
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin):
-    list_display = ["user", "team", "role", "created_at"]
+    list_display = ["user", "team", "created_at"]
     list_filter = ["team"]
 
 
 @admin.register(Invitation)
 class InvitationAdmin(admin.ModelAdmin):
-    list_display = ["id", "team", "email", "role", "is_accepted"]
+    list_display = ["id", "team", "email", "is_accepted"]
     list_filter = ["team", "is_accepted"]
 
 
 class MembershipInlineAdmin(admin.TabularInline):
     model = Membership
-    list_display = ["user", "role"]
+    list_display = ["user"]
 
 
 @admin.register(Team)

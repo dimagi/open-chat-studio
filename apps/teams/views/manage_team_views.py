@@ -12,7 +12,6 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
-from apps.teams.roles import is_admin
 from apps.web.forms import set_form_fields_disabled
 
 
@@ -33,8 +32,9 @@ def manage_teams(request):
 def manage_team(request, team_slug):
     team = request.team
     team_form = None
+    is_team_admin = request.team_membership.is_team_admin
     if request.method == "POST":
-        if is_admin(request.user, team):
+        if is_team_admin:
             team_form = TeamChangeForm(request.POST, instance=team)
             if team_form.is_valid():
                 messages.success(request, _("Team details saved!"))
@@ -45,7 +45,7 @@ def manage_team(request, team_slug):
             messages.error(request, "Sorry you don't have permission to do that.")
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-    if not request.team_membership.is_team_admin:
+    if not is_team_admin:
         set_form_fields_disabled(team_form, True)
 
     return render(

@@ -123,7 +123,7 @@ class TeamMemberManagementViewTest(TestCase):
 
     def test_members_cant_change_own_role(self):
         for membership in [self.normal_membership, self.admin_membership]:
-            original_role = membership.role
+            original_groups = set(membership.groups.values_list("id", flat=True))
             c = Client()
             c.force_login(membership.user)
             # trying to change fails hard
@@ -132,7 +132,7 @@ class TeamMemberManagementViewTest(TestCase):
 
             # confirm unchanged
             membership.refresh_from_db()
-            assert original_role == membership.role
+            assert original_groups == set(membership.groups.values_list("id", flat=True))
 
     def test_only_admin_cant_leave(self):
         c = Client()
