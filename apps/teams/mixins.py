@@ -9,4 +9,4 @@ class LoginAndTeamRequiredMixin(UserPassesTestMixin):
     """
 
     def test_func(self):
-        return valid_auth_and_membership(self.request.user, self.request.team)
+        return valid_auth_and_membership(self.request)
