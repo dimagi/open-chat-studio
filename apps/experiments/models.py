@@ -607,7 +607,6 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=255)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )

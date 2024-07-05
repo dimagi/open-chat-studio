@@ -28,17 +28,6 @@
     </a>
   </li>
 </ul>
-<li class="menu-title">
-  <span>{% translate "Teams" %}</span>
-</li>
-<ul class="menu-list">
-  <li>
-    <a href="{% url 'teams:manage_teams' %}" {% if 'teams' in request.path %}class="active"{% endif %}>
-      <i class="fa fa-group h-4 w-4"></i>
-      {% translate "Teams" %}
-    </a>
-  </li>
-</ul>
 {% if user.is_superuser %}
   <li class="menu-title">
     <span>{% translate "Admin" %}</span>
