@@ -36,12 +36,12 @@ def get_session_json(session):
     return {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
         "experiment": {
-            "experiment_id": str(experiment.public_id),
+            "id": str(experiment.public_id),
             "name": experiment.name,
             "url": f"http://testserver/api/experiments/{experiment.public_id}/",
         },
         "participant": {"identifier": session.participant.identifier},
-        "session_id": str(session.external_id),
+        "id": str(session.external_id),
         "team": {
             "name": session.team.name,
             "slug": session.team.slug,
@@ -55,7 +55,7 @@ def get_session_json(session):
 def test_retrieve_session(session):
     user = session.team.members.first()
     client = ApiTestClient(user, session.team)
-    response = client.get(reverse("api:session-detail", kwargs={"external_id": session.external_id}))
+    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
     assert response.json() == get_session_json(session)
 
@@ -68,7 +68,7 @@ def test_create_session(experiment):
     response = client.post(reverse("api:session-list"), data=data, format="json")
     response_json = response.json()
     assert response.status_code == 201, response_json
-    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    session = ExperimentSession.objects.get(external_id=response_json["id"])
     assert response_json == get_session_json(session)
 
 
@@ -86,7 +86,7 @@ def test_create_session_with_messages(experiment):
     response = client.post(reverse("api:session-list"), data=data, format="json")
     response_json = response.json()
     assert response.status_code == 201, response_json
-    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    session = ExperimentSession.objects.get(external_id=response_json["id"])
     assert response_json == get_session_json(session)
     assert session.chat.messages.count() == 2
 
@@ -99,6 +99,6 @@ def test_create_session_new_participant(experiment):
     response = client.post(reverse("api:session-list"), data=data, format="json")
     response_json = response.json()
     assert response.status_code == 201, response_json
-    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    session = ExperimentSession.objects.get(external_id=response_json["id"])
     assert session.participant.identifier == "jack bean"
     assert response_json == get_session_json(session)

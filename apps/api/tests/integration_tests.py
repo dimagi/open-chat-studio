@@ -22,7 +22,7 @@ def test_create_new_session_and_post_message(mock_response, experiment):
     response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
 
-    experiment_id = response.json()["results"][0]["experiment_id"]
+    experiment_id = response.json()["results"][0]["id"]
 
     data = {
         "experiment": experiment_id,
@@ -33,10 +33,12 @@ def test_create_new_session_and_post_message(mock_response, experiment):
     }
     response = client.post(reverse("api:session-list"), data=data, format="json")
     assert response.status_code == 201
-    session_id = response.json()["session_id"]
+    session_id = response.json()["id"]
 
     mock_response.return_value = "Fido"
     new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment_id})
-    response = client.post(new_message_url, data={"message": "What should I call my dog?", "session": session_id})
-    assert response.status_code == 200
+    response = client.post(
+        new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"
+    )
+    assert response.status_code == 200, response.json()
     assert response.json() == {"response": "Fido"}

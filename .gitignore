@@ -25,3 +25,4 @@ venv
 static/css/
 static/js/
 .git-backup
+tmp_schema.yml

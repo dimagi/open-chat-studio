@@ -8,12 +8,14 @@ from apps.teams.models import Team
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:experiment-detail", lookup_field="public_id")
-    experiment_id = serializers.UUIDField(source="public_id")
+    url = serializers.HyperlinkedIdentityField(
+        view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
+    )
+    id = serializers.UUIDField(source="public_id")
 
     class Meta:
         model = Experiment
-        fields = ["experiment_id", "name", "url"]
+        fields = ["id", "name", "url"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -29,15 +31,17 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class ExperimentSessionSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
-    session_id = serializers.ReadOnlyField(source="external_id")
+    url = serializers.HyperlinkedIdentityField(
+        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    )
+    id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "session_id", "team", "experiment", "participant", "created_at", "updated_at"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at"]
 
 
 class MessageSerializer(serializers.Serializer):
@@ -46,9 +50,12 @@ class MessageSerializer(serializers.Serializer):
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
-    experiment = serializers.SlugRelatedField(slug_field="public_id", queryset=Experiment.objects)
-    participant = serializers.CharField(required=False)
+    experiment = serializers.SlugRelatedField(
+        slug_field="public_id", queryset=Experiment.objects, label="Experiment ID"
+    )
+    participant = serializers.CharField(
+        required=False, label="Participant identifier", help_text="Channel specific participant identifier"
+    )
     messages = MessageSerializer(many=True, required=False)
 
     class Meta:
@@ -82,3 +89,8 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
                 ]
             )
         return instance
+
+
+class ParticipantExperimentData(serializers.Serializer):
+    experiment = serializers.UUIDField(label="Experiment ID")
+    data = serializers.DictField(label="Participant Data")

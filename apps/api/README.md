@@ -12,7 +12,7 @@ headers = {"Accept": "application/json", "Content-Type": "application/json", "X-
 # List experiments
 response = requests.get("https://chatbots.dimagi.com/api/experiments", headers=headers)
 experiments = response.json()
-experiment_id = experiments[0]["experiment_id"]
+experiment_id = experiments[0]["id"]
 
 # Start a conversation with the experiment bot
 data = {"message": "Hi there"}
@@ -41,7 +41,7 @@ data = {
 }
 
 response = requests.post("https://chatbots.dimagi.com/api/sessions", data=data, headers=headers)
-session_id = response.json()["session_id"]
+session_id = response.json()["id"]
 
 # Update the session with a new message
 data = {"message": "Hi there", "session": session_id}
