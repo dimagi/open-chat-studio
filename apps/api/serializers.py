@@ -66,7 +66,6 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         )
         validated_data["team"] = request.team
         validated_data["participant"] = participant
-        validated_data["llm"] = experiment.llm
         channel, _ = ExperimentChannel.objects.get_or_create(
             experiment=experiment,
             platform=ChannelPlatform.API,
