@@ -1,24 +1,20 @@
 {% load i18n %}
-<div class="navbar bg-base-100 shadow-md">
-  <div class="navbar-start">
-    <div class="lg:hidden">
-      {% block mobile_nav %}{% endblock %}
+{% block navbar %}
+  <div class="navbar bg-base-100 shadow-md">
+    <div class="navbar-start">
     </div>
-  </div>
-  <div class="navbar-center hidden lg:flex">
-    {% block nav_center %}{% endblock %}
-  </div>
-  <div class="navbar-end">
-    {% if user.is_authenticated %}
-    {% else %}
-      {% if signup_enabled %}
-        <a href="{% url 'account_signup' %}" class="btn btn-primary">
-          {% translate "Sign Up" %}
+    <div class="navbar-end">
+      {% if user.is_authenticated %}
+      {% else %}
+        {% if signup_enabled %}
+          <a href="{% url 'account_signup' %}" class="btn btn-primary">
+            {% translate "Sign Up" %}
+          </a>
+        {% endif %}
+        <a href="{% url 'account_login' %}" class="btn btn-outline ml-2">
+          {% translate "Sign In" %}
         </a>
       {% endif %}
-      <a href="{% url 'account_login' %}" class="btn btn-outline ml-2">
-        {% translate "Sign In" %}
-      </a>
-    {% endif %}
+    </div>
   </div>
-</div>
+{% endblock %}
