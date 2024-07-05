@@ -1,15 +1,16 @@
 import time
 
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 
-from apps.api.permissions import HasUserAPIKey
+from apps.api.permissions import BearerTokenAuthentication
 from apps.api.serializers import ExperimentSessionCreateSerializer
 from apps.channels.tasks import handle_api_message
 
 
 @api_view(["POST"])
-@permission_classes([HasUserAPIKey])
+@authentication_classes([BearerTokenAuthentication])
+@permission_classes([])  # remove the default
 def chat_completions(request, experiment_id: str):
     messages = request.data.get("messages", [])
     try:
