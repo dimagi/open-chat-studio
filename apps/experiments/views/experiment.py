@@ -434,9 +434,13 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    user_sessions = ExperimentSession.objects.with_last_message_created_at().filter(
-        participant__user=request.user,
-        experiment=experiment,
+    user_sessions = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(
+            participant__user=request.user,
+            experiment=experiment,
+        )
+        .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
