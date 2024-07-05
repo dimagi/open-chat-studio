@@ -1,26 +1,20 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils.decorators import method_decorator
-from rest_framework import serializers
+from rest_framework import filters, mixins, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import ListAPIView
+from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import HasUserAPIKey
-from apps.experiments.models import Experiment, Participant, ParticipantData
-
-require_view_experiment = permission_required("experiments.view_experiment")
-
-
-class ExperimentSerializer(serializers.Serializer):
-    name = serializers.CharField()
-    experiment_id = serializers.UUIDField(source="public_id")
+from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
+from apps.api.serializers import ExperimentSerializer, ExperimentSessionCreateSerializer, ExperimentSessionSerializer
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 
-@method_decorator(require_view_experiment, name="get")
-class ExperimentsView(ListAPIView):
-    permission_classes = [HasUserAPIKey]
+class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
+    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
+    lookup_field = "public_id"
 
     def get_queryset(self):
         return Experiment.objects.filter(team__slug=self.request.team.slug).all()
@@ -55,3 +49,23 @@ def update_participant_data(request, participant_id: str):
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
     return HttpResponse()
+
+
+class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
+    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
+    serializer_class = ExperimentSessionSerializer
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+    lookup_field = "external_id"
+
+    def get_queryset(self):
+        return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+
+    def create(self, request, *args, **kwargs):
+        serializer = ExperimentSessionCreateSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
+        headers = {"Location": str(output["url"])}
+        return Response(output, status=status.HTTP_201_CREATED, headers=headers)

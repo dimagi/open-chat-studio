@@ -18,14 +18,33 @@ def experiment(db):
 def test_list_experiments(experiment):
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
-    response = client.get(reverse("api:list-experiments"))
+    response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
     expected_json = {
-        "results": [{"name": experiment.name, "experiment_id": experiment.public_id}],
+        "results": [
+            {
+                "name": experiment.name,
+                "experiment_id": experiment.public_id,
+                "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+            }
+        ],
         "next": None,
         "previous": None,
     }
     assert response.json() == expected_json
+
+
+@pytest.mark.django_db()
+def test_retrieve_experiments(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+    response = client.get(reverse("api:experiment-detail", kwargs={"public_id": experiment.public_id}))
+    assert response.status_code == 200
+    assert response.json() == {
+        "experiment_id": experiment.public_id,
+        "name": experiment.name,
+        "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+    }
 
 
 @pytest.mark.django_db()
@@ -39,13 +58,13 @@ def test_only_experiments_from_the_scoped_team_is_returned():
     client_team_2 = ApiTestClient(user, team2)
 
     # Fetch experiments from team 1
-    response = client_team_1.get(reverse("api:list-experiments"))
+    response = client_team_1.get(reverse("api:experiment-list"))
     experiments = response.json()["results"]
     assert len(experiments) == 1
     assert experiments[0]["experiment_id"] == experiment_team_1.public_id
 
     # Fetch experiments from team 2
-    response = client_team_2.get(reverse("api:list-experiments"))
+    response = client_team_2.get(reverse("api:experiment-list"))
     experiments = response.json()["results"]
     assert len(experiments) == 1
     assert experiments[0]["experiment_id"] == experiment_team_2.public_id
