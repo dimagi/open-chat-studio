@@ -9,7 +9,7 @@ from apps.teams.models import Team
 
 class ExperimentSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(
-        view_name="api:experiment-detail", lookup_field="public_id", label="API URL"
+        view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
     )
     id = serializers.UUIDField(source="public_id")
 
@@ -31,7 +31,9 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class ExperimentSessionSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
+    url = serializers.HyperlinkedIdentityField(
+        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    )
     id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
     experiment = ExperimentSerializer(read_only=True)
@@ -48,7 +50,6 @@ class MessageSerializer(serializers.Serializer):
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name="api:session-detail", lookup_field="external_id")
     experiment = serializers.SlugRelatedField(
         slug_field="public_id", queryset=Experiment.objects, label="Experiment ID"
     )

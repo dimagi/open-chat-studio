@@ -37,6 +37,8 @@ def test_create_new_session_and_post_message(mock_response, experiment):
 
     mock_response.return_value = "Fido"
     new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment_id})
-    response = client.post(new_message_url, data={"message": "What should I call my dog?", "session": session_id})
-    assert response.status_code == 200
+    response = client.post(
+        new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"
+    )
+    assert response.status_code == 200, response.json()
     assert response.json() == {"response": "Fido"}

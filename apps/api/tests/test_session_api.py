@@ -55,7 +55,7 @@ def get_session_json(session):
 def test_retrieve_session(session):
     user = session.team.members.first()
     client = ApiTestClient(user, session.team)
-    response = client.get(reverse("api:session-detail", kwargs={"external_id": session.external_id}))
+    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
     assert response.json() == get_session_json(session)
 

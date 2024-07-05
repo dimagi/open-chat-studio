@@ -70,15 +70,15 @@ def update_participant_data(request, participant_id: str):
     """
     Upsert participant data for all specified experiments in the payload
     """
-    serializer = ParticipantExperimentData(data=request.data, many=True).is_valid(raise_exception=True)
+    serializer = ParticipantExperimentData(data=request.data, many=True)
     serializer.is_valid(raise_exception=True)
-    experiment_data = serializer.save()
+    experiment_data = serializer.validated_data
     experiment_ids = {data["experiment"] for data in experiment_data}
     experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=request.team)
-    experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
+    experiment_map = {experiment.public_id: experiment for experiment in experiments}
     participant = get_object_or_404(Participant, identifier=participant_id, team=request.team)
 
-    missing_ids = set(experiment_ids) - set(experiment_map)
+    missing_ids = experiment_ids - set(experiment_map)
     if missing_ids:
         response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
         return JsonResponse(data=response, status=404)
