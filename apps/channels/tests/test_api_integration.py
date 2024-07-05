@@ -64,3 +64,23 @@ def test_new_message_with_existing_session(get_llm_response_mock, experiment, cl
 
     # check that no new sessions were created
     assert not ExperimentSession.objects.exclude(id=session.id).exists()
+
+
+@pytest.mark.django_db()
+def test_new_message_with_to_another_users_session(experiment, client):
+    users = experiment.team.members.all()
+    session_user = users[1]
+    participant, _ = Participant.objects.get_or_create(
+        identifier=session_user.email, team=experiment.team, user=session_user
+    )
+    session = ExperimentSessionFactory(experiment=experiment, participant=participant)
+
+    auth_user = users[0]
+    client = ApiTestClient(auth_user, experiment.team)
+
+    response = client.post(
+        reverse("channels:new_api_message", kwargs={"experiment_id": experiment.public_id}),
+        api_messages.text_message(session_id=str(session.external_id)),
+        content_type="application/json",
+    )
+    assert response.status_code == 404
