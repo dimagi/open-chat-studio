@@ -167,6 +167,15 @@ class TimeoutTrigger(BaseModel):
             )  # We don't use Count here because otherwise Django wants to do a group_by, which messes up the subquery: https://stackoverflow.com/a/69031027
             .values("count")
         )
+        failure_count_for_last_message = (
+            EventLog.objects.filter(
+                session=OuterRef("pk"),
+                chat_message_id=Subquery(last_human_message_id),
+                status=EventLogStatusChoices.FAILURE,
+            )
+            .annotate(count=Func(F("chat_message_id"), function="Count"))
+            .values("count")
+        )
 
         sessions = (
             ExperimentSession.objects.filter(
@@ -177,6 +186,7 @@ class TimeoutTrigger(BaseModel):
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 log_count=Subquery(log_count_for_last_message),
+                failure_count=Subquery(failure_count_for_last_message),
             )
             .filter(
                 last_human_message_created_at__lt=trigger_time,
@@ -185,6 +195,10 @@ class TimeoutTrigger(BaseModel):
             .filter(
                 Q(log_count__lt=self.total_num_triggers) | Q(log_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
+            .filter(
+                Q(failure_count__lt=TOTAL_FAILURES)
+                # There are still failures left
+            )
         )
         return sessions.select_related("experiment_channel", "experiment").all()
 

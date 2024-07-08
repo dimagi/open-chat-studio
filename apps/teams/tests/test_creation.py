@@ -5,7 +5,6 @@ from django.urls import reverse
 from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Membership, Team
-from apps.teams.roles import is_admin
 from apps.users.models import CustomUser
 from apps.utils.factories.user import UserFactory
 
@@ -20,8 +19,8 @@ class TeamCreationTest(TestCase):
         team = create_default_team_for_user(user)
         assert "Alice" == team.name
         assert "alice" == team.slug
-        assert is_admin(user, team)
         membership = team.membership_set.filter(user=user).first()
+        assert membership.is_team_admin()
         assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
 
 
@@ -36,6 +35,23 @@ def test_slug_generation_on_team_creation(client):
     assert created_team is not None
     assert created_team.slug is not None
     assert created_team.slug != ""
+
+
+@pytest.mark.django_db()
+def test_slug_unchanged_on_team_name_update(client):
+    user = UserFactory()
+    client.force_login(user)
+
+    client.post(reverse("teams:create_team"), {"name": "Foo"})
+    team = Team.objects.get(name="Foo")
+    assert team.slug == "foo"
+
+    client.post(reverse("single_team:manage_team", args=[team.slug]), {"name": "Bar"})
+
+    # Changing the name should not change the slug
+    team.refresh_from_db()
+    assert team.name == "Bar"
+    assert team.slug == "foo"
 
 
 @pytest.mark.django_db()

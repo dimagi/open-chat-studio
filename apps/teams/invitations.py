@@ -27,7 +27,7 @@ def send_invitation(invitation):
 def process_invitation(invitation: Invitation, user: CustomUser):
     from .tasks import send_invitation_accepted_notification
 
-    membership = Membership.objects.create(team=invitation.team, user=user, role=invitation.role)
+    membership = Membership.objects.create(team=invitation.team, user=user)
     membership.groups.set(invitation.groups.all())
     invitation.is_accepted = True
     invitation.accepted_by = user

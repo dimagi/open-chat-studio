@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from .helpers import create_default_team_for_user, get_next_unique_team_slug
+from .helpers import create_default_team_for_user
 from .models import Invitation, Membership, Team
 
 
@@ -103,13 +103,6 @@ class TeamChangeForm(forms.ModelForm):
         help_texts = {
             "name": _("Your team name."),
         }
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        instance.slug = get_next_unique_team_slug(instance.name)
-        if commit:
-            instance.save()
-        return instance
 
 
 class InvitationForm(forms.ModelForm):

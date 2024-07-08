@@ -14,7 +14,6 @@ class TeamFactory(factory.django.DjangoModelFactory):
         skip_postgeneration_save = True
 
     name = factory.Faker("text", max_nb_chars=20)
-    slug = factory.Sequence(lambda x: f"team-{x}")
 
 
 class MembershipFactory(factory.django.DjangoModelFactory):
@@ -24,7 +23,6 @@ class MembershipFactory(factory.django.DjangoModelFactory):
 
     user = factory.SubFactory(UserFactory)
     team = factory.SubFactory(TeamFactory)
-    role = "admin"
 
     @factory.post_generation
     def groups(self, create, extracted, **kwargs):
@@ -42,5 +40,5 @@ def get_test_user_groups():
 
 
 class TeamWithUsersFactory(TeamFactory):
-    admin = factory.RelatedFactory(MembershipFactory, "team", role="admin", groups=get_team_owner_groups)
-    member = factory.RelatedFactory(MembershipFactory, "team", role="member", groups=get_test_user_groups)
+    admin = factory.RelatedFactory(MembershipFactory, "team", groups=get_team_owner_groups)
+    member = factory.RelatedFactory(MembershipFactory, "team", groups=get_test_user_groups)

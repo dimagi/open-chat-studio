@@ -625,7 +625,6 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=255)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
@@ -757,7 +756,7 @@ class ExperimentSession(BaseTeamModel):
 
         try:
             channel = ChannelBase.from_experiment_session(self)
-            channel.new_bot_message(message)
+            channel.send_message_to_user(message)
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
