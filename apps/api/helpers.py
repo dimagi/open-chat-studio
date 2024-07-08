@@ -24,7 +24,7 @@ def get_team_from_request(request: HttpRequest) -> CustomUser | None:
 
 
 def get_team_membership_for_request(request: HttpRequest):
-    return Membership.objects.get(team=request.team, user=request.user)
+    return Membership.objects.filter(team=request.team, user=request.user).first()
 
 
 def _get_api_key_object(request, model_class):
