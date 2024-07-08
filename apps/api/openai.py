@@ -41,7 +41,7 @@ from apps.channels.tasks import handle_api_message
         
         reply = completion.choices[0].message
     """,
-    tags=["OpenAi"],
+    tags=["OpenAI"],
     request=inline_serializer(
         "chat.completion.request",
         {"messages": MessageSerializer(many=True)},
