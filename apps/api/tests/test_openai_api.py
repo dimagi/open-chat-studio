@@ -45,7 +45,8 @@ def api_key(team_with_users):
     # Needed to provide cascaded rollback for the testdata. I'm not certain which apps are necessary but these
     # seem to work.
     # See https://docs.djangoproject.com/en/5.0/topics/testing/advanced/#django.test.TransactionTestCase.available_apps
-    available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users"]
+    available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users"],
+    serialized_rollback=True,
 )
 @patch("apps.chat.channels.ApiChannel._get_experiment_response")
 def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
