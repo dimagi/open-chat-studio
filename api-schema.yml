@@ -73,7 +73,7 @@ paths:
         description: Experiment ID
         required: true
       tags:
-      - OpenAi
+      - OpenAI
       requestBody:
         content:
           application/json:
