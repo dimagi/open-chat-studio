@@ -25,9 +25,8 @@ class CreateExperimentRoute(CreateView):
         return form
 
     def get_success_url(self):
-        return reverse(
-            "experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]]
-        )
+        url = reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
+        return f"{url}#routes"
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -56,9 +55,8 @@ class EditExperimentRoute(UpdateView):
         return form
 
     def get_success_url(self):
-        return reverse(
-            "experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]]
-        )
+        url = reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
+        return f"{url}#routes"
 
 
 class DeleteExperimentRoute(LoginAndTeamRequiredMixin, View):

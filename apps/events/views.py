@@ -12,6 +12,11 @@ from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.teams.decorators import login_and_team_required
 
 
+def _get_events_url(team_slug, experiment_id):
+    url = reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+    return f"{url}#events"
+
+
 @login_and_team_required
 @permission_required("events.add_timeouttrigger")
 def create_timeout_event_view(request, team_slug: str, experiment_id: str):
@@ -33,7 +38,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
             trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
             trigger.action = saved_action
             trigger.save()
-            return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
+            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
         action_form = get_action_params_form(team_id=request.team.id, experiment_id=experiment_id)
         trigger_form = trigger_form_class()
@@ -75,7 +80,7 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         if action_form.is_valid() and trigger_form.is_valid():
             action_form.save(experiment_id=experiment_id)
             trigger = trigger_form.save(experiment_id=experiment_id)
-            return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
+            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
         action_form = get_action_params_form(
             instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
@@ -109,7 +114,7 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     trigger.delete()
-    return HttpResponseRedirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
+    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
 
 
 @login_and_team_required

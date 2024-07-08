@@ -145,8 +145,8 @@
 
   <div role="tablist" class="tabs tabs-bordered">
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" checked/>
-      <div role="tabpanel" class="tab-content">
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
+      <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
           <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
             <div class="grid grid-flow-col auto-cols-max gap-x-2">
@@ -180,8 +180,8 @@
       </div>
     {% endif %}
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions"/>
-    <div role="tabpanel" class="tab-content">
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" id="tab-mysessions" />
+    <div role="tabpanel" class="tab-content" id="content-mysessions">
       <div class="app-card">
         <div class="overflow-x-auto">
           <table class="pg-table">
@@ -218,8 +218,8 @@
     </div>
 
     {% flag "events" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events"/>
-      <div role="tabpanel" class="tab-content">
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
+      <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
@@ -229,8 +229,9 @@
         </div>
       </div>
     {% endflag %}
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes"/>
-    <div role="tabpanel" class="tab-content">
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+    <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
         {% if can_make_child_routes %}
           <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create child route</a>
@@ -250,6 +251,31 @@
     let element = document.getElementById('tag-multiselect-filter');
     new TomSelect(element, {
       maxItems: null,
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabs = document.querySelectorAll('.tab');
+      const tabContents = document.querySelectorAll('.tab-content');
+      const showTabContent = (tabId) => {
+        tabContents.forEach(content => content.style.display = 'none');
+        document.getElementById(`content-${tabId}`).style.display = 'block';
+        history.replaceState(null, '', `#${tabId}`);
+      };
+
+      if (window.location.hash) {
+        const tabId = window.location.hash.replace('#', '');
+        const tab = document.getElementById(`tab-${tabId}`);
+        if (tab) {
+          tab.checked = true;
+          showTabContent(tabId);
+        }
+      }
+      tabs.forEach(tab => {
+        tab.addEventListener('change', (event) => {
+          const tabId = event.target.id.replace('tab-', '');
+          showTabContent(tabId);
+        });
+      });
     });
   </script>
 {% endblock %}
