@@ -15,6 +15,32 @@ from apps.channels.tasks import handle_api_message
 @extend_schema(
     operation_id="openai_chat_completions",
     summary="Chat Completions API for Experiments",
+    description="""
+    Use OpenAI's client to send messages to the experiment and get responses. This will
+    create a new session in the experiment with all the provided messages
+    and return the response from the experiment.
+    
+    The last message must be a 'user' message.
+    
+    Example (Python):
+    
+        experiment_id = "your experiment ID"
+        
+        client = OpenAI(
+            api_key="your API key",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+        )
+        
+        completion = client.chat.completions.create(
+            model="anything",
+            messages=[
+                {"role": "assistant", "content": "How can I help you today?"},
+                {"role": "user", "content": "I need help with something."},
+            ],
+        )
+        
+        reply = completion.choices[0].message
+    """,
     tags=["OpenAi"],
     request=inline_serializer(
         "chat.completion.request",

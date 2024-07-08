@@ -51,6 +51,19 @@ paths:
   /api/openai/{experiment_id}/chat/completions:
     post:
       operationId: openai_chat_completions
+      description: "\n    Use OpenAI's client to send messages to the experiment and\
+        \ get responses. This will\n    create a new session in the experiment with\
+        \ all the provided messages\n    and return the response from the experiment.\n\
+        \    \n    The last message must be a 'user' message.\n    \n    Example (Python):\n\
+        \    \n        experiment_id = \"your experiment ID\"\n        \n        client\
+        \ = OpenAI(\n            api_key=\"your API key\",\n            base_url=f\"\
+        https://chatbots.dimagi.com/api/openai/{experiment_id}\",\n        )\n   \
+        \     \n        completion = client.chat.completions.create(\n           \
+        \ model=\"anything\",\n            messages=[\n                {\"role\":\
+        \ \"assistant\", \"content\": \"How can I help you today?\"},\n          \
+        \      {\"role\": \"user\", \"content\": \"I need help with something.\"},\n\
+        \            ],\n        )\n        \n        reply = completion.choices[0].message\n\
+        \    "
       summary: Chat Completions API for Experiments
       parameters:
       - in: path
