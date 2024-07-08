@@ -59,7 +59,12 @@ from apps.experiments.models import (
     SessionStatus,
     SyntheticVoice,
 )
-from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
+from apps.experiments.tables import (
+    ChildExperimentRoutesTable,
+    ExperimentSessionsTable,
+    ExperimentTable,
+    ParentExperimentRoutesTable,
+)
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -466,6 +471,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
             **_get_events_context(experiment, team_slug),
+            **_get_routes_context(experiment, team_slug),
         },
     )
 
@@ -505,6 +511,15 @@ def _get_events_context(experiment: Experiment, team_slug: str):
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
+
+
+def _get_routes_context(experiment: Experiment, team_slug: str):
+    parent_links = experiment.parent_links.all()
+    return {
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.all()),
+        "parent_routes_table": ParentExperimentRoutesTable(parent_links),
+        "can_make_child_routes": len(parent_links) == 0,
+    }
 
 
 @login_and_team_required
