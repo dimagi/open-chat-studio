@@ -1,5 +1,5 @@
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
@@ -46,7 +46,7 @@ class MESSAGE_TYPES(Enum):
         return any(value == item.value for item in MESSAGE_TYPES)
 
 
-class ChannelBase:
+class ChannelBase(ABC):
     """
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
@@ -63,19 +63,10 @@ class ChannelBase:
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
-    Properties:
-        chat_id: An abstract property that must be implemented in subclasses to return the unique identifier
-            of the chat.
-        message_content_type: An abstract property that must be implemented in subclasses to return the type
-            of message content (e.g., text, voice).
-        message_text: An abstract property that must be implemented in subclasses to return the text
-            content of the message.
-
     Class variables:
         supported_message_types: A list of message content types that are supported by this channel
 
     Abstract methods:
-        initialize: (Optional) Performs any necessary initialization
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
             if voice_replies_supported is True
         send_text_to_user: Implementation of sending text to the user. Typically this is the reply from the bot
@@ -85,8 +76,7 @@ class ChannelBase:
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
     Public API:
         new_user_message: Handles a message coming from the user.
-        new_bot_message: Handles a message coming from the bot.
-        get_chat_id_from_message: Returns the unique identifier of the chat from the message object.
+        send_message_to_user: Handles a message coming from the bot.
     """
 
     voice_replies_supported: ClassVar[bool] = False
@@ -105,67 +95,67 @@ class ChannelBase:
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
-        self.initialize()
 
-    @abstractmethod
-    def initialize(self):
-        pass
+    @classmethod
+    def start_new_session(
+        cls,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        session_external_id: str | None = None,
+    ):
+        return _start_experiment_session(
+            experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            session_external_id,
+        )
+
+    @cached_property
+    def messaging_service(self):
+        return self.experiment_channel.messaging_provider.get_messaging_service()
 
     @property
-    def chat_id(self) -> str:
+    def participant_identifier(self) -> str:
         if self.experiment_session and self.experiment_session.participant.identifier:
             return self.experiment_session.participant.identifier
-        return self.get_chat_id_from_message(self.message)
-
-    @abstractmethod
-    def get_chat_id_from_message(self, message):
-        raise NotImplementedError()
+        return self.message.participant_id
 
     @property
-    @abstractmethod
-    def message_content_type(self):
-        raise NotImplementedError()
+    def participant_user(self):
+        if self.experiment_session:
+            return self.experiment_session.participant.user
 
-    @property
-    @abstractmethod
-    def message_text(self):
-        raise NotImplementedError()
-
-    @abstractmethod
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        if self.voice_replies_supported:
-            raise Exception(
-                "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
-            )
-        pass
+        raise NotImplementedError(
+            "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
+        )
 
     @abstractmethod
     def send_text_to_user(self, text: str):
         """Channel specific way of sending text back to the user"""
-        pass
+        raise NotImplementedError()
 
-    @abstractmethod
     def get_message_audio(self) -> BytesIO:
-        pass
+        return self.messaging_service.get_message_audio(message=self.message)
 
-    @abstractmethod
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
 
-    @abstractmethod
     def transcription_finished(self, transcript: str):
         """Callback indicating that the transcription is finished"""
         pass
 
-    @abstractmethod
     def submit_input_to_llm(self):
         """Callback indicating that the user input will now be given to the LLM"""
         pass
-
-    def new_bot_message(self, bot_message: str):
-        """Handles a message coming from the bot. Call this to send bot messages to the user"""
-        self._send_message_to_user(bot_message)
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> "ChannelBase":
@@ -223,12 +213,12 @@ class ChannelBase:
         if self.experiment_channel.platform != ChannelPlatform.WEB:
             if self._is_reset_conversation_request():
                 # Webchats' statuses are updated through an "external" flow
-                return
+                return ""
 
             if self.experiment.conversational_consent_enabled:
                 if self._should_handle_pre_conversation_requirements():
                     self._handle_pre_conversation_requirements()
-                    return
+                    return ""
             else:
                 # If `conversational_consent_enabled` is not enabled, we should just make sure that the session's status
                 # is ACTIVE
@@ -276,7 +266,7 @@ class ChannelBase:
         # This is technically the start of the conversation
         if self.experiment.seed_message:
             bot_response = self._generate_response_for_user(self.experiment.seed_message)
-            self.new_bot_message(bot_response)
+            self.send_message_to_user(bot_response)
 
     def _chat_initiated(self):
         """The user initiated the chat and we need to get their consent before continuing the conversation"""
@@ -312,18 +302,18 @@ class ChannelBase:
         return self.user_query.strip() == USER_CONSENT_TEXT
 
     def _extract_user_query(self) -> str:
-        if self.message_content_type == MESSAGE_TYPES.VOICE:
+        if self.message.content_type == MESSAGE_TYPES.VOICE:
             try:
                 return self._get_voice_transcript()
             except Exception as e:
                 self._inform_user_of_error()
                 raise e
-        return self.message_text
+        return self.message.message_text
 
-    def _send_message_to_user(self, bot_message: str):
+    def send_message_to_user(self, bot_message: str):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         send_message_func = self.send_text_to_user
-        user_sent_voice = self.message and self.message_content_type == MESSAGE_TYPES.VOICE
+        user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
 
         if self.voice_replies_supported and self.experiment.synthetic_voice:
             voice_config = self.experiment.voice_response_behaviour
@@ -335,8 +325,9 @@ class ChannelBase:
         send_message_func(bot_message)
 
     def _handle_supported_message(self):
-        response = self._get_llm_response(self.user_query)
-        self._send_message_to_user(response)
+        self.submit_input_to_llm()
+        response = self._get_experiment_response(message=self.user_query)
+        self.send_message_to_user(response)
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return response
@@ -372,14 +363,6 @@ class ChannelBase:
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
 
-    def _get_llm_response(self, text: str) -> str:
-        """
-        Handles a user message by sending it for experiment response and replying with the answer.
-        """
-        self.submit_input_to_llm()
-
-        return self._get_experiment_response(message=text)
-
     def _get_experiment_response(self, message: str) -> str:
         experiment_bot = TopicBot(self.experiment_session)
         answer = experiment_bot.process_input(message)
@@ -405,14 +388,8 @@ class ChannelBase:
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        self.experiment_session = (
-            ExperimentSession.objects.filter(
-                experiment=self.experiment,
-                participant__identifier=str(self.chat_id),
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        if not self.experiment_session:
+            self.experiment_session = self._get_latest_session()
 
         if not self.experiment_session:
             self._create_new_experiment_session()
@@ -432,6 +409,16 @@ class ChannelBase:
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
 
+    def _get_latest_session(self):
+        return (
+            ExperimentSession.objects.filter(
+                experiment=self.experiment,
+                participant__identifier=str(self.participant_identifier),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""
         self.experiment_session.end()
@@ -441,24 +428,19 @@ class ChannelBase:
         """Creates a new experiment session. If one already exists, the participant will be transfered to the new
         session
         """
-        if not self.experiment_session:
-            participant, _ = Participant.objects.get_or_create(identifier=self.chat_id, team=self.experiment.team)
-        else:
-            participant = self.experiment_session.participant
-        self.experiment_session = ExperimentSession.objects.create(
-            team=self.experiment.team,
-            participant=participant,
+        self.experiment_session = self.start_new_session(
             experiment=self.experiment,
-            llm=self.experiment.llm,
             experiment_channel=self.experiment_channel,
+            participant_identifier=self.participant_identifier,
+            participant_user=self.participant_user,
+            session_status=SessionStatus.SETUP,
         )
-        enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.CONVERSATION_START)
 
     def _is_reset_conversation_request(self):
         return self.user_query == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
-        return self.message_content_type is not None and self.message_content_type in self.supported_message_types
+        return self.message.content_type is not None and self.message.content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self):
         """Generates a suitable response to the user when they send unsupported messages"""
@@ -479,7 +461,7 @@ class ChannelBase:
             try again later
             """
         )
-        self.new_bot_message(bot_message)
+        self.send_message_to_user(bot_message)
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
@@ -493,18 +475,7 @@ class WebChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
-
-    @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
-    def new_bot_message(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):
         # Simply adding a new AI message to the chat history will cause it to be sent to the UI
         pass
 
@@ -512,23 +483,26 @@ class WebChannel(ChannelBase):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
 
-    @staticmethod
+    @classmethod
     def start_new_session(
+        cls,
         experiment: Experiment,
-        experiment_channel: ExperimentChannel,
         participant_identifier: str,
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        session = _start_experiment_session(
+        experiment_channel = _ensure_experiment_channel_exists(
+            experiment=experiment, platform="web", name=f"{experiment.id}-web"
+        )
+        session = super().start_new_session(
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
         WebChannel.check_and_process_seed_message(session)
         return session
 
-    @staticmethod
-    def check_and_process_seed_message(session: ExperimentSession):
+    @classmethod
+    def check_and_process_seed_message(cls, session: ExperimentSession):
         from apps.experiments.tasks import get_response_for_webchat_task
 
         if session.experiment.seed_message:
@@ -543,28 +517,23 @@ class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
-    def initialize(self):
+    def __init__(
+        self, experiment_channel: ExperimentChannel | None = None, experiment_session: ExperimentSession | None = None
+    ):
+        super().__init__(experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
-
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.body
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         antiflood(
-            self.telegram_bot.send_voice, self.chat_id, voice=synthetic_voice.audio, duration=synthetic_voice.duration
+            self.telegram_bot.send_voice,
+            self.participant_identifier,
+            voice=synthetic_voice.audio,
+            duration=synthetic_voice.duration,
         )
 
     def send_text_to_user(self, text: str):
         for message_text in smart_split(text):
-            antiflood(self.telegram_bot.send_message, self.chat_id, text=message_text)
+            antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
@@ -575,24 +544,21 @@ class TelegramChannel(ChannelBase):
 
     def submit_input_to_llm(self):
         # Indicate to the user that the bot is busy processing the message
-        self.telegram_bot.send_chat_action(chat_id=self.chat_id, action="typing")
+        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="typing")
 
     def transcription_started(self):
-        self.telegram_bot.send_chat_action(chat_id=self.chat_id, action="upload_voice")
+        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
 
     def transcription_finished(self, transcript: str):
         self.telegram_bot.send_message(
-            self.chat_id, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
+            self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
 
 
 class WhatsappChannel(ChannelBase):
-    def initialize(self):
-        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data.get("number")
-        to_number = self.chat_id
+        to_number = self.participant_identifier
         self.messaging_service.send_text_message(
             text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
@@ -609,17 +575,6 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
-    def get_message_audio(self) -> BytesIO:
-        return self.messaging_service.get_message_audio(message=self.message)
-
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
@@ -628,22 +583,18 @@ class WhatsappChannel(ChannelBase):
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
         from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.chat_id
+        to_number = self.participant_identifier
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
         )
 
 
 class FacebookMessengerChannel(ChannelBase):
-    def initialize(self):
-        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(text, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK)
-
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
+        self.messaging_service.send_text_message(
+            text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+        )
 
     @property
     def voice_replies_supported(self) -> bool:
@@ -652,17 +603,6 @@ class FacebookMessengerChannel(ChannelBase):
     @property
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
-
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
-    def get_message_audio(self) -> BytesIO:
-        return self.messaging_service.get_message_audio(message=self.message)
 
     def transcription_finished(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
@@ -673,7 +613,7 @@ class FacebookMessengerChannel(ChannelBase):
         """
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_, to=self.chat_id, platform=ChannelPlatform.FACEBOOK
+            synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
         )
 
 
@@ -683,18 +623,22 @@ class ApiChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
-    def get_chat_id_from_message(self, message):
-        return message.chat_id
+    def __init__(
+        self,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
+        user=None,
+    ):
+        super().__init__(experiment_channel, experiment_session)
+        self.user = user
+        if not self.user and not self.experiment_session:
+            raise MessageHandlerException("ApiChannel requires either an existing session or a user")
 
     @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
+    def participant_user(self):
+        return super().participant_user or self.user
 
-    @property
-    def message_text(self):
-        return self.message.message_text
-
-    def new_bot_message(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
@@ -718,18 +662,6 @@ class SlackChannel(ChannelBase):
         super().__init__(experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
 
-    @cached_property
-    def messaging_service(self):
-        return self.experiment_channel.messaging_provider.get_messaging_service()
-
-    @property
-    def message_content_type(self):
-        return MESSAGE_TYPES.TEXT
-
-    @property
-    def message_text(self):
-        return self.message.message_text
-
     def send_text_to_user(self, text: str):
         if not self.send_response_to_user:
             return
@@ -751,14 +683,6 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise MessageHandlerException("WebChannel requires an existing session")
-
-    @staticmethod
-    def start_new_session(
-        experiment: Experiment, experiment_channel: ExperimentChannel, participant_identifier: str, external_id: str
-    ):
-        return _start_experiment_session(
-            experiment, experiment_channel, participant_identifier, session_external_id=external_id
-        )
 
 
 def _start_experiment_session(
@@ -794,7 +718,6 @@ def _start_experiment_session(
         session = ExperimentSession.objects.create(
             team=experiment.team,
             experiment=experiment,
-            llm=experiment.llm,
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,
@@ -809,3 +732,8 @@ def _start_experiment_session(
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
+
+
+def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
+    channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
+    return channel

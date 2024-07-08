@@ -15,6 +15,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.pytest import django_db_with_data
 
 
 @pytest.fixture()
@@ -33,13 +34,13 @@ class TestSyntheticVoice:
         voices_queryset = SyntheticVoice.get_for_team(team=None)
         assert voices_queryset.count() == SyntheticVoice.objects.count()
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_excludes_service(self):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.OpenAI, SyntheticVoice.Azure}
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_do_not_include_other_team_exclusive_voices(self):
         """Tests that `get_for_team` returns both general and team exclusive synthetic voices. Exclusive synthetic
         voices are those whose service is one of SyntheticVoice.TEAM_SCOPED_SERVICES
@@ -213,9 +214,9 @@ class TestExperimentSession:
     @patch("apps.chat.bots.TopicBot.process_input")
     def test_ad_hoc_message(self, process_input, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
-        mock_channel.new_bot_message = Mock()
+        mock_channel.send_message_to_user = Mock()
         if not fail_silently:
-            mock_channel.new_bot_message.side_effect = Exception("Cannot send message")
+            mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
         process_input.return_value = "We're testing"
 
@@ -223,7 +224,7 @@ class TestExperimentSession:
             experiment_session.ad_hoc_bot_message(
                 instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
             )
-            call = mock_channel.new_bot_message.mock_calls[0]
+            call = mock_channel.send_message_to_user.mock_calls[0]
             assert call.args[0] == "We're testing"
 
         if not fail_silently:

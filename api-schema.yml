@@ -1,0 +1,456 @@
+openapi: 3.0.3
+info:
+  title: Dimagi Chatbots
+  version: '1'
+  description: Experiments with AI, GPT and LLMs
+paths:
+  /api/experiments/:
+    get:
+      operationId: experiment_list
+      summary: List Experiments
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      tags:
+      - Experiments
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedExperimentList'
+          description: ''
+  /api/experiments/{id}/:
+    get:
+      operationId: experiment_retrieve
+      summary: Retrieve Experiment
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      tags:
+      - Experiments
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+          description: ''
+  /api/openai/{experiment_id}/chat/completions:
+    post:
+      operationId: openai_chat_completions
+      description: "\n    Use OpenAI's client to send messages to the experiment and\
+        \ get responses. This will\n    create a new session in the experiment with\
+        \ all the provided messages\n    and return the response from the experiment.\n\
+        \    \n    The last message must be a 'user' message.\n    \n    Example (Python):\n\
+        \    \n        experiment_id = \"your experiment ID\"\n        \n        client\
+        \ = OpenAI(\n            api_key=\"your API key\",\n            base_url=f\"\
+        https://chatbots.dimagi.com/api/openai/{experiment_id}\",\n        )\n   \
+        \     \n        completion = client.chat.completions.create(\n           \
+        \ model=\"anything\",\n            messages=[\n                {\"role\":\
+        \ \"assistant\", \"content\": \"How can I help you today?\"},\n          \
+        \      {\"role\": \"user\", \"content\": \"I need help with something.\"},\n\
+        \            ],\n        )\n        \n        reply = completion.choices[0].message\n\
+        \    "
+      summary: Chat Completions API for Experiments
+      parameters:
+      - in: path
+        name: experiment_id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      tags:
+      - OpenAi
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/chat.completion.request'
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chat.completion'
+          description: ''
+  /api/participants/{participant_id}/:
+    post:
+      operationId: update_participant_data
+      description: Upsert participant data for all specified experiments in the payload
+      summary: Update Participant Data
+      parameters:
+      - in: path
+        name: participant_id
+        schema:
+          type: string
+        description: Channel specific participant identifier
+        required: true
+      tags:
+      - Participants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ParticipantExperimentData'
+        required: true
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/sessions/:
+    get:
+      operationId: session_list
+      summary: List Experiment Sessions
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      tags:
+      - Experiment Sessions
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedExperimentSessionList'
+          description: ''
+    post:
+      operationId: session_create
+      summary: Create Experiment Session
+      tags:
+      - Experiment Sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentSessionCreate'
+        required: true
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSession'
+          description: ''
+  /api/sessions/{id}/:
+    get:
+      operationId: session_retrieve
+      summary: Retrieve Experiment Session
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSession'
+          description: ''
+  /channels/api/{experiment_id}/incoming_message:
+    post:
+      operationId: new_api_message
+      description: Chat with an experiment.
+      summary: New API Message
+      parameters:
+      - in: path
+        name: experiment_id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAPIMessage'
+        required: true
+      security:
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewAPIMessageResponse'
+          description: ''
+components:
+  schemas:
+    Experiment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+          readOnly: true
+          title: API URL
+      required:
+      - id
+      - name
+      - url
+    ExperimentSession:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: string
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        experiment:
+          allOf:
+          - $ref: '#/components/schemas/Experiment'
+          readOnly: true
+        participant:
+          allOf:
+          - $ref: '#/components/schemas/Participant'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - experiment
+      - id
+      - participant
+      - team
+      - updated_at
+      - url
+    ExperimentSessionCreate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        participant:
+          type: string
+          title: Participant identifier
+          description: Channel specific participant identifier
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - experiment
+      - url
+    Message:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        content:
+          type: string
+      required:
+      - content
+      - role
+    NewAPIMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          title: User message
+        session:
+          type: string
+          title: Optional session ID
+      required:
+      - message
+    NewAPIMessageResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          title: AI response
+      required:
+      - response
+    PaginatedExperimentList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+    PaginatedExperimentSessionList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentSession'
+    Participant:
+      type: object
+      properties:
+        identifier:
+          type: string
+          maxLength: 320
+    ParticipantExperimentData:
+      type: object
+      properties:
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        data:
+          type: object
+          additionalProperties: {}
+          title: Participant Data
+      required:
+      - data
+      - experiment
+    RoleEnum:
+      enum:
+      - system
+      - user
+      - assistant
+      type: string
+      description: |-
+        * `system` - system
+        * `user` - user
+        * `assistant` - assistant
+    Team:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - name
+      - slug
+    chat.choices:
+      type: object
+      properties:
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          type: string
+      required:
+      - finish_reason
+      - index
+      - message
+    chat.completion:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/chat.choices'
+        created:
+          type: integer
+        model:
+          type: string
+      required:
+      - choices
+      - created
+      - id
+      - model
+    chat.completion.request:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - messages
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+    tokenAuth:
+      type: http
+      scheme: bearer
