@@ -14,7 +14,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -124,6 +124,11 @@ class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
             return ""
         return self.session.get_participant_data(use_participant_tz=True) or ""
 
+    @property
+    def current_datetime(self):
+        participant_tz = self.session.get_participant_timezone()
+        return pretty_date(timezone.now(), participant_tz)
+
 
 class ExperimentRunnable(BaseExperimentRunnable):
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
@@ -144,7 +149,7 @@ class ExperimentRunnable(BaseExperimentRunnable):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        self._populate_memory()
+        self._populate_memory(input)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self._save_message_to_history(input, ChatMessageType.HUMAN)
@@ -197,28 +202,32 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
 
+    def _input_chain(self) -> Runnable[dict[str, Any], Any]:
+        """Return a langchain runnable that when invoked, will return
+        the fully populated LLM input. This will be used during history compression.
+        """
+        raise NotImplementedError
+
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
     @property
     def prompt(self):
-        participant_tz = self.session.get_participant_timezone()
-        current_datetime = pretty_date(timezone.now(), participant_tz)
-        # The bot converts to UTC unless we tell it to preserve the given timezone
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime} (timezone preserved)"
-        system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
-                system_prompt,
+                ("system", self.experiment.prompt_text),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
         )
 
-    def _populate_memory(self):
+    def _populate_memory(self, input: str):
         # TODO: convert to use BaseChatMessageHistory object
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
+        input_messages = self._input_messages(input)
+        messages = compress_chat_history(
+            self.session.chat, llm=model, max_token_limit=self.experiment.max_token_limit, input_messages=input_messages
+        )
         self.memory.chat_memory.messages = messages
 
     def _save_message_to_history(self, message: str, type_: ChatMessageType, add_experiment_tag: bool = False):
@@ -237,19 +246,25 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[dict[str, Any], str]:
+    def _input_messages(self, input: str):
+        chain = self._input_chain()
+        return chain.invoke(input).messages
+
+    def _build_chain(self):
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+        return self._input_chain() | model | StrOutputParser()
+
+    def _input_chain(self) -> Runnable[dict[str, Any], str]:
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
             | RunnableLambda(self.format_input)
             | self.prompt
-            | model
-            | StrOutputParser()
         )
 
 
@@ -257,16 +272,19 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def _parse_output(self, output):
         return output.get("output", "")
 
-    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
+    def _input_chain(self) -> Runnable[dict[str, Any], dict]:
+        return (
+            RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(current_datetime=RunnableLambda(lambda x: self.current_datetime))
+            | RunnableLambda(self.format_input)
+        )
+
+    def _build_chain(self):
         assert self.experiment.tools_enabled
         model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
         tools = get_tools(self.session)
-        agent = (
-            RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnableLambda(self.format_input)
-            | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
-        )
+        agent = self._input_chain() | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
@@ -279,6 +297,16 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def prompt(self):
         prompt = super().prompt
         return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
+
+    def _input_messages(self, input: str):
+        chain = (
+            self._input_chain()
+            # Since it's hard to guess what the agent_scratchpad will look like, let's just assume its empty
+            | RunnablePassthrough.assign(agent_scratchpad=lambda x: [])
+            | self.prompt
+        )
+        chain = {"input": RunnablePassthrough()} | chain
+        return chain.invoke(input).messages
 
 
 class AssistantExperimentRunnable(BaseExperimentRunnable):
@@ -310,7 +338,9 @@ class AssistantExperimentRunnable(BaseExperimentRunnable):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        new_instructions = self.experiment.assistant.instructions.format(participant_data=self.participant_data)
+        new_instructions = self.experiment.assistant.instructions.format(
+            participant_data=self.participant_data, current_datetime=self.current_datetime
+        )
         input_dict["instructions"] = new_instructions
 
         response = self._get_response_with_retries(config, input_dict, thread_id)

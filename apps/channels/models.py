@@ -1,4 +1,3 @@
-import logging
 import uuid
 
 from django.conf import settings
@@ -9,7 +8,6 @@ from django.utils.html import format_html
 from django.utils.translation import gettext as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
-from telebot import TeleBot, apihelper, types
 
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
@@ -113,15 +111,6 @@ class ExperimentChannel(BaseModel):
     def __str__(self):
         return f"Channel: {self.name} ({self.platform})"
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        try:
-            if self.platform == TELEGRAM:
-                _set_telegram_webhook(self)
-        except apihelper.ApiTelegramException:
-            token = self.extra_data.get("bot_token", "")
-            logging.error(f"Unable set Telegram webhook with token '{token}'")
-
     @property
     def platform_enum(self):
         return ChannelPlatform(self.platform)
@@ -174,17 +163,3 @@ class ExperimentChannel(BaseModel):
     def soft_delete(self):
         self.deleted = True
         self.save()
-
-
-def _set_telegram_webhook(experiment_channel: ExperimentChannel):
-    """
-    Set the webhook at Telegram to allow message forwarding to this platform
-    """
-    tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
-    if experiment_channel.deleted:
-        webhook_url = None
-    else:
-        webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
-
-    tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
-    tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])

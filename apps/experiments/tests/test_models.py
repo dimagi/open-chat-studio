@@ -213,9 +213,9 @@ class TestExperimentSession:
     @patch("apps.chat.bots.TopicBot.process_input")
     def test_ad_hoc_message(self, process_input, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
-        mock_channel.new_bot_message = Mock()
+        mock_channel.send_message_to_user = Mock()
         if not fail_silently:
-            mock_channel.new_bot_message.side_effect = Exception("Cannot send message")
+            mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
         process_input.return_value = "We're testing"
 
@@ -223,7 +223,7 @@ class TestExperimentSession:
             experiment_session.ad_hoc_bot_message(
                 instruction_prompt="Tell the user we're testing", fail_silently=fail_silently
             )
-            call = mock_channel.new_bot_message.mock_calls[0]
+            call = mock_channel.send_message_to_user.mock_calls[0]
             assert call.args[0] == "We're testing"
 
         if not fail_silently:

@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 from django.views.generic import RedirectView
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
@@ -62,9 +62,7 @@ urlpatterns = [
     path("celery-progress/", include("celery_progress.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    # Optional UI - you may wish to remove one of these depending on your preference
-    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # hijack urls for impersonation
     path("hijack/", include("hijack.urls", namespace="hijack")),
     path("channels/", include("apps.channels.urls", namespace="channels")),

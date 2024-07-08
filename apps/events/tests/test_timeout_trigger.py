@@ -190,6 +190,17 @@ def test_failure_count_reached(session):
             )
 
         assert timeout_trigger._has_triggers_left(session, message) is False
+        assert len(timeout_trigger.timed_out_sessions()) == 0
+
+        # The timeout passes after the next message is sent
+        message_2 = ChatMessage.objects.create(
+            chat=chat,
+            content="Hello",
+            message_type=ChatMessageType.HUMAN,
+        )
+        message_2.save()
+        frozen_time.tick(delta=timedelta(minutes=11))
+        assert len(timeout_trigger.timed_out_sessions()) == 1
 
 
 @pytest.mark.django_db()

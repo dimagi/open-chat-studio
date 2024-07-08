@@ -19,13 +19,13 @@ from apps.experiments.models import (
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
 
-def test_create_experiment_success(db, client, team_with_users):
+@pytest.mark.django_db()
+def test_create_experiment_success(client, team_with_users):
     user = team_with_users.members.first()
     source_material = SourceMaterialFactory(team=team_with_users)
     consent_form = ConsentFormFactory(team=team_with_users)
@@ -36,7 +36,7 @@ def test_create_experiment_success(db, client, team_with_users):
         "name": "some name",
         "description": "Some description",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant",
+        "prompt_text": "You are a helpful assistant. The current date time is {current_datetime}",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
         "temperature": 0.7,
@@ -130,7 +130,6 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     """For each new experiment session, a participant should be created and linked to the session"""
     identifier = "someone@example.com"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
-    channel = ExperimentChannelFactory(experiment=experiment)
     user = None
     if is_user:
         user = experiment.team.members.first()
@@ -138,7 +137,6 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
 
     session = WebChannel.start_new_session(
         experiment,
-        experiment_channel=channel,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -182,7 +180,6 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     reused, and not result in a new participant being created
     """
     experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
-    channel1 = ExperimentChannelFactory(experiment=experiment1)
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -192,7 +189,6 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 
     session = WebChannel.start_new_session(
         experiment1,
-        experiment_channel=channel1,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -203,11 +199,9 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 
     # user starts a second session in the same team
     experiment2 = ExperimentFactory(team=team)
-    channel2 = ExperimentChannelFactory(experiment=experiment2)
 
     session = WebChannel.start_new_session(
         experiment2,
-        experiment_channel=channel2,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -223,7 +217,6 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     """A new participant should be created for each team when a user uses the same identifier"""
     experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
-    channel1 = ExperimentChannelFactory(experiment=experiment1)
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -233,7 +226,6 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
     session = WebChannel.start_new_session(
         experiment1,
-        experiment_channel=channel1,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -249,11 +241,9 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         new_team = TeamWithUsersFactory()
 
     experiment2 = ExperimentFactory(team=new_team)
-    channel2 = ExperimentChannelFactory(experiment=experiment2)
 
     session = WebChannel.start_new_session(
         experiment2,
-        experiment_channel=channel2,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -332,7 +322,6 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     team = experiment.team
     experiment2 = ExperimentFactory(team=team)
-    channel = ExperimentChannelFactory(experiment=experiment)
     identifier = "someone@example.com"
     participant = Participant.objects.create(identifier=identifier, team=team)
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, content_object=experiment)
@@ -342,7 +331,6 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
     WebChannel.start_new_session(
         experiment,
-        experiment_channel=channel,
         participant_identifier=identifier,
         timezone="Africa/Johannesburg",
     )
