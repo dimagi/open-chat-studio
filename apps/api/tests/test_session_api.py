@@ -79,8 +79,8 @@ def test_create_session_with_messages(experiment):
     data = {
         "experiment": experiment.public_id,
         "messages": [
-            {"type": "ai", "message": "hi"},
-            {"type": "human", "message": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": "hello"},
         ],
     }
     response = client.post(reverse("api:session-list"), data=data, format="json")

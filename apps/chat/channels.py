@@ -388,14 +388,8 @@ class ChannelBase(ABC):
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        self.experiment_session = (
-            ExperimentSession.objects.filter(
-                experiment=self.experiment,
-                participant__identifier=str(self.participant_identifier),
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        if not self.experiment_session:
+            self.experiment_session = self._get_latest_session()
 
         if not self.experiment_session:
             self._create_new_experiment_session()
@@ -414,6 +408,16 @@ class ChannelBase(ABC):
                 # to the channel sessions when removing this code
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
+
+    def _get_latest_session(self):
+        return (
+            ExperimentSession.objects.filter(
+                experiment=self.experiment,
+                participant__identifier=str(self.participant_identifier),
+            )
+            .order_by("-created_at")
+            .first()
+        )
 
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""

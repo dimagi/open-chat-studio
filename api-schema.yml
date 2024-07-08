@@ -48,6 +48,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/Experiment'
           description: ''
+  /api/openai/{experiment_id}/chat/completions:
+    post:
+      operationId: openai_chat_completions
+      description: "\n    Use OpenAI's client to send messages to the experiment and\
+        \ get responses. This will\n    create a new session in the experiment with\
+        \ all the provided messages\n    and return the response from the experiment.\n\
+        \    \n    The last message must be a 'user' message.\n    \n    Example (Python):\n\
+        \    \n        experiment_id = \"your experiment ID\"\n        \n        client\
+        \ = OpenAI(\n            api_key=\"your API key\",\n            base_url=f\"\
+        https://chatbots.dimagi.com/api/openai/{experiment_id}\",\n        )\n   \
+        \     \n        completion = client.chat.completions.create(\n           \
+        \ model=\"anything\",\n            messages=[\n                {\"role\":\
+        \ \"assistant\", \"content\": \"How can I help you today?\"},\n          \
+        \      {\"role\": \"user\", \"content\": \"I need help with something.\"},\n\
+        \            ],\n        )\n        \n        reply = completion.choices[0].message\n\
+        \    "
+      summary: Chat Completions API for Experiments
+      parameters:
+      - in: path
+        name: experiment_id
+        schema:
+          type: string
+        description: Experiment ID
+        required: true
+      tags:
+      - OpenAi
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/chat.completion.request'
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chat.completion'
+          description: ''
   /api/participants/{participant_id}/:
     post:
       operationId: update_participant_data
@@ -257,13 +299,13 @@ components:
     Message:
       type: object
       properties:
-        type:
-          $ref: '#/components/schemas/TypeEnum'
-        message:
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        content:
           type: string
       required:
-      - message
-      - type
+      - content
+      - role
     NewAPIMessage:
       type: object
       properties:
@@ -341,6 +383,16 @@ components:
       required:
       - data
       - experiment
+    RoleEnum:
+      enum:
+      - system
+      - user
+      - assistant
+      type: string
+      description: |-
+        * `system` - system
+        * `user` - user
+        * `assistant` - assistant
     Team:
       type: object
       properties:
@@ -354,16 +406,51 @@ components:
       required:
       - name
       - slug
-    TypeEnum:
-      enum:
-      - human
-      - ai
-      type: string
-      description: |-
-        * `human` - human
-        * `ai` - ai
+    chat.choices:
+      type: object
+      properties:
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          type: string
+      required:
+      - finish_reason
+      - index
+      - message
+    chat.completion:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/chat.choices'
+        created:
+          type: integer
+        model:
+          type: string
+      required:
+      - choices
+      - created
+      - id
+      - model
+    chat.completion.request:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - messages
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-Api-Key
+    tokenAuth:
+      type: http
+      scheme: bearer
