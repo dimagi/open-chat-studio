@@ -1,13 +1,54 @@
 import time
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.api.permissions import BearerTokenAuthentication
-from apps.api.serializers import ExperimentSessionCreateSerializer
+from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
 
 
+@extend_schema(
+    operation_id="openai_chat_completions",
+    summary="Chat Completions API for Experiments",
+    tags=["OpenAi"],
+    request=inline_serializer(
+        "chat.completion.request",
+        {"messages": MessageSerializer(many=True)},
+    ),
+    responses={
+        200: inline_serializer(
+            "chat.completion",
+            {
+                "id": serializers.CharField(),
+                "choices": inline_serializer(
+                    "chat.choices",
+                    {
+                        "finish_reason": serializers.CharField(),
+                        "index": serializers.IntegerField(),
+                        "message": serializers.CharField(),
+                    },
+                    many=True,
+                ),
+                "created": serializers.IntegerField(),
+                "model": serializers.CharField(),
+                "object": "chat.completion",
+            },
+        )
+    },
+    parameters=[
+        OpenApiParameter(
+            name="experiment_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Experiment ID",
+        ),
+    ],
+)
 @api_view(["POST"])
 @authentication_classes([BearerTokenAuthentication])
 @permission_classes([])  # remove the default
@@ -16,21 +57,22 @@ def chat_completions(request, experiment_id: str):
     try:
         last_message = messages.pop()
     except IndexError:
-        # TODO: openai error responses
-        return Response(data={})
+        return _make_error_response(400, "No messages provided")
 
     if last_message.get("role") != "user":
-        # TODO: openai error responses
-        return Response(data={})
+        return _make_error_response(400, "Last message must be a user message")
 
     converted_data = {
         "experiment": experiment_id,
         "messages": messages,
     }
     serializer = ExperimentSessionCreateSerializer(data=converted_data, context={"request": request})
-    serializer.is_valid(raise_exception=True)  # TODO: openai error responses
-    session = serializer.save()
+    try:
+        serializer.is_valid(raise_exception=True)
+    except ValidationError as e:
+        return _make_error_response(400, str(e))
 
+    session = serializer.save()
     response_message = handle_api_message(
         request.user, session.experiment, last_message.get("content"), session.participant.identifier, session
     )
@@ -48,3 +90,8 @@ def chat_completions(request, experiment_id: str):
         "object": "chat.completion",
     }
     return Response(data=completion)
+
+
+def _make_error_response(status_code, message):
+    data = {"error": {"message": message, "type": "error", "param": None, "code": None}}
+    return Response(data=data, status=status_code)
