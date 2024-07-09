@@ -1,5 +1,6 @@
 from django.urls import include, path
 
+from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
 
 from . import views
@@ -120,6 +121,22 @@ urlpatterns = [
     ),
     # public link
     path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
+    # Experiment Routes
+    path(
+        "e/<int:experiment_id>/experiment_routes/new",
+        CreateExperimentRoute.as_view(),
+        name="experiment_route_new",
+    ),
+    path(
+        "e/<int:experiment_id>/experiment_routes/<int:pk>/edit",
+        EditExperimentRoute.as_view(),
+        name="experiment_route_edit",
+    ),
+    path(
+        "e/<int:experiment_id>/experiment_routes/<int:pk>/delete",
+        DeleteExperimentRoute.as_view(),
+        name="experiment_route_delete",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

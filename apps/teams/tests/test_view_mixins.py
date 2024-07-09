@@ -4,10 +4,10 @@ from django.http import Http404, HttpResponse
 from django.test import RequestFactory, TestCase
 from django.views import View
 
+from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.middleware import TeamsMiddleware
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.models import Membership, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
+from apps.teams.models import Team
 from apps.users.models import CustomUser
 
 
@@ -30,14 +30,14 @@ class TeamMixinTest(TestCase):
         cls.yanks = Team.objects.create(name="Yankees", slug="yanks")
 
         cls.sox_admin = CustomUser.objects.create(username="tito@redsox.com")
+        make_user_team_owner(cls.sox, cls.sox_admin)
         cls.sox_member = CustomUser.objects.create(username="papi@redsox.com")
-        Membership.objects.create(user=cls.sox_admin, role=ROLE_ADMIN, team=cls.sox)
-        Membership.objects.create(user=cls.sox_member, role=ROLE_MEMBER, team=cls.sox)
+        add_user_to_team(cls.sox, cls.sox_member)
 
         cls.yanks_admin = CustomUser.objects.create(username="joe.torre@yankees.com")
+        make_user_team_owner(cls.yanks, cls.yanks_admin)
         cls.yanks_member = CustomUser.objects.create(username="derek.jeter@yankees.com")
-        Membership.objects.create(user=cls.yanks_admin, role=ROLE_ADMIN, team=cls.yanks)
-        Membership.objects.create(user=cls.yanks_member, role=ROLE_MEMBER, team=cls.yanks)
+        add_user_to_team(cls.yanks, cls.yanks_member)
 
     def _get_request(self, user=None):
         request = self.factory.get("/team/")  # the url here is ignored
@@ -75,7 +75,7 @@ class TeamMixinTest(TestCase):
         self.assertRedirectToLogin(MemberView, AnonymousUser(), "yanks")
 
     def test_member_view_logged_in(self):
-        for user in [self.sox_member, self.sox_member]:
+        for user in [self.sox_member, self.sox_admin]:
             self.assertSuccessfulRequest(MemberView, user, "sox")
             self.assertNotFound(MemberView, user, "yanks")
         for user in [self.yanks_member, self.yanks_admin]:

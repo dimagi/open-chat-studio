@@ -37,6 +37,11 @@ from .experiment import (  # noqa: F401
     start_session_public,
     update_delete_channel,
 )
+from .experiment_routes import (  # noqa: F401
+    CreateExperimentRoute,
+    DeleteExperimentRoute,
+    EditExperimentRoute,
+)
 from .no_activity import (  # noqa: F401
     CreateNoActivityMessageConfig,
     DeleteNoActivityMessageConfig,

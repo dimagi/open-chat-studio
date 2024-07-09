@@ -453,6 +453,24 @@ class ExperimentRoute(BaseTeamModel):
     keyword = models.SlugField(max_length=128)
     is_default = models.BooleanField(default=False)
 
+    @classmethod
+    def eligible_children(cls, team: Team, parent: Experiment | None = None):
+        """Returns a list of experiments: that are not parents, and are not children of the current experiment"""
+        parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
+
+        if parent:
+            child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
+            eligible_experiments = (
+                Experiment.objects.filter(team=team)
+                .exclude(id__in=child_ids)
+                .exclude(id__in=parent_ids)
+                .exclude(id=parent.id)
+            )
+        else:
+            eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
+
+        return eligible_experiments
+
     class Meta:
         unique_together = (
             ("parent", "child"),
@@ -607,7 +625,6 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=255)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )

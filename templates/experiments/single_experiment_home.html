@@ -60,78 +60,93 @@
         </div>
       </div>
     </div>
-    <h2 class="flex-1 pg-subtitle my-2">{{ experiment.description }}</h2>
-    <h3 class="inline mr-4">Channels:</h3>
-    <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
-  {#  Commented elements included for Tailwind processing #}
-  {#  <i class="fa-brands fa-telegram"></i> #}
-  {#  <i class="fa-brands fa-whatsapp"></i> #}
-    {% for channel in channels %}
-      <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
-        <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
-      </div>
-      <dialog id="channel_{{ channel.id }}_modal" class="modal">
-        <div class="modal-box">
-          <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
-          <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
-                {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
-                x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
-            {% csrf_token %}
-            {% render_form_fields channel.form %}
-            {% if channel.extra_form %}
-              <div {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}>
-                {% render_form_fields channel.extra_form %}
-              </div>
-            {% endif %}
-            <div class="modal-action">
-              <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
-              <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
-              <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-            </div>
-          </form>
+    <h2 class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
+    <div class="my-4">
+      <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
+      <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
+    {#  Commented elements included for Tailwind processing #}
+    {#  <i class="fa-brands fa-telegram"></i> #}
+    {#  <i class="fa-brands fa-whatsapp"></i> #}
+      {% for channel in channels %}
+        <div class="btn btn-ghost btn-sm !normal-case" onclick="channel_{{ channel.id }}_modal.showModal()">
+          <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
         </div>
-      </dialog>
-    {% endfor %}
-    {% if platforms %}
-      <div class="dropdown">
-        <button tabindex="0" class="btn btn-ghost btn-sm">
-          <i class="fa-regular fa-plus"></i>
-        </button>
-        <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
-          {% for platform in platforms %}
-            <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% for platform in platforms %}
-        <dialog id="{{ platform.value }}_modal" class="modal">
+        <dialog id="channel_{{ channel.id }}_modal" class="modal">
           <div class="modal-box">
-            <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-            <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                  x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+            <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
+            <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
+                  {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
+                  x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
               {% csrf_token %}
-              {% render_form_fields platform_forms|dict_lookup:platform %}
-              {% if platform.extra_form %}
-                <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                  {% render_form_fields platform.extra_form %}
+              {% render_form_fields channel.form %}
+              {% if channel.extra_form %}
+                <div {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}>
+                  {% render_form_fields channel.extra_form %}
                 </div>
               {% endif %}
               <div class="modal-action">
-                <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
+                <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
+                <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
+                <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
               </div>
             </form>
           </div>
         </dialog>
       {% endfor %}
+      {% if platforms %}
+        <div class="dropdown">
+          <button tabindex="0" class="btn btn-ghost btn-sm">
+            <i class="fa-regular fa-plus"></i>
+          </button>
+          <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
+            {% for platform in platforms %}
+              <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% for platform in platforms %}
+          <dialog id="{{ platform.value }}_modal" class="modal">
+            <div class="modal-box">
+              <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+              <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+                    x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                {% csrf_token %}
+                {% render_form_fields platform_forms|dict_lookup:platform %}
+                {% if platform.extra_form %}
+                  <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
+                    {% render_form_fields platform.extra_form %}
+                  </div>
+                {% endif %}
+                <div class="modal-action">
+                  <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+                  <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+                  <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
+                </div>
+              </form>
+            </div>
+          </dialog>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    {% if not can_make_child_routes %}
+      <div class="my-4">
+        <h3 class="font-bold text-lg">Parent Experiments:
+          <span class="ml-2 tooltip" data-tip="This experiment is configured as a child of the following experiments.">
+            <i class="text-sm fa fa-circle-question" ></i>
+          </span>
+        </h3>
+      </div>
+      <div class="p-3 lg:w-3/4">{% render_table parent_routes_table %}</div>
+      </div>
     {% endif %}
   </div>
 
+
   <div role="tablist" class="tabs tabs-bordered">
     {% if perms.chat.view_chat %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" checked/>
-      <div role="tabpanel" class="tab-content">
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
+      <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
           <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
             <div class="grid grid-flow-col auto-cols-max gap-x-2">
@@ -165,8 +180,8 @@
       </div>
     {% endif %}
 
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions"/>
-    <div role="tabpanel" class="tab-content">
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="My Sessions" id="tab-mysessions" />
+    <div role="tabpanel" class="tab-content" id="content-mysessions">
       <div class="app-card">
         <div class="overflow-x-auto">
           <table class="pg-table">
@@ -203,8 +218,8 @@
     </div>
 
     {% flag "events" %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events"/>
-      <div role="tabpanel" class="tab-content">
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
+      <div role="tabpanel" class="tab-content" id="content-events">
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
@@ -214,6 +229,18 @@
         </div>
       </div>
     {% endflag %}
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
+    <div role="tabpanel" class="tab-content" id="content-routes">
+      <div class="app-card">
+        {% if can_make_child_routes %}
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+          {% render_table child_routes_table %}
+        {% else %}
+          Child experiments cannot have their own routes.
+        {% endif %}
+      </div>
+    </div>
   </div>
   <script>
     let url = "{{ filter_tags_url|escapejs }}"
@@ -224,6 +251,31 @@
     let element = document.getElementById('tag-multiselect-filter');
     new TomSelect(element, {
       maxItems: null,
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabs = document.querySelectorAll('.tab');
+      const tabContents = document.querySelectorAll('.tab-content');
+      const showTabContent = (tabId) => {
+        tabContents.forEach(content => content.style.display = 'none');
+        document.getElementById(`content-${tabId}`).style.display = 'block';
+        history.replaceState(null, '', `#${tabId}`);
+      };
+
+      if (window.location.hash) {
+        const tabId = window.location.hash.replace('#', '');
+        const tab = document.getElementById(`tab-${tabId}`);
+        if (tab) {
+          tab.checked = true;
+          showTabContent(tabId);
+        }
+      }
+      tabs.forEach(tab => {
+        tab.addEventListener('change', (event) => {
+          const tabId = event.target.id.replace('tab-', '');
+          showTabContent(tabId);
+        });
+      });
     });
   </script>
 {% endblock %}

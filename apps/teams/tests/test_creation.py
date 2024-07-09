@@ -5,7 +5,6 @@ from django.urls import reverse
 from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Membership, Team
-from apps.teams.roles import is_admin
 from apps.users.models import CustomUser
 from apps.utils.factories.user import UserFactory
 
@@ -20,8 +19,8 @@ class TeamCreationTest(TestCase):
         team = create_default_team_for_user(user)
         assert "Alice" == team.name
         assert "alice" == team.slug
-        assert is_admin(user, team)
         membership = team.membership_set.filter(user=user).first()
+        assert membership.is_team_admin()
         assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
 
 
