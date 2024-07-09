@@ -35,6 +35,9 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
 
     def on_chain_start(self, serialized, inputs, *args, **kwargs):
         self.depth += 1
+        from apps.pipelines.models import PipelineRunStatus
+
+        self.pipeline_run.status = PipelineRunStatus.RUNNING
         if self._should_log(kwargs):
             self.logger.info(f"{kwargs.get('name', serialized.get('name'))} starting")
 
@@ -81,3 +84,4 @@ class LogHandler:
         )
         # Appending to a list is thread safe in python
         self.pipeline_run.log["entries"].append(log_entry.model_dump())
+        self.pipeline_run.save()
