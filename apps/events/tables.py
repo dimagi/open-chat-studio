@@ -2,6 +2,7 @@ import django_tables2 as tables
 from django.conf import settings
 from django.template.loader import get_template
 from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.utils.time import seconds_to_human
@@ -43,10 +44,16 @@ class ActionsColumn(tables.Column):
         )
 
 
+class ParamsColumn(tables.Column):
+    def render(self, value, record):
+        items = format_html_join("", "<li><strong>{}</strong>: {}</li>", value.items())
+        return format_html(f"<ul>{items}</ul>")
+
+
 class EventsTable(tables.Table):
     type = tables.Column(accessor="type", verbose_name="When...")
     action_type = tables.Column(accessor="action__action_type", verbose_name="Then...")
-    action_params = tables.JSONColumn(accessor="action__action_params", verbose_name="With these parameters...")
+    action_params = ParamsColumn(accessor="action__params", verbose_name="With these parameters...")
     total_num_triggers = tables.Column(accessor="total_num_triggers", verbose_name="Repeat")
     error_count = tables.Column(accessor="failure_count", verbose_name="Error Count")
     actions = ActionsColumn(empty_values=())
