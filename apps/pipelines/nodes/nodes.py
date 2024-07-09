@@ -111,7 +111,7 @@ class ExtractStructuredDataBasic(LLMResponse):
         prompt = PromptTemplate.from_template(template="{input}.\nCurrent user data: {participant_data}")
         return (
             {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.get_participant_data()))
+            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.get_participant_data(state)))
             | prompt
             | super().get_runnable(node, state).with_structured_output(json_schema)
         )

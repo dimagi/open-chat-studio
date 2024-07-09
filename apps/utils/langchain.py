@@ -67,8 +67,11 @@ class FakeLlm(FakeListChatModel):
     def get_call_messages(self):
         return [call[1][0] for call in self.calls]
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
+
+    def with_structured_output(self, schema) -> dict:
+        return self
 
 
 class FakeLlmService(LlmService):
