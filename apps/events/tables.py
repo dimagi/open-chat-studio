@@ -2,7 +2,7 @@ import django_tables2 as tables
 from django.conf import settings
 from django.template.loader import get_template
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.utils.time import seconds_to_human
@@ -46,8 +46,8 @@ class ActionsColumn(tables.Column):
 
 class ParamsColumn(tables.Column):
     def render(self, value, record):
-        items = [f"<li><strong>{k}</strong>: {v}</li>" for k, v in value.items()]
-        return format_html(f"<ul>{''.join(items)}</ul>")
+        items = format_html_join("", "<li><strong>{}</strong>: {}</li>", value.items())
+        return format_html(f"<ul>{items}</ul>")
 
 
 class EventsTable(tables.Table):
