@@ -28,7 +28,7 @@ class TestSyntheticVoice:
     def test_team_scoped_services(self):
         assert SyntheticVoice.TEAM_SCOPED_SERVICES == [SyntheticVoice.OpenAIVoiceEngine]
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_returns_all_general_services(self):
         """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
         voices_queryset = SyntheticVoice.get_for_team(team=None)
