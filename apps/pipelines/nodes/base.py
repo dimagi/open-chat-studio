@@ -22,28 +22,26 @@ class PipelineState(TypedDict):
 
 
 class PipelineNode(BaseModel, ABC):
-    """Pipeline node that is either a single or a combination of Langchain Runnables
-
-    Define required parameters as typed fields. Compose the runnable in `get_runnable`
+    """Pipeline node that implements the `process` method and returns a new state. Define required parameters as
+    typed fields.
 
     Example:
         class FunNode(PipelineNode):
             required_parameter_1: CustomType
             optional_parameter_1: Optional[CustomType] = None
 
-            def get_runnable(self, input) -> str:
-                if self.optional_parameter_1:
-                    return PromptTemplate.from_template(template=self.required_parameter_1)
-                else:
-                    return LLMResponse.build(node)
+            def process(self, state: PipelineState) -> PipelineState:
+                input = state["messages"][-1]
+                output = ... # do something
+                PipelineState(messages=[output]) # Update the state by adding the output to the `messages` attr
 
        class FunLambdaNode(PipelineNode):
             required_parameter_1: str
 
-            def get_runnable(self, node: Node):
-                def fn(input: Input):
-                    return self.required_parameter_1
-                return RunnableLambda(fn, name=self.__class__.__name__)
+            def process(self, state: PipelineState) -> PipelineState:
+                ...
+                return PipelineState() # Return an empty state if you do not want to update the current state
+
     """
 
     class Config:
