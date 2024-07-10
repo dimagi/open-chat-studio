@@ -512,7 +512,7 @@ DOCUMENTATION_LINKS = {
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
-FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
+FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]

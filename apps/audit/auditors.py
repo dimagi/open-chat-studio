@@ -1,31 +1,43 @@
 import logging
 
 from django.core.exceptions import ValidationError
-from field_audit.auditors import BaseAuditor
+from field_audit.auditors import SystemUserAuditor
 from field_audit.models import USER_TYPE_REQUEST
 
+from apps.teams.utils import get_current_team
 from apps.users.models import CustomUser
 
 log = logging.getLogger("audit")
 
 
-class RequestAuditor(BaseAuditor):
-    """Auditor class for getting users from authenticated requests."""
+class AuditContextProvider(SystemUserAuditor):
+    """Auditor class for getting context for audit event.
+    This combines the SystemUserAuditor with the RequestAuditor since we want to include
+    'team' context in both cases.
+    """
 
     def change_context(self, request):
+        context = {}
+        if team := get_current_team():
+            context["team"] = team.id
+
         if request is None:
-            return None
-        if request.user.is_authenticated:
-            username = get_request_username(request)
-            context = {
-                "user_type": USER_TYPE_REQUEST,
-                "username": username,
-            }
-            if username != request.user.username:
-                context["as_username"] = request.user.username
-            return context
-        # short-circuit the audit chain for not-None requests
-        return {}
+            context |= super().change_context(request)
+        elif request.user.is_authenticated:
+            context |= get_request_context(request)
+
+        return context
+
+
+def get_request_context(request):
+    username = get_request_username(request)
+    context = {
+        "user_type": USER_TYPE_REQUEST,
+        "username": username,
+    }
+    if username != request.user.username:
+        context["as_username"] = request.user.username
+    return context
 
 
 def get_request_username(request):
