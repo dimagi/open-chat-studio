@@ -7,7 +7,10 @@ def django_db_with_data(available_apps=("apps.experiments",)):
     Args:
         available_apps (tuple, optional):
             The apps that are necessary for the test. Defaults to ("apps.experiments",).
-            It is unclear which apps are necessary but these seem to work.
+            Any apps that create default data using Django migrations should be included
+            in this list.
+
+    See also `apps.conftest._django_db_restore_serialized`.
     """
     import pytest
 

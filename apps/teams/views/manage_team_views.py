@@ -15,19 +15,6 @@ from apps.teams.models import Invitation
 from apps.web.forms import set_form_fields_disabled
 
 
-@login_required
-def manage_teams(request):
-    teams = request.user.teams.order_by("name")
-    return render(
-        request,
-        "teams/list_teams.html",
-        {
-            "teams": teams,
-            "page_title": _("Manage Teams"),
-        },
-    )
-
-
 @login_and_team_required
 def manage_team(request, team_slug):
     team = request.team
@@ -70,7 +57,7 @@ def create_team(request):
             team = form.save()
             team.save()
             make_user_team_owner(team=team, user=request.user)
-            return HttpResponseRedirect(reverse("teams:manage_teams"))
+            return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
     else:
         form = TeamChangeForm()
     return render(
