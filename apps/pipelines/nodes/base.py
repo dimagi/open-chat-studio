@@ -22,7 +22,7 @@ class PipelineState(TypedDict):
 
 
 class PipelineNode(BaseModel, ABC):
-    """Pipeline node that implements the `process` method and returns a new state. Define required parameters as
+    """Pipeline node that implements the `_process` method and returns a new state. Define required parameters as
     typed fields.
 
     Example:
@@ -30,7 +30,7 @@ class PipelineNode(BaseModel, ABC):
             required_parameter_1: CustomType
             optional_parameter_1: Optional[CustomType] = None
 
-            def process(self, state: PipelineState) -> PipelineState:
+            def _process(self, state: PipelineState) -> PipelineState:
                 input = state["messages"][-1]
                 output = ... # do something
                 PipelineState(messages=[output]) # Update the state by adding the output to the `messages` attr
@@ -38,7 +38,7 @@ class PipelineNode(BaseModel, ABC):
        class FunLambdaNode(PipelineNode):
             required_parameter_1: str
 
-            def process(self, state: PipelineState) -> PipelineState:
+            def _process(self, state: PipelineState) -> PipelineState:
                 ...
                 return PipelineState() # Return an empty state if you do not want to update the current state
 
@@ -54,7 +54,21 @@ class PipelineNode(BaseModel, ABC):
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def process(self, state: PipelineState, config) -> PipelineState:
+        cls_name = self.__class__.__name__
+        logger = self.logger(config)
+        if logger:
+            logger.info(f"{cls_name} starting")
+
+        output = self._process(state, config)
+
+        if logger:
+            self.logger(config).info(f"{cls_name} finished with output: {output}")
+
+        # Append the output to the state, otherwise do not change the state
+        return PipelineState(messages=[output]) if output else PipelineState()
+
+    def _process(self, state: PipelineState, config) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -62,7 +76,6 @@ class PipelineNode(BaseModel, ABC):
         for handler in config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
-        raise AttributeError("No logger found")
 
     def experiment_session(self, state: PipelineState) -> ExperimentSession:
         return ExperimentSession.objects.get(id=state["experiment_session_id"])

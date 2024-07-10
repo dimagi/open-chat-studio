@@ -29,18 +29,23 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
     assert run.status == PipelineRunStatus.SUCCESS
 
     assert run.input == PipelineState(messages=[input])
-    # Since we only used passthrough nodes, the state was not updated
-    assert run.output == PipelineState(messages=[input])
+    assert run.output == PipelineState(
+        messages=[
+            input,  # the input to the graph
+            input,  # The output of the first Passthrough
+            input,  # the output of the last Passthrough
+        ]
+    )
 
     assert len(run.log["entries"]) == 8
     assert run.log["entries"][1]["level"] == "INFO"
     assert run.log["entries"][1]["message"] == "Passthrough starting"
     assert run.log["entries"][2]["level"] == "DEBUG"
     assert run.log["entries"][2]["message"] == f"Returning input: '{input}' without modification"
-    assert run.log["entries"][3]["message"] == f"Passthrough finished: {input}"
+    assert run.log["entries"][3]["message"] == f"Passthrough finished with output: {input}"
     assert run.log["entries"][4]["message"] == "Passthrough starting"
     assert run.log["entries"][5]["message"] == f"Returning input: '{input}' without modification"
-    assert run.log["entries"][6]["message"] == f"Passthrough finished: {input}"
+    assert run.log["entries"][6]["message"] == f"Passthrough finished with output: {input}"
 
 
 @pytest.mark.django_db()

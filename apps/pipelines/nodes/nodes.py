@@ -19,7 +19,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         input = state["messages"][-1]
 
         env = SandboxedEnvironment()
@@ -34,7 +34,7 @@ class RenderTemplate(PipelineNode):
             # As a last resort, just set the all the variables in the template to the input
             content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
         template = SandboxedEnvironment().from_string(self.template_string)
-        return PipelineState(messages=[template.render(content)])
+        return template.render(content)
 
 
 class LLMResponse(PipelineNode):
@@ -44,10 +44,10 @@ class LLMResponse(PipelineNode):
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(state["messages"][-1])
-        return PipelineState(messages=[output.content])
+        return output.content
 
     def get_chat_model(self):
         from apps.service_providers.models import LlmProvider
@@ -70,10 +70,10 @@ class CreateReport(LLMResponse):
         "Output it as JSON with a single key called 'summary' with the summary."
     )
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
         output = chain.invoke(state["messages"][-1])
-        return PipelineState(messages=[output.content])
+        return output.content
 
 
 class SendEmail(PipelineNode):
@@ -81,27 +81,27 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=state["messages"][-1]
         )
-        return PipelineState()
 
 
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         input = state["messages"][-1]
-        self.logger(config).debug(f"Returning input: '{input}' without modification")
-        return PipelineState()
+        if logger := self.logger(config):
+            logger.debug(f"Returning input: '{input}' without modification")
+        return input
 
 
 class ExtractStructuredDataBasic(LLMResponse):
     __human_name__ = "Extract structured data (Basic)"
     data_schema: str
 
-    def process(self, state: PipelineState) -> RunnableLambda:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> RunnableLambda:
         json_schema = ExtractStructuredDataBasic.to_json_schema(json.loads(self.data_schema))
         prompt = PromptTemplate.from_template(template="{input}.\nCurrent user data: {participant_data}")
         chain = (
@@ -111,7 +111,7 @@ class ExtractStructuredDataBasic(LLMResponse):
             | super().get_chat_model().with_structured_output(json_schema)
         )
         output = chain.invoke(state["messages"][-1])
-        return PipelineState(messages=[output])
+        return output
 
     def get_participant_data(self, state: PipelineState):
         session = self.experiment_session(state)
@@ -157,7 +157,7 @@ class UpdateParticipantMemory(PipelineNode):
     __human_name__ = "Update participant memory"
     key_name: str | None = None
 
-    def process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
         extracted_data = state["messages"][-1]
 
         if not isinstance(extracted_data, dict):
@@ -186,5 +186,3 @@ class UpdateParticipantMemory(PipelineNode):
                 team=session.team,
                 data={self.key_name: extracted_data} if self.key_name else extracted_data,
             )
-
-        return PipelineState()

@@ -207,6 +207,8 @@ def test_extract_and_update_data_pipeline(provider):
     correctly.
     """
     session = ExperimentSessionFactory()
+    session.participant.team = session.team
+    session.participant.save()
     # There should be no data
     participant_data = (
         ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
