@@ -75,10 +75,10 @@ def test_delete_team(client, team_with_users):
     assert response.status_code == 302
     assert not Team.objects.filter(slug=team_with_users.slug).exists()
 
-    audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.pk).order_by("event_date")
+    audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.id).order_by("event_date")
     assert len(audit_events) == 2
     assert audit_events[0].is_create
     assert audit_events[1].is_delete
 
-    # no audit events for related models that get deleted
-    assert not AuditEvent.objects.by_model(Membership).filter(is_delete=True).exists()
+    # make sure there are audit events for related models
+    assert AuditEvent.objects.by_model(Membership).filter(is_delete=True).count() == 2

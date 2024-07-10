@@ -12,6 +12,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.web.forms import set_form_fields_disabled
 
 
@@ -87,7 +88,7 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    request.team.delete()
+    delete_object_with_auditing_of_related_objects(request.team)
     messages.success(request, _('The "{team}" team was successfully deleted').format(team=request.team.name))
     return HttpResponseRedirect(reverse("web:home"))
 

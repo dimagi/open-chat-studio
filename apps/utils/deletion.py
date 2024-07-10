@@ -1,8 +1,35 @@
 from typing import Any
 
 from django.contrib.admin.utils import NestedObjects
-from django.db import router
+from django.db import router, transaction
 from django.db.models.deletion import get_candidate_relations_to_delete
+from field_audit.field_audit import get_audited_models
+
+
+def delete_object_with_auditing_of_related_objects(obj):
+    """Deletes the given object and its related objects, auditing the deletion of each object.
+
+    Args:
+        obj: The object to delete.
+    """
+    from field_audit.models import AuditAction
+
+    collector = NestedObjects(using="default")
+    collector.collect([obj])
+    with transaction.atomic():
+        for model, instances in reversed(collector.data.items()):
+            if model._meta.auto_created:
+                continue
+
+            if len(instances) == 1:
+                list(instances)[0].delete()
+                continue
+
+            audit_kwargs = {}
+            if model in get_audited_models():
+                audit_kwargs["audit_action"] = AuditAction.AUDIT
+
+            model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
