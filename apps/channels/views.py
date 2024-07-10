@@ -13,7 +13,6 @@ from rest_framework.response import Response
 
 from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
-from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -83,9 +82,10 @@ def new_turn_message(request, experiment_id: uuid):
 def new_api_message(request, experiment_id: uuid):
     """Chat with an experiment."""
     message_data = request.data.copy()
-    message_data["participant"] = request.user.email
+    participant_id = request.user.email
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
 
+    session = None
     if session_id := message_data.get("session"):
         session = get_object_or_404(
             ExperimentSession,
@@ -94,13 +94,7 @@ def new_api_message(request, experiment_id: uuid):
             team=request.team,
             participant__user=request.user,
         )
-        message_data["participant"] = session.participant.identifier
+        participant_id = session.participant.identifier
 
-    experiment_channel, _created = ExperimentChannel.objects.get_or_create(
-        name=f"{experiment.id}-api",
-        experiment=experiment,
-        platform=ChannelPlatform.API,
-    )
-
-    response = tasks.handle_api_message(request.user, experiment_channel, message_data=message_data)
+    response = tasks.handle_api_message(request.user, experiment, message_data["message"], participant_id, session)
     return Response(data={"response": response})

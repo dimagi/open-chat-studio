@@ -45,8 +45,28 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.Serializer):
-    type = serializers.ChoiceField(choices=["human", "ai"])
-    message = serializers.CharField()
+    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="type")
+    content = serializers.CharField(source="message")
+
+    def to_representation(self, instance):
+        output = super().to_representation(instance)
+        # map internal names to external names
+        output["role"] = {
+            "human": "user",
+            "ai": "assistant",
+            "system": "system",
+        }[output["role"]]
+        return output
+
+    def to_internal_value(self, data):
+        # map external names to internal names
+        data = super().to_internal_value(data)
+        data["type"] = {
+            "user": "human",
+            "assistant": "ai",
+            "system": "system",
+        }[data["type"]]
+        return data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
