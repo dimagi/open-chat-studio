@@ -25,8 +25,7 @@
     <hr/>
   </li>
   <li>
-    <a href="
-             {% if front_end_framework == 'htmx' %}{% url 'teams:create_team' %}{% else %}{% url 'teams:manage_teams' %}new{% endif %}">
+    <a href="{% url 'teams:create_team' %}">
       <i class="fa fa-plus"></i>
       {% translate "Add Team" %}
     </a>
