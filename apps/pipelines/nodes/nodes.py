@@ -1,17 +1,14 @@
 import json
-from functools import partial
 
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda, RunnablePassthrough
-from langchain_core.runnables.utils import Input
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from pydantic import Field, create_model
 
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
-from apps.pipelines.graph import Node
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -22,23 +19,22 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
-        def fn(input: Input):
-            env = SandboxedEnvironment()
-            try:
-                if isinstance(input, BaseMessage):
-                    content = json.loads(input.content)
-                elif isinstance(input, dict):
-                    content = input
-                else:
-                    content = json.loads(input)
-            except json.JSONDecodeError:
-                # As a last resort, just set the all the variables in the template to the input
-                content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-            template = SandboxedEnvironment().from_string(self.template_string)
-            return template.render(content)
+    def process(self, state: PipelineState) -> PipelineState:
+        input = state["messages"][-1]
 
-        return RunnableLambda(fn, name=self.__class__.__name__)
+        env = SandboxedEnvironment()
+        try:
+            if isinstance(input, BaseMessage):
+                content = json.loads(input.content)
+            elif isinstance(input, dict):
+                content = input
+            else:
+                content = json.loads(input)
+        except json.JSONDecodeError:
+            # As a last resort, just set the all the variables in the template to the input
+            content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
+        template = SandboxedEnvironment().from_string(self.template_string)
+        return PipelineState(messages=[template.render(content)])
 
 
 class LLMResponse(PipelineNode):
@@ -48,16 +44,18 @@ class LLMResponse(PipelineNode):
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
 
-    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
-        service = self.get_llm_service()
-        return service.get_chat_model(self.llm_model, self.llm_temperature)
+    def process(self, state: PipelineState) -> PipelineState:
+        llm = self.get_chat_model()
+        output = llm.invoke(state["messages"][-1])
+        return PipelineState(messages=[output.content])
 
-    def get_llm_service(self):
+    def get_chat_model(self):
         from apps.service_providers.models import LlmProvider
 
         provider = LlmProvider.objects.get(id=self.llm_provider_id)
         try:
-            return provider.get_llm_service()
+            service = provider.get_llm_service()
+            return service.get_chat_model(self.llm_model, self.llm_temperature)
         except LlmProvider.DoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
         except ServiceProviderConfigError as e:
@@ -72,8 +70,10 @@ class CreateReport(LLMResponse):
         "Output it as JSON with a single key called 'summary' with the summary."
     )
 
-    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
-        return PromptTemplate.from_template(template=self.prompt) | super().get_runnable(node, state)
+    def process(self, state: PipelineState) -> PipelineState:
+        chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
+        output = chain.invoke(state["messages"][-1])
+        return PipelineState(messages=[output.content])
 
 
 class SendEmail(PipelineNode):
@@ -81,40 +81,36 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
-        def fn(input: Input):
-            send_email_from_pipeline.delay(
-                recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
-            )
-            return input
-
-        return RunnableLambda(fn, name=self.__class__.__name__)
+    def process(self, state: PipelineState) -> PipelineState:
+        send_email_from_pipeline.delay(
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=state["messages"][-1]
+        )
+        return PipelineState()
 
 
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
-        def fn(input: Input, config: RunnableConfig):
-            self.logger(config).debug(f"Returning input: '{input}' without modification")
-            return input
-
-        return RunnableLambda(fn, name=self.__class__.__name__)
+    def process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+        self.logger(config).debug(f"Returning input: '{input}' without modification")
+        return PipelineState()
 
 
 class ExtractStructuredDataBasic(LLMResponse):
     __human_name__ = "Extract structured data (Basic)"
     data_schema: str
 
-    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
+    def process(self, state: PipelineState) -> RunnableLambda:
         json_schema = ExtractStructuredDataBasic.to_json_schema(json.loads(self.data_schema))
         prompt = PromptTemplate.from_template(template="{input}.\nCurrent user data: {participant_data}")
-        return (
+        chain = (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.get_participant_data(state)))
             | prompt
-            | super().get_runnable(node, state).with_structured_output(json_schema)
+            | super().get_chat_model().with_structured_output(json_schema)
         )
+        output = chain.invoke(state["messages"][-1])
+        return PipelineState(messages=[output])
 
     def get_participant_data(self, state: PipelineState):
         session = self.experiment_session(state)
@@ -160,26 +156,25 @@ class UpdateParticipantMemory(PipelineNode):
     __human_name__ = "Update participant memory"
     key_name: str | None = None
 
-    def get_runnable(self, node: Node, state: PipelineState) -> RunnableLambda:
-        node = node
-
-        def fn(input: Input, config: RunnableConfig, state: PipelineState):
-            """Input should be a python dictionary"""
-            session = self.experiment_session(state)
-            extracted_data = {self.key_name: input} if self.key_name else input
-            try:
-                participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
-                    participant=session.participant
-                )
+    def process(self, state: PipelineState) -> PipelineState:
+        extracted_data = state["messages"][-1]
+        session = self.experiment_session(state)
+        try:
+            participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
+                participant=session.participant
+            )
+            if self.key_name:
+                participant_data.data[self.key_name] = participant_data.data.get(self.key_name, {}) | extracted_data
+            else:
                 participant_data.data = participant_data.data | extracted_data
-                participant_data.save()
-            except ParticipantData.DoesNotExist:
-                ParticipantData.objects.create(
-                    participant=session.participant,
-                    content_type__model="experiment",
-                    object_id=session.experiment.id,
-                    team=session.team,
-                    data=extracted_data,
-                )
 
-        return RunnableLambda(partial(fn, state=state), name=self.__class__.__name__)
+            participant_data.save()
+        except ParticipantData.DoesNotExist:
+            ParticipantData.objects.create(
+                participant=session.participant,
+                content_object=session.experiment,
+                team=session.team,
+                data={self.key_name: extracted_data} if self.key_name else extracted_data,
+            )
+
+        return PipelineState()
