@@ -1,6 +1,6 @@
 import pytest
-from django.test import TestCase
 from django.urls import reverse
+from field_audit.models import AuditEvent
 
 from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.helpers import create_default_team_for_user
@@ -9,19 +9,19 @@ from apps.users.models import CustomUser
 from apps.utils.factories.user import UserFactory
 
 
-class TeamCreationTest(TestCase):
-    def test_create_for_user(self):
-        email = "alice@example.com"
-        user = CustomUser.objects.create(
-            username=email,
-            email=email,
-        )
-        team = create_default_team_for_user(user)
-        assert "Alice" == team.name
-        assert "alice" == team.slug
-        membership = team.membership_set.filter(user=user).first()
-        assert membership.is_team_admin()
-        assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
+@pytest.mark.django_db()
+def test_create_for_user():
+    email = "alice@example.com"
+    user = CustomUser.objects.create(
+        username=email,
+        email=email,
+    )
+    team = create_default_team_for_user(user)
+    assert "Alice" == team.name
+    assert "alice" == team.slug
+    membership = team.membership_set.filter(user=user).first()
+    assert membership.is_team_admin()
+    assert [SUPER_ADMIN_GROUP] == [group.name for group in membership.groups.all()]
 
 
 @pytest.mark.django_db()
@@ -66,3 +66,19 @@ def test_group_owner_assignment_on_team_creation(client):
     membership = Membership.objects.filter(team__slug=created_team.slug).first()
     permission_group = membership.groups.first()
     assert permission_group.name == SUPER_ADMIN_GROUP
+
+
+@pytest.mark.django_db()
+def test_delete_team(client, team_with_users):
+    client.force_login(team_with_users.members.first())
+    response = client.post(reverse("single_team:delete_team", args=[team_with_users.slug]))
+    assert response.status_code == 302
+    assert not Team.objects.filter(slug=team_with_users.slug).exists()
+
+    audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.pk).order_by("event_date")
+    assert len(audit_events) == 2
+    assert audit_events[0].is_create
+    assert audit_events[1].is_delete
+
+    # no audit events for related models that get deleted
+    assert not AuditEvent.objects.by_model(Membership).filter(is_delete=True).exists()
