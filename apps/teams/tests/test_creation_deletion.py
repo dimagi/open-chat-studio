@@ -82,3 +82,11 @@ def test_delete_team(client, team_with_users):
 
     # make sure there are audit events for related models
     assert AuditEvent.objects.by_model(Membership).filter(is_delete=True).count() == 2
+
+    # make sure that all events have the same transaction ID
+    transaction_ids = {
+        context["transaction_id"]
+        for context in AuditEvent.objects.filter(is_delete=True).values_list("change_context", flat=True)
+    }
+    assert len(transaction_ids) == 1
+    assert all(transaction_id is not None for transaction_id in transaction_ids)

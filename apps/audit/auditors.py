@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from field_audit.auditors import SystemUserAuditor
 from field_audit.models import USER_TYPE_REQUEST
 
+from apps.audit.transaction import get_audit_transaction_id
 from apps.teams.utils import get_current_team
 from apps.users.models import CustomUser
 
@@ -24,6 +25,8 @@ class AuditContextProvider(SystemUserAuditor):
             context = super().change_context(request)
         elif request.user.is_authenticated:
             context = get_request_context(request)
+
+        context["transaction_id"] = get_audit_transaction_id()
 
         if team := get_current_team():
             context["team"] = team.id
