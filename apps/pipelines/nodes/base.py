@@ -57,13 +57,11 @@ class PipelineNode(BaseModel, ABC):
     def process(self, state: PipelineState, config) -> PipelineState:
         cls_name = self.__class__.__name__
         logger = self.logger(config)
-        if logger:
-            logger.info(f"{cls_name} starting")
+        logger.info(f"{cls_name} starting")
 
         output = self._process(state, config)
 
-        if logger:
-            self.logger(config).info(f"{cls_name} finished with output: {output}")
+        self.logger(config).info(f"{cls_name} finished with output: {output}")
 
         # Append the output to the state, otherwise do not change the state
         return PipelineState(messages=[output]) if output else PipelineState()
