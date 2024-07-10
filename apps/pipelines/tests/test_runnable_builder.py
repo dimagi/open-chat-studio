@@ -214,13 +214,15 @@ def test_extract_and_update_data_pipeline(provider):
     assert participant_data is None
 
     # New data should be created
-    _run_extract_update_pipeline(session, provider=provider, extracted_data={"name": "John"}, key_name="profile")
+    _run_extract_update_pipeline(session, provider=provider, extracted_data={"name": "Johnny"}, key_name="profile")
 
     participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "John"}}
+    assert participant_data.data == {"profile": {"name": "Johnny"}}
 
     # The "profile" key should be updated
-    _run_extract_update_pipeline(session, provider=provider, extracted_data={"last_name": "Wick"}, key_name="profile")
+    _run_extract_update_pipeline(
+        session, provider=provider, extracted_data={"name": "John", "last_name": "Wick"}, key_name="profile"
+    )
     participant_data.refresh_from_db()
     assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
 

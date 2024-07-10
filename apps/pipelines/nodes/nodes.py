@@ -92,6 +92,7 @@ class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
     def process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+        input = state["messages"][-1]
         self.logger(config).debug(f"Returning input: '{input}' without modification")
         return PipelineState()
 
@@ -158,6 +159,15 @@ class UpdateParticipantMemory(PipelineNode):
 
     def process(self, state: PipelineState) -> PipelineState:
         extracted_data = state["messages"][-1]
+
+        if not isinstance(extracted_data, dict):
+            # TODO: This should not happen, but until we do input-output type matching, it's always possible
+            input_type = type(extracted_data)
+            raise TypeError(
+                f"UpdateParticipantMemory expected a dictionary as input, but got {input_type} instead.\n"
+                f"Input: {extracted_data}"
+            )
+
         session = self.experiment_session(state)
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(

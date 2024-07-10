@@ -29,13 +29,8 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
     assert run.status == PipelineRunStatus.SUCCESS
 
     assert run.input == PipelineState(messages=[input])
-    assert run.output == PipelineState(
-        messages=[
-            input,  # the input
-            input,  # the output of the first node / input to the second
-            input,  # the output
-        ]
-    )
+    # Since we only used passthrough nodes, the state was not updated
+    assert run.output == PipelineState(messages=[input])
 
     assert len(run.log["entries"]) == 8
     assert run.log["entries"][1]["level"] == "INFO"
@@ -54,11 +49,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
     error_message = "Bad things are afoot"
 
     class FailingPassthrough(PipelineNode):
-        def get_runnable(self, node, state) -> RunnableLambda:
-            def fn(input, config):
-                raise Exception(error_message)
-
-            return RunnableLambda(fn, name=self.__class__.__name__)
+        def process(self, state) -> RunnableLambda:
+            raise Exception(error_message)
 
     from apps.pipelines.nodes import nodes
 
