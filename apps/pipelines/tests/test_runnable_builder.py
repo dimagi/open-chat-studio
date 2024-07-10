@@ -4,6 +4,7 @@ import pytest
 from django.core import mail
 from django.test import override_settings
 
+from apps.experiments.models import ParticipantData
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -168,7 +169,7 @@ def test_render_template():
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 def test_extract_structured_data_basic(provider):
-    fake_llm = FakeLlm(responses=['{"name": "John"}'], token_counts=[0])
+    fake_llm = FakeLlm(responses=[{"name": "John"}], token_counts=[0])
     service = FakeLlmService(llm=fake_llm)
     session = ExperimentSessionFactory()
 
@@ -196,4 +197,84 @@ def test_extract_structured_data_basic(provider):
             }
         )
         state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session_id=session.id)
-        assert runnable.invoke(state)["messages"][-1] == '{"name": "John"}'
+        assert runnable.invoke(state)["messages"][-1] == {"name": "John"}
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+def test_extract_and_update_data_pipeline(provider):
+    """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
+    participant to make sure it creates data. Then we run it again a few times to test that it updates the data
+    correctly.
+    """
+    session = ExperimentSessionFactory()
+    # There should be no data
+    participant_data = (
+        ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
+    )
+    assert participant_data is None
+
+    # New data should be created
+    _run_extract_update_pipeline(session, provider=provider, extracted_data={"name": "John"}, key_name="profile")
+
+    participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
+    assert participant_data.data == {"profile": {"name": "John"}}
+
+    # The "profile" key should be updated
+    _run_extract_update_pipeline(session, provider=provider, extracted_data={"last_name": "Wick"}, key_name="profile")
+    participant_data.refresh_from_db()
+    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
+
+    # New data should be inserted at the toplevel
+    _run_extract_update_pipeline(session, provider=provider, extracted_data={"has_pets": False}, key_name=None)
+    participant_data.refresh_from_db()
+    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}, "has_pets": False}
+
+
+def _run_extract_update_pipeline(session, provider, extracted_data: dict, key_name: str):
+    fake_llm = FakeLlm(responses=[extracted_data], token_counts=[0])
+    service = FakeLlmService(llm=fake_llm)
+
+    with (
+        mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
+    ):
+        runnable = PipelineGraph.build_runnable_from_json(
+            {
+                "edges": [
+                    {
+                        "id": "extraction->update_data",
+                        "source": "extraction",
+                        "target": "update_data",
+                    },
+                ],
+                "nodes": [
+                    {
+                        "data": {
+                            "id": "extraction",
+                            "label": "Extract some data",
+                            "type": "ExtractStructuredDataBasic",
+                            "params": {
+                                "llm_provider_id": provider.id,
+                                "llm_model": "fake-model",
+                                "data_schema": '{"name": "the name of the user"}',
+                            },
+                        },
+                        "id": "extraction",
+                    },
+                    {
+                        "data": {
+                            "id": "update_data",
+                            "label": "Update participant memory",
+                            "type": "UpdateParticipantMemory",
+                            "params": {
+                                "key_name": key_name,
+                            },
+                        },
+                        "id": "update_data",
+                    },
+                ],
+                "id": 1,
+                "name": "New Pipeline",
+            }
+        )
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session_id=session.id)
+        runnable.invoke(state)

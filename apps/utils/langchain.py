@@ -9,7 +9,7 @@ from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from apps.service_providers.llm_service import LlmService
@@ -71,7 +71,13 @@ class FakeLlm(FakeListChatModel):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
     def with_structured_output(self, schema) -> dict:
-        return self
+        """with_structured_output should return a runnable that returns a dictionary, so we simply replace the LLM
+        with a runnable lambda that returns the dictionary that we specified when we built the FakeLlm:
+
+        Example:
+            FakeLlm(responses=[{"name": "John"}])
+        """
+        return RunnableLambda(lambda *args: self.responses[-1])
 
 
 class FakeLlmService(LlmService):
