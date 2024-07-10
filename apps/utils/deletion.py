@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Any
 
 from django.contrib.admin.utils import NestedObjects
@@ -16,6 +17,7 @@ def delete_object_with_auditing_of_related_objects(obj):
 
     collector = NestedObjects(using="default")
     collector.collect([obj])
+    counter = Counter()
     with transaction.atomic():
         for model, instances in reversed(collector.data.items()):
             if model._meta.auto_created:
@@ -23,13 +25,16 @@ def delete_object_with_auditing_of_related_objects(obj):
 
             if len(instances) == 1:
                 list(instances)[0].delete()
+                counter[model._meta.label] += 1
                 continue
 
             audit_kwargs = {}
             if model in get_audited_models():
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
 
-            model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
+            _, stats = model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
+            counter.update(stats)
+    return dict(counter)
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:
