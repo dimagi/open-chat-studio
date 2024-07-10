@@ -42,7 +42,8 @@ class PipelineGraph(pydantic.BaseModel):
         state_graph = StateGraph(PipelineState)
         for node in self.nodes:
             node_class = getattr(nodes, node.type)
-            state_graph.add_node(node.id, node_class.get_callable(node))
+            node_instance = node_class(**node.params)
+            state_graph.add_node(node.id, node_instance.process)
         for edge in self.edges:
             state_graph.add_edge(edge.source, edge.target)
 

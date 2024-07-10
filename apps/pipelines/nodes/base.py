@@ -2,12 +2,6 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, TypedDict
 
-from langchain.prompts import BasePromptTemplate
-from langchain_core.messages import BaseMessage
-from langchain_core.prompt_values import StringPromptValue
-from langchain_core.runnables import (
-    Runnable,
-)
 from pydantic import BaseModel
 from pydantic_core import ValidationError
 
@@ -62,29 +56,8 @@ class PipelineNode(BaseModel, ABC):
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
 
-    @classmethod
-    def get_callable(cls, node: Node) -> Callable:
-        built_node = cls.build(node)
-
-        def fn(state: PipelineState) -> PipelineState:
-            runnable = built_node.get_runnable(node, state=state)
-            if isinstance(runnable, BasePromptTemplate):
-                input = {"input": state["messages"][-1]}
-            else:
-                input = state["messages"][-1]
-            result = runnable.invoke(input)
-            if isinstance(result, BaseMessage):
-                output = result.content
-            elif isinstance(result, StringPromptValue):
-                output = result.text
-            else:
-                output = result
-            return PipelineState(messages=[output])
-
-        return fn
-
-    def get_runnable(self, node: Node, state: PipelineState) -> Runnable:
-        """Get a predefined runnable to be used in the pipeline"""
+    def process(self, state: PipelineState) -> PipelineState:
+        """The method that executes node specific functionality"""
         raise NotImplementedError
 
     def logger(self, config):
