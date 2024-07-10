@@ -70,7 +70,7 @@ def create_team(request):
             team = form.save()
             team.save()
             make_user_team_owner(team=team, user=request.user)
-            return HttpResponseRedirect(reverse("teams:manage_teams"))
+            return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
     else:
         form = TeamChangeForm()
     return render(
