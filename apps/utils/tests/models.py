@@ -29,7 +29,7 @@ class Bot(models.Model):
         return self.name
 
 
-@audit_fields("name", audit_special_queryset_writes=True)
+@audit_fields("name", "collection", audit_special_queryset_writes=True)
 class Tool(models.Model):
     name = models.CharField(max_length=100)
     collection = models.ForeignKey("Collection", on_delete=models.SET_NULL, null=True, blank=True)

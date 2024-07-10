@@ -28,7 +28,8 @@ def _model_setup():
         -> t2
     c2
         -> t2
-        -> t3
+        -> b3
+    t3
     """
     from apps.utils.tests.models import Bot, Collection, Param, Tool
 
