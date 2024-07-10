@@ -1,7 +1,9 @@
 from abc import ABC
 from collections.abc import Callable, Sequence
+from functools import cached_property
 from typing import Annotated, Any, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from pydantic_core import ValidationError
 
@@ -33,16 +35,18 @@ class PipelineNode(BaseModel, ABC):
             def _process(self, state: PipelineState) -> PipelineState:
                 input = state["messages"][-1]
                 output = ... # do something
-                PipelineState(messages=[output]) # Update the state by adding the output to the `messages` attr
+                return output # The state will be updated with output
 
        class FunLambdaNode(PipelineNode):
             required_parameter_1: str
 
             def _process(self, state: PipelineState) -> PipelineState:
                 ...
-                return PipelineState() # Return an empty state if you do not want to update the current state
+                return # The state will not be updated, since None is returned
 
     """
+
+    config: RunnableConfig | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -55,23 +59,24 @@ class PipelineNode(BaseModel, ABC):
             raise PipelineNodeBuildError(ex)
 
     def process(self, state: PipelineState, config) -> PipelineState:
+        self.config = config
         cls_name = self.__class__.__name__
-        logger = self.logger(config)
-        logger.info(f"{cls_name} starting")
+        self.logger.info(f"{cls_name} starting")
 
-        output = self._process(state, config)
+        output = self._process(state)
 
-        self.logger(config).info(f"{cls_name} finished with output: {output}")
+        self.logger.info(f"{cls_name} finished with output: {output}")
 
         # Append the output to the state, otherwise do not change the state
         return PipelineState(messages=[output]) if output else PipelineState()
 
-    def _process(self, state: PipelineState, config) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
-    def logger(self, config):
-        for handler in config["callbacks"].handlers:
+    @cached_property
+    def logger(self):
+        for handler in self.config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
 

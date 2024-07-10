@@ -4,7 +4,7 @@ from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pydantic import Field, create_model
 
 from apps.experiments.models import ParticipantData
@@ -19,7 +19,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         input = state["messages"][-1]
 
         env = SandboxedEnvironment()
@@ -44,7 +44,7 @@ class LLMResponse(PipelineNode):
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(state["messages"][-1])
         return output.content
@@ -70,7 +70,7 @@ class CreateReport(LLMResponse):
         "Output it as JSON with a single key called 'summary' with the summary."
     )
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
         output = chain.invoke(state["messages"][-1])
         return output.content
@@ -81,7 +81,7 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=state["messages"][-1]
         )
@@ -90,10 +90,9 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         input = state["messages"][-1]
-        if logger := self.logger(config):
-            logger.debug(f"Returning input: '{input}' without modification")
+        self.logger.debug(f"Returning input: '{input}' without modification")
         return input
 
 
@@ -101,7 +100,7 @@ class ExtractStructuredDataBasic(LLMResponse):
     __human_name__ = "Extract structured data (Basic)"
     data_schema: str
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> RunnableLambda:
+    def _process(self, state: PipelineState) -> RunnableLambda:
         json_schema = ExtractStructuredDataBasic.to_json_schema(json.loads(self.data_schema))
         prompt = PromptTemplate.from_template(template="{input}.\nCurrent user data: {participant_data}")
         chain = (
@@ -157,7 +156,7 @@ class UpdateParticipantMemory(PipelineNode):
     __human_name__ = "Update participant memory"
     key_name: str | None = None
 
-    def _process(self, state: PipelineState, config: RunnableConfig) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         extracted_data = state["messages"][-1]
 
         if not isinstance(extracted_data, dict):
