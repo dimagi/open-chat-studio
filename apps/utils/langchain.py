@@ -75,7 +75,7 @@ class FakeLlm(FakeListChatModel):
         with a runnable lambda that returns the dictionary that we specified when we built the FakeLlm:
 
         Example:
-            FakeLlm(responses=[{"name": "John"}])
+            FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
         """
         return RunnableLambda(lambda *args: self.responses[-1])
 

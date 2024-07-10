@@ -222,25 +222,27 @@ def test_extract_and_update_data_pipeline(logger, provider):
     assert participant_data is None
 
     # New data should be created
-    _run_extract_update_pipeline(session, provider=provider, extracted_data={"name": "Johnny"}, key_name="profile")
+    _run_data_extract_and_update_pipeline(
+        session, provider=provider, extracted_data={"name": "Johnny"}, key_name="profile"
+    )
 
     participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
     assert participant_data.data == {"profile": {"name": "Johnny"}}
 
     # The "profile" key should be updated
-    _run_extract_update_pipeline(
+    _run_data_extract_and_update_pipeline(
         session, provider=provider, extracted_data={"name": "John", "last_name": "Wick"}, key_name="profile"
     )
     participant_data.refresh_from_db()
     assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
 
     # New data should be inserted at the toplevel
-    _run_extract_update_pipeline(session, provider=provider, extracted_data={"has_pets": False}, key_name=None)
+    _run_data_extract_and_update_pipeline(session, provider=provider, extracted_data={"has_pets": False}, key_name=None)
     participant_data.refresh_from_db()
     assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}, "has_pets": False}
 
 
-def _run_extract_update_pipeline(session, provider, extracted_data: dict, key_name: str):
+def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dict, key_name: str):
     fake_llm = FakeLlm(responses=[extracted_data], token_counts=[0])
     service = FakeLlmService(llm=fake_llm)
 
