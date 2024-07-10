@@ -7,7 +7,10 @@ def django_db_with_data(available_apps=("apps.experiments",)):
     Args:
         available_apps (tuple, optional):
             The apps that are necessary for the test. Defaults to ("apps.experiments",).
-            It is unclear which apps are necessary but these seem to work.
+            Any apps that create default data using Django migrations should be included
+            in this list.
+
+    See also `apps.conftest._django_db_restore_serialized`.
     """
     import pytest
 
@@ -19,3 +22,16 @@ def django_db_with_data(available_apps=("apps.experiments",)):
         )(func)
 
     return _inner
+
+
+def django_db_transactional():
+    """Shortcut decorator to mark a test function as a transactional test.
+
+    This is just an alias for django_db_with_data() but kept separate for clarity.
+
+    An alternative would be to use the pytest.mark.django_db(transaction=True, available_apps=(...) decorator
+    (without `serialized_rollback=True`) but determining the list of apps required is not always
+    clear, and they are only needed in order to create the content types and permissions. Instead, we rely on
+    the serialized_rollback=True to load the serialized DB state which includes the content types and permissions.
+    """
+    return django_db_with_data()
