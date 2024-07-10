@@ -10,20 +10,21 @@
     </li>
   {% endif %}
   {% if other_teams %}
-    <li class="menu-title">
-      <span>{% translate "Switch Team" %}</span>
+    <li>
+      <details>
+        <summary>{% translate "Switch Team" %}</summary>
+        <ul>
+          {% for name, url in other_teams.items %}
+            <li>
+              <a href="{{ url }}"><i class="fa fa-arrow-right"></i>{{ name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
     </li>
-    {% for name, url in other_teams.items %}
-      <li>
-        <a href="{{ url }}"><i class="fa fa-arrow-right"></i>{{ name }}</a>
-      </li>
-    {% endfor %}
   {% endif %}
 {% endif %}
 {% if request.user.is_authenticated %}
-  <li class="menu-title">
-    <hr/>
-  </li>
   <li>
     <a href="
              {% if front_end_framework == 'htmx' %}{% url 'teams:create_team' %}{% else %}{% url 'teams:manage_teams' %}new{% endif %}">
