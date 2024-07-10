@@ -516,6 +516,9 @@ FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
 ]
+TEST_NON_SERIALIZED_APPS = [
+    "field_audit",
+]
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
