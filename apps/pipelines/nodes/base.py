@@ -46,7 +46,7 @@ class PipelineNode(BaseModel, ABC):
 
     """
 
-    config: RunnableConfig | None = None
+    _config: RunnableConfig | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -59,7 +59,7 @@ class PipelineNode(BaseModel, ABC):
             raise PipelineNodeBuildError(ex)
 
     def process(self, state: PipelineState, config) -> PipelineState:
-        self.config = config
+        self._config = config
         cls_name = self.__class__.__name__
         self.logger.info(f"{cls_name} starting")
 
@@ -76,6 +76,6 @@ class PipelineNode(BaseModel, ABC):
 
     @cached_property
     def logger(self):
-        for handler in self.config["callbacks"].handlers:
+        for handler in self._config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
