@@ -23,6 +23,7 @@ def test_content_types():
 
 
 IGNORE_APPS = {
+    "accounting",
     "api",
     "users",
     "sites",

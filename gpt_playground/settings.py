@@ -77,6 +77,7 @@ THIRD_PARTY_APPS = [
 PROJECT_APPS = [
     "apps.users.apps.UserConfig",
     "apps.api.apps.APIConfig",
+    "apps.accounting",
     "apps.chat",
     "apps.experiments",
     "apps.web",
