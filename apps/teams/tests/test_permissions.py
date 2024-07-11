@@ -24,6 +24,7 @@ def test_content_types():
 
 IGNORE_APPS = {
     "api",
+    "audit",
     "users",
     "sites",
     "otp_static",
