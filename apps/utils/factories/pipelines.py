@@ -11,13 +11,13 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     name = "Test Pipeline"
     data = {
         "edges": [
-            {"id": "1->2", "source": "1", "target": "2"},
+            {"id": "1->2", "source": "first", "target": "second"},
         ],
         "nodes": [
             {
                 "id": "1",
                 "data": {
-                    "id": "1",
+                    "id": "first",
                     "type": "Passthrough",
                     "label": "Passthrough",
                     "params": {},
@@ -26,7 +26,7 @@ class PipelineFactory(factory.django.DjangoModelFactory):
             {
                 "id": "2",
                 "data": {
-                    "id": "2",
+                    "id": "second",
                     "type": "Passthrough",
                     "label": "Passthrough",
                     "params": {},

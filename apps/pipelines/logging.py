@@ -15,42 +15,43 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
     def __init__(self, pipeline_run, verbose=False) -> None:
         self.pipeline_run = pipeline_run
         self.logger = get_logger(uuid.uuid4().hex, self.pipeline_run)
-        self.depth = 0
         self.verbose = verbose
         self._run_id_names = {}
 
     def _should_log(self, kwargs):
+        """We only log steps that are defined nodes inside of the pipeline.
+
+        The nodes themselves should handle logging further if more information is required.
+        """
+
         if "langsmith:hidden" in kwargs.get("tags", []):
             return False
+
         if self.verbose:
             return True
+
         if kwargs.get("run_id") in self._run_id_names:
             return True
-        from apps.pipelines.nodes import nodes
 
-        if hasattr(nodes, kwargs.get("name", "")):
+        if kwargs.get("name") in self.pipeline_run.pipeline.node_ids:
             self._run_id_names[kwargs.get("run_id")] = kwargs.get("name")
             return True
+
         return False
 
     def on_chain_start(self, serialized, inputs, *args, **kwargs):
-        self.depth += 1
-        from apps.pipelines.models import PipelineRunStatus
-
-        self.pipeline_run.status = PipelineRunStatus.RUNNING
         if self._should_log(kwargs):
-            self.logger.info(f"{kwargs.get('name', serialized.get('name'))} starting")
+            self.logger.info(
+                f"{kwargs.get('name', serialized.get('name'))} starting",
+                input=inputs if isinstance(inputs, str) else inputs["messages"][-1],
+            )
 
     def on_chain_end(self, outputs, **kwargs):
-        from apps.pipelines.models import PipelineRunStatus
-
-        self.depth -= 1
         if self._should_log(kwargs):
-            self.logger.info(f"{self._run_id_names[kwargs.get('run_id')]} finished: {outputs}")
-
-        if self.depth == 0:
-            self.pipeline_run.status = PipelineRunStatus.SUCCESS
-            self.pipeline_run.save()  # We can only save in the original thread. Not totally clear why
+            self.logger.info(
+                f"{self._run_id_names.get(kwargs.get('run_id'), '')} finished",
+                output=outputs if isinstance(outputs, str) else outputs["messages"][-1],
+            )
 
     def on_chain_error(self, error, *args, **kwargs):
         from apps.pipelines.models import PipelineRunStatus
@@ -75,11 +76,14 @@ class LogHandler:
         from apps.pipelines.models import LogEntry
 
         record = message.record
+
         log_entry = LogEntry(
             **{
                 "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
                 "level": record["level"].name,
                 "message": record["message"],
+                "output": record["extra"].get("output"),
+                "input": record["extra"].get("input"),
             }
         )
         # Appending to a list is thread safe in python
