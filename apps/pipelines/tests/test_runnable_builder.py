@@ -207,6 +207,58 @@ def test_extract_structured_data_basic(provider):
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+@pytest.mark.parametrize(
+    ("key_name", "input", "existing_data", "expected_data_structure", "expect_error"),
+    [
+        (None, {"cats": "yes", "name": "John"}, None, {"cats": "yes", "name": "John"}, False),
+        (None, {"cats": "yes", "name": "John"}, {}, {"cats": "yes", "name": "John"}, False),
+        ("pets", {"cats": []}, {}, {"pets": {"cats": []}}, False),
+        ("pets", {"cats": []}, {"pets": {"dogs": []}}, {"pets": {"cats": []}}, False),
+        ("name", "John", {}, {"name": "John"}, False),
+        ("name", "John", {"name": "Johnny", "surname": "Wick"}, {"name": "John", "surname": "Wick"}, False),
+        ("profiles", [{"name": "John"}], {}, {"profiles": [{"name": "John"}]}, False),
+        ("profiles", [{"name": "John"}], {"profiles": "there are none"}, {"profiles": [{"name": "John"}]}, False),
+        (None, "some input", {}, None, True),
+        (None, [], {}, None, True),
+    ],
+)
+def test_update_participant_data_node(key_name, input, existing_data, expected_data_structure, expect_error):
+    session = ExperimentSessionFactory()
+    if existing_data:
+        ParticipantData.objects.create(
+            team=session.team, participant=session.participant, data=existing_data, content_object=session.experiment
+        )
+
+    runnable = PipelineGraph.build_runnable_from_json(
+        {
+            "edges": [],
+            "nodes": [
+                {
+                    "data": {
+                        "id": "llm-GUk0C",
+                        "label": "Update participant memory",
+                        "type": "UpdateParticipantMemory",
+                        "params": {
+                            "key_name": key_name,
+                        },
+                    },
+                    "id": "llm-GUk0C",
+                },
+            ],
+        }
+    )
+    state = PipelineState(messages=[input], experiment_session=session)
+    if expect_error:
+        with pytest.raises(KeyError, match="A key is expected for a string or list value."):
+            runnable.invoke(state)
+    else:
+        runnable.invoke(state)
+        participant_data = ParticipantData.objects.get(participant=session.participant)
+        assert participant_data.data == expected_data_structure
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_and_update_data_pipeline(provider):
     """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
     participant to make sure it creates data. Then we run it again a few times to test that it updates the data

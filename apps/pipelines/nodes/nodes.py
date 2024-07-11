@@ -157,31 +157,32 @@ class UpdateParticipantMemory(PipelineNode):
     key_name: str | None = None
 
     def _process(self, state: PipelineState) -> PipelineState:
-        extracted_data = state["messages"][-1]
-
-        if not isinstance(extracted_data, dict):
-            # TODO: This should not happen, but until we do input-output type matching, it's always possible
-            input_type = type(extracted_data)
-            raise TypeError(
-                f"UpdateParticipantMemory expected a dictionary as input, but got {input_type} instead.\n"
-                f"Input: {extracted_data}"
-            )
-
+        """Strategy:
+        - If the input is a string or list, a `key_name` must be present to be valid JSON.
+        - If `key_name` is present, we create a new dictionary with `input` as the value to `key_name`.
+        - Merge this new dictionary with the current participant data, essentially overriding existing data
+        """
+        new_data = state["messages"][-1]
         session = state["experiment_session"]
+
+        if isinstance(new_data, str) or isinstance(new_data, list):
+            if not self.key_name:
+                raise KeyError("A key is expected for a string or list value.")
+
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
             )
-            if self.key_name:
-                participant_data.data[self.key_name] = participant_data.data.get(self.key_name, {}) | extracted_data
-            else:
-                participant_data.data = participant_data.data | extracted_data
 
+            if self.key_name:
+                new_data = {self.key_name: new_data}
+
+            participant_data.data = participant_data.data | new_data
             participant_data.save()
         except ParticipantData.DoesNotExist:
             ParticipantData.objects.create(
                 participant=session.participant,
                 content_object=session.experiment,
                 team=session.team,
-                data={self.key_name: extracted_data} if self.key_name else extracted_data,
+                data={self.key_name: new_data} if self.key_name else new_data,
             )
