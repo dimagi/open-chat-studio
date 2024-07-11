@@ -26,7 +26,8 @@ class AuditContextProvider(SystemUserAuditor):
         elif request.user.is_authenticated:
             context = get_request_context(request)
 
-        context["transaction_id"] = get_audit_transaction_id()
+        if transaction_id := get_audit_transaction_id():
+            context["transaction_id"] = transaction_id
 
         if team := get_current_team():
             context["team"] = team.id
