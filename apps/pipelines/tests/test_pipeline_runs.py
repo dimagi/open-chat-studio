@@ -8,6 +8,7 @@ from apps.pipelines.models import Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.pytest import django_db_transactional
 
 
 @pytest.fixture()
@@ -20,7 +21,7 @@ def session():
     return ExperimentSessionFactory()
 
 
-@pytest.mark.django_db()
+@django_db_transactional()
 def test_running_pipeline_creates_run(pipeline: Pipeline):
     input = "foo"
     pipeline.invoke(PipelineState(messages=[input]))
@@ -48,7 +49,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
     assert run.log["entries"][6]["message"] == f"Passthrough finished: {input}"
 
 
-@pytest.mark.django_db()
+@django_db_transactional()
 def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
     input = "What's up"
     error_message = "Bad things are afoot"
@@ -75,7 +76,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
     assert run.log["entries"][1]["message"] == error_message
 
 
-@pytest.mark.django_db()
+@django_db_transactional()
 def test_running_pipeline_stores_session(pipeline: Pipeline, session: ExperimentSession):
     input = "foo"
     pipeline.invoke(PipelineState(messages=[input]), session)

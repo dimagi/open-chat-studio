@@ -87,7 +87,6 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "participant",
         "status",
         "created_at",
-        "llm",
     )
     search_fields = ("external_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")

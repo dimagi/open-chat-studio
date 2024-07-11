@@ -59,7 +59,12 @@ from apps.experiments.models import (
     SessionStatus,
     SyntheticVoice,
 )
-from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
+from apps.experiments.tables import (
+    ChildExperimentRoutesTable,
+    ExperimentSessionsTable,
+    ExperimentTable,
+    ParentExperimentRoutesTable,
+)
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
@@ -171,7 +176,6 @@ class ExperimentForm(forms.ModelForm):
             "consent_form",
             "voice_provider",
             "synthetic_voice",
-            "no_activity_config",
             "safety_violation_notification_emails",
             "voice_response_behaviour",
             "tools",
@@ -203,7 +207,6 @@ class ExperimentForm(forms.ModelForm):
         self.fields["pre_survey"].queryset = team.survey_set
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
-        self.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
 
         # Alpine.js bindings
@@ -434,9 +437,13 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    user_sessions = ExperimentSession.objects.with_last_message_created_at().filter(
-        participant__user=request.user,
-        experiment=experiment,
+    user_sessions = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(
+            participant__user=request.user,
+            experiment=experiment,
+        )
+        .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
@@ -462,6 +469,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
             **_get_events_context(experiment, team_slug),
+            **_get_routes_context(experiment, team_slug),
         },
     )
 
@@ -501,6 +509,15 @@ def _get_events_context(experiment: Experiment, team_slug: str):
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
+
+
+def _get_routes_context(experiment: Experiment, team_slug: str):
+    parent_links = experiment.parent_links.all()
+    return {
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.all()),
+        "parent_routes_table": ParentExperimentRoutesTable(parent_links),
+        "can_make_child_routes": len(parent_links) == 0,
+    }
 
 
 @login_and_team_required

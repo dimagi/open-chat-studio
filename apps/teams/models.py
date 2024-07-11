@@ -15,8 +15,6 @@ from apps.teams import model_audit_fields
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
-from . import roles
-
 
 class TeamObjectManager(AuditingManager):
     pass
@@ -101,7 +99,6 @@ class Membership(BaseModel, PermissionsMixin):
 
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES)
 
     objects = MembershipObjectManager()
 
@@ -120,7 +117,6 @@ class Invitation(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="invitations")
     email = models.EmailField()
-    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES, default=roles.ROLE_MEMBER)
     invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_invitations")
     is_accepted = models.BooleanField(default=False)
     accepted_by = models.ForeignKey(
