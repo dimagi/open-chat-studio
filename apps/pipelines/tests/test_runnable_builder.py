@@ -21,8 +21,8 @@ def provider():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_full_email_sending_pipeline(logger, get_llm_service, provider):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_full_email_sending_pipeline(get_llm_service, provider):
     service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
     get_llm_service.return_value = service
 
@@ -94,8 +94,8 @@ def test_full_email_sending_pipeline(logger, get_llm_service, provider):
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_send_email(logger):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_send_email():
     runnable = PipelineGraph.build_runnable_from_json(
         {
             "edges": [],
@@ -124,8 +124,8 @@ def test_send_email(logger):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_llm_response(logger, get_llm_service, provider):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_response(get_llm_service, provider):
     service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
     get_llm_service.return_value = service
     runnable = PipelineGraph.build_runnable_from_json(
@@ -147,8 +147,8 @@ def test_llm_response(logger, get_llm_service, provider):
     assert runnable.invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1] == "123"
 
 
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_render_template(logger):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_render_template():
     render_template_node_id = "render-123"
     runnable = PipelineGraph.build_runnable_from_json(
         {
@@ -172,8 +172,8 @@ def test_render_template(logger):
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_extract_structured_data_basic(logger, provider):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_extract_structured_data_basic(provider):
     fake_llm = FakeLlm(responses=[{"name": "John"}], token_counts=[0])
     service = FakeLlmService(llm=fake_llm)
     session = ExperimentSessionFactory()
@@ -206,8 +206,8 @@ def test_extract_structured_data_basic(logger, provider):
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger")
-def test_extract_and_update_data_pipeline(logger, provider):
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_extract_and_update_data_pipeline(provider):
     """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
     participant to make sure it creates data. Then we run it again a few times to test that it updates the data
     correctly.
