@@ -56,3 +56,6 @@ class Collection(models.Model):
 
     def __str__(self):
         return self.name
+
+
+MODEL_NAMES = [f"{model.__module__}.{model.__name__}" for model in [Bot, Tool, Collection, Param]]

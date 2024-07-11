@@ -16,7 +16,7 @@ from apps.utils.deletion import delete_object_with_auditing_of_related_objects
     ],
 )
 def test_delete_with_auditing(obj_name, delete_events, update_events, expected_stats):
-    from apps.utils.tests.models import Bot, Collection, Tool
+    from apps.utils.tests.models import MODEL_NAMES, Bot, Collection, Tool
 
     source_model = {
         "b": Bot,
@@ -36,6 +36,6 @@ def test_delete_with_auditing(obj_name, delete_events, update_events, expected_s
 
     actual_update_events = {
         f"{e.object_class_path.split('.')[-1]}-{','.join(e.delta)}"
-        for e in AuditEvent.objects.filter(is_delete=False, is_create=False)
+        for e in AuditEvent.objects.filter(is_delete=False, is_create=False, object_class_path__in=MODEL_NAMES)
     }
     assert actual_update_events == set(update_events)
