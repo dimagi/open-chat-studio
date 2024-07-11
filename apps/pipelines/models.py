@@ -30,14 +30,19 @@ class Pipeline(BaseTeamModel):
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
+        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
+        # the session instead of the session object.
+        input_copy = input.copy()
+        input_copy["experiment_session"] = session.id
         pipeline_run = PipelineRun.objects.create(
-            pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}, session=session
+            pipeline=self, input=input_copy, status=PipelineRunStatus.RUNNING, log={"entries": []}, session=session
         )
 
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
         logging_callback.logger.info("Starting pipeline run")
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
+            output["experiment_session"] = session.id
             pipeline_run.output = output
         finally:
             logging_callback.logger.info("Pipeline run finished")

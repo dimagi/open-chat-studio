@@ -20,7 +20,7 @@ def add_messages(left: list, right: list):
 
 class PipelineState(TypedDict):
     messages: Annotated[Sequence[Any], add_messages]
-    experiment_session_id: int
+    experiment_session: ExperimentSession
 
 
 class PipelineNode(BaseModel, ABC):
@@ -79,6 +79,3 @@ class PipelineNode(BaseModel, ABC):
         for handler in self.config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
-
-    def experiment_session(self, state: PipelineState) -> ExperimentSession:
-        return ExperimentSession.objects.get(id=state["experiment_session_id"])

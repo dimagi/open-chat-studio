@@ -201,7 +201,7 @@ def test_extract_structured_data_basic(logger, provider):
                 ],
             }
         )
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session_id=session.id)
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
         assert runnable.invoke(state)["messages"][-1] == {"name": "John"}
 
 
@@ -288,5 +288,5 @@ def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dic
                 "name": "New Pipeline",
             }
         )
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session_id=session.id)
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
         runnable.invoke(state)

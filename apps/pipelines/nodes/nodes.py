@@ -113,7 +113,7 @@ class ExtractStructuredDataBasic(LLMResponse):
         return output
 
     def get_participant_data(self, state: PipelineState):
-        session = self.experiment_session(state)
+        session = state["experiment_session"]
         return session.get_participant_data()
 
     @staticmethod
@@ -167,7 +167,7 @@ class UpdateParticipantMemory(PipelineNode):
                 f"Input: {extracted_data}"
             )
 
-        session = self.experiment_session(state)
+        session = state["experiment_session"]
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
