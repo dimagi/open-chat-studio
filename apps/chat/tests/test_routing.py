@@ -11,27 +11,21 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.langchain import FakeLlm, FakeLlmService
 
 
-@pytest.fixture()
-def experiment():
-    team = TeamFactory()
-    experiments = ExperimentFactory.create_batch(3, team=team)
-    ExperimentRoute.objects.bulk_create(
-        [
-            ExperimentRoute(
-                team=team, parent=experiments[0], child=experiments[1], keyword="keyword1", is_default=False
-            ),
-            ExperimentRoute(
-                team=team, parent=experiments[0], child=experiments[2], keyword="keyword2", is_default=True
-            ),
-        ]
-    )
-    return experiments[0]
-
-
 @pytest.mark.django_db()
-def test_routing(experiment):
+@pytest.mark.parametrize(
+    ("with_default", "routing_response", "expected_tag"),
+    [
+        (True, "keyword1", "keyword1"),
+        (True, "keyword3", "keyword3"),
+        (True, "not a valid keyword", "keyword2"),
+        (False, "keyword2", "keyword2"),
+        (False, "not a valid keyword", "keyword1"),
+    ],
+)
+def test_experiment_routing(with_default, routing_response, expected_tag):
+    experiment = _make_experiment_with_routing(with_default)
     session = ExperimentSessionFactory(experiment=experiment)
-    fake_llm = FakeLlm(responses=["keyword2", "How can I help today?"], token_counts=[0])
+    fake_llm = FakeLlm(responses=[routing_response, "How can I help today?"], token_counts=[0])
     fake_service = FakeLlmService(llm=fake_llm)
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
         bot = TopicBot(session)
@@ -42,4 +36,28 @@ def test_routing(experiment):
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
     ]
     message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
-    assert list(message.tags.values_list("name", flat=True)) == ["keyword2"]
+    assert list(message.tags.values_list("name", flat=True)) == [expected_tag]
+
+
+def _make_experiment_with_routing(with_default=True):
+    team = TeamFactory()
+    experiments = ExperimentFactory.create_batch(4, team=team)
+    ExperimentRoute.objects.bulk_create(
+        [
+            ExperimentRoute(
+                team=team, parent=experiments[0], child=experiments[1], keyword="keyword1", is_default=False
+            ),
+            ExperimentRoute(
+                # make the middle one the default to avoid first / last false positives
+                team=team,
+                parent=experiments[0],
+                child=experiments[2],
+                keyword="keyword2",
+                is_default=with_default,
+            ),
+            ExperimentRoute(
+                team=team, parent=experiments[0], child=experiments[3], keyword="keyword3", is_default=False
+            ),
+        ]
+    )
+    return experiments[0]
