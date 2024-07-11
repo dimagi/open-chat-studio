@@ -78,7 +78,7 @@ class ChainOutput(Serializable):
         return ["ocs", "schema", "chain_output"]
 
 
-class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
+class BaseExperimentRunnable(RunnableSerializable[str, ChainOutput], ABC):
     experiment: Experiment
     session: ExperimentSession
     input_key: str = "input"
