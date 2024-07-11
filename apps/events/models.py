@@ -256,7 +256,9 @@ class TimePeriod(models.TextChoices):
 
 
 class ScheduledMessage(BaseTeamModel):
-    action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
+    action = models.ForeignKey(
+        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, default=None
+    )
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"

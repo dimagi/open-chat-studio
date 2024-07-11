@@ -92,7 +92,7 @@ class Passthrough(PipelineNode):
 
     def _process(self, state: PipelineState) -> PipelineState:
         input = state["messages"][-1]
-        self.logger.debug(f"Returning input: '{input}' without modification")
+        self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return input
 
 
