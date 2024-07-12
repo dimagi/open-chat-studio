@@ -29,6 +29,7 @@ def session():
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
+    session.experiment.id = 1  # required for hashing (used by @cache decorator)
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
     session.get_participant_data = lambda *args, **kwargs: None
