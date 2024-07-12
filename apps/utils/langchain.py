@@ -1,3 +1,4 @@
+import dataclasses
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,7 +17,8 @@ from pydantic import Field
 
 from apps.accounting.usage import BaseUsageRecorder, UsageScope
 from apps.service_providers.llm_service import LlmService
-from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler, UsageCallbackHandler
+from apps.service_providers.llm_service.callbacks import UsageCallbackHandler
+from apps.service_providers.llm_service.token_counters import TokenCounter
 from apps.service_providers.service_usage import UsageMixin
 from apps.teams.models import BaseTeamModel
 
@@ -129,13 +131,30 @@ class FakeLlmService(LlmService, UsageMixin):
         return self.assistant
 
 
+@dataclasses.dataclass
+class FakeTokenCounter(TokenCounter):
+    token_counts: list[int] = dataclasses.field(default_factory=lambda: [1])
+    token_i: int = 0
+
+    def get_tokens_from_text(self, text) -> int:
+        token_counts = self.token_counts[self.token_i]
+        if self.token_i < len(self.token_counts) - 1:
+            self.token_i += 1
+        else:
+            self.token_i = 0
+        return token_counts
+
+
 @contextmanager
 def mock_experiment_llm_service(responses: list, token_counts: list[int] = None):
-    llm = FakeLlm(responses=responses, token_counts=token_counts or [0])
     usage_recorder = FakeUsageRecorder()
-    llm.callbacks = [
-        UsageCallbackHandler(usage_recorder, TokenCountingCallbackHandler(llm)),
-    ]
+    llm = FakeLlm(
+        responses=responses,
+        token_counts=token_counts or [0],
+        callbacks=[
+            UsageCallbackHandler(usage_recorder, FakeTokenCounter()),
+        ],
+    )
     service = FakeLlmService(llm=llm, usage_recorder=usage_recorder, assistant=FakeAssistant(responses=responses))
 
     def fake_llm_service(self):

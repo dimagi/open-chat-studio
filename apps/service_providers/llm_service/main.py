@@ -12,9 +12,9 @@ from langchain_core.load import dumpd
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
-from openai._base_client import SyncAPIClient
 
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler, UsageCallbackHandler
+from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter
 from apps.service_providers.service_usage import UsageMixin
 
 
@@ -86,7 +86,7 @@ class LlmService(pydantic.BaseModel):
     supports_transcription: bool = False
     supports_assistants: bool = False
 
-    def get_raw_client(self) -> SyncAPIClient:
+    def get_raw_client(self):
         raise NotImplementedError
 
     def get_assistant(self, assistant_id: str, as_agent=False):
@@ -126,7 +126,9 @@ class OpenAILlmService(UsageMixin, LlmService):
             openai_api_base=self.openai_api_base,
             openai_organization=self.openai_organization,
             callbacks=[
-                UsageCallbackHandler(self.usage_recorder, OpenAICallbackHandler(), metadata={"model": llm_model})
+                UsageCallbackHandler(
+                    self.usage_recorder, OpenAITokenCounter(model=llm_model), metadata={"model": llm_model}
+                )
             ],
         )
         if model._get_encoding_model()[0] == "cl100k_base":
@@ -143,8 +145,6 @@ class OpenAILlmService(UsageMixin, LlmService):
         return transcript.text
 
     def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
-        from langchain_community.callbacks import OpenAICallbackHandler
-
         return OpenAICallbackHandler()
 
 
@@ -159,19 +159,18 @@ class AzureLlmService(LlmService, UsageMixin):
         arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        model = AzureChatOpenAI(
+        return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
             temperature=temperature,
+            callbacks=[
+                UsageCallbackHandler(
+                    self.usage_recorder, OpenAITokenCounter(model=llm_model), metadata={"model": llm_model}
+                )
+            ],
         )
-        model.callbacks = [
-            UsageCallbackHandler(
-                self.usage_recorder, TokenCountingCallbackHandler(model), metadata={"model": llm_model}
-            )
-        ]
-        return model
 
 
 class AnthropicLlmService(LlmService, UsageMixin):
@@ -184,15 +183,12 @@ class AnthropicLlmService(LlmService, UsageMixin):
         arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        model = ChatAnthropic(
+        return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             temperature=temperature,
+            callbacks=[
+                UsageCallbackHandler(self.usage_recorder, AnthropicTokenCounter(), metadata={"model": llm_model})
+            ],
         )
-        model.callbacks = [
-            UsageCallbackHandler(
-                self.usage_recorder, TokenCountingCallbackHandler(model), metadata={"model": llm_model}
-            )
-        ]
-        return model
