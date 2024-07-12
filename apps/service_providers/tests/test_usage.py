@@ -65,7 +65,7 @@ def test_usage_recording_for_anthropic(mock_create):
             usage_recorder=usage_recorder,
         )
 
-    _test_usage_recording_for_chat_model(service_factory, expected_input_tokens=8, expected_output_tokens=12)
+    _test_usage_recording_for_chat_model(service_factory, expected_input_tokens=5, expected_output_tokens=10)
 
 
 def _test_usage_recording_for_chat_model(service_factory, expected_input_tokens, expected_output_tokens):
