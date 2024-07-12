@@ -81,7 +81,7 @@ class ChainOutput(Serializable):
         return ["ocs", "schema", "chain_output"]
 
 
-class ExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     state: ChatRunnableState
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
