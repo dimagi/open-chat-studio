@@ -124,8 +124,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
         message=error_message,
         level="ERROR",
     )
-    assert LogEntry(**entries[6]) == LogEntry(
-        time=entries[6]["time"], message="Pipeline run failed", level="DEBUG", input=input
+    assert LogEntry(**entries[5]) == LogEntry(
+        time=entries[5]["time"], message="Pipeline run failed", level="DEBUG", input=input
     )
 
 
