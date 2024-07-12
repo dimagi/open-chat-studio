@@ -5,6 +5,7 @@ from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
+from apps.accounting.models import UsageType
 from apps.channels.datamodels import BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
@@ -54,7 +55,12 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
         last_user_message = input_formatter.format(input=last_user_message)
 
     # Get the response from the bot using the last message from the user and return it
-    answer, input_tokens, output_tokens = conversation.predict(last_user_message)
+    history = PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=[])
+    with llm_service.record_usage(history) as usage:
+        answer = conversation.predict(last_user_message)
+
+    input_tokens = usage.totals.get(UsageType.INPUT_TOKENS, 0)
+    output_tokens = usage.totals.get(UsageType.OUTPUT_TOKENS, 0)
 
     # Push the user message back into the message list now that the bot response has arrived
     if last_user_object:
@@ -79,7 +85,8 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
         }
     )
     history_event |= {"preview": answer, "time": datetime.now().time().strftime("%H:%M")}
-    PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
+    history.history = history_event
+    history.save()
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}
 
 

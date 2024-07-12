@@ -10,8 +10,6 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import BaseMemory
-from langchain_anthropic import ChatAnthropic
-from langchain_community.callbacks import get_openai_callback
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage
 
@@ -85,23 +83,10 @@ class BasicConversation(Conversation):
     def _get_optimized_history(self, chat: Chat, max_token_limit: int) -> list[BaseMessage]:
         return compress_chat_history(chat, self.llm, max_token_limit, input_messages=[])
 
-    def predict(self, input: str) -> tuple[str, int, int]:
-        if isinstance(self.llm, ChatAnthropic):
-            # Langchain has no inbuilt functionality to return prompt or
-            # completion tokens for Anthropic's models
-            # https://python.langchain.com/docs/modules/model_io/llms/token_usage_tracking
-            # Instead, we convert the prompt to a string, and count the tokens
-            # with Anthropic's token counter.
-            # TODO: When we enable the AgentExecuter for Anthropic models, we should revisit this
-            response = self.chain.invoke({"input": input})
-            prompt_tokens = self.llm.get_num_tokens_from_messages(response["history"][:-1])
-            completion_tokens = self.llm.get_num_tokens_from_messages([response["history"][-1]])
-            return response["output"], prompt_tokens, completion_tokens
-        else:
-            with get_openai_callback() as cb:
-                response = self.chain.invoke({"input": input})
-            output = response["output"]
-            return output, cb.prompt_tokens, cb.completion_tokens
+    def predict(self, input: str) -> str:
+        response = self.chain.invoke({"input": input})
+        output = response["output"]
+        return output
 
 
 def compress_chat_history(

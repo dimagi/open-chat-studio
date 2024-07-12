@@ -10,4 +10,4 @@ class UsageMixin:
     @contextmanager
     def record_usage(self, source_object: BaseTeamModel, metadata: dict = None):
         with self.usage_recorder.for_source(source_object, metadata=metadata):
-            yield
+            yield self.usage_recorder

@@ -1,5 +1,4 @@
 import dataclasses
-from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -80,10 +79,6 @@ class FakeLlm(FakeListChatModel):
 
 
 class FakeUsageRecorder(BaseUsageRecorder):
-    def __init__(self):
-        super().__init__()
-        self.totals = Counter()
-
     def _get_scope(self, source_object: BaseTeamModel, metadata: dict = None):
         return UsageScope(
             service_object=mock.Mock(team_id=source_object.team_id),

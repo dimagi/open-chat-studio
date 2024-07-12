@@ -1,5 +1,6 @@
 import dataclasses
 import threading
+from collections import Counter
 from contextlib import contextmanager
 from typing import Any
 
@@ -63,6 +64,7 @@ class BaseUsageRecorder:
         self._lock = threading.Lock()
         self.usage = []
         self.scope: list[UsageScope] = []
+        self.totals = Counter()
 
     @contextmanager
     def for_source(self, source_object: BaseTeamModel, metadata: dict = None):
@@ -101,6 +103,8 @@ class BaseUsageRecorder:
         batch = self.get_batch()
         if batch:
             Usage.objects.bulk_create([usage.get_model() for usage in batch])
+            for usage in batch:
+                self.totals[usage.type] += usage.value
         self.usage = []
 
     def get_batch(self):

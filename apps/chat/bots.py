@@ -158,12 +158,8 @@ class SafetyBot:
     def _initialize(self):
         self.conversation = create_conversation(self.prompt, self.source_material, self.llm)
 
-    def _call_predict(self, input_str):
-        response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
-        return response
-
     def is_safe(self, input_str: str) -> bool:
-        result = self._call_predict(input_str)
+        result = self.conversation.predict(input=input_str)
         if result.strip().lower().startswith("safe"):
             return True
         elif result.strip().lower().startswith("unsafe"):
