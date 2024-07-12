@@ -105,7 +105,9 @@ class TelegramChannelForm(ExtraFormBase):
 
 
 class WhatsappChannelForm(ExtraFormBase):
-    number = forms.CharField(label="Number", max_length=20)
+    number = forms.CharField(
+        label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
+    )
     webook_url = forms.CharField(
         widget=forms.TextInput(attrs={"readonly": "readonly"}),
         label="Webhook URL",
