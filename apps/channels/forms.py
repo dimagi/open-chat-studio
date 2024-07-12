@@ -87,6 +87,22 @@ class TelegramChannelForm(ExtraFormBase):
         tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
         tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
 
+    def clean_bot_token(self):
+        """Checks the bot token by making a request to get info on the bot. If the token is invalid, an
+        ApiTelegramException will be raised with error_code = 404
+        """
+        bot_token = self.cleaned_data["bot_token"]
+        try:
+            bot = TeleBot(bot_token, threaded=False)
+            bot.get_me()
+        except apihelper.ApiTelegramException as ex:
+            if ex.error_code == 404:
+                raise forms.ValidationError(f"Invalid token: {bot_token}")
+            else:
+                logger.exception(ex)
+                raise forms.ValidationError("Could not verify the bot token")
+        return bot_token
+
 
 class WhatsappChannelForm(ExtraFormBase):
     number = forms.CharField(label="Number", max_length=20)
