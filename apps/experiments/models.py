@@ -24,6 +24,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.repr import sane_repr
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -640,6 +641,8 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+    __repr__ = sane_repr()
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):

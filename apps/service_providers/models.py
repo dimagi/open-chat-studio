@@ -17,6 +17,7 @@ from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel
 
+from ..utils.repr import sane_repr
 from . import forms, llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
 
@@ -106,6 +107,8 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         help_text="The models that will be available for use. Separate multiple models with a comma.",
     )
     config = encrypt(models.JSONField(default=dict))
+
+    __repr__ = sane_repr("type", "name")
 
     class Meta:
         ordering = ("type", "name")
