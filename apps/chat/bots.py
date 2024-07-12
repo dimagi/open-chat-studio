@@ -52,7 +52,6 @@ class TopicBot:
         self.experiment = experiment or session.experiment
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
-        self.llm = self.experiment.get_chat_model()
         self.source_material = self.experiment.source_material.material if self.experiment.source_material else None
         self.safety_layers = self.experiment.safety_layers.all()
         self.chat = session.chat
@@ -82,10 +81,8 @@ class TopicBot:
         self.chain = create_experiment_runnable(self.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
-        self.safety_bots = [
-            SafetyBot(safety_layer, self.llm, self.usage_recorder, self.source_material)
-            for safety_layer in self.safety_layers
-        ]
+        llm = self.experiment.get_chat_model()
+        self.safety_bots = [SafetyBot(safety_layer, llm, self.source_material) for safety_layer in self.safety_layers]
 
     def _call_predict(self, input_str, save_input_to_history=True):
         if self.child_chains:
