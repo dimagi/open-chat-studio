@@ -16,6 +16,7 @@ from pydantic import Field
 
 from apps.accounting.usage import BaseUsageRecorder, UsageScope
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler, UsageCallbackHandler
 from apps.service_providers.service_usage import UsageMixin
 from apps.teams.models import BaseTeamModel
 
@@ -129,7 +130,12 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
-    service = FakeLlmService(llm=FakeLlm(responses=responses, token_counts=token_counts or [0]))
+    llm = FakeLlm(responses=responses, token_counts=token_counts or [0])
+    usage_recorder = FakeUsageRecorder()
+    llm.callbacks = [
+        UsageCallbackHandler(usage_recorder, TokenCountingCallbackHandler(llm)),
+    ]
+    service = FakeLlmService(llm=llm, usage_recorder=usage_recorder)
 
     def fake_llm_service(self):
         return service
@@ -143,4 +149,4 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
         patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
         patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
     ):
-        yield
+        yield service
