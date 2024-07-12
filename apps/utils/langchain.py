@@ -142,15 +142,7 @@ class FakeTokenCounter(TokenCounter):
 
 @contextmanager
 def mock_experiment_llm_service(responses: list, token_counts: list[int] = None):
-    usage_recorder = FakeUsageRecorder()
-    llm = FakeLlm(
-        responses=responses,
-        token_counts=token_counts or [0],
-        callbacks=[
-            UsageCallbackHandler(usage_recorder, FakeTokenCounter()),
-        ],
-    )
-    service = FakeLlmService(llm=llm, usage_recorder=usage_recorder, assistant=FakeAssistant(responses=responses))
+    service = build_fake_llm_service(responses, token_counts)
 
     def fake_llm_service(self):
         return service
@@ -160,3 +152,16 @@ def mock_experiment_llm_service(responses: list, token_counts: list[int] = None)
         patch("apps.assistants.models.OpenAiAssistant.get_llm_service", new=fake_llm_service),
     ):
         yield service
+
+
+def build_fake_llm_service(responses, token_counts):
+    usage_recorder = FakeUsageRecorder()
+    llm = FakeLlm(
+        responses=responses,
+        token_counts=token_counts or [0],
+        callbacks=[
+            UsageCallbackHandler(usage_recorder, FakeTokenCounter(token_counts=token_counts)),
+        ],
+    )
+    service = FakeLlmService(llm=llm, usage_recorder=usage_recorder, assistant=FakeAssistant(responses=responses))
+    return service

@@ -28,10 +28,13 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
 
 @shared_task
 def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> dict[str, str | int]:
-    llm_service = LlmProvider.objects.get(id=data_dict["provider"]).get_llm_service()
-    messages_history = data_dict["messages"]
-
+    llm_service = LlmProvider.objects.get(team_id=team_id, id=data_dict["provider"]).get_llm_service()
     user = CustomUser.objects.get(id=user_id)
+    return get_prompt_builder_response(llm_service, team_id, user, data_dict)
+
+
+def get_prompt_builder_response(llm_service, team_id: int, user, data_dict: dict) -> dict[str, str | int]:
+    messages_history = data_dict["messages"]
 
     # Get the last message from the user
     # If the most recent message was from the AI, then
@@ -44,8 +47,10 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
         last_user_message = last_user_object["message"]
 
     # Fetch source material
-    source_material = SourceMaterial.objects.filter(id=data_dict["sourceMaterialID"]).first()
-    source_material_material = source_material.material if source_material else ""
+    source_material_material = ""
+    if source_material_id := data_dict.get("sourceMaterialID"):
+        source_material = SourceMaterial.objects.filter(id=source_material_id).first()
+        source_material_material = source_material.material if source_material else ""
 
     llm = llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"]))
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
