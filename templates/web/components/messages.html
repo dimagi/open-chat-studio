@@ -1,3 +1,5 @@
+{% load markdown %}
+
 <script>
   (() => {
     htmx.on("messages", (event) => {
@@ -12,7 +14,7 @@
     {% for message in messages %}
       <script>
         (() => {
-          alertify.notify("{{ message.message }}", "{{ message.tags }}", 100);
+          alertify.notify("{{ message.message|single_quotes }}", "{{ message.tags }}", 100);
         })();
       </script>
     {% endfor %}

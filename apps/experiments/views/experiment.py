@@ -540,7 +540,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         try:
@@ -588,7 +588,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         platform = ChannelPlatform(form.cleaned_data["platform"])
