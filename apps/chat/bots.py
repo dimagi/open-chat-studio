@@ -4,7 +4,6 @@ from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from pydantic import ValidationError
 
-from apps.accounting.usage import UsageRecorder
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
@@ -59,7 +58,6 @@ class TopicBot:
         self.chat = session.chat
         self.session = session
         self.max_token_limit = self.experiment.max_token_limit
-        self.usage_recorder = UsageRecorder(self.session.team, self.session)
 
         # maps keywords to child experiments.
         self.child_experiment_routes = (
@@ -105,7 +103,6 @@ class TopicBot:
         )
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
-        self.usage_recorder.record_token_usage(result.prompt_tokens, result.completion_tokens)
         return result.output
 
     def _get_child_chain(self, input_str) -> tuple[str, Any]:
@@ -118,7 +115,6 @@ class TopicBot:
                 }
             },
         )
-        self.usage_recorder.record_token_usage(result.prompt_tokens, result.completion_tokens)
 
         keyword = result.output.lower().strip()
         try:
@@ -127,7 +123,7 @@ class TopicBot:
             return self.default_tag, self.default_child_chain
 
     def process_input(self, user_input: str, save_input_to_history=True):
-        with self.usage_recorder:
+        with self.experiment.get_llm_service().record_usage(self.session):
             # human safety layers
             for safety_bot in self.safety_bots:
                 if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
@@ -155,14 +151,11 @@ class TopicBot:
 
 
 class SafetyBot:
-    def __init__(
-        self, safety_layer: SafetyLayer, llm: BaseChatModel, usage_recorder: UsageRecorder, source_material: str | None
-    ):
+    def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: str | None):
         self.safety_layer = safety_layer
         self.prompt = safety_layer.prompt_text
         self.llm = llm
         self.source_material = source_material
-        self.usage_recorder = usage_recorder
         self._initialize()
 
     def _initialize(self):
@@ -170,7 +163,6 @@ class SafetyBot:
 
     def _call_predict(self, input_str):
         response, prompt_tokens, completion_tokens = self.conversation.predict(input=input_str)
-        self.usage_recorder.record_token_usage(prompt_tokens, completion_tokens)
         return response
 
     def is_safe(self, input_str: str) -> bool:

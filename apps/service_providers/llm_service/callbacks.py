@@ -6,6 +6,9 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.outputs import LLMResult
 
+from apps.accounting.models import UsageType
+from apps.accounting.usage import BaseUsageRecorder
+
 
 class TokenCountingCallbackHandler(BaseCallbackHandler):
     """Callback Handler that counts tokens using the LLM Model methods."""
@@ -48,3 +51,30 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
         if not response:
             return
         self.on_llm_end(response)
+
+
+class UsageCallbackHandler(BaseCallbackHandler):
+    raise_error = True
+
+    def __init__(
+        self, usage_recorder: BaseUsageRecorder, token_counting_callback: BaseCallbackHandler, metadata: dict = None
+    ):
+        super().__init__()
+        self.usage_recorder = usage_recorder
+        assert hasattr(token_counting_callback, "prompt_tokens")
+        assert hasattr(token_counting_callback, "completion_tokens")
+        self.token_counting_callback = token_counting_callback
+        self.metadata = metadata or {}
+
+    def on_llm_start(self, *args, **kwargs) -> Any:
+        self.token_counting_callback.on_llm_start(*args, **kwargs)
+
+    def on_llm_end(self, *args, **kwargs) -> None:
+        self.token_counting_callback.on_llm_end(*args, **kwargs)
+
+        with self.usage_recorder.update_metadata(self.metadata):
+            if prompt_tokens := getattr(self.token_counting_callback, "prompt_tokens", None):
+                self.usage_recorder.record_usage(UsageType.INPUT_TOKENS, prompt_tokens)
+
+            if completion_tokens := getattr(self.token_counting_callback, "completion_tokens", None):
+                self.usage_recorder.record_usage(UsageType.OUTPUT_TOKENS, completion_tokens)

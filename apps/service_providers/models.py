@@ -11,6 +11,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
+from apps.accounting.usage import UsageRecorder
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
@@ -72,10 +73,11 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AnthropicConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_llm_service(self, config: dict):
+    def get_llm_service(self, usage_recorder, config: dict):
         config = {
             "supports_assistants": self.supports_assistants,
             "supports_transcription": self.supports_transcription,
+            "usage_recorder": usage_recorder,
             **config,
         }
         try:
@@ -117,7 +119,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
 
     def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.get_llm_service(config)
+        return self.type_enum.get_llm_service(UsageRecorder(self), config)
 
 
 class VoiceProviderType(models.TextChoices):

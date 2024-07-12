@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -5,14 +6,18 @@ from unittest import mock
 from unittest.mock import patch
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
-from langchain_community.chat_models import FakeListChatModel
+from langchain_community.chat_models.fake import FakeListChatModel
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from pydantic import Field
 
+from apps.accounting.usage import BaseUsageRecorder, UsageScope
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.service_usage import UsageMixin
+from apps.teams.models import BaseTeamModel
 
 
 class FakeLlm(FakeListChatModel):
@@ -71,8 +76,30 @@ class FakeLlm(FakeListChatModel):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
 
-class FakeLlmService(LlmService):
+class FakeUsageRecorder(BaseUsageRecorder):
+    def __init__(self):
+        super().__init__()
+        self.totals = Counter()
+
+    def _get_scope(self, source_object: BaseTeamModel, metadata: dict = None):
+        return UsageScope(
+            service_object=mock.Mock(team_id=source_object.team_id),
+            source_object=source_object,
+            metadata=metadata or {},
+        )
+
+    def commit_and_clear(self):
+        for usage in self.get_batch():
+            self.totals[usage.type] += usage.value
+        self.usage = []
+
+
+class FakeLlmService(LlmService, UsageMixin):
     llm: Any
+    usage_recorder: BaseUsageRecorder = Field(default_factory=FakeUsageRecorder)
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float):
         return self.llm

@@ -5,6 +5,7 @@ import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain.chat_models.base import BaseChatModel
 from langchain_anthropic import ChatAnthropic
+from langchain_community.callbacks import OpenAICallbackHandler
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.load import dumpd
@@ -13,7 +14,8 @@ from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 from openai._base_client import SyncAPIClient
 
-from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler, UsageCallbackHandler
+from apps.service_providers.service_usage import UsageMixin
 
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
@@ -100,12 +102,15 @@ class LlmService(pydantic.BaseModel):
         return TokenCountingCallbackHandler(llm_model)
 
 
-class OpenAILlmService(LlmService):
+class OpenAILlmService(UsageMixin, LlmService):
     _type = "openai"
 
     openai_api_key: str
     openai_api_base: str = None
     openai_organization: str = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def get_raw_client(self) -> OpenAI:
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
@@ -120,10 +125,14 @@ class OpenAILlmService(LlmService):
             openai_api_key=self.openai_api_key,
             openai_api_base=self.openai_api_base,
             openai_organization=self.openai_organization,
+            callbacks=[
+                UsageCallbackHandler(self.usage_recorder, OpenAICallbackHandler(), metadata={"model": llm_model})
+            ],
         )
         if model._get_encoding_model()[0] == "cl100k_base":
             # fallback to gpt-4 if the model is not available for encoding
             model.tiktoken_model_name = "gpt-4"
+
         return model
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -139,33 +148,51 @@ class OpenAILlmService(LlmService):
         return OpenAICallbackHandler()
 
 
-class AzureLlmService(LlmService):
+class AzureLlmService(LlmService, UsageMixin):
     _type = "openai"
 
     openai_api_key: str
     openai_api_base: str
     openai_api_version: str
 
+    class Config:
+        arbitrary_types_allowed = True
+
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        return AzureChatOpenAI(
+        model = AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
             temperature=temperature,
         )
+        model.callbacks = [
+            UsageCallbackHandler(
+                self.usage_recorder, TokenCountingCallbackHandler(model), metadata={"model": llm_model}
+            )
+        ]
+        return model
 
 
-class AnthropicLlmService(LlmService):
+class AnthropicLlmService(LlmService, UsageMixin):
     _type = "anthropic"
 
     anthropic_api_key: str
     anthropic_api_base: str
 
+    class Config:
+        arbitrary_types_allowed = True
+
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        return ChatAnthropic(
+        model = ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             temperature=temperature,
         )
+        model.callbacks = [
+            UsageCallbackHandler(
+                self.usage_recorder, TokenCountingCallbackHandler(model), metadata={"model": llm_model}
+            )
+        ]
+        return model

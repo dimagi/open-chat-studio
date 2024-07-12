@@ -11,8 +11,17 @@ class UsageType(models.TextChoices):
 
 
 class Usage(BaseTeamModel):
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
-    object_id = models.PositiveBigIntegerField(null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
+    # the source of the usage
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="usage_by_source")
+    source_object_id = models.PositiveBigIntegerField(null=True)
+    source_object = GenericForeignKey("source_content_type", "source_object_id")
+
+    # which service this usage is associated with
+    service_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="usage_by_service")
+    service_object_id = models.PositiveBigIntegerField(null=True)
+    service_object = GenericForeignKey("service_content_type", "service_object_id")
+
     type = models.CharField(max_length=255)
     value = models.IntegerField(default=0)
+
+    metadata = models.JSONField(default=dict)
