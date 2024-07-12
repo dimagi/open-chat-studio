@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 from functools import cache
 
 from django.utils import timezone
-from langchain_core.callbacks import BaseCallbackHandler
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
@@ -20,11 +19,6 @@ class RunnableState(metaclass=ABCMeta):
 
     @abstractmethod
     def get_chat_model(self):
-        pass
-
-    @property
-    @abstractmethod
-    def callback_handler(self) -> BaseCallbackHandler:
         pass
 
     @abstractmethod
