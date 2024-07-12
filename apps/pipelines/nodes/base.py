@@ -1,15 +1,12 @@
 from abc import ABC
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from functools import cached_property
 from typing import Annotated, Any
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
-from pydantic_core import ValidationError
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.exceptions import PipelineNodeBuildError
-from apps.pipelines.graph import Node
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 
 
@@ -57,13 +54,6 @@ class PipelineNode(BaseModel, ABC):
 
     class Config:
         arbitrary_types_allowed = True
-
-    @classmethod
-    def build(cls, node: Node) -> Callable[[dict], dict]:
-        try:
-            return cls(**node.params)
-        except ValidationError as ex:
-            raise PipelineNodeBuildError(ex)
 
     def process(self, state: PipelineState, config) -> PipelineState:
         self._config = config
