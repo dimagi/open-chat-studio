@@ -119,7 +119,7 @@ class TopicBot:
         try:
             return self.child_chains[result.output.lower().strip()]
         except KeyError:
-            return self.default_child_chain or self.child_chains.values()[0]
+            return self.default_child_chain or list(self.child_chains.values())[0]
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])

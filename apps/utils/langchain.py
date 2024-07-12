@@ -102,11 +102,15 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
+    service = FakeLlmService(llm=FakeLlm(responses=responses, token_counts=token_counts or [0]))
+
     def fake_llm_service(self):
-        return FakeLlmService(llm=FakeLlm(responses=responses, token_counts=token_counts or [0]))
+        return service
+
+    assistant = FakeAssistant(responses=responses)
 
     def fake_get_assistant(self):
-        return FakeAssistant(responses=responses)
+        return assistant
 
     with (
         patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
