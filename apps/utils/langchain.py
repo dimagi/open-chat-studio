@@ -131,8 +131,8 @@ class FakeTokenCounter(TokenCounter):
 
 
 @contextmanager
-def mock_experiment_llm_service(responses: list[str], token_counts: list[int] = None):
-    service = build_fake_llm_service(responses, token_counts)
+def mock_experiment_llm_service(responses: list[str], token_counts: list[int] = None, usage_recorder=None):
+    service = build_fake_llm_service(responses, token_counts, usage_recorder)
 
     def fake_llm_service(self):
         return service
@@ -144,8 +144,8 @@ def mock_experiment_llm_service(responses: list[str], token_counts: list[int] = 
         yield service
 
 
-def build_fake_llm_service(responses: list[str], token_counts: list[int] = None):
-    usage_recorder = FakeUsageRecorder()
+def build_fake_llm_service(responses: list[str], token_counts: list[int] = None, usage_recorder=None):
+    usage_recorder = usage_recorder or FakeUsageRecorder()
     token_counts = token_counts or [1]
     llm = FakeLlm(
         responses=responses,

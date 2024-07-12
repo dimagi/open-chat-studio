@@ -133,7 +133,7 @@ class UsageRecorder(BaseUsageRecorder):
         self.service_object = service_object
 
     def _get_scope(self, source_object: BaseTeamModel, metadata: dict = None):
-        return UsageScope(service_object=self.service_object, source_object=source_object, metadata=metadata)
+        return UsageScope(service_object=self.service_object, source_object=source_object, metadata=metadata or {})
 
 
 def _merge_usages(usages: list[UsageRecord]):
