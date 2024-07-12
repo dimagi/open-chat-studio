@@ -25,8 +25,6 @@ from apps.teams.models import BaseTeamModel
 class FakeLlm(FakeListChatModel):
     """Extension of the FakeListChatModel that allows mocking of the token counts."""
 
-    token_counts: list = []
-    token_i: int = 0
     calls: list = []
 
     def _generate(
@@ -57,16 +55,8 @@ class FakeLlm(FakeListChatModel):
             for c in response:
                 yield ChatGenerationChunk(message=AIMessageChunk(content=c))
 
-    def get_num_tokens_from_messages(self, messages: list) -> int:
-        token_counts = self.token_counts[self.token_i]
-        if self.token_i < len(self.token_counts) - 1:
-            self.token_i += 1
-        else:
-            self.token_i = 0
-        return token_counts
-
     def get_num_tokens(self, text: str) -> int:
-        return self.get_num_tokens_from_messages([])
+        raise NotImplementedError()
 
     def get_calls(self):
         return self.calls
@@ -141,7 +131,7 @@ class FakeTokenCounter(TokenCounter):
 
 
 @contextmanager
-def mock_experiment_llm_service(responses: list, token_counts: list[int] = None):
+def mock_experiment_llm_service(responses: list[str], token_counts: list[int] = None):
     service = build_fake_llm_service(responses, token_counts)
 
     def fake_llm_service(self):
@@ -154,11 +144,11 @@ def mock_experiment_llm_service(responses: list, token_counts: list[int] = None)
         yield service
 
 
-def build_fake_llm_service(responses, token_counts):
+def build_fake_llm_service(responses: list[str], token_counts: list[int] = None):
     usage_recorder = FakeUsageRecorder()
+    token_counts = token_counts or [1]
     llm = FakeLlm(
         responses=responses,
-        token_counts=token_counts or [0],
         callbacks=[
             UsageCallbackHandler(usage_recorder, FakeTokenCounter(token_counts=token_counts)),
         ],
