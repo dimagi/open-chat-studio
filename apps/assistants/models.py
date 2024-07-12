@@ -1,3 +1,5 @@
+from functools import cache
+
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -62,7 +64,11 @@ class OpenAiAssistant(BaseTeamModel):
         return [{"type": tool} for tool in self.builtin_tools]
 
     def get_assistant(self):
-        return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
+        return self.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
+
+    @cache
+    def get_llm_service(self):
+        return self.llm_provider.get_llm_service()
 
 
 @audit_fields(

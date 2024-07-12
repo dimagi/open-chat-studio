@@ -11,7 +11,7 @@ from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_experiment_llm_service
 
 
 class TasksTest(TestCase):
@@ -48,7 +48,7 @@ class TasksTest(TestCase):
 
     def test_getting_ping_message_saves_history(self):
         expected_ping_message = "Hey, answer me!"
-        with mock_experiment_llm(self.experiment, responses=[expected_ping_message]):
+        with mock_experiment_llm_service(responses=[expected_ping_message]):
             response = self.experiment_session._bot_prompt_for_user("Some message")
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
@@ -82,7 +82,7 @@ def test_no_activity_ping_with_assistant_bot():
     session.experiment.assistant = local_assistant
 
     expected_ping_message = "Hey, answer me!"
-    with mock_experiment_llm(session.experiment, responses=[expected_ping_message]):
+    with mock_experiment_llm_service(responses=[expected_ping_message]):
         response = session._bot_prompt_for_user("Some message")
     messages = ChatMessage.objects.filter(chat=session.chat).all()
     # Only the AI message should be there

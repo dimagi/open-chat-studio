@@ -13,7 +13,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_experiment_llm_service
 
 from .message_examples import telegram_messages
 
@@ -189,7 +189,7 @@ def test_reset_conversation_does_not_create_new_session(
 
 
 def _simulate_user_message(channel_instance, user_message: str):
-    with mock_experiment_llm(channel_instance.experiment, responses=["OK"]):
+    with mock_experiment_llm_service(responses=["OK"]):
         channel_instance.new_user_message(user_message)
 
 

@@ -9,7 +9,7 @@ from apps.experiments.models import ExperimentSession
 from apps.slack.models import SlackInstallation
 from apps.slack.slack_listeners import new_message
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_experiment_llm_service
 
 SLACK_TEAM_ID = "SLACK_TEAM_ID"
 SLACK_CHANNEL_ID = "SLACK_CHANNEL_ID"
@@ -47,7 +47,7 @@ THREAD_REPLY_EVENT = {
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("experiment_channel")
 def test_response_to_bot_mention_in_assigned_channel(bolt_context):
-    with mock_experiment_llm(None, responses=["Hello"]):
+    with mock_experiment_llm_service(responses=["Hello"]):
         new_message(BOT_MENTION_EVENT, bolt_context)
     assert bolt_context.say.call_args_list == [(("Hello",), {"thread_ts": BOT_MENTION_EVENT["ts"]})]
     assert ExperimentSession.objects.count() == 1
@@ -77,12 +77,12 @@ def test_ignores_messages_from_unassigned_channel(bolt_context):
 @pytest.mark.usefixtures("experiment_channel")
 def test_responds_to_session_thread(bolt_context):
     bolt_context["say"] = Mock()
-    with mock_experiment_llm(None, responses=["Hello"]):
+    with mock_experiment_llm_service(responses=["Hello"]):
         new_message(BOT_MENTION_EVENT, bolt_context)
         assert bolt_context.say.call_args_list == [(("Hello",), {"thread_ts": BOT_MENTION_EVENT["ts"]})]
         assert ExperimentSession.objects.count() == 1
 
-    with mock_experiment_llm(None, responses=["How can I help?"]):
+    with mock_experiment_llm_service(responses=["How can I help?"]):
         bolt_context["say"] = Mock()
         new_message(THREAD_REPLY_EVENT, bolt_context)
 
@@ -105,13 +105,13 @@ def test_ignores_non_session_thread(bolt_context):
 
 @pytest.mark.usefixtures("experiment_channel")
 def test_response_to_mention_in_session_thread(bolt_context):
-    with mock_experiment_llm(None, responses=["Hello"]):
+    with mock_experiment_llm_service(responses=["Hello"]):
         # start a thread with the bot
         new_message(BOT_MENTION_EVENT, bolt_context)
         assert bolt_context.say.call_args_list == [(("Hello",), {"thread_ts": BOT_MENTION_EVENT["ts"]})]
         assert ExperimentSession.objects.count() == 1
 
-    with mock_experiment_llm(None, responses=["How can I help?"]):
+    with mock_experiment_llm_service(responses=["How can I help?"]):
         # reply in the thread and mention the bot
         bolt_context["say"] = Mock()
         thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
@@ -124,7 +124,7 @@ def test_response_to_mention_in_session_thread(bolt_context):
 
 @pytest.mark.usefixtures("experiment_channel")
 def test_response_to_mention_in_non_session_thread(bolt_context):
-    with mock_experiment_llm(None, responses=["Hello"]):
+    with mock_experiment_llm_service(responses=["Hello"]):
         # Bot mention in a thread that isn't associated with a session
         thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
         thread_reply_with_mention["text"] = f"<@{BOT_USER_ID}> can you jump in here"

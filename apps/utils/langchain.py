@@ -95,20 +95,6 @@ class FakeUsageRecorder(BaseUsageRecorder):
         self.usage = []
 
 
-class FakeLlmService(LlmService, UsageMixin):
-    llm: Any
-    usage_recorder: BaseUsageRecorder = Field(default_factory=FakeUsageRecorder)
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    def get_chat_model(self, llm_model: str, temperature: float):
-        return self.llm
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        return self.llm
-
-
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
     responses: list
     i: int = 0
@@ -128,25 +114,35 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
         return response
 
 
+class FakeLlmService(LlmService, UsageMixin):
+    llm: Any
+    assistant: Any = Field(default_factory=lambda: FakeAssistant(responses=[]))
+    usage_recorder: BaseUsageRecorder = Field(default_factory=FakeUsageRecorder)
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def get_chat_model(self, llm_model: str, temperature: float):
+        return self.llm
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        return self.assistant
+
+
 @contextmanager
-def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
+def mock_experiment_llm_service(responses: list, token_counts: list[int] = None):
     llm = FakeLlm(responses=responses, token_counts=token_counts or [0])
     usage_recorder = FakeUsageRecorder()
     llm.callbacks = [
         UsageCallbackHandler(usage_recorder, TokenCountingCallbackHandler(llm)),
     ]
-    service = FakeLlmService(llm=llm, usage_recorder=usage_recorder)
+    service = FakeLlmService(llm=llm, usage_recorder=usage_recorder, assistant=FakeAssistant(responses=responses))
 
     def fake_llm_service(self):
         return service
 
-    assistant = FakeAssistant(responses=responses)
-
-    def fake_get_assistant(self):
-        return assistant
-
     with (
         patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
-        patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
+        patch("apps.assistants.models.OpenAiAssistant.get_llm_service", new=fake_llm_service),
     ):
         yield service

@@ -19,7 +19,7 @@ from apps.service_providers.llm_service.runnables import (
 from apps.service_providers.llm_service.state import AssistantExperimentState
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_experiment_llm_service
 
 ASSISTANT_ID = "test_assistant_id"
 
@@ -106,20 +106,16 @@ def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, l
 
 
 def test_assistant_runnable_raises_error(session):
-    experiment = session.experiment
-
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
-    with mock_experiment_llm(experiment, [error]):
+    with mock_experiment_llm_service([error]):
         assistant = _get_assistant_mocked_history_recording(session)
         with pytest.raises(openai.BadRequestError):
             assistant.invoke("test")
 
 
 def test_assistant_runnable_handles_cancellation_status(session):
-    experiment = session.experiment
-
     error = ValueError("unexpected status: cancelled")
-    with mock_experiment_llm(experiment, [error]):
+    with mock_experiment_llm_service([error]):
         assistant = _get_assistant_mocked_history_recording(session)
         with pytest.raises(GenerationCancelled):
             assistant.invoke("test")
@@ -166,7 +162,7 @@ def test_assistant_runnable_cancels_existing_run(responses, exception, output, s
     assistant = _get_assistant_mocked_history_recording(session)
     cancel_run = mock.Mock()
     assistant.__dict__["_cancel_run"] = cancel_run
-    with mock_experiment_llm(session.experiment, responses):
+    with mock_experiment_llm_service(responses):
         with exception:
             result = assistant.invoke("test")
 

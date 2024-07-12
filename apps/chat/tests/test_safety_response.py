@@ -5,7 +5,7 @@ import pytest
 from apps.chat.bots import TopicBot
 from apps.experiments.models import SafetyLayer
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import mock_experiment_llm_service
 
 
 @pytest.mark.django_db()
@@ -23,7 +23,7 @@ def test_safety_response(is_safe_mock):
     expected = "Sorry I can't help with that."
     bot = TopicBot(session)
     with patch.object(TopicBot, "_get_safe_response", wraps=bot._get_safe_response) as mock_get_safe_response:
-        with mock_experiment_llm(experiment, responses=[expected]):
+        with mock_experiment_llm_service(responses=[expected]):
             response = bot.process_input("It's my way or the highway!")
 
     mock_get_safe_response.assert_called()
