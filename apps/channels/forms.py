@@ -1,6 +1,7 @@
 import logging
 from functools import cached_property
 
+import phonenumbers
 from django import forms
 from django.conf import settings
 from django.urls import reverse
@@ -88,7 +89,7 @@ class TelegramChannelForm(ExtraFormBase):
 
 
 class WhatsappChannelForm(ExtraFormBase):
-    number = forms.CharField(label="Number", max_length=100)
+    number = forms.CharField(label="Number", max_length=20)
     webook_url = forms.CharField(
         widget=forms.TextInput(attrs={"readonly": "readonly"}),
         label="Webhook URL",
@@ -112,6 +113,13 @@ class WhatsappChannelForm(ExtraFormBase):
     def get_success_message(self, channel: ExperimentChannel):
         """The message to be displayed when the channel is successfully linked"""
         return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+    def clean_number(self):
+        try:
+            number_obj = phonenumbers.parse(self.cleaned_data["number"])
+            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
 
 
 class FacebookChannelForm(ExtraFormBase):
