@@ -47,4 +47,4 @@ transformers # this is required by the tokenizer that langchain uses
 turn-python>=0.2.0
 twilio
 whitenoise[brotli]
-phonenumbers
+phonenumberslite
