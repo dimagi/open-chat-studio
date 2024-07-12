@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from functools import cached_property
+from functools import cache, cached_property
 
 import markdown
 import pytz
@@ -433,6 +433,7 @@ class Experiment(BaseTeamModel):
         service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)
 
+    @cache
     def get_llm_service(self):
         if self.llm_provider:
             return self.llm_provider.get_llm_service()
