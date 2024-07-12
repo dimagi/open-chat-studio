@@ -122,7 +122,7 @@ def test_runnable_save_input_to_history(runnable, session, chat, fake_llm):
 
     result = chain.invoke("hi", config={"configurable": {"save_input_to_history": False}})
 
-    assert result.output == "this is a test message"
+    assert result == "this is a test message"
     assert len(fake_llm.get_calls()) == 1
     assert chat.messages.count() == 2
 

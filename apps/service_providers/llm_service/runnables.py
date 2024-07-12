@@ -21,6 +21,7 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnablePassthrough,
     RunnableSerializable,
+    ensure_config,
 )
 
 from apps.chat.models import Chat, ChatMessageType
@@ -75,6 +76,7 @@ class ExperimentRunnable(RunnableSerializable[str, str]):
 
     def invoke(self, input: str, config: RunnableConfig | None = None) -> str:
         self._populate_memory(input)
+        config = ensure_config(config)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self.state.save_message_to_history(input, ChatMessageType.HUMAN)
@@ -216,6 +218,7 @@ class AssistantExperimentRunnable(RunnableSerializable[str, str]):
 
     def invoke(self, input: str, config: RunnableConfig | None = None) -> str:
         input_dict = {"content": input}
+        config = ensure_config(config)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self.state.save_message_to_history(input, ChatMessageType.HUMAN)

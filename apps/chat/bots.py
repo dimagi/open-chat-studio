@@ -100,7 +100,7 @@ class TopicBot:
         )
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
-        return result.output
+        return result
 
     def _get_child_chain(self, input_str) -> tuple[str, Any]:
         result = self.chain.invoke(
@@ -113,7 +113,7 @@ class TopicBot:
             },
         )
 
-        keyword = result.output.lower().strip()
+        keyword = result.lower().strip()
         try:
             return keyword, self.child_chains[keyword]
         except KeyError:
