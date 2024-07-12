@@ -169,13 +169,12 @@ class UpdateParticipantMemory(PipelineNode):
             if not self.key_name:
                 raise KeyError("A key is expected for a string or list value.")
 
+        if self.key_name:
+            new_data = {self.key_name: new_data}
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
             )
-
-            if self.key_name:
-                new_data = {self.key_name: new_data}
 
             participant_data.data = participant_data.data | new_data
             participant_data.save()
@@ -184,5 +183,5 @@ class UpdateParticipantMemory(PipelineNode):
                 participant=session.participant,
                 content_object=session.experiment,
                 team=session.team,
-                data={self.key_name: new_data} if self.key_name else new_data,
+                data=new_data,
             )
