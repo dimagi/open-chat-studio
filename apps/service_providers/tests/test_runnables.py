@@ -10,7 +10,6 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
-    ChainOutput,
     ExperimentRunnable,
     SimpleExperimentRunnable,
 )
@@ -66,7 +65,8 @@ def runnable(request, session):
 def test_runnable(runnable, session, fake_llm):
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
         {"system": "You are a helpful assistant"},
@@ -85,7 +85,8 @@ def test_runnable_with_source_material(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     expected_system__prompt = "System prompt with this is the source material"
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
@@ -96,7 +97,8 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     expected_system__prompt = "System prompt with "
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 
@@ -106,7 +108,8 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm):
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     session.experiment.input_formatter = "foo {input} bar"
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0])[1] == {"human": "foo hi bar"}
 
@@ -133,7 +136,8 @@ def test_runnable_with_history(runnable, session, chat, fake_llm):
     assert chat.messages.count() == 1
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     assert len(fake_llm.get_calls()) == 1
     assert _messages_to_dict(fake_llm.get_call_messages()[0]) == [
         {"system": experiment.prompt_text},
@@ -185,7 +189,8 @@ def test_runnable_with_current_datetime(runnable, session, fake_llm):
     session.experiment.prompt_text = "System prompt with current datetime: {current_datetime}"
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
-    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    # assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    assert result == "this is a test message"
     expected_system__prompt = "System prompt with current datetime: Thursday, 08 February 2024 13:00:08 UTC"
     assert fake_llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
 

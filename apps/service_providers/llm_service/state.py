@@ -60,10 +60,6 @@ class ExperimentState(RunnableState):
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.experiment.llm, self.experiment.temperature)
 
-    @property
-    def callback_handler(self):
-        return self.get_llm_service().get_callback_handler(self.get_chat_model())
-
     def format_input(self, input_key: str, runnable_input: dict):
         if self.experiment.input_formatter:
             runnable_input[input_key] = self.experiment.input_formatter.format(input=runnable_input[input_key])

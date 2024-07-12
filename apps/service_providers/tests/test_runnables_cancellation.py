@@ -8,7 +8,6 @@ from apps.chat.models import Chat
 from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
-    ChainOutput,
     GenerationCancelled,
     SimpleExperimentRunnable,
 )
@@ -78,7 +77,7 @@ def _test_runnable(runnable, session, expected_output):
 
     with pytest.raises(GenerationCancelled) as exc_info:
         runnable.invoke("hi")
-    assert exc_info.value.output == ChainOutput(output=expected_output, prompt_tokens=30, completion_tokens=20)
+    assert exc_info.value.output == expected_output
 
 
 def _get_assistant_mocked_history_recording(session, cls):

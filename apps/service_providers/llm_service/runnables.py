@@ -4,13 +4,12 @@ import re
 import time
 from operator import itemgetter
 from time import sleep
-from typing import Any, Literal
+from typing import Any
 
 import openai
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
-from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -22,7 +21,6 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnablePassthrough,
     RunnableSerializable,
-    ensure_config,
 )
 
 from apps.chat.models import Chat, ChatMessageType
@@ -42,7 +40,7 @@ class GenerationError(Exception):
 
 
 class GenerationCancelled(Exception):
-    def __init__(self, output: "ChainOutput"):
+    def __init__(self, output: str):
         self.output = output
 
 
@@ -60,28 +58,7 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     return SimpleExperimentRunnable(state=state)
 
 
-class ChainOutput(Serializable):
-    output: str
-    """String text."""
-    prompt_tokens: int
-    """Number of tokens in the prompt."""
-    completion_tokens: int
-    """Number of tokens in the completion."""
-
-    type: Literal["OcsChainOutput"] = "ChainOutput"
-
-    @classmethod
-    def is_lc_serializable(cls) -> bool:
-        """Return whether this class is serializable."""
-        return True
-
-    @classmethod
-    def get_lc_namespace(cls) -> list[str]:
-        """Get the namespace of the langchain object."""
-        return ["ocs", "schema", "chain_output"]
-
-
-class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
+class ExperimentRunnable(RunnableSerializable[str, str]):
     state: ChatRunnableState
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
@@ -96,28 +73,20 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.state.callback_handler
-        config = ensure_config(config)
-        config["callbacks"] = config["callbacks"] or []
-        config["callbacks"].append(callback)
-
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> str:
         self._populate_memory(input)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = self._get_output_check_cancellation(input, config)
-        result = ChainOutput(
-            output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
-        )
         if self.cancelled:
-            raise GenerationCancelled(result)
+            raise GenerationCancelled(output)
 
         if config.get("configurable", {}).get("save_output_to_history", True):
             experiment_tag = config.get("configurable", {}).get("experiment_tag")
             self.state.save_message_to_history(output, ChatMessageType.AI, experiment_tag)
-        return result
+        return output
 
     def _get_output_check_cancellation(self, input, config):
         chain = self._build_chain()
@@ -238,19 +207,14 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return chain.invoke(input).to_messages()
 
 
-class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+class AssistantExperimentRunnable(RunnableSerializable[str, str]):
     state: AssistantState
     input_key = "content"
 
     class Config:
         arbitrary_types_allowed = True
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.state.callback_handler
-        config = ensure_config(config)
-        config["callbacks"] = config["callbacks"] or []
-        config["callbacks"].append(callback)
-
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> str:
         input_dict = {"content": input}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
@@ -270,7 +234,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         output = response.return_values["output"]
         self.state.save_message_to_history(output, ChatMessageType.AI)
 
-        return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
+        return output
 
     def _get_response_with_retries(self, config, input_dict, thread_id):
         assistant = self.state.get_openai_assistant()
@@ -283,7 +247,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 self._handle_api_error(thread_id, assistant, e)
             except ValueError as e:
                 if re.search(r"cancelling|cancelled", str(e)):
-                    raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
+                    raise GenerationCancelled("")
             else:
                 return response
         raise GenerationError("Failed to get response after 3 retries")

@@ -5,15 +5,13 @@ import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain.chat_models.base import BaseChatModel
 from langchain_anthropic import ChatAnthropic
-from langchain_community.callbacks import OpenAICallbackHandler
-from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
-from langchain_core.language_models import BaseLanguageModel
+from langchain_core.callbacks import CallbackManager
 from langchain_core.load import dumpd
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 
-from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler, UsageCallbackHandler
+from apps.service_providers.llm_service.callbacks import UsageCallbackHandler
 from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter
 from apps.service_providers.service_usage import UsageMixin
 
@@ -98,9 +96,6 @@ class LlmService(pydantic.BaseModel):
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
-    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(llm_model)
-
 
 class OpenAILlmService(UsageMixin, LlmService):
     _type = "openai"
@@ -143,9 +138,6 @@ class OpenAILlmService(UsageMixin, LlmService):
             file=audio,
         )
         return transcript.text
-
-    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
-        return OpenAICallbackHandler()
 
 
 class AzureLlmService(LlmService, UsageMixin):
