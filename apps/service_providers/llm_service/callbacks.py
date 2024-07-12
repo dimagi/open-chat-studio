@@ -1,4 +1,5 @@
 import threading
+import weakref
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +20,8 @@ class TokenCountingCallbackHandler(BaseCallbackHandler):
     def __init__(self, model: BaseLanguageModel):
         super().__init__()
         self._lock = threading.Lock()
-        self.model = model
+        # Use weakref to avoid circular reference between callback handler and model
+        self.model = weakref.proxy(model)
 
     def __repr__(self) -> str:
         return f"Prompt Tokens: {self.prompt_tokens}\n" f"Completion Tokens: {self.completion_tokens}\n"
