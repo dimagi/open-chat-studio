@@ -9,6 +9,10 @@ from apps.teams.models import BaseTeamModel
 from .models import Usage, UsageType
 
 
+class UsageOutOfScopeError(Exception):
+    pass
+
+
 @dataclasses.dataclass
 class UsageRecord:
     """A record of usage for a specific service object.
@@ -119,7 +123,7 @@ class BaseUsageRecorder:
 
     def get_current_scope(self):
         if not self.scope:
-            raise Exception("UsageRecorder must be used as a context manager")
+            raise UsageOutOfScopeError("UsageRecorder must be used as a context manager")
         return self.scope[-1]
 
     def record_usage(self, usage_type: UsageType, value, metadata: dict = None):
