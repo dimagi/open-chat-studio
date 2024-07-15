@@ -15,7 +15,7 @@ def delete_object_with_auditing_of_related_objects(obj):
     Args:
         obj: The object to delete.
     """
-    from field_audit.models import AuditAction
+    from field_audit.models import AuditAction, AuditingManager
 
     collector = NestedObjects(using="default")
     collector.collect([obj])
@@ -44,7 +44,7 @@ def delete_object_with_auditing_of_related_objects(obj):
                 continue
 
             audit_kwargs = {}
-            if model in get_audited_models():
+            if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
 
             _, stats = model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
