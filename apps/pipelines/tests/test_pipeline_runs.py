@@ -4,7 +4,7 @@ import pytest
 from langchain_core.runnables import RunnableLambda
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.models import Pipeline, PipelineRunStatus
+from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -39,14 +39,58 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
     )
 
     assert len(run.log["entries"]) == 8
-    assert run.log["entries"][1]["level"] == "INFO"
-    assert run.log["entries"][1]["message"] == "Passthrough starting"
-    assert run.log["entries"][2]["level"] == "DEBUG"
-    assert run.log["entries"][2]["message"] == f"Returning input: '{input}' without modification"
-    assert run.log["entries"][3]["message"] == f"Passthrough finished: {input}"
-    assert run.log["entries"][4]["message"] == "Passthrough starting"
-    assert run.log["entries"][5]["message"] == f"Returning input: '{input}' without modification"
-    assert run.log["entries"][6]["message"] == f"Passthrough finished: {input}"
+
+    entries = run.log["entries"]
+    assert LogEntry(**entries[0]) == LogEntry(
+        time=entries[0]["time"],
+        message="Starting pipeline run",
+        level="DEBUG",
+        input=input,
+    )
+    assert LogEntry(**entries[1]) == LogEntry(
+        time=entries[1]["time"],
+        message=f"{pipeline.node_ids[0]} starting",
+        level="INFO",
+        input=input,
+    )
+    assert LogEntry(**entries[2]) == LogEntry(
+        time=entries[2]["time"],
+        message=f"Returning input: '{input}' without modification",
+        level="DEBUG",
+        input=input,
+        output=input,
+    )
+    assert LogEntry(**entries[3]) == LogEntry(
+        time=entries[3]["time"],
+        message=f"{pipeline.node_ids[0]} finished",
+        level="INFO",
+        output=input,
+    )
+    assert LogEntry(**entries[4]) == LogEntry(
+        time=entries[4]["time"],
+        message=f"{pipeline.node_ids[1]} starting",
+        level="INFO",
+        input=input,
+    )
+    assert LogEntry(**entries[5]) == LogEntry(
+        time=entries[5]["time"],
+        message=f"Returning input: '{input}' without modification",
+        level="DEBUG",
+        input=input,
+        output=input,
+    )
+    assert LogEntry(**entries[6]) == LogEntry(
+        time=entries[6]["time"],
+        message=f"{pipeline.node_ids[1]} finished",
+        level="INFO",
+        output=input,
+    )
+    assert LogEntry(**entries[7]) == LogEntry(
+        time=entries[7]["time"],
+        message="Pipeline run finished",
+        level="DEBUG",
+        output=input,
+    )
 
 
 @django_db_transactional()
@@ -72,8 +116,20 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
     assert run.input == PipelineState(messages=[input])
     assert run.output is None
     assert run.status == PipelineRunStatus.ERROR
-    assert run.log["entries"][1]["level"] == "ERROR"
-    assert run.log["entries"][1]["message"] == error_message
+    entries = run.log["entries"]
+    assert LogEntry(**entries[2]) == LogEntry(
+        time=entries[2]["time"],
+        message=error_message,
+        level="ERROR",
+    )
+    assert LogEntry(**entries[4]) == LogEntry(
+        time=entries[4]["time"],
+        message=error_message,
+        level="ERROR",
+    )
+    assert LogEntry(**entries[6]) == LogEntry(
+        time=entries[6]["time"], message="Pipeline run failed", level="DEBUG", input=input
+    )
 
 
 @django_db_transactional()
