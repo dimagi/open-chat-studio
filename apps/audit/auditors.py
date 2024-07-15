@@ -38,7 +38,7 @@ class AuditContextProvider(SystemUserAuditor):
             #   login_and_team_required decorator and has the 'team_slug' url path parameter
             # - If the view does not modify team data, add the view name to
             #   FIELD_AUDIT_TEAM_EXEMPT_VIEWS in settings
-            log.error(
+            log.exception(  # use `exception` here to include the stack in the event log
                 "No team found for audit context",
                 extra={"audit_context": context, "view_name": _get_view_name(request)},
             )
