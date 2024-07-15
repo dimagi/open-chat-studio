@@ -7,6 +7,8 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import BaseHasAPIKey
 
+from apps.teams.utils import set_current_team
+
 from .helpers import get_team_from_request, get_team_membership_for_request, get_user_from_request
 from .models import UserAPIKey
 
@@ -24,6 +26,8 @@ class BearerTokenAuthentication(TokenAuthentication):
             request.user = user
             request.team = api_key.team
             request.team_membership = get_team_membership_for_request(request)
+            # this is unset by the request_finished signal
+            set_current_team(api_key.team)
         return user_auth_tuple
 
     def authenticate_credentials(self, key):
@@ -49,6 +53,8 @@ class HasUserAPIKey(BaseHasAPIKey):
             request.user = get_user_from_request(request)
             request.team = get_team_from_request(request)
             request.team_membership = get_team_membership_for_request(request)
+            # this is unset by the request_finished signal
+            set_current_team(request.team)
         return has_perm
 
 
