@@ -1,8 +1,9 @@
 import pydantic
 from langchain_core.runnables import RunnableSequence
 from langgraph.graph import StateGraph
+from pydantic_core import ValidationError
 
-from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 
 
 class Node(pydantic.BaseModel):
@@ -34,15 +35,13 @@ class PipelineGraph(pydantic.BaseModel):
         return graph.build_runnable()
 
     def build_runnable(self) -> RunnableSequence:
-        from apps.pipelines.nodes import nodes
         from apps.pipelines.nodes.base import PipelineState
 
         if not self.nodes:
             raise PipelineBuildError("There are no nodes in the graph")
         state_graph = StateGraph(PipelineState)
-        for node in self.nodes:
-            node_class = getattr(nodes, node.type)
-            state_graph.add_node(node.id, node_class.get_callable(node))
+
+        self._add_nodes_to_graph(state_graph)
         for edge in self.edges:
             state_graph.add_edge(edge.source, edge.target)
 
@@ -60,3 +59,14 @@ class PipelineGraph(pydantic.BaseModel):
 
         compiled_graph = state_graph.compile()
         return compiled_graph
+
+    def _add_nodes_to_graph(self, state_graph):
+        from apps.pipelines.nodes import nodes
+
+        try:
+            for node in self.nodes:
+                node_class = getattr(nodes, node.type)
+                node_instance = node_class(**node.params)
+                state_graph.add_node(node.id, node_instance.process)
+        except ValidationError as ex:
+            raise PipelineNodeBuildError(ex)

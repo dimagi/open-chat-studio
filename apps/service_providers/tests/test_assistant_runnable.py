@@ -1,7 +1,7 @@
 from contextlib import nullcontext as does_not_raise
 from typing import Literal
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import openai
 import pytest
@@ -16,6 +16,7 @@ from apps.service_providers.llm_service.runnables import (
     GenerationCancelled,
     GenerationError,
 )
+from apps.service_providers.llm_service.state import AssistantExperimentState
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
@@ -174,8 +175,9 @@ def test_assistant_runnable_cancels_existing_run(responses, exception, output, s
 
 
 def _get_assistant_mocked_history_recording(session):
-    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
-    assistant.__dict__["_save_message_to_history"] = lambda *args, **kwargs: None
+    state = AssistantExperimentState(session.experiment, session)
+    assistant = AssistantExperimentRunnable(state=state)
+    state.save_message_to_history = Mock()
     return assistant
 
 

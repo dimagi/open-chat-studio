@@ -85,7 +85,10 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
         for tag in tag_objs:
-            self.tags.add(tag, through_defaults={"team": team, "user": added_by})
+            self.add_tag(tag, team, added_by)
+
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
+        self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     @property
     def get_linked_tags(self):

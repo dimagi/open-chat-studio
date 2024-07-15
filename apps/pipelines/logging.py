@@ -41,16 +41,26 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
 
     def on_chain_start(self, serialized, inputs, *args, **kwargs):
         if self._should_log(kwargs):
+            input = None
+            if isinstance(inputs, str):
+                input = inputs
+            elif "messages" in inputs:
+                input = inputs["messages"][-1]
             self.logger.info(
                 f"{kwargs.get('name', serialized.get('name'))} starting",
-                input=inputs if isinstance(inputs, str) else inputs["messages"][-1],
+                input=input,
             )
 
     def on_chain_end(self, outputs, **kwargs):
         if self._should_log(kwargs):
+            output = None
+            if isinstance(outputs, str):
+                output = outputs
+            elif "messages" in outputs:
+                output = outputs["messages"][-1]
             self.logger.info(
                 f"{self._run_id_names.get(kwargs.get('run_id'), '')} finished",
-                output=outputs if isinstance(outputs, str) else outputs["messages"][-1],
+                output=output,
             )
 
     def on_chain_error(self, error, *args, **kwargs):
@@ -77,13 +87,15 @@ class LogHandler:
 
         record = message.record
 
+        output = record["extra"].get("output")
+        input = record["extra"].get("input")
         log_entry = LogEntry(
             **{
                 "time": record["time"].strftime("%Y-%m-%d %H:%M:%S.%f"),
                 "level": record["level"].name,
                 "message": record["message"],
-                "output": record["extra"].get("output"),
-                "input": record["extra"].get("input"),
+                "output": str(output) if output else None,
+                "input": str(input) if input else None,
             }
         )
         # Appending to a list is thread safe in python
