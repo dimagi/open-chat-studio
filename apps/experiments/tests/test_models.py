@@ -24,7 +24,7 @@ def experiment_session():
 
 
 class TestSyntheticVoice:
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_team_scoped_services(self):
         assert SyntheticVoice.TEAM_SCOPED_SERVICES == [SyntheticVoice.OpenAIVoiceEngine]
 

@@ -76,12 +76,12 @@ THIRD_PARTY_APPS = [
 
 PROJECT_APPS = [
     "apps.audit",
-    "apps.users.apps.UserConfig",
-    "apps.api.apps.APIConfig",
+    "apps.users",
+    "apps.api",
     "apps.chat",
     "apps.experiments",
     "apps.web",
-    "apps.teams.apps.TeamConfig",
+    "apps.teams",
     "apps.channels",
     "apps.service_providers",
     "apps.analysis",

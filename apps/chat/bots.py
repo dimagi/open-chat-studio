@@ -1,3 +1,5 @@
+from typing import Any
+
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from pydantic import ValidationError
@@ -65,6 +67,7 @@ class TopicBot:
         )
         self.child_chains = {}
         self.default_child_chain = None
+        self.default_tag = None
         self._initialize()
 
     def _initialize(self):
@@ -73,6 +76,10 @@ class TopicBot:
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
                 self.default_child_chain = child_runnable
+                self.default_tag = child_route.keyword.lower().strip()
+
+        if self.child_chains and not self.default_child_chain:
+            self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
         self.chain = create_experiment_runnable(self.experiment, self.session)
 
@@ -83,17 +90,15 @@ class TopicBot:
 
     def _call_predict(self, input_str, save_input_to_history=True):
         if self.child_chains:
-            chain = self._get_child_chain(input_str)
-            add_experiment_tag = True
+            tag, chain = self._get_child_chain(input_str)
         else:
-            chain = self.chain
-            add_experiment_tag = False
+            tag, chain = None, self.chain
         result = chain.invoke(
             input_str,
             config={
                 "configurable": {
                     "save_input_to_history": save_input_to_history,
-                    "add_experiment_tag": add_experiment_tag,
+                    "experiment_tag": tag,
                 }
             },
         )
@@ -103,7 +108,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_child_chain(self, input_str):
+    def _get_child_chain(self, input_str) -> tuple[str, Any]:
         result = self.chain.invoke(
             input_str,
             config={
@@ -116,10 +121,11 @@ class TopicBot:
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
 
+        keyword = result.output.lower().strip()
         try:
-            return self.child_chains[result.output.lower().strip()]
+            return keyword, self.child_chains[keyword]
         except KeyError:
-            return self.default_child_chain or self.child_chains.values()[0]
+            return self.default_tag, self.default_child_chain
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
