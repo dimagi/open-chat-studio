@@ -26,6 +26,9 @@ class BearerTokenAuthentication(TokenAuthentication):
             request.user = user
             request.team = api_key.team
             request.team_membership = get_team_membership_for_request(request)
+            if not request.team_membership:
+                raise exceptions.AuthenticationFailed()
+
             # this is unset by the request_finished signal
             set_current_team(api_key.team)
         return user_auth_tuple
@@ -53,6 +56,9 @@ class HasUserAPIKey(BaseHasAPIKey):
             request.user = get_user_from_request(request)
             request.team = get_team_from_request(request)
             request.team_membership = get_team_membership_for_request(request)
+            if not request.team_membership:
+                return False
+
             # this is unset by the request_finished signal
             set_current_team(request.team)
         return has_perm
