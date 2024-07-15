@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from django.db import connections
 
@@ -31,3 +33,8 @@ def _django_db_restore_serialized(request: pytest.FixtureRequest, django_db_keep
             for connection in connections.all(initialized_only=True):
                 if hasattr(connection, "_test_serialized_contents"):
                     connection.creation.deserialize_db_from_string(connection._test_serialized_contents)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _set_env():
+    os.environ["UNIT_TESTING"] = "True"
