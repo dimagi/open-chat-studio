@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.models import Permission
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
@@ -78,7 +79,7 @@ def remove_team_membership(request, team_slug, membership_id):
             )
             return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
 
-    membership.delete()
+    remove_user_from_team(membership)
     messages.success(
         request,
         _("{member} was removed from {team}.").format(
@@ -89,3 +90,11 @@ def remove_team_membership(request, team_slug, membership_id):
         return HttpResponseRedirect(reverse("web:home"))
     else:
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
+
+
+@transaction.atomic
+def remove_user_from_team(membership):
+    from apps.api.models import UserAPIKey
+
+    membership.delete()
+    UserAPIKey.objects.filter(user=membership.user, team=membership.team).delete()

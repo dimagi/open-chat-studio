@@ -2,6 +2,7 @@ import pytest
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.api.models import UserAPIKey
 from apps.teams.backends import (
     CHAT_VIEWER_GROUP,
     EXPERIMENT_ADMIN_GROUP,
@@ -27,11 +28,15 @@ class TeamMemberManagementViewTest(TestCase):
         self.admin = CustomUser.objects.create(username="tito@redsox.com")
         self.admin2 = CustomUser.objects.create(username="alex@redsox.com")
         self.member = CustomUser.objects.create(username="papi@redsox.com")
+
         self.member2 = CustomUser.objects.create(username="manny@redsox.com")
 
         self.admin_membership = make_user_team_owner(self.team, self.admin)
         self.admin_membership2 = make_user_team_owner(self.team, self.admin2)
+
         self.normal_membership = add_user_to_team(self.team, self.member)
+        UserAPIKey.objects.create(name="apikey", user=self.member, team=self.team)
+
         self.normal_membership2 = add_user_to_team(self.team, self.member2)
 
         self.groups = get_groups()
@@ -82,6 +87,7 @@ class TeamMemberManagementViewTest(TestCase):
         self._remove_member(c, self.normal_membership)
         # confirm member removed
         assert not Membership.objects.filter(pk=self.normal_membership.pk).exists()
+        assert not UserAPIKey.objects.filter(user=self.member).exists()
 
     def test_admins_can_remove_admins(self):
         c = Client()
