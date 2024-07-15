@@ -15,3 +15,8 @@ def render_markdown(value):
         return ""
     md = markdown.Markdown(extensions=["fenced_code", "tables", "footnotes", ResourceExtension()])
     return mark_safe(md.convert(value))
+
+
+@register.filter
+def single_quotes(text):
+    return mark_safe(text.replace('"', "'"))
