@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import pgettext_lazy
 from field_audit import audit_fields
+from field_audit.models import AuditingManager
 from taggit.managers import TaggableManager
 from taggit.models import GenericTaggedItemBase, TagBase
 
@@ -18,17 +19,14 @@ class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
 
 
-@audit_fields(
-    "name",
-    "slug",
-    "created_by",
-    "team",
-)
+@audit_fields("name", "slug", "created_by", "team", audit_special_queryset_writes=True)
 class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
     created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     is_system_tag = models.BooleanField(default=False)
     category = models.CharField(choices=TagCategories.choices, blank=True, default="")
+
+    objects = AuditingManager()
 
     class Meta:
         verbose_name = _("Tag")
@@ -40,16 +38,12 @@ class Tag(TagBase, BaseTeamModel):
         return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
 
 
-@audit_fields(
-    "user",
-    "team",
-    "tag",
-    "object_id",
-    "content_type",
-)
+@audit_fields("user", "team", "tag", "object_id", "content_type", audit_special_queryset_writes=True)
 class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
     user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items", on_delete=models.CASCADE)
+
+    objects = AuditingManager()
 
     class Meta:
         indexes = [
