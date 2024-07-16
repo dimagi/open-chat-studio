@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
@@ -10,17 +11,12 @@ from .helpers import get_team_membership_for_request
 from .models import UserAPIKey
 
 
-class ApiKeyAuthentication(BaseAuthentication):
-    """Default auth for APIs that supports the following methods:
-    * API Key in the X-API-KEY header (see settings.API_KEY_CUSTOM_HEADER)
-    * API Key in the Authorization header with the 'Bearer' keyword
-    """
-
-    keyword = "Bearer"
+class BaseKeyAuthentication(BaseAuthentication):
+    def get_key(self, request):
+        raise NotImplementedError
 
     def authenticate(self, request):
-        parser = ConfigurableKeyParser(keyword=self.keyword)
-        key = parser.get(request)
+        key = self.get_key(request)
         if not key:
             return None
 
@@ -42,6 +38,18 @@ class ApiKeyAuthentication(BaseAuthentication):
         # this is unset by the request_finished signal
         set_current_team(token.team)
         return user, token
+
+
+class ApiKeyAuthentication(BaseKeyAuthentication):
+    def get_key(self, request):
+        return KeyParser().get_from_header(request, settings.API_KEY_CUSTOM_HEADER)
+
+
+class BearerTokenAuthentication(BaseKeyAuthentication):
+    keyword = "Bearer"
+
+    def get_key(self, request):
+        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
 
 class ConfigurableKeyParser(KeyParser):

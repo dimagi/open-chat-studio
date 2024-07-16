@@ -18,7 +18,8 @@ paths:
       tags:
       - Experiments
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -40,7 +41,8 @@ paths:
       tags:
       - Experiments
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -81,8 +83,8 @@ paths:
               $ref: '#/components/schemas/chat.completion.request'
         required: true
       security:
+      - apiKeyAuth: []
       - tokenAuth: []
-      - ApiKeyAuth: []
       responses:
         '200':
           content:
@@ -113,7 +115,8 @@ paths:
                 $ref: '#/components/schemas/ParticipantExperimentData'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           description: No response body
@@ -137,7 +140,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -157,7 +161,8 @@ paths:
               $ref: '#/components/schemas/ExperimentSessionCreate'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '201':
           content:
@@ -179,7 +184,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -208,7 +214,8 @@ paths:
               $ref: '#/components/schemas/NewAPIMessage'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -447,10 +454,10 @@ components:
       required:
       - messages
   securitySchemes:
-    ApiKeyAuth:
+    apiKeyAuth:
       type: apiKey
       in: header
-      name: X-Api-Key
+      name: X-api-key
     tokenAuth:
       type: http
       scheme: bearer

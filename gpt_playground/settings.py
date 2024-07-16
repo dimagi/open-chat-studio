@@ -337,7 +337,10 @@ SITE_ID = 1
 
 # DRF config
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.api.permissions.ApiKeyAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.api.permissions.ApiKeyAuthentication",
+        "apps.api.permissions.BearerTokenAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
@@ -354,12 +357,6 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
-    "APPEND_COMPONENTS": {"securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}}},
-    # "SECURITY": [
-    #     {
-    #         "ApiKeyAuth": [],
-    #     }
-    # ],
 }
 
 # Celery setup (using redis)
