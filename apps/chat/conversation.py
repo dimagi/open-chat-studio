@@ -176,8 +176,9 @@ def compress_chat_history_from_messages(
         summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
 
     log.info(
-        "Compressed chat history to %s tokens (%s summary + %s history)",
-        history_tokens + summary_tokens,
+        "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
+        input_message_tokens + history_tokens + summary_tokens,
+        input_message_tokens,
         summary_tokens,
         history_tokens,
     )

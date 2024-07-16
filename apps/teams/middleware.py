@@ -32,4 +32,5 @@ class TeamsMiddleware(MiddlewareMixin):
         request.team = SimpleLazyObject(lambda: _get_team(request, view_kwargs))
         request.team_membership = SimpleLazyObject(lambda: _get_team_membership(request))
 
+        # this is unset by the request_finished signal
         set_current_team(request.team)

@@ -1,3 +1,4 @@
+import phonenumbers
 from pydantic import BaseModel, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
@@ -59,14 +60,21 @@ class TwilioMessage(BaseMessage):
         content_type = message_data.get("MediaContentType0")
 
         prefix_to_remove = f"{prefix}:"
+        platform = prefix_channel_map[prefix]
+        to = message_data["To"].removeprefix(prefix_to_remove)
+        if platform == ChannelPlatform.WHATSAPP:
+            # Parse the number to E164 format, since this is the format of numbers in the DB
+            # Normally they are already in this format, but this is just an extra layer of security
+            number_obj = phonenumbers.parse(to)
+            to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
         return TwilioMessage(
             participant_id=message_data["From"].removeprefix(prefix_to_remove),
-            to=message_data["To"].removeprefix(prefix_to_remove),
+            to=to,
             message_text=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
-            platform=prefix_channel_map[prefix],
+            platform=platform,
         )
 
 

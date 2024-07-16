@@ -811,7 +811,7 @@ class ExperimentSession(BaseTeamModel):
         return scheduled_messages
 
     @cached_property
-    def participant_data_from_experiment(self) -> "ParticipantData":
+    def participant_data_from_experiment(self) -> dict:
         try:
             return self.experiment.participant_data.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
