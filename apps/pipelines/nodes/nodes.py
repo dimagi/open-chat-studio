@@ -123,13 +123,20 @@ class ExtractStructuredData(LLMResponse):
 
         chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
         while len(chunks) > 1:
+            self.logger.info(f"{len(chunks)} chunks created")
             extracted_data = []
-            for message_chunk in chunks:
+            for idx, message_chunk in enumerate(chunks):
                 output = chain.invoke(message_chunk, config=self._config)
+                chunk_head = message_chunk[:100]
+                chunk_tail = message_chunk[-100:]
+                self.logger.info(
+                    f"Chunk {idx}", input=f"\n{chunk_head}\n...\n{chunk_tail}\n", output=f"Extracted data:\n{output}"
+                )
                 extracted_data.append(output)
 
             # Reducing step
             input = "\n".join([json.dumps(data) for data in extracted_data])
+            self.logger.info("Merging extracted data from chunks for re-evaluation")
             new_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
 
             if len(new_chunks) >= len(chunks):
@@ -143,6 +150,7 @@ class ExtractStructuredData(LLMResponse):
             chunks = new_chunks
 
         output = chain.invoke(chunks[0], config=self._config)
+        self.logger.info("Running final inference", input=chunks[0], output=f"Extracted data:\n{output}")
         return output
 
     def _get_prompt_token_count(self, participant_data: dict) -> int:
@@ -162,10 +170,11 @@ class ExtractStructuredData(LLMResponse):
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        model_token_limit = 1000  # Get this from model metadata
         overlap_percentage = 0.1
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
+        self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
             encoding = tiktoken.encoding_for_model(self.llm_model)
