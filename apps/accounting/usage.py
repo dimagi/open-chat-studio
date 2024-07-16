@@ -1,4 +1,6 @@
 import dataclasses
+import logging
+import os
 import threading
 from collections import Counter
 from contextlib import contextmanager
@@ -7,6 +9,8 @@ from typing import Any
 from apps.teams.models import BaseTeamModel
 
 from .models import Usage, UsageType
+
+log = logging.getLogger("audit")
 
 
 class UsageOutOfScopeError(Exception):
@@ -123,7 +127,10 @@ class BaseUsageRecorder:
 
     def get_current_scope(self):
         if not self.scope:
-            raise UsageOutOfScopeError("UsageRecorder must be used as a context manager")
+            if os.getenv("UNIT_TESTING", False):
+                raise UsageOutOfScopeError("UsageRecorder must be used as a context manager")
+            else:
+                log.exception("Missing scope for usage recording. User `service.usage_scope` context manager.")
         return self.scope[-1]
 
     def record_usage(self, usage_type: UsageType, value, metadata: dict = None):
