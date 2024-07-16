@@ -75,13 +75,14 @@ THIRD_PARTY_APPS = [
 ]
 
 PROJECT_APPS = [
-    "apps.users.apps.UserConfig",
-    "apps.api.apps.APIConfig",
+    "apps.audit",
+    "apps.users",
+    "apps.api",
     "apps.accounting",
     "apps.chat",
     "apps.experiments",
     "apps.web",
-    "apps.teams.apps.TeamConfig",
+    "apps.teams",
     "apps.channels",
     "apps.service_providers",
     "apps.analysis",
@@ -115,6 +116,7 @@ MIDDLEWARE = [
     "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
+    "apps.audit.middleware.AuditTransactionMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
 ]
@@ -513,7 +515,18 @@ DOCUMENTATION_LINKS = {
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
-FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
+FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
+FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
+    "account_reset_password_from_key",
+]
+FIELD_AUDIT_REQUEST_ID_HEADERS = [
+    "X-Request-ID",  # Heroku
+    "X-Amzn-Trace-Id",  # Amazon
+    "traceparent",  # W3C Trace Context (Google)
+]
+TEST_NON_SERIALIZED_APPS = [
+    "field_audit",
+]
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
