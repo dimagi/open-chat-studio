@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import Group
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -8,7 +9,6 @@ from apps.teams.backends import (
     EXPERIMENT_ADMIN_GROUP,
     SUPER_ADMIN_GROUP,
     add_user_to_team,
-    get_groups,
     make_user_team_owner,
 )
 from apps.teams.exceptions import TeamPermissionError
@@ -39,7 +39,7 @@ class TeamMemberManagementViewTest(TestCase):
 
         self.normal_membership2 = add_user_to_team(self.team, self.member2)
 
-        self.groups = get_groups()
+        self.groups = {group.name: group for group in Group.objects.all()}
         self.admin_groups = [self.groups[SUPER_ADMIN_GROUP]]
         self.admin_group_ids = {g.id for g in self.admin_groups}
         self.member_groups = [self.groups[EXPERIMENT_ADMIN_GROUP], self.groups[CHAT_VIEWER_GROUP]]
