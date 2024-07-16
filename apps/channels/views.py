@@ -5,13 +5,15 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 
 
 @csrf_exempt
@@ -47,19 +49,52 @@ def new_turn_message(request, experiment_id: uuid):
     return HttpResponse()
 
 
+@extend_schema(
+    operation_id="new_api_message",
+    summary="New API Message",
+    tags=["Channels"],
+    request=inline_serializer(
+        "NewAPIMessage",
+        fields={
+            "message": serializers.CharField(label="User message"),
+            "session": serializers.CharField(required=False, label="Optional session ID"),
+        },
+    ),
+    responses={
+        200: inline_serializer(
+            "NewAPIMessageResponse",
+            fields={
+                "response": serializers.CharField(label="AI response"),
+            },
+        )
+    },
+    parameters=[
+        OpenApiParameter(
+            name="experiment_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Experiment ID",
+        ),
+    ],
+)
 @api_view(["POST"])
 @permission_classes([HasUserAPIKey])
 def new_api_message(request, experiment_id: uuid):
-    """
-    Expected body: {"message": ""}
-    """
+    """Chat with an experiment."""
     message_data = request.data.copy()
-    message_data["participant_id"] = request.user.email
+    participant_id = request.user.email
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_channel, _created = ExperimentChannel.objects.get_or_create(
-        name=f"{experiment.id}-api",
-        experiment=experiment,
-        platform=ChannelPlatform.API,
-    )
-    response = tasks.handle_api_message(experiment_channel, message_data=message_data)
+
+    session = None
+    if session_id := message_data.get("session"):
+        session = get_object_or_404(
+            ExperimentSession,
+            external_id=session_id,
+            experiment=experiment,
+            team=request.team,
+            participant__user=request.user,
+        )
+        participant_id = session.participant.identifier
+
+    response = tasks.handle_api_message(request.user, experiment, message_data["message"], participant_id, session)
     return Response(data={"response": response})

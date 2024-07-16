@@ -1,6 +1,7 @@
 import logging
 from functools import cached_property
 
+import phonenumbers
 from django import forms
 from django.conf import settings
 from django.urls import reverse
@@ -86,9 +87,27 @@ class TelegramChannelForm(ExtraFormBase):
         tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
         tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
 
+    def clean_bot_token(self):
+        """Checks the bot token by making a request to get info on the bot. If the token is invalid, an
+        ApiTelegramException will be raised with error_code = 404
+        """
+        bot_token = self.cleaned_data["bot_token"]
+        try:
+            bot = TeleBot(bot_token, threaded=False)
+            bot.get_me()
+        except apihelper.ApiTelegramException as ex:
+            if ex.error_code == 404:
+                raise forms.ValidationError(f"Invalid token: {bot_token}")
+            else:
+                logger.exception(ex)
+                raise forms.ValidationError("Could not verify the bot token")
+        return bot_token
+
 
 class WhatsappChannelForm(ExtraFormBase):
-    number = forms.CharField(label="Number", max_length=100)
+    number = forms.CharField(
+        label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
+    )
     webook_url = forms.CharField(
         widget=forms.TextInput(attrs={"readonly": "readonly"}),
         label="Webhook URL",
@@ -112,6 +131,13 @@ class WhatsappChannelForm(ExtraFormBase):
     def get_success_message(self, channel: ExperimentChannel):
         """The message to be displayed when the channel is successfully linked"""
         return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+    def clean_number(self):
+        try:
+            number_obj = phonenumbers.parse(self.cleaned_data["number"])
+            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
 
 
 class FacebookChannelForm(ExtraFormBase):

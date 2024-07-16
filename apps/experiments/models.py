@@ -422,6 +422,24 @@ class ExperimentRoute(BaseTeamModel):
     keyword = models.SlugField(max_length=128)
     is_default = models.BooleanField(default=False)
 
+    @classmethod
+    def eligible_children(cls, team: Team, parent: Experiment | None = None):
+        """Returns a list of experiments: that are not parents, and are not children of the current experiment"""
+        parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
+
+        if parent:
+            child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
+            eligible_experiments = (
+                Experiment.objects.filter(team=team)
+                .exclude(id__in=child_ids)
+                .exclude(id__in=parent_ids)
+                .exclude(id=parent.id)
+            )
+        else:
+            eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
+
+        return eligible_experiments
+
     class Meta:
         unique_together = (
             ("parent", "child"),
@@ -518,7 +536,17 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "identifier")]
 
 
+class ParticipantDataObjectManager(models.Manager):
+    def for_experiment(self, experiment: Experiment):
+        return (
+            super()
+            .get_queryset()
+            .filter(content_type__model="experiment", object_id=experiment.id, team=experiment.team)
+        )
+
+
 class ParticipantData(BaseTeamModel):
+    objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
     data = encrypt(models.JSONField(default=dict))
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -576,7 +604,6 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    llm = models.CharField(max_length=255)
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
@@ -729,6 +756,7 @@ class ExperimentSession(BaseTeamModel):
             Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
             participant=self.participant,
             team=self.team,
+            action__isnull=False,
         ).select_related("action")
 
         scheduled_messages = []
@@ -751,7 +779,7 @@ class ExperimentSession(BaseTeamModel):
         return scheduled_messages
 
     @cached_property
-    def participant_data_from_experiment(self) -> "ParticipantData":
+    def participant_data_from_experiment(self) -> dict:
         try:
             return self.experiment.participant_data.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:

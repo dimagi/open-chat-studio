@@ -15,6 +15,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.pytest import django_db_with_data
 
 
 @pytest.fixture()
@@ -23,23 +24,23 @@ def experiment_session():
 
 
 class TestSyntheticVoice:
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_team_scoped_services(self):
         assert SyntheticVoice.TEAM_SCOPED_SERVICES == [SyntheticVoice.OpenAIVoiceEngine]
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_returns_all_general_services(self):
         """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
         voices_queryset = SyntheticVoice.get_for_team(team=None)
         assert voices_queryset.count() == SyntheticVoice.objects.count()
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_excludes_service(self):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.OpenAI, SyntheticVoice.Azure}
 
-    @pytest.mark.django_db()
+    @django_db_with_data()
     def test_get_for_team_do_not_include_other_team_exclusive_voices(self):
         """Tests that `get_for_team` returns both general and team exclusive synthetic voices. Exclusive synthetic
         voices are those whose service is one of SyntheticVoice.TEAM_SCOPED_SERVICES

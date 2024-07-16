@@ -127,6 +127,11 @@ class ChannelBase(ABC):
             return self.experiment_session.participant.identifier
         return self.message.participant_id
 
+    @property
+    def participant_user(self):
+        if self.experiment_session:
+            return self.experiment_session.participant.user
+
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         raise NotImplementedError(
             "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
@@ -381,14 +386,8 @@ class ChannelBase(ABC):
         If the user requested a new session (by sending the reset command), this will create a new experiment
         session.
         """
-        self.experiment_session = (
-            ExperimentSession.objects.filter(
-                experiment=self.experiment,
-                participant__identifier=str(self.participant_identifier),
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        if not self.experiment_session:
+            self.experiment_session = self._get_latest_session()
 
         if not self.experiment_session:
             self._create_new_experiment_session()
@@ -408,6 +407,16 @@ class ChannelBase(ABC):
                 self.experiment_session.experiment_channel = self.experiment_channel
                 self.experiment_session.save()
 
+    def _get_latest_session(self):
+        return (
+            ExperimentSession.objects.filter(
+                experiment=self.experiment,
+                participant__identifier=str(self.participant_identifier),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` and creating a new one"""
         self.experiment_session.end()
@@ -421,6 +430,7 @@ class ChannelBase(ABC):
             experiment=self.experiment,
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
+            participant_user=self.participant_user,
             session_status=SessionStatus.SETUP,
         )
 
@@ -611,6 +621,21 @@ class ApiChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
+    def __init__(
+        self,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
+        user=None,
+    ):
+        super().__init__(experiment_channel, experiment_session)
+        self.user = user
+        if not self.user and not self.experiment_session:
+            raise MessageHandlerException("ApiChannel requires either an existing session or a user")
+
+    @property
+    def participant_user(self):
+        return super().participant_user or self.user
+
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
@@ -691,7 +716,6 @@ def _start_experiment_session(
         session = ExperimentSession.objects.create(
             team=experiment.team,
             experiment=experiment,
-            llm=experiment.llm,
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,

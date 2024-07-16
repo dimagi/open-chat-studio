@@ -75,12 +75,13 @@ THIRD_PARTY_APPS = [
 ]
 
 PROJECT_APPS = [
-    "apps.users.apps.UserConfig",
-    "apps.api.apps.APIConfig",
+    "apps.audit",
+    "apps.users",
+    "apps.api",
     "apps.chat",
     "apps.experiments",
     "apps.web",
-    "apps.teams.apps.TeamConfig",
+    "apps.teams",
     "apps.channels",
     "apps.service_providers",
     "apps.analysis",
@@ -114,6 +115,7 @@ MIDDLEWARE = [
     "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
+    "apps.audit.middleware.AuditTransactionMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
     "tz_detect.middleware.TimezoneMiddleware",
 ]
@@ -143,6 +145,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "apps.web.context_processors.project_meta",
                 "apps.teams.context_processors.team",
+                "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
             ],
@@ -334,8 +337,10 @@ SITE_ID = 1
 
 # DRF config
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.IsAuthenticatedOrHasUserAPIKey"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.HasUserAPIKey"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
@@ -344,14 +349,12 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Dimagi Chatbots",
     "DESCRIPTION": "Experiments with AI, GPT and LLMs",
-    "VERSION": "0.1.0",
+    "VERSION": "1",
     "SERVE_INCLUDE_SCHEMA": False,
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
-    "APPEND_COMPONENTS": {
-        "securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "Authorization"}}
-    },
+    "APPEND_COMPONENTS": {"securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}}},
     "SECURITY": [
         {
             "ApiKeyAuth": [],
@@ -511,7 +514,18 @@ DOCUMENTATION_LINKS = {
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
-FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.RequestAuditor", "field_audit.auditors.SystemUserAuditor"]
+FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
+FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
+    "account_reset_password_from_key",
+]
+FIELD_AUDIT_REQUEST_ID_HEADERS = [
+    "X-Request-ID",  # Heroku
+    "X-Amzn-Trace-Id",  # Amazon
+    "traceparent",  # W3C Trace Context (Google)
+]
+TEST_NON_SERIALIZED_APPS = [
+    "field_audit",
+]
 
 # tz_detect
 TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]

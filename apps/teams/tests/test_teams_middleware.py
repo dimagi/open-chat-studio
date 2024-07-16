@@ -3,7 +3,6 @@ from django.urls import reverse
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.models import Invitation, Team
-from apps.teams.roles import ROLE_MEMBER
 from apps.users.models import CustomUser
 
 PASSWORD = "123"
@@ -70,9 +69,7 @@ class TeamsAuthTest(TestCase):
         assert success, f"User login failed: {user.username}"
 
     def _create_invitation(self):
-        return Invitation.objects.create(
-            team=self.sox, email="dj@yankees.com", role=ROLE_MEMBER, invited_by=self.sox_admin
-        )
+        return Invitation.objects.create(team=self.sox, email="dj@yankees.com", invited_by=self.sox_admin)
 
     def _assertRequestHasTeam(self, response, team, user=None):
         request = response.wsgi_request

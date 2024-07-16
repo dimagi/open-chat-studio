@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import cached_property
 
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
@@ -26,22 +27,36 @@ class Pipeline(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
+    @cached_property
+    def node_ids(self):
+        return [node.get("data", {}).get("id") for node in self.data.get("nodes", [])]
+
     def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_json(self.data)
-
+        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
+        # the session instead of the session object.
         pipeline_run = PipelineRun.objects.create(
-            pipeline=self, input=input, status=PipelineRunStatus.RUNNING, log={"entries": []}, session=session
+            pipeline=self,
+            input=input.json_safe(),
+            status=PipelineRunStatus.RUNNING,
+            log={"entries": []},
+            session=session,
         )
 
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
-        logging_callback.logger.info("Starting pipeline run")
+        logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
+            output = PipelineState(**output).json_safe()
             pipeline_run.output = output
         finally:
-            logging_callback.logger.info("Pipeline run finished")
+            if pipeline_run.status == PipelineRunStatus.ERROR:
+                logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
+            else:
+                pipeline_run.status = PipelineRunStatus.SUCCESS
+                logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
         return output
 
@@ -68,6 +83,8 @@ class LogEntry(pydantic.BaseModel):
     time: datetime
     level: str
     message: str
+    output: str | None = None
+    input: str | None = None
 
     class Config:
         json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")}

@@ -3,18 +3,9 @@
 from django.db import migrations
 
 
-def set_llms(apps, schema_editor):
-    ExperimentSession = apps.get_model("experiments", "ExperimentSession")
-    for session in ExperimentSession.objects.select_related('experiment'):
-        session.llm = session.experiment.llm
-        session.save(update_fields=["llm"])
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("experiments", "0013_remove_public_id_nulls"),
     ]
 
-    operations = [
-        migrations.RunPython(set_llms, elidable=True)
-    ]
+    operations = []

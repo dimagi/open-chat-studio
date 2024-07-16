@@ -88,16 +88,4 @@
       {% endif %}
     </li>
   {% endflag %}
-{#  <li>#}
-{#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
-{#      <i class="fa fa-comments fa-fw"></i>#}
-{#      {% translate "Chats" %}#}
-{#    </a>#}
-{#  </li>#}
-  <li>
-    <a href="{% url 'single_team:manage_team' request.team.slug %}" {% if active_tab == 'manage-team' %}class="active"{% endif %}>
-      <i class="fa fa-gear fa-fw"></i>
-      {% translate "My Team" %}
-    </a>
-  </li>
 {% endif %}

@@ -1,8 +1,3 @@
-{% if record %}
-  {% url url_name request.team.slug record.id as action_url %}
-{% else %}
-  {% url url_name request.team.slug as action_url %}
-{% endif %}
 <a href="{{ action_url }}" class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}>
   <i class="{{ icon_class }}"></i>
   {{ label }}
