@@ -39,10 +39,19 @@
   {% empty %}
     <p>{% translate "You haven't created any API keys yet. Create one below." %}</p>
   {% endfor %}
-  <form method="post" action="{% url 'users:create_api_key' %}">
-    {% csrf_token %}
-    <div class="mt-2">
-      <input type="submit" class="pg-button-secondary" value="{% translate "New API Key" %}" />
+  <button class="btn btn-secondary"
+          onclick="api_key_modal.showModal()"
+          hx-get="{% url 'users:create_api_key' %}"
+          hx-target="#api_key_modal_content"
+          hx-trigger="click"
+  >{% translate "New API Key" %}</button>
+  <dialog id="api_key_modal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      <h3 class="text-lg font-bold">Create a new API Key</h3>
+      <div id="api_key_modal_content"></div>
     </div>
-  </form>
+  </dialog>
 </section>
