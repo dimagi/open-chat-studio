@@ -23,7 +23,7 @@ from apps.utils.langchain import mock_experiment_llm_service
 def test_experiment_routing(with_default, routing_response, expected_tag):
     experiment = _make_experiment_with_routing(with_default)
     session = ExperimentSessionFactory(experiment=experiment)
-    with mock_experiment_llm_service(["safe", "How can I help today?"], token_counts=[1]) as service:
+    with mock_experiment_llm_service([routing_response, "How can I help today?"], token_counts=[1]) as service:
         bot = TopicBot(session)
         response = bot.process_input("Hi")
     assert response == "How can I help today?"
