@@ -3,11 +3,10 @@ import time
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from apps.api.permissions import BearerTokenAuthentication
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
 
@@ -76,8 +75,6 @@ from apps.channels.tasks import handle_api_message
     ],
 )
 @api_view(["POST"])
-@authentication_classes([BearerTokenAuthentication])
-@permission_classes([])  # remove the default
 def chat_completions(request, experiment_id: str):
     messages = request.data.get("messages", [])
     try:

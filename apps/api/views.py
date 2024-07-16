@@ -4,11 +4,11 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
+from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
@@ -39,7 +39,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
     ),
 )
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "id"
@@ -64,7 +64,6 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
     ],
 )
 @api_view(["POST"])
-@permission_classes([HasUserAPIKey])
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request, participant_id: str):
     """
@@ -123,7 +122,7 @@ def update_participant_data(request, participant_id: str):
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]
