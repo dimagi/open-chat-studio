@@ -50,7 +50,7 @@ class SummarizeConversationAction(EventActionHandlerBase):
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
         usage_meta = {"event_action": action.id, "experiment": session.experiment.id}
-        with session.experiment.get_llm_service().record_usage(session, metadata=usage_meta):
+        with session.experiment.get_llm_service().usage_scope(session, metadata=usage_meta):
             summary = SummarizerMixin(llm=session.experiment.get_chat_model(), prompt=prompt).predict_new_summary(
                 messages, current_summary
             )

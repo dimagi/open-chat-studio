@@ -61,7 +61,7 @@ def get_prompt_builder_response(llm_service, team_id: int, user, data_dict: dict
 
     # Get the response from the bot using the last message from the user and return it
     history = PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=[])
-    with llm_service.record_usage(history) as usage:
+    with llm_service.usage_scope(history) as usage:
         answer = conversation.predict(last_user_message)
 
     input_tokens = usage.totals.get(UsageType.INPUT_TOKENS, 0)

@@ -120,7 +120,7 @@ class TopicBot:
             return self.default_tag, self.default_child_chain
 
     def process_input(self, user_input: str, save_input_to_history=True):
-        with self.experiment.get_llm_service().record_usage(self.session):
+        with self.experiment.get_llm_service().usage_scope(self.session):
             # human safety layers
             for safety_bot in self.safety_bots:
                 if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):

@@ -77,7 +77,7 @@ def _test_usage_recording_for_chat_model(service_factory, expected_input_tokens,
     model = service.get_chat_model("gpt-3", temperature=0.5)
 
     source_object = ExperimentSession(id=1, team_id=123)
-    with service.record_usage(source_object, metadata={"session_id": "session"}):
+    with service.usage_scope(source_object, metadata={"session_id": "session"}):
         response = model.invoke("Hello, how are you?")
 
     assert response.content == "I'm doing well, thank you for asking."

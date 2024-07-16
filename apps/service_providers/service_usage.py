@@ -8,6 +8,6 @@ class UsageMixin:
     usage_recorder: UsageRecorder
 
     @contextmanager
-    def record_usage(self, source_object: BaseTeamModel, metadata: dict = None):
+    def usage_scope(self, source_object: BaseTeamModel, metadata: dict = None):
         with self.usage_recorder.for_source(source_object, metadata=metadata):
             yield self.usage_recorder
