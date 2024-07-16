@@ -10,7 +10,6 @@
 {% block page_js %}
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
-    const App = SiteJS.app;
     document.addEventListener('DOMContentLoaded', () => {
       const uploadUrl = '{% url "users:upload_profile_image" %}';
       document.getElementById("profile-upload").onchange = function() {
@@ -41,7 +40,7 @@
       // upload to server
         let formData = new FormData();
         formData.append("avatar", file);
-        formData.append('csrfmiddlewaretoken', App.Cookies.get('csrftoken'));
+        formData.append('csrfmiddlewaretoken', SiteJS.app.Cookies.get('csrftoken'));
         fetch(uploadUrl, {method: "POST", body: formData, credentials: 'same-origin'}).then(
           function (response) {
             if (response.ok) {
