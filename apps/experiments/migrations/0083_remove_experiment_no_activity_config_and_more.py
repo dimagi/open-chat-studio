@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0081_rename_public_id_experimentsession_external_id_and_more'),
+        ('experiments', '0082_remove_experimentsession_llm'),
     ]
 
     operations = [
