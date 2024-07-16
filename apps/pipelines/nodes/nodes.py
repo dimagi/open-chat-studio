@@ -165,13 +165,13 @@ class ExtractStructuredData(LLMResponse):
         """Chunk messages using a splitter that considers the token count.
         Strategy:
         - chunk_size (in tokens) = The LLM's token limit - prompt_token_count
-        - chunk_overlap is chosen to be 10%
+        - chunk_overlap is chosen to be 20%
 
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
         model_token_limit = 1000  # Get this from model metadata
-        overlap_percentage = 0.1
+        overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
         self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
