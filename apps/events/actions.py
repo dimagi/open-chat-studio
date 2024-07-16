@@ -20,7 +20,7 @@ class EventActionHandlerBase:
             Callback for whenever the associated action is updated.
     """
 
-    def invoke(self, session, *args, **kwargs):
+    def invoke(self, session, action):
         ...
 
     def event_action_updated(self, action):
@@ -49,9 +49,11 @@ class SummarizeConversationAction(EventActionHandlerBase):
         history = session.chat.get_langchain_messages_until_summary()
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
-        summary = SummarizerMixin(llm=session.experiment.get_chat_model(), prompt=prompt).predict_new_summary(
-            messages, current_summary
-        )
+        usage_meta = {"event_action": action.id, "experiment": session.experiment.id}
+        with session.experiment.get_llm_service().record_usage(session, metadata=usage_meta):
+            summary = SummarizerMixin(llm=session.experiment.get_chat_model(), prompt=prompt).predict_new_summary(
+                messages, current_summary
+            )
 
         return summary
 
