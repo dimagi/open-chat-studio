@@ -7,6 +7,8 @@
         <table class="table pg-table">
           <thead>
             <tr>
+              <th>{% translate "Team" %}</th>
+              <th>{% translate "Name" %}</th>
               <th>{% translate "Prefix" %}</th>
               <th>{% translate "Created" %}</th>
               <th></th>
@@ -15,6 +17,8 @@
           <tbody>
     {% endif %}
     <tr>
+      <td><a href="{% url "web_team:home" key.team.slug %}" class="link">{{ key.team.name }}</a></td>
+      <td>{{ key.name }}</td>
       <td>{{ key.prefix }}</td>
       <td>{{ key.created.date }}</td>
       <td>
