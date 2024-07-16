@@ -15,6 +15,8 @@ from .forms import CustomUserChangeForm, UploadAvatarForm
 from .helpers import require_email_confirmation, user_has_confirmed_email_address
 from .models import CustomUser
 
+SESSION_API_KEY = "session_api_key"
+
 
 @login_required
 def profile(request):
@@ -44,6 +46,8 @@ def profile(request):
             messages.success(request, _("Profile successfully saved."))
     else:
         form = CustomUserChangeForm(instance=request.user)
+
+    new_api_key = request.session.pop(SESSION_API_KEY, None)
     return render(
         request,
         "account/profile.html",
@@ -51,8 +55,9 @@ def profile(request):
             "form": form,
             "active_tab": "profile",
             "page_title": _("Profile"),
-            "api_keys": request.user.api_keys.filter(revoked=False),
+            "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
             "user_has_valid_totp_device": user_has_valid_totp_device(request.user),
+            "new_api_key": new_api_key,
         },
     )
 
@@ -73,12 +78,7 @@ def create_api_key(request):
     api_key, key = UserAPIKey.objects.create_key(
         name=f"{request.user.get_display_name()} API Key", user=request.user, team=request.team
     )
-    messages.success(
-        request,
-        _("API Key created. Your key is: {key}. Save this somewhere safe - you will only see it once!").format(
-            key=key,
-        ),
-    )
+    request.session[SESSION_API_KEY] = key
     return HttpResponseRedirect(reverse("users:user_profile"))
 
 
