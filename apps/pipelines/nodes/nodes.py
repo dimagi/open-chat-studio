@@ -170,7 +170,7 @@ class ExtractStructuredData(LLMResponse):
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 1000  # Get this from model metadata
+        model_token_limit = 8192  # Get this from model metadata
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
