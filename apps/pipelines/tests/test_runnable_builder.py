@@ -189,7 +189,7 @@ def test_extract_structured_data_basic(provider):
                         "data": {
                             "id": "llm-GUk0C",
                             "label": "Extract some data",
-                            "type": "ExtractStructuredDataBasic",
+                            "type": "ExtractStructuredData",
                             "params": {
                                 "llm_provider_id": provider.id,
                                 "llm_model": "fake-model",
@@ -315,7 +315,7 @@ def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dic
                         "data": {
                             "id": "extraction",
                             "label": "Extract some data",
-                            "type": "ExtractStructuredDataBasic",
+                            "type": "ExtractStructuredData",
                             "params": {
                                 "llm_provider_id": provider.id,
                                 "llm_model": "fake-model",
