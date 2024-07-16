@@ -6,7 +6,7 @@
   <section class="app-card">
 
     <h1 class="pg-title">{% translate "Project Dashboard" %}</h1>
-    <form>
+    <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, changed, submit">
       <div class="pg-columns">
         <div class="pg-column">
           {% render_field form.start %}
@@ -19,7 +19,7 @@
         <input type="submit" class="pg-button-primary" value="Update">
       </div>
     </form>
-    <div class="mt-2">
+    <div class="mt-2" id="charts">
       <div class="pg-subtitle">{% translate "Chat Messages (Daily)" %}
         <canvas id="usage-chart" class="mt-2"></canvas>
       </div>
@@ -27,15 +27,23 @@
   </section>
 {% endblock %}
 {% block page_js %}
-  {{ usage_data|json_script:'usage_data' }}
   <script src="{% static 'js/adminDashboard-bundle.js' %}"></script>
   <script>
-    const start = new Date("{{ start }}");
-    const end = new Date("{{ end }}");
-    const startValue = {{ start_value }};
+    let chart;
+    htmx.onLoad(() => {
+      const element = document.getElementById('usage_data');
+      if (!element) {
+        return;
+      }
+      const usageData = JSON.parse(document.getElementById('usage_data').textContent);
+      const start = new Date(usageData.start);
+      const end = new Date(usageData.end);
 
-    const usageChart = document.getElementById('usage-chart').getContext('2d');
-    const usageData = JSON.parse(document.getElementById('usage_data').textContent);
-    SiteJS.adminDashboard.barChartWithDates(usageChart, start, end, usageData, "Chat Messages");
+      const usageChart = document.getElementById('usage-chart').getContext('2d');
+      if (chart) {
+        chart.destroy();
+      }
+      chart = SiteJS.adminDashboard.barChartWithDates(usageChart, start, end, usageData.data, "Chat Messages");
+    })
   </script>
 {% endblock %}

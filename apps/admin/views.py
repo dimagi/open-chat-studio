@@ -2,34 +2,47 @@ from datetime import datetime, timedelta
 
 from django.contrib.auth.decorators import user_passes_test
 from django.template.response import TemplateResponse
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.admin.forms import DateRangeForm
 from apps.admin.queries import get_message_stats
 from apps.admin.serializers import StatsSerializer
-from apps.users.models import CustomUser
 
 
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
 def admin_home(request):
     end = _get_date_param(request, "end", timezone.now().date())
     start = _get_date_param(request, "start", end - timedelta(days=90))
-
-    serializer = StatsSerializer(get_message_stats(start, end), many=True)
-
     form = DateRangeForm(initial={"start": start, "end": end})
-    start_value = CustomUser.objects.filter(date_joined__lt=start).count()
     return TemplateResponse(
         request,
         "admin/home.html",
         context={
             "active_tab": "admin",
-            "usage_data": serializer.data,
             "form": form,
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "start_value": start_value,
         },
+    )
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def usage_chart(request):
+    end = _get_date_param(request, "end", timezone.now().date())
+    start = _get_date_param(request, "start", end - timedelta(days=90))
+
+    serializer = StatsSerializer(get_message_stats(start, end), many=True)
+    url = reverse("ocs_admin:home")
+    return TemplateResponse(
+        request,
+        "admin/usage_chart.html",
+        context={
+            "usage_data": {
+                "data": serializer.data,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        },
+        headers={"HX-Push-Url": f"{url}?start={start}&end={end}"},
     )
 
 

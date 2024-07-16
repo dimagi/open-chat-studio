@@ -1,0 +1,8 @@
+{% load form_tags %}
+{% load i18n %}
+{% load static %}
+
+<div class="pg-subtitle">{% translate "Chat Messages (Daily)" %}
+  <canvas id="usage-chart" class="mt-2"></canvas>
+</div>
+{{ usage_data|json_script:'usage_data' }}
