@@ -70,11 +70,12 @@ class LlmCompletionStep(core.BaseStep[Any, str]):
     def run(self, params: LlmCompletionStepParams, context: StepContext[Any]) -> StepContext[str]:
         llm: BaseChatModel = self.pipeline_context.llm_service.get_chat_model(params.llm_model, 1.0)
         prompt = params.prompt_template.format_prompt(data=context.get_data())
-        try:
-            result = llm.invoke(prompt)
-        except Exception as e:
-            raise StepError(f"Error invoking LLM: {e}")
-        return StepContext(result.content, name="llm_output")
+        with self.pipeline_context.llm_service.record_usage(self.pipeline_context.run.group):
+            try:
+                result = llm.invoke(prompt)
+            except Exception as e:
+                raise StepError(f"Error invoking LLM: {e}")
+            return StepContext(result.content, name="llm_output")
 
 
 class AssistantParams(core.Params):
