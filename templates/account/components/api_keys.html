@@ -14,7 +14,12 @@
           stroke-width="2"
           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
-      <span>API Key created. Save this somewhere safe - you will only see it once: <code>{{ new_api_key }}</code></span>
+      <div>
+        <span>API Key created. Save this somewhere safe - you will only see it once: <code id="api-key">{{ new_api_key }}</code></span>
+        <button class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'api-key')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i><span></span>
+        </button>
+      </div>
     </div>
   {% endif %}
   {% for key in api_keys %}
