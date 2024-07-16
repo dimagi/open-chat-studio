@@ -8,3 +8,7 @@ class PipelineNodeAttributeError(Exception):
 
 class PipelineNodeBuildError(Exception):
     pass
+
+
+class PipelineNodeRunError(Exception):
+    pass

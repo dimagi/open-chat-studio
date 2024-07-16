@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
 from apps.experiments.models import ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -139,7 +139,7 @@ class ExtractStructuredData(LLMResponse):
                 # Additionally, when the `data_schema` is also large, the model will output a large amount of
                 # tokens per chunk, resulting in the output tokens being more than the chunk size. This will cause
                 # more chunks and an infinite loop
-                raise Exception("Stopping due to bloating chunks. Reduce the size of the data schema")
+                raise PipelineNodeRunError("Stopping due to bloating chunks. Reduce the size of the data schema")
             chunks = new_chunks
 
         output = chain.invoke(chunks[0], config=self._config)

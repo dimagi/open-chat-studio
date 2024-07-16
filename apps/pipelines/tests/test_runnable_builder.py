@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest import mock
 
 import pytest
@@ -5,6 +6,7 @@ from django.core import mail
 from django.test import override_settings
 
 from apps.experiments.models import ParticipantData
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -171,17 +173,15 @@ def test_render_template():
     assert runnable.invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1] == "Cycling is cool"
 
 
-@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_structured_data_basic(provider):
+@contextmanager
+def extract_structured_data_pipeline(provider, *args, **kwds):
     fake_llm = FakeLlm(responses=[{"name": "John"}], token_counts=[0])
     service = FakeLlmService(llm=fake_llm)
-    session = ExperimentSessionFactory()
 
     with (
         mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
     ):
-        runnable = PipelineGraph.build_runnable_from_json(
+        graph = PipelineGraph.build_runnable_from_json(
             {
                 "edges": [],
                 "nodes": [
@@ -201,8 +201,60 @@ def test_extract_structured_data_basic(provider):
                 ],
             }
         )
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
-        assert runnable.invoke(state)["messages"][-1] == {"name": "John"}
+        yield graph
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_extract_structured_data_no_chunking(provider):
+    session = ExperimentSessionFactory()
+
+    with extract_structured_data_pipeline(provider) as graph:
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        assert graph.invoke(state)["messages"][-1] == {"name": "John"}
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_extract_structured_data_with_chunking(provider):
+    session = ExperimentSessionFactory()
+
+    with (
+        extract_structured_data_pipeline(provider) as graph,
+        mock.patch(
+            "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
+            side_effect=[["chunk1", "chunk2", "chunk3"], ["chunk1", "chunk2"], ["chunk1"]],
+        ) as chunk_messages,
+    ):
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        assert graph.invoke(state)["messages"][-1] == {"name": "John"}
+
+    assert chunk_messages.call_count == 3
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+@pytest.mark.parametrize(
+    "returned_chunks",
+    [
+        # increasing chunks
+        [["chunk1", "chunk2"], ["chunk1", "chunk2", "chunk3"]],
+        # stagnating chunks
+        [["chunk1", "chunk2"], ["chunk1", "chunk2"]],
+    ],
+)
+def test_extract_structured_data_raises_run_error(returned_chunks, provider):
+    session = ExperimentSessionFactory()
+
+    state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+    with (
+        extract_structured_data_pipeline(provider) as graph,
+        mock.patch("apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages", side_effect=returned_chunks),
+        pytest.raises(
+            PipelineNodeRunError, match="Stopping due to bloating chunks. Reduce the size of the data schema"
+        ),
+    ):
+        graph.invoke(state)
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
