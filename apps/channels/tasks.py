@@ -18,7 +18,7 @@ from apps.utils.taskbadger import update_taskbadger_data
 log = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     experiment_channel = (
         ExperimentChannel.objects.filter(external_id=channel_external_id)
@@ -42,7 +42,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         message_handler.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_twilio_message(self, message_data: str, request_uri: str, signature: str):
     raw_data = json.loads(message_data)
     message = TwilioMessage.parse(raw_data)
@@ -92,7 +92,7 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
             log.error("Twilio signature validation failed")
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
     experiment_channel = (
