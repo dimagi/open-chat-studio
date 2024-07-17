@@ -1,7 +1,18 @@
 {% load chat_tags %}
-<div class="chat-message-user flex">
-  {% include "experiments/chat/components/user_icon.html" %}
-  <div class="message-contents">
-    <p>{{ message_text|render_markdown }}</p>
+<div class="chat-message-user flex flex-col">
+  <div class="flex flex-row">
+    {% include "experiments/chat/components/user_icon.html" %}
+    <div class="message-contents">
+      <p>{{ message_text|render_markdown }}</p>
+    </div>
+  </div>
+  <div class="flex flex-col">
+    {% for file in message.get_attached_files %}
+      <a class="text-sm p-1 hover:bg-gray-300 hover:rounded-lg"
+         href="{% url 'chat:download_file' team_slug=message.chat.team.slug pk=file.id %}"
+         download="{{ file.name }}">
+        <i class="fa-solid fa-download fa-sm"></i> {{ file.name }}
+      </a>
+    {% endfor %}
   </div>
 </div>

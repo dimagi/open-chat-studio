@@ -7,6 +7,7 @@ from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
+from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -109,3 +110,20 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 },
             },
         }
+
+    def get_attached_files(self):
+        """For display purposes. Returns the tool resource files for which this message has references to. The
+        reference will be the file's external id
+
+        Message metadata example:
+        {
+            "code_interpreter": ["file_id_1", "file_id_2"]
+            "file_search": ["file_id_3", "file_id_4"]
+        }
+        """
+        file_ids = []
+        file_ids.extend(self.metadata.get("file_search", []))
+        file_ids.extend(self.metadata.get("code_interpreter", []))
+        if file_ids:
+            return File.objects.filter(team=self.chat.team, external_id__in=file_ids)
+        return []
