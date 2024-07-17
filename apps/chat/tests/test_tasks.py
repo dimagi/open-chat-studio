@@ -5,7 +5,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _get_latest_sessions_for_participants
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, NoActivityMessageConfig, SessionStatus
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
 from apps.service_providers.models import LlmProvider
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -20,16 +20,12 @@ class TasksTest(TestCase):
         self.telegram_chat_id = 1234567891
         self.team = Team.objects.create(name="test-team")
         self.user = CustomUser.objects.create_user(username="testuser")
-        self.no_activity_config = NoActivityMessageConfig.objects.create(
-            team=self.team, message_for_bot="Some message", name="Some name", max_pings=3, ping_after=1
-        )
         self.experiment = Experiment.objects.create(
             team=self.team,
             owner=self.user,
             name="TestExperiment",
             description="test",
             prompt_text="You are a helpful assistant",
-            no_activity_config=self.no_activity_config,
             consent_form=ConsentForm.get_default(self.team),
             llm_provider=LlmProvider.objects.create(
                 name="test",

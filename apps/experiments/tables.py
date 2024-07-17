@@ -8,7 +8,6 @@ from apps.experiments.models import (
     Experiment,
     ExperimentRoute,
     ExperimentSession,
-    NoActivityMessageConfig,
     SafetyLayer,
     SourceMaterial,
     Survey,
@@ -134,30 +133,6 @@ class ConsentFormTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No consent forms found."
-
-
-class NoActivityMessageConfigTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:no_activity_edit"),
-                actions.delete_action(url_name="experiments:no_activity_delete"),
-            ]
-        },
-    )
-
-    class Meta:
-        model = NoActivityMessageConfig
-        fields = (
-            "name",
-            "message_for_bot",
-            "max_pings",
-            "ping_after",
-        )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No configs found."
 
 
 class ExperimentSessionsTable(tables.Table):
