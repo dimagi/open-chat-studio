@@ -8,7 +8,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.langchain import FakeLlm, FakeLlmService
+from apps.utils.langchain import build_fake_llm_service
 
 
 @pytest.mark.django_db()
@@ -25,13 +25,12 @@ from apps.utils.langchain import FakeLlm, FakeLlmService
 def test_experiment_routing(with_default, routing_response, expected_tag):
     experiment = _make_experiment_with_routing(with_default)
     session = ExperimentSessionFactory(experiment=experiment)
-    fake_llm = FakeLlm(responses=[routing_response, "How can I help today?"], token_counts=[0])
-    fake_service = FakeLlmService(llm=fake_llm)
+    fake_service = build_fake_llm_service(responses=[routing_response, "How can I help today?"], token_counts=[0])
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
         bot = TopicBot(session)
         response = bot.process_input("Hi")
     assert response == "How can I help today?"
-    assert fake_llm.get_call_messages() == [
+    assert fake_service.llm.get_call_messages() == [
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
     ]

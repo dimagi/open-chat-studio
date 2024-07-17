@@ -9,7 +9,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.langchain import FakeLlm, FakeLlmService
+from apps.utils.langchain import build_fake_llm_service
 from apps.utils.pytest import django_db_with_data
 
 
@@ -23,7 +23,7 @@ def provider():
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_full_email_sending_pipeline(get_llm_service, provider):
-    service = FakeLlmService(llm=FakeLlm(responses=['{"summary": "Ice is cold"}'], token_counts=[0]))
+    service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'], token_counts=[0])
     get_llm_service.return_value = service
 
     runnable = PipelineGraph.build_runnable_from_json(
@@ -126,7 +126,7 @@ def test_send_email():
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_llm_response(get_llm_service, provider):
-    service = FakeLlmService(llm=FakeLlm(responses=["123"], token_counts=[0]))
+    service = build_fake_llm_service(responses=["123"], token_counts=[0])
     get_llm_service.return_value = service
     runnable = PipelineGraph.build_runnable_from_json(
         {
@@ -174,8 +174,7 @@ def test_render_template():
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_structured_data_basic(provider):
-    fake_llm = FakeLlm(responses=[{"name": "John"}], token_counts=[0])
-    service = FakeLlmService(llm=fake_llm)
+    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0])
     session = ExperimentSessionFactory()
 
     with (
@@ -295,8 +294,7 @@ def test_extract_and_update_data_pipeline(provider):
 
 
 def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dict, key_name: str):
-    fake_llm = FakeLlm(responses=[extracted_data], token_counts=[0])
-    service = FakeLlmService(llm=fake_llm)
+    service = build_fake_llm_service(responses=[extracted_data], token_counts=[0])
 
     with (
         mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
