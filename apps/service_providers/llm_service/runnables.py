@@ -25,6 +25,7 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
+from apps.assistants.models import ThreadToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.state import (
@@ -96,7 +97,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
         callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
@@ -245,16 +246,20 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     class Config:
         arbitrary_types_allowed = True
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None, attachments: list | None = None) -> ChainOutput:
+        resource_file_mapping, message_attachments = self._upload_tool_resource_files(attachments)
         callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        input_dict = {"content": input}
+        input_dict = {"content": input, "attachments": message_attachments}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            if resource_file_mapping:
+                chat_message.metadata = chat_message.metadata | resource_file_mapping
+                chat_message.save()
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
@@ -271,6 +276,34 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         self.state.save_message_to_history(output, ChatMessageType.AI)
 
         return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
+
+    def _upload_tool_resource_files(self, attachments):
+        from apps.assistants.sync import create_files_remote
+
+        # Upload and create file_search tool
+        resource_file_mapping = {}
+        message_attachments = []
+        if attachments:
+            chat = self.state.session.chat
+            # assistant = self.state.get_openai_assistant()
+            client = self.state.get_llm_service().get_raw_client()
+            for resource_name in ["file_search", "code_interpreter"]:
+                resource_files = [att["file"] for att in attachments if att["type"] == resource_name]
+                if resource_files:
+                    # Upload the files to OpenAI
+                    openai_file_ids = create_files_remote(client, resource_files)
+                    # Extend the attachment mapping for the thread message
+                    resource_file_mapping[resource_name] = openai_file_ids
+                    message_attachments.extend(
+                        [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
+                    )
+                    # Create a tool resource for the chat and add / update the file list
+                    tool_resource, _created = ThreadToolResources.objects.get_or_create(
+                        chat=chat,
+                        tool_type=resource_name,
+                    )
+                    tool_resource.files.add(*resource_files)
+        return resource_file_mapping, message_attachments
 
     def _get_response_with_retries(self, config, input_dict, thread_id):
         assistant = self.state.get_openai_assistant()

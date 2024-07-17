@@ -215,12 +215,13 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
 def _sync_tool_resources(assistant):
     resource_data = {}
     resources = {resource.tool_type: resource for resource in assistant.tool_resources.all()}
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
     if code_interpreter := resources.get("code_interpreter"):
-        file_ids = _create_files_remote(assistant, code_interpreter.files.all())
+        file_ids = create_files_remote(client, code_interpreter.files.all())
         resource_data["code_interpreter"] = {"file_ids": file_ids}
 
     if file_search := resources.get("file_search"):
-        file_ids = _create_files_remote(assistant, file_search.files.all())
+        file_ids = create_files_remote(client, file_search.files.all())
         store_id = file_search.extra.get("vector_store_id")
         updated_store_id = _update_or_create_vector_store(
             assistant, f"{assistant.name} - File Search", store_id, file_ids
@@ -276,17 +277,16 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
     return kwargs
 
 
-def _create_files_remote(assistant, files):
+def create_files_remote(client, files):
     file_ids = []
     for file in files:
         if not file.external_id:
-            _push_file_to_openai(assistant, file)
+            _push_file_to_openai(client, file)
         file_ids.append(file.external_id)
     return file_ids
 
 
-def _push_file_to_openai(assistant: OpenAiAssistant, file: File):
-    client = assistant.llm_provider.get_llm_service().get_raw_client()
+def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
     openai_file = client.files.create(
