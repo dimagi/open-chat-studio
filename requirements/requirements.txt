@@ -51,7 +51,7 @@ celery[redis]==5.3.5
     #   django-celery-beat
 celery-progress==0.3
     # via -r requirements/requirements.in
-certifi==2023.7.22
+certifi==2024.7.4
     # via
     #   httpcore
     #   httpx

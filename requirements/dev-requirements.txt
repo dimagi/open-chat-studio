@@ -7,7 +7,7 @@ anyio==3.7.1
     #   watchfiles
 build==1.0.3
     # via pip-tools
-certifi==2023.7.22
+certifi==2024.7.4
     # via
     #   -c requirements/requirements.txt
     #   httpcore
