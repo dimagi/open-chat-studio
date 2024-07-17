@@ -62,7 +62,7 @@ class ExperimentState(RunnableState):
 
     @property
     def callback_handler(self):
-        return self.get_llm_service().get_callback_handler(self.get_chat_model())
+        return self.get_llm_service().get_callback_handler(self.experiment.llm)
 
     def format_input(self, input_key: str, runnable_input: dict):
         if self.experiment.input_formatter:
