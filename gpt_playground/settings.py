@@ -439,7 +439,15 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
         token=TASKBADGER_API_KEY,
-        systems=[CelerySystemIntegration()],
+        systems=[
+            CelerySystemIntegration(
+                excludes=[
+                    # ignore these since they execute often and fire other tasks that we already track
+                    "apps.events.tasks.enqueue_static_triggers",
+                    "apps.events.tasks.enqueue_timed_out_events",
+                ]
+            )
+        ],
     )
 
 LOGGING = {
