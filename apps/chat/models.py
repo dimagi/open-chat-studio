@@ -73,6 +73,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
+    metadata = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["created_at"]

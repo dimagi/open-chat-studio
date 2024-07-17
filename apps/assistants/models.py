@@ -85,3 +85,19 @@ class ToolResources(BaseModel):
 
     def __str__(self):
         return f"Tool Resources for {self.assistant.name}: {self.tool_type}"
+
+
+class ThreadToolResources(BaseModel):
+    chat = models.ForeignKey("chat.Chat", on_delete=models.CASCADE, related_name="tool_resources")
+    tool_type = models.CharField(max_length=128)
+    files = models.ManyToManyField("files.File", blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    objects = AuditingManager()
+
+    @property
+    def label(self):
+        return self.tool_type.replace("_", " ").title()
+
+    def __str__(self):
+        return f"Tool Resources for chat {self.chat.id}: {self.tool_type}"
