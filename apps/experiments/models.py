@@ -461,6 +461,14 @@ class Participant(BaseTeamModel):
     def __str__(self):
         return self.identifier
 
+    def get_platform_display(self):
+        from apps.channels.models import ChannelPlatform
+
+        try:
+            return ChannelPlatform(self.platform).label
+        except ValueError:
+            return self.platform
+
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
