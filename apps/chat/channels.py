@@ -701,7 +701,9 @@ def _start_experiment_session(
 
     with transaction.atomic():
         try:
-            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+            participant = Participant.objects.get(
+                team=experiment.team, identifier=participant_identifier, platform=experiment_channel.platform
+            )
             if participant_user and participant.user is None:
                 # If a participant becomes a user, we must reconcile the user and participant
                 participant.user = participant_user
