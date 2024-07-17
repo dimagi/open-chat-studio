@@ -7,13 +7,13 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
-from apps.api.models import UserAPIKey
-
-from .forms import CustomUserChangeForm, UploadAvatarForm
+from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
 from .helpers import require_email_confirmation, user_has_confirmed_email_address
 from .models import CustomUser
+
+SESSION_API_KEY = "session_api_key"
 
 
 @login_required
@@ -44,6 +44,8 @@ def profile(request):
             messages.success(request, _("Profile successfully saved."))
     else:
         form = CustomUserChangeForm(instance=request.user)
+
+    new_api_key = request.session.pop(SESSION_API_KEY, None)
     return render(
         request,
         "account/profile.html",
@@ -51,8 +53,9 @@ def profile(request):
             "form": form,
             "active_tab": "profile",
             "page_title": _("Profile"),
-            "api_keys": request.user.api_keys.filter(revoked=False),
+            "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
             "user_has_valid_totp_device": user_has_valid_totp_device(request.user),
+            "new_api_key": new_api_key,
         },
     )
 
@@ -69,17 +72,22 @@ def upload_profile_image(request):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def create_api_key(request):
-    api_key, key = UserAPIKey.objects.create_key(
-        name=f"{request.user.get_display_name()} API Key", user=request.user, team=request.team
-    )
-    messages.success(
+    form = ApiKeyForm(request, request.POST or None)
+    if request.method == "POST":
+        if form.is_valid():
+            instance, key = form.save()
+            request.session[SESSION_API_KEY] = key
+            return HttpResponse(status=201, headers={"HX-Location": reverse("users:user_profile")})
+
+    return render(
         request,
-        _("API Key created. Your key is: {key}. Save this somewhere safe - you will only see it once!").format(
-            key=key,
-        ),
+        "account/components/api_key_form.html",
+        context={
+            "form": form,
+        },
     )
-    return HttpResponseRedirect(reverse("users:user_profile"))
 
 
 @login_required
