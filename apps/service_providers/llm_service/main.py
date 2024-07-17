@@ -6,7 +6,6 @@ from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenO
 from langchain.chat_models.base import BaseChatModel
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
-from langchain_core.language_models import BaseLanguageModel
 from langchain_core.load import dumpd
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
@@ -14,6 +13,7 @@ from openai import OpenAI
 from openai._base_client import SyncAPIClient
 
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.token_counters import AnthropicTokenCounter, OpenAITokenCounter
 
 
 class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
@@ -96,8 +96,8 @@ class LlmService(pydantic.BaseModel):
     def transcribe_audio(self, audio: BytesIO) -> str:
         raise NotImplementedError
 
-    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(llm_model)
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        raise NotImplementedError
 
 
 class OpenAILlmService(LlmService):
@@ -133,10 +133,8 @@ class OpenAILlmService(LlmService):
         )
         return transcript.text
 
-    def get_callback_handler(self, llm_model: BaseLanguageModel) -> BaseCallbackHandler:
-        from langchain_community.callbacks import OpenAICallbackHandler
-
-        return OpenAICallbackHandler()
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
 
 class AzureLlmService(LlmService):
@@ -155,6 +153,9 @@ class AzureLlmService(LlmService):
             temperature=temperature,
         )
 
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
 
 class AnthropicLlmService(LlmService):
     _type = "anthropic"
@@ -169,3 +170,6 @@ class AnthropicLlmService(LlmService):
             model=llm_model,
             temperature=temperature,
         )
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(AnthropicTokenCounter())
