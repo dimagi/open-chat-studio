@@ -87,11 +87,11 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         experiment = validated_data["experiment"]
         if experiment.team_id != request.team.id:
             raise NotFound("Experiment not found")
+        validated_data["team"] = request.team
         participant_identifier = validated_data.get("participant", request.user.email)
         participant, _created = Participant.objects.get_or_create(
-            identifier=participant_identifier, team=request.team, user=request.user
+            identifier=participant_identifier, team=request.team, user=request.user, platform=ChannelPlatform.API
         )
-        validated_data["team"] = request.team
         validated_data["participant"] = participant
         channel, _ = ExperimentChannel.objects.get_or_create(
             experiment=experiment,

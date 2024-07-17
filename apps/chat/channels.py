@@ -711,6 +711,7 @@ def _start_experiment_session(
                 user=participant_user,
                 identifier=participant_identifier,
                 team=experiment.team,
+                platform=experiment_channel.platform,
             )
 
         session = ExperimentSession.objects.create(
