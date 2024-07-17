@@ -68,6 +68,7 @@ from apps.experiments.tables import (
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
+from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
@@ -641,11 +642,20 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
     message_text = request.POST["message"]
+    uploaded_files = request.FILES
+    created_files = []
+    for file_type in ["code_interpreter", "file_search"]:
+        if file_type not in uploaded_files:
+            continue
+        for uploaded_file in uploaded_files.getlist(file_type):
+            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            created_files.append({"type": file_type, "file_id": new_file.id})
+
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
-    result = get_response_for_webchat_task.delay(session.id, message_text)
+    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=created_files)
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
