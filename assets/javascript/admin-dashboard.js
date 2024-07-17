@@ -41,8 +41,8 @@ export const barChartWithDates = (ctx, start, end, data, label) => {
       ]
     },
     options: {
-      aspectRatio: 3,
       responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: {
           display: false
@@ -93,8 +93,8 @@ export const cumulativeChartWithDates = (
       ]
     },
     options: {
-      aspectRatio: 3,
       responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: {
           display: false

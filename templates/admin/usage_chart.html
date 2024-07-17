@@ -2,7 +2,12 @@
 {% load i18n %}
 {% load static %}
 
-<div class="pg-subtitle">{% translate "Chat Messages (Daily)" %}
-  <canvas id="usage-chart" class="mt-2"></canvas>
+<div class="pg-subtitle">{% translate "Chat Messages" %}</div>
+<div class="w-full h-48 relative">
+  <canvas id="message-chart" class="mt-2"></canvas>
 </div>
-{{ usage_data|json_script:'usage_data' }}
+<div class="pg-subtitle">{% translate "Participant Count" %}</div>
+<div class="w-full h-48 relative">
+  <canvas id="participant-chart" class="mt-2"></canvas>
+</div>
+{{ chart_data|json_script:'chart_data' }}

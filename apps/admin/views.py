@@ -6,8 +6,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.admin.forms import DateRangeForm
-from apps.admin.queries import get_message_stats
+from apps.admin.queries import get_message_stats, get_participant_stats
 from apps.admin.serializers import StatsSerializer
+from apps.experiments.models import Participant
 
 
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
@@ -30,14 +31,19 @@ def usage_chart(request):
     end = _get_date_param(request, "end", timezone.now().date())
     start = _get_date_param(request, "start", end - timedelta(days=90))
 
-    serializer = StatsSerializer(get_message_stats(start, end), many=True)
+    usage_data = StatsSerializer(get_message_stats(start, end), many=True)
+    participant_data = StatsSerializer(get_participant_stats(start, end), many=True)
     url = reverse("ocs_admin:home")
     return TemplateResponse(
         request,
         "admin/usage_chart.html",
         context={
-            "usage_data": {
-                "data": serializer.data,
+            "chart_data": {
+                "message_data": usage_data.data,
+                "participant_data": {
+                    "data": participant_data.data,
+                    "start_value": Participant.objects.filter(created_at__lt=start).count(),
+                },
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
