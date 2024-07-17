@@ -1,14 +1,28 @@
 import phonenumbers
 from pydantic import BaseModel, Field, field_validator
+from typing_extensions import TypedDict
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.files.models import File
+
+
+class Attachment(TypedDict):
+    file: File
+    type: str
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    attachments: list[Attachment] = Field(default={})
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class TelegramMessage(BaseMessage):

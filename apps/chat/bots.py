@@ -88,9 +88,9 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-    def _call_predict(self, input_str, save_input_to_history=True):
+    def _call_predict(self, input_str, save_input_to_history=True, attachments: list | None = None):
         if self.child_chains:
-            tag, chain = self._get_child_chain(input_str)
+            tag, chain = self._get_child_chain(input_str, attachments)
         else:
             tag, chain = None, self.chain
         result = chain.invoke(
@@ -101,6 +101,7 @@ class TopicBot:
                     "experiment_tag": tag,
                 }
             },
+            attachments=attachments,
         )
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
@@ -108,7 +109,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_child_chain(self, input_str) -> tuple[str, Any]:
+    def _get_child_chain(self, input_str: str, attachments: list | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(
             input_str,
             config={
@@ -117,6 +118,7 @@ class TopicBot:
                     "save_output_to_history": False,
                 }
             },
+            attachments=attachments,
         )
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
@@ -139,7 +141,7 @@ class TopicBot:
             bot.output_tokens = 0
         return input_tokens, output_tokens
 
-    def process_input(self, user_input: str, save_input_to_history=True):
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list | None = None):
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
@@ -147,7 +149,7 @@ class TopicBot:
                 notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
-        response = self._call_predict(user_input, save_input_to_history)
+        response = self._call_predict(user_input, save_input_to_history=save_input_to_history, attachments=attachments)
 
         # ai safety layers
         for safety_bot in self.safety_bots:
