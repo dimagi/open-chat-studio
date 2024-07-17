@@ -189,7 +189,7 @@ huggingface-hub==0.20.2
     # via
     #   tokenizers
     #   transformers
-idna==3.4
+idna==3.7
     # via
     #   anyio
     #   httpx
