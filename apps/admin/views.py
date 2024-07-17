@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.admin.forms import DateRangeForm
-from apps.admin.queries import get_message_stats, get_participant_stats, usage_to_csv
+from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
 
@@ -66,7 +66,9 @@ def export_usage(request):
 
 @user_passes_test(lambda u: u.is_staff, login_url="/404")
 def export_whatsapp(request):
-    pass
+    response = HttpResponse(get_whatsapp_numbers(), content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="whatsapp_numbers.csv"'
+    return response
 
 
 def _get_date_param(request, param_name, default):
