@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 
 from django.contrib.auth.decorators import user_passes_test
+from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.admin.forms import DateRangeForm
-from apps.admin.queries import get_message_stats, get_participant_stats
+from apps.admin.queries import get_message_stats, get_participant_stats, usage_to_csv
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
 
@@ -50,6 +51,22 @@ def usage_chart(request):
         },
         headers={"HX-Push-Url": f"{url}?start={start}&end={end}"},
     )
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def export_usage(request):
+    end = _get_date_param(request, "end", timezone.now().date())
+    start = _get_date_param(request, "start", end - timedelta(days=90))
+
+    response = HttpResponse(usage_to_csv(start, end), content_type="text/csv")
+    export_filename = f"usage_{start.isoformat()}_{end.isoformat()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
+    return response
+
+
+@user_passes_test(lambda u: u.is_staff, login_url="/404")
+def export_whatsapp(request):
+    pass
 
 
 def _get_date_param(request, param_name, default):

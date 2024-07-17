@@ -16,7 +16,17 @@
         </div>
       </div>
     </form>
-    <div class="mt-2" id="charts"></div>
+    <div class="mt-4" id="charts"></div>
+    <div class="flex space-x-3">
+      <a class="btn" href="{% url "ocs_admin:export_usage" %}">
+        <i class="fa-solid fa-download"></i>
+        Usage Data
+      </a>
+      <a class="btn" href="{% url "ocs_admin:export_whatsapp" %}">
+        <i class="fa-solid fa-download"></i>
+        WhatsApp Numbers
+      </a>
+    </div>
   </section>
 {% endblock %}
 {% block page_js %}
