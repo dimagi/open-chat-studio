@@ -2,6 +2,24 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
+from django.db.models import OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
+
+
+def set_participant_platform(apps, schema_editor):
+    Participant = apps.get_model("experiments", "Participant")
+    ExperimentSession = apps.get_model("experiments", "ExperimentSession")
+    Participant.objects.update(
+        platform=Coalesce(
+            Subquery(
+                ExperimentSession.objects
+                .exclude(experiment_channel=None)
+                .filter(participant_id=OuterRef('id'))
+                .values('experiment_channel__platform')[:1]
+            ),
+            Value("")
+        )
+    )
 
 
 class Migration(migrations.Migration):
@@ -17,4 +35,5 @@ class Migration(migrations.Migration):
             field=models.CharField(default="", max_length=32),
             preserve_default=False,
         ),
+        migrations.RunPython(set_participant_platform, migrations.RunPython.noop, elidable=True),
     ]
