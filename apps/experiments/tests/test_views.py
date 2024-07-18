@@ -1,4 +1,5 @@
 from contextlib import nullcontext as does_not_raise
+from io import BytesIO
 from unittest import mock
 
 import pytest
@@ -17,9 +18,15 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
+from apps.files.models import File
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SourceMaterialFactory
+from apps.utils.factories.experiment import (
+    ConsentFormFactory,
+    ExperimentFactory,
+    ExperimentSessionFactory,
+    SourceMaterialFactory,
+)
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
@@ -339,3 +346,24 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     part_data2.refresh_from_db()
     assert part_data1.data["timezone"] == "Africa/Johannesburg"
     assert part_data2.data["timezone"] == "Africa/Johannesburg"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task", mock.Mock())
+def test_experiment_session_message_view_creates_files(experiment, client):
+    session = ExperimentSessionFactory(experiment=experiment)
+    url = reverse(
+        "experiments:experiment_session_message",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.id, "session_id": session.id},
+    )
+
+    client.force_login(experiment.owner)
+    file_search_file = BytesIO(b"some content")
+    file_search_file.name = "fs.text"
+    code_interpreter_file = BytesIO(b"some content")
+    code_interpreter_file.name = "ci.text"
+    data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
+    client.post(url, data=data)
+    File.objects.get(name="fs.text")
+    File.objects.get(name="ci.text")
