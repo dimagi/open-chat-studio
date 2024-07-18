@@ -1,0 +1,13 @@
+{% load form_tags %}
+{% load i18n %}
+{% load static %}
+
+<div class="pg-subtitle">{% translate "Chat Messages" %}</div>
+<div class="w-full h-48 relative">
+  <canvas id="message-chart" class="mt-2"></canvas>
+</div>
+<div class="pg-subtitle">{% translate "Participant Count" %}</div>
+<div class="w-full h-48 relative">
+  <canvas id="participant-chart" class="mt-2"></canvas>
+</div>
+{{ chart_data|json_script:'chart_data' }}

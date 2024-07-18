@@ -47,7 +47,7 @@ def test_get_messages_to_fire():
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
-    with freeze_time("2024-04-01"), patch("apps.chat.tasks.functions.Now") as db_time:
+    with freeze_time("2024-04-01"), patch("apps.events.tasks.functions.Now") as db_time:
         utc_now = timezone.now()
         db_time.return_value = utc_now
 
@@ -112,7 +112,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
     seconds_offset = 1
     step_delta = delta + relativedelta(seconds=seconds_offset)
 
-    with freeze_time("2024-04-01") as frozen_time, patch("apps.chat.tasks.functions.Now") as db_time:
+    with freeze_time("2024-04-01") as frozen_time, patch("apps.events.tasks.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
         scheduled_message = ScheduledMessageFactory(
             team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
@@ -168,7 +168,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
     with (
         caplog.at_level(logging.ERROR),
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
-        patch("apps.chat.tasks.functions.Now") as db_time,
+        patch("apps.events.tasks.functions.Now") as db_time,
     ):
         sm = ScheduledMessageFactory(
             participant=session.participant, action=event_action, team=session.team, experiment=session.experiment

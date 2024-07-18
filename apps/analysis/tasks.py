@@ -140,7 +140,7 @@ def run_parallel_pipeline(group, contexts):
     callback_chord.apply_async()
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def update_group_run_status(task_results, group_id: int):
     group = RunGroup.objects.get(id=group_id)
     group_status = (
@@ -153,7 +153,7 @@ def update_group_run_status(task_results, group_id: int):
     group.save()
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def on_chord_error(request, exc, traceback, group_id: int):
     group = RunGroup.objects.get(id=group_id)
     group.status = RunStatus.ERROR
@@ -162,7 +162,7 @@ def on_chord_error(request, exc, traceback, group_id: int):
     group.save()
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, ignore_result=True)
 def run_pipline_split(self, run_id: int):
     run = AnalysisRun.objects.select_related(
         "group", "group__team", "group__analysis", "group__analysis__llm_provider"

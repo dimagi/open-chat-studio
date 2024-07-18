@@ -14,40 +14,40 @@ from apps.service_providers.llm_service.runnables import (
 )
 from apps.service_providers.llm_service.state import ChatExperimentState
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import FakeLlm, FakeLlmService
+from apps.utils.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
-def fake_llm():
-    return FakeLlm(responses=[["This", " is", " a", " test", " message"]], token_counts=[30, 20, 10])
+def fake_llm_service():
+    return build_fake_llm_service(responses=[["This", " is", " a", " test", " message"]], token_counts=[30, 20, 10])
 
 
 @pytest.fixture()
-def session(fake_llm):
+def session(fake_llm_service):
     chat = Chat()
     chat.get_langchain_messages_until_summary = lambda: []
     chat.refresh_from_db = lambda *args, **kwargs: None
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
-    session.experiment.get_llm_service = lambda: FakeLlmService(llm=fake_llm)
+    session.experiment.get_llm_service = lambda: fake_llm_service
     session.experiment.tools = [AgentTools.SCHEDULE_UPDATE]
     session.get_participant_data = lambda *args, **kwargs: ""
     return session
 
 
 @pytest.mark.django_db()
-def test_simple_runnable_cancellation(session, fake_llm):
+def test_simple_runnable_cancellation(session, fake_llm_service):
     runnable = _get_assistant_mocked_history_recording(session, SimpleExperimentRunnable)
     _test_runnable(runnable, session, "This is")
 
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.llm_service.state.get_tools")
-def test_agent_runnable_cancellation(get_tools, session, fake_llm):
+def test_agent_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
     runnable = _get_assistant_mocked_history_recording(session, AgentExperimentRunnable)
 
-    fake_llm.responses = [
+    fake_llm_service.llm.responses = [
         AIMessageChunk(
             content="call tool",
             additional_kwargs={"tool_calls": [{"function": {"name": "foo", "arguments": "{}"}, "id": "1"}]},

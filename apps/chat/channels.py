@@ -366,8 +366,6 @@ class ChannelBase(ABC):
     def _get_experiment_response(self, message: str) -> str:
         experiment_bot = TopicBot(self.experiment_session)
         answer = experiment_bot.process_input(message, attachments=self.message.attachments)
-        self.experiment_session.no_activity_ping_count = 0
-        self.experiment_session.save()
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):

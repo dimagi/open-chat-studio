@@ -3,11 +3,10 @@ import time
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from apps.api.permissions import BearerTokenAuthentication
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
 
@@ -43,26 +42,32 @@ from apps.channels.tasks import handle_api_message
     """,
     tags=["OpenAI"],
     request=inline_serializer(
-        "chat.completion.request",
+        "CreateChatCompletionRequest",
         {"messages": MessageSerializer(many=True)},
     ),
     responses={
         200: inline_serializer(
-            "chat.completion",
+            "CreateChatCompletionResponse",
             {
                 "id": serializers.CharField(),
                 "choices": inline_serializer(
-                    "chat.choices",
+                    "ChatCompletionResponseChoices",
                     {
                         "finish_reason": serializers.CharField(),
                         "index": serializers.IntegerField(),
-                        "message": serializers.CharField(),
+                        "message": inline_serializer(
+                            "ChatCompletionResponseMessage",
+                            {
+                                "role": serializers.ChoiceField(choices=["assistant"]),
+                                "content": serializers.CharField(),
+                            },
+                        ),
                     },
                     many=True,
                 ),
                 "created": serializers.IntegerField(),
                 "model": serializers.CharField(),
-                "object": "chat.completion",
+                "object": serializers.ChoiceField(choices=["chat.completion"]),
             },
         )
     },
@@ -76,8 +81,6 @@ from apps.channels.tasks import handle_api_message
     ],
 )
 @api_view(["POST"])
-@authentication_classes([BearerTokenAuthentication])
-@permission_classes([])  # remove the default
 def chat_completions(request, experiment_id: str):
     messages = request.data.get("messages", [])
     try:
@@ -108,7 +111,7 @@ def chat_completions(request, experiment_id: str):
             {
                 "finish_reason": "stop",
                 "index": 0,
-                "message": response_message,
+                "message": {"role": "assistant", "content": response_message},
             }
         ],
         "created": int(time.time()),

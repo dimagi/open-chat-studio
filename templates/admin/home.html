@@ -1,0 +1,59 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+{% load i18n %}
+{% load static %}
+{% block app %}
+  <section class="app-card">
+
+    <h1 class="pg-title">{% translate "Project Dashboard" %}</h1>
+    <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">
+      <div class="pg-columns">
+        <div class="pg-column">
+          {% render_field form.start %}
+        </div>
+        <div class="pg-column">
+          {% render_field form.end %}
+        </div>
+      </div>
+    </form>
+    <div class="mt-4" id="charts"></div>
+    <div class="flex space-x-3">
+      <a class="btn" href="{% url "ocs_admin:export_usage" %}">
+        <i class="fa-solid fa-download"></i>
+        Usage Data
+      </a>
+      <a class="btn" href="{% url "ocs_admin:export_whatsapp" %}">
+        <i class="fa-solid fa-download"></i>
+        WhatsApp Numbers
+      </a>
+    </div>
+  </section>
+{% endblock %}
+{% block page_js %}
+  <script src="{% static 'js/adminDashboard-bundle.js' %}"></script>
+  <script>
+    let messageChart;
+    let participantChart;
+    htmx.onLoad(() => {
+      const element = document.getElementById('chart_data');
+      if (!element) {
+        return;
+      }
+      const chartData = JSON.parse(element.textContent);
+      const start = new Date(chartData.start);
+      const end = new Date(chartData.end);
+
+      const messageChartCtx = document.getElementById('message-chart').getContext('2d');
+      const participantChartCtx = document.getElementById('participant-chart').getContext('2d');
+      if (messageChart) {
+        messageChart.destroy();
+      }
+      if (participantChart) {
+        participantChart.destroy();
+      }
+      messageChart = SiteJS.adminDashboard.barChartWithDates(messageChartCtx, start, end, chartData.message_data, "Chat Messages");
+      let participantData = chartData.participant_data;
+      participantChart = SiteJS.adminDashboard.cumulativeChartWithDates(participantChartCtx, start, end, participantData.data, "Participants", participantData.start_value);
+    })
+  </script>
+{% endblock %}

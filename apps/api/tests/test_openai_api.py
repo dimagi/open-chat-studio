@@ -70,4 +70,4 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
     assert ExperimentSession.objects.count() == 1
     assert completion.id == ExperimentSession.objects.first().external_id
     assert completion.model == experiment.llm
-    assert completion.choices[0].message == "I am fine, thank you."
+    assert completion.choices[0].message.content == "I am fine, thank you."
