@@ -42,7 +42,7 @@ def _get_latest_sessions_for_participants(
     )
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruction: bool, experiment_public_id: UUID):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
@@ -71,7 +71,7 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
             logger.exception(exception)
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     experiment = experiment_session.experiment
