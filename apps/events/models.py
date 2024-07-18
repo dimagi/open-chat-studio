@@ -274,7 +274,12 @@ class ScheduledMessage(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not self.next_trigger_date:
-            delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+            params = {}
+            if self.custom_schedule_params:
+                params = self.custom_schedule_params
+            elif self.action:
+                params = self.action.params
+            delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
 
