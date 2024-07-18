@@ -274,11 +274,7 @@ class ScheduledMessage(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         if not self.next_trigger_date:
-            params = {}
-            if self.custom_schedule_params:
-                params = self.custom_schedule_params
-            elif self.action:
-                params = self.action.params
+            params = self.get_params()
             delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
@@ -310,21 +306,24 @@ class ScheduledMessage(BaseTeamModel):
 
         self.save()
 
+    def get_params(self):
+        return self.custom_schedule_params or (self.action.params if self.action else {})
+
     @cached_property
     def name(self) -> str:
-        return self.action.params["name"]
+        return self.get_params()["name"]
 
     @cached_property
     def frequency(self) -> str:
-        return self.action.params["frequency"]
+        return self.get_params()["frequency"]
 
     @cached_property
     def time_period(self) -> str:
-        return self.action.params["time_period"]
+        return self.get_params()["time_period"]
 
     @cached_property
     def repetitions(self) -> str:
-        return self.action.params["repetitions"]
+        return self.get_params()["repetitions"]
 
     def as_string(self, as_timezone: str | None = None):
         schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
