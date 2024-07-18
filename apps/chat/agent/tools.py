@@ -1,14 +1,14 @@
-import json
 import logging
-import uuid
 from datetime import datetime, timedelta
 
-from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
+from django.db import transaction
+from django_celery_beat.models import IntervalSchedule
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
+from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage
-from apps.experiments.models import AgentTools, ExperimentSession
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
@@ -52,14 +52,13 @@ class RecurringReminderTool(CustomBaseTool):
         **kwargs,
     ):
         interval_schedule, _created = IntervalSchedule.objects.get_or_create(every=every, period=period)
-        create_periodic_task(
+        return create_schedule_message(
             self.experiment_session,
             message=message,
             start_time=datetime_due,
             expires=datetime_end,
             interval=interval_schedule,
         )
-        return "Success"
 
 
 class OneOffReminderTool(CustomBaseTool):
@@ -74,13 +73,12 @@ class OneOffReminderTool(CustomBaseTool):
         message: str,
         **kwargs,
     ):
-        create_periodic_task(
+        return create_schedule_message(
             self.experiment_session,
             message=message,
-            clocked=ClockedSchedule.objects.create(clocked_time=datetime_due),
-            one_off=True,
+            start_time=datetime_due,
+            repetitions=1,
         )
-        return "Success"
 
 
 class UpdateScheduledMessageTool(CustomBaseTool):
@@ -125,21 +123,28 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
 
-def create_periodic_task(experiment_session: ExperimentSession, message: str, **kwargs):
-    task_kwargs = json.dumps(
-        {
-            "chat_ids": [experiment_session.participant.identifier],
-            "message": message,
-            "is_bot_instruction": False,
-            "experiment_public_id": str(experiment_session.experiment.public_id),
-        }
-    )
-    PeriodicTask.objects.create(
-        name=f"reminder-{experiment_session.id}-{uuid.uuid4()}",
-        task=BOT_MESSAGE_FOR_USER_TASK,
-        kwargs=task_kwargs,
-        **kwargs,
-    )
+def create_schedule_message(experiment_session: ExperimentSession, message: str, **kwargs):
+    form = ScheduledMessageConfigForm(data=kwargs, experiment_id=experiment_session.experiment.public_id)
+    if form.is_valid():
+        cleaned_data = form.cleaned_data
+        try:
+            with transaction.atomic():
+                experiment = Experiment.objects.get(id=cleaned_data["experiment_id"])
+                ScheduledMessage.objects.create(
+                    custom_schedule_params={
+                        "name": cleaned_data["name"],
+                        "prompt_text": message,
+                        "frequency": cleaned_data["frequency"],
+                        "time_period": cleaned_data["time_period"],
+                        "repetitions": cleaned_data["repetitions"],
+                    },
+                    experiment=experiment,
+                    participant=experiment_session.participant.identifier,
+                    team=experiment_session.team,
+                )
+            return "Success"
+        except Experiment.DoesNotExist:
+            return None
 
 
 TOOL_CLASS_MAP = {
