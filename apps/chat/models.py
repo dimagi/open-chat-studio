@@ -127,3 +127,17 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if file_ids:
             return File.objects.filter(team=self.chat.team, external_id__in=file_ids)
         return []
+
+
+class ThreadToolResources(BaseModel):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="tool_resources")
+    tool_type = models.CharField(max_length=128)
+    files = models.ManyToManyField("files.File", blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    @property
+    def label(self):
+        return self.tool_type.replace("_", " ").title()
+
+    def __str__(self):
+        return f"Tool Resources for chat {self.chat.id}: {self.tool_type}"

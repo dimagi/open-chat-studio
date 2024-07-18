@@ -29,12 +29,11 @@ from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
-from apps.assistants.models import ThreadToolResources
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType, ThreadToolResources
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
