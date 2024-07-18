@@ -43,7 +43,6 @@ team_urlpatterns = [
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
     path("slack/", include("apps.slack.urls")),
-    path("chat/", include("apps.chat.urls")),
 ]
 
 urlpatterns = [

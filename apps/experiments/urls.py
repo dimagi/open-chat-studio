@@ -137,6 +137,7 @@ urlpatterns = [
         DeleteExperimentRoute.as_view(),
         name="experiment_route_delete",
     ),
+    path("file/<int:pk>/", views.download_file, name="download_file"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

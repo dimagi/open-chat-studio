@@ -14,7 +14,7 @@ from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -1059,3 +1059,14 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
         return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
 
     return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
+
+
+@login_and_team_required
+@permission_required("assistants.view_threadtoolresources")
+def download_file(request, team_slug: str, pk: int):
+    resource = get_object_or_404(File, team__slug=team_slug, id=pk, team=request.team)
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404()
