@@ -453,6 +453,10 @@ class Participant(BaseTeamModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
 
+    class Meta:
+        ordering = ["platform", "identifier"]
+        unique_together = [("team", "platform", "identifier")]
+
     @property
     def email(self):
         validate_email(self.identifier)
@@ -539,10 +543,6 @@ class Participant(BaseTeamModel):
                 ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
 
         ParticipantData.objects.bulk_update(records_to_update, fields=["data"])
-
-    class Meta:
-        ordering = ["identifier"]
-        unique_together = [("team", "identifier")]
 
 
 class ParticipantDataObjectManager(models.Manager):
