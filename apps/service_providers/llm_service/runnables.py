@@ -30,7 +30,6 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.state import (
     AssistantExperimentState,
-    AssistantState,
     ChatExperimentState,
     ChatRunnableState,
 )
@@ -243,7 +242,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantState
+    state: AssistantExperimentState
     input_key = "content"
 
     class Config:
