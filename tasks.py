@@ -37,15 +37,23 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     args = " -U" if upgrade_all else ""
     has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
     if has_uv.ok:
-        cmd_base = "uv pip compile"
+        cmd_base = "uv pip compile --no-strip-extras"
     else:
         cmd_base = "pip-compile --resolver=backtracking"
-    env = {"CUSTOM_COMPILE_COMMAND": "inv requirements"}
+    env = {"CUSTOM_COMPILE_COMMAND": "inv requirements", "UV_CUSTOM_COMPILE_COMMAND": "inv requirements"}
     if upgrade_package:
         cmd_base += f" --upgrade-package {upgrade_package}"
-    c.run(f"{cmd_base} requirements/requirements.in{args}", env=env)
-    c.run(f"{cmd_base} requirements/dev-requirements.in{args}", env=env)
-    c.run(f"{cmd_base} requirements/prod-requirements.in{args}", env=env)
+
+    def _compile(base_path):
+        c.run(f"{cmd_base} {base_path}.in -o {base_path}.txt{args}", env=env)
+
+    _compile("requirements/requirements")
+    _compile("requirements/dev-requirements")
+    _compile("requirements/prod-requirements")
+
+    if _confirm("\nInstall requirements ?", _exit=False):
+        cmd = "uv pip" if has_uv.ok else "pip"
+        c.run(f"{cmd} install -r dev-requirements.txt", echo=True, pty=True)
 
 
 @task
