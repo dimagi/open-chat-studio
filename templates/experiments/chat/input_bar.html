@@ -27,6 +27,7 @@
               <li><a class="btn btn-sm" @click="$refs.fileSearch.click()">File Search</a></li>
             </ul>
           </div>
+          <!-- Supported file types for code interpreter: https://platform.openai.com/docs/assistants/tools/code-interpreter/supported-files -->
           <input
             x-ref="codeInterpreter"
             hidden
@@ -34,9 +35,10 @@
             type="file"
             @change="handleFileChange($event, 'code_interpreter_files')"
             multiple
-            accept=".doc,.docx,.pdf"
+            accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts,.csv,.jpeg,.jpg,.gif,.png,.tar,.xlsx,.xml,.zip"
             class="file-input file-input-bordered file-input-sm w-full max-w-xs"
           />
+          <!-- Supported file types for file search: https://platform.openai.com/docs/assistants/tools/file-search/supported-files -->
           <input
             x-ref="fileSearch"
             hidden
@@ -44,7 +46,7 @@
             type="file"
             @change="handleFileChange($event, 'file_search_files')"
             multiple
-            accept=".doc,.docx,.pdf"
+            accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
             class="file-input file-input-bordered file-input-sm w-full max-w-xs"
           />
         </div>
