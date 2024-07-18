@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def send_email_from_pipeline(recipient_list, subject, message):
     send_mail(
         subject=subject,

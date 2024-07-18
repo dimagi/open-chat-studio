@@ -366,8 +366,6 @@ class ChannelBase(ABC):
     def _get_experiment_response(self, message: str) -> str:
         experiment_bot = TopicBot(self.experiment_session)
         answer = experiment_bot.process_input(message)
-        self.experiment_session.no_activity_ping_count = 0
-        self.experiment_session.save()
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
@@ -703,7 +701,9 @@ def _start_experiment_session(
 
     with transaction.atomic():
         try:
-            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
+            participant = Participant.objects.get(
+                team=experiment.team, identifier=participant_identifier, platform=experiment_channel.platform
+            )
             if participant_user and participant.user is None:
                 # If a participant becomes a user, we must reconcile the user and participant
                 participant.user = participant_user
@@ -713,6 +713,7 @@ def _start_experiment_session(
                 user=participant_user,
                 identifier=participant_identifier,
                 team=experiment.team,
+                platform=experiment_channel.platform,
             )
 
         session = ExperimentSession.objects.create(

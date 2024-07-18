@@ -12,8 +12,11 @@ export default tseslint.config(
     "languageOptions": {
       "globals": {
         "require": "readonly",
-        "window": "readonly"
+        "window": "readonly",
+        "document": "readonly",
+        "navigator": "readonly",
+        "console": "readonly",
       }
-    }
+    },
   }
 );

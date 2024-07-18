@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 
 from apps.experiments.models import Participant
+from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -53,7 +54,10 @@ def test_only_experiments_from_the_scoped_team_is_returned():
     experiment_team_2 = ExperimentFactory(team=TeamWithUsersFactory())
     team1 = experiment_team_1.team
     team2 = experiment_team_2.team
+
     user = team1.members.first()
+    add_user_to_team(team2, user, [EXPERIMENT_ADMIN_GROUP])
+
     client_team_1 = ApiTestClient(user, team1)
     client_team_2 = ApiTestClient(user, team2)
 
@@ -75,7 +79,7 @@ def test_update_participant_data():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team)
+    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 
@@ -106,7 +110,7 @@ def test_update_participant_data_returns_404():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=TeamWithUsersFactory())
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team)
+    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 

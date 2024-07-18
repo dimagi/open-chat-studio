@@ -12,15 +12,18 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
 from apps.experiments.models import Experiment
 from apps.service_providers.models import MessagingProviderType
+from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
 log = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     experiment_channel = (
-        ExperimentChannel.objects.filter(external_id=channel_external_id).select_related("experiment").first()
+        ExperimentChannel.objects.filter(external_id=channel_external_id)
+        .select_related("experiment", "experiment__team")
+        .first()
     )
     if not experiment_channel:
         return
@@ -34,10 +37,12 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     message = TelegramMessage.parse(update)
     message_handler = TelegramChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
-    message_handler.new_user_message(message)
+
+    with current_team(experiment_channel.experiment.team):
+        message_handler.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_twilio_message(self, message_data: str, request_uri: str, signature: str):
     raw_data = json.loads(message_data)
     message = TwilioMessage.parse(raw_data)
@@ -52,9 +57,13 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
             channel_id_key = "page_id"
             ChannelClass = FacebookMessengerChannel
 
-    experiment_channel = ExperimentChannel.objects.filter(
-        extra_data__contains={channel_id_key: message.to}, messaging_provider__type=MessagingProviderType.twilio
-    ).first()
+    experiment_channel = (
+        ExperimentChannel.objects.filter(
+            extra_data__contains={channel_id_key: message.to}, messaging_provider__type=MessagingProviderType.twilio
+        )
+        .select_related("experiment", "experiment__team")
+        .first()
+    )
     if not experiment_channel:
         return
 
@@ -62,7 +71,9 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
 
     message_handler = ChannelClass(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
-    message_handler.new_user_message(message)
+
+    with current_team(experiment_channel.experiment.team):
+        message_handler.new_user_message(message)
 
 
 def validate_twillio_request(experiment_channel, raw_data, request_uri, signature):
@@ -81,19 +92,25 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
             log.error("Twilio signature validation failed")
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
-    experiment_channel = ExperimentChannel.objects.filter(
-        experiment__public_id=experiment_id,
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider__type=MessagingProviderType.turnio,
-    ).first()
+    experiment_channel = (
+        ExperimentChannel.objects.filter(
+            experiment__public_id=experiment_id,
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider__type=MessagingProviderType.turnio,
+        )
+        .select_related("experiment", "experiment__team")
+        .first()
+    )
     if not experiment_channel:
         return
     channel = WhatsappChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
-    channel.new_user_message(message)
+
+    with current_team(experiment_channel.experiment.team):
+        channel.new_user_message(message)
 
 
 def handle_api_message(user, experiment: Experiment, message_text: str, participant_id: str, session=None):

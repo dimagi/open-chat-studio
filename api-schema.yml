@@ -18,7 +18,8 @@ paths:
       tags:
       - Experiments
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -40,7 +41,8 @@ paths:
       tags:
       - Experiments
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -78,17 +80,17 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/chat.completion.request'
+              $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
+      - apiKeyAuth: []
       - tokenAuth: []
-      - ApiKeyAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/chat.completion'
+                $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
   /api/participants/{participant_id}/:
     post:
@@ -113,7 +115,8 @@ paths:
                 $ref: '#/components/schemas/ParticipantExperimentData'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           description: No response body
@@ -137,7 +140,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -157,7 +161,8 @@ paths:
               $ref: '#/components/schemas/ExperimentSessionCreate'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '201':
           content:
@@ -179,7 +184,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -208,7 +214,8 @@ paths:
               $ref: '#/components/schemas/NewAPIMessage'
         required: true
       security:
-      - ApiKeyAuth: []
+      - apiKeyAuth: []
+      - tokenAuth: []
       responses:
         '200':
           content:
@@ -218,6 +225,64 @@ paths:
           description: ''
 components:
   schemas:
+    ChatCompletionResponseChoices:
+      type: object
+      properties:
+        finish_reason:
+          type: string
+        index:
+          type: integer
+        message:
+          $ref: '#/components/schemas/ChatCompletionResponseMessage'
+      required:
+      - finish_reason
+      - index
+      - message
+    ChatCompletionResponseMessage:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/ChatCompletionResponseMessageRoleEnum'
+        content:
+          type: string
+      required:
+      - content
+      - role
+    ChatCompletionResponseMessageRoleEnum:
+      enum:
+      - assistant
+      type: string
+      description: '* `assistant` - assistant'
+    CreateChatCompletionRequest:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - messages
+    CreateChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionResponseChoices'
+        created:
+          type: integer
+        model:
+          type: string
+        object:
+          $ref: '#/components/schemas/ObjectEnum'
+      required:
+      - choices
+      - created
+      - id
+      - model
+      - object
     Experiment:
       type: object
       properties:
@@ -300,12 +365,22 @@ components:
       type: object
       properties:
         role:
-          $ref: '#/components/schemas/RoleEnum'
+          $ref: '#/components/schemas/MessageRoleEnum'
         content:
           type: string
       required:
       - content
       - role
+    MessageRoleEnum:
+      enum:
+      - system
+      - user
+      - assistant
+      type: string
+      description: |-
+        * `system` - system
+        * `user` - user
+        * `assistant` - assistant
     NewAPIMessage:
       type: object
       properties:
@@ -325,6 +400,11 @@ components:
           title: AI response
       required:
       - response
+    ObjectEnum:
+      enum:
+      - chat.completion
+      type: string
+      description: '* `chat.completion` - chat.completion'
     PaginatedExperimentList:
       type: object
       required:
@@ -383,16 +463,6 @@ components:
       required:
       - data
       - experiment
-    RoleEnum:
-      enum:
-      - system
-      - user
-      - assistant
-      type: string
-      description: |-
-        * `system` - system
-        * `user` - user
-        * `assistant` - assistant
     Team:
       type: object
       properties:
@@ -406,51 +476,11 @@ components:
       required:
       - name
       - slug
-    chat.choices:
-      type: object
-      properties:
-        finish_reason:
-          type: string
-        index:
-          type: integer
-        message:
-          type: string
-      required:
-      - finish_reason
-      - index
-      - message
-    chat.completion:
-      type: object
-      properties:
-        id:
-          type: string
-        choices:
-          type: array
-          items:
-            $ref: '#/components/schemas/chat.choices'
-        created:
-          type: integer
-        model:
-          type: string
-      required:
-      - choices
-      - created
-      - id
-      - model
-    chat.completion.request:
-      type: object
-      properties:
-        messages:
-          type: array
-          items:
-            $ref: '#/components/schemas/Message'
-      required:
-      - messages
   securitySchemes:
-    ApiKeyAuth:
+    apiKeyAuth:
       type: apiKey
       in: header
-      name: X-Api-Key
+      name: X-api-key
     tokenAuth:
       type: http
       scheme: bearer

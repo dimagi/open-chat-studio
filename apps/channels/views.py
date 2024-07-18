@@ -8,11 +8,11 @@ from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from apps.api.permissions import HasUserAPIKey
 from apps.channels import tasks
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -78,7 +78,6 @@ def new_turn_message(request, experiment_id: uuid):
     ],
 )
 @api_view(["POST"])
-@permission_classes([HasUserAPIKey])
 def new_api_message(request, experiment_id: uuid):
     """Chat with an experiment."""
     message_data = request.data.copy()
@@ -93,6 +92,7 @@ def new_api_message(request, experiment_id: uuid):
             experiment=experiment,
             team=request.team,
             participant__user=request.user,
+            experiment_channel__platform=ChannelPlatform.API,
         )
         participant_id = session.participant.identifier
 

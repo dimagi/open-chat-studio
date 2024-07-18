@@ -61,7 +61,6 @@ CONTENT_TYPES = {
         "experiment",
         "experimentroute",
         "experimentsession",
-        "noactivitymessageconfig",
         "participant",
         "participantdata",
         "promptbuilderhistory",
@@ -222,13 +221,13 @@ def make_user_team_owner(team, user) -> Membership:
 def add_user_to_team(team, user, groups=None) -> Membership:
     membership = Membership.objects.create(team=team, user=user)
     if groups:
-        membership.groups.set(groups)
+        membership.groups.set(get_groups(groups))
     return membership
 
 
 def get_team_owner_groups():
-    return [Group.objects.get(name=SUPER_ADMIN_GROUP)]
+    return get_groups([SUPER_ADMIN_GROUP])
 
 
-def get_groups():
-    return {group.name: group for group in Group.objects.all()}
+def get_groups(names):
+    return list(Group.objects.filter(name__in=names))

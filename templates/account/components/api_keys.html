@@ -1,12 +1,35 @@
 {% load i18n %}
 <section class="app-card">
   <h2 class="pg-subtitle">{% translate "API Keys" %}</h2>
+  {% if new_api_key %}
+    <div role="alert" class="alert alert-success">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-6 w-6 shrink-0 stroke-current"
+        fill="none"
+        viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <div>
+        <span>API Key created. Save this somewhere safe - you will only see it once: <code id="api-key">{{ new_api_key }}</code></span>
+        <button class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'api-key')" title="Copy to clipboard">
+          <i class="fa-regular fa-copy"></i><span></span>
+        </button>
+      </div>
+    </div>
+  {% endif %}
   {% for key in api_keys %}
     {% if forloop.first %}
       <div class='table-responsive'>
         <table class="table pg-table">
           <thead>
             <tr>
+              <th>{% translate "Team" %}</th>
+              <th>{% translate "Name" %}</th>
               <th>{% translate "Prefix" %}</th>
               <th>{% translate "Created" %}</th>
               <th></th>
@@ -15,6 +38,8 @@
           <tbody>
     {% endif %}
     <tr>
+      <td><a href="{% url "web_team:home" key.team.slug %}" class="link">{{ key.team.name }}</a></td>
+      <td>{{ key.name }}</td>
       <td>{{ key.prefix }}</td>
       <td>{{ key.created.date }}</td>
       <td>
@@ -35,10 +60,19 @@
   {% empty %}
     <p>{% translate "You haven't created any API keys yet. Create one below." %}</p>
   {% endfor %}
-  <form method="post" action="{% url 'users:create_api_key' %}">
-    {% csrf_token %}
-    <div class="mt-2">
-      <input type="submit" class="pg-button-secondary" value="{% translate "New API Key" %}" />
+  <button class="btn btn-outline"
+          onclick="api_key_modal.showModal()"
+          hx-get="{% url 'users:create_api_key' %}"
+          hx-target="#api_key_modal_content"
+          hx-trigger="click"
+  >{% translate "New API Key" %}</button>
+  <dialog id="api_key_modal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      <h3 class="text-lg font-bold">Create a new API Key</h3>
+      <div id="api_key_modal_content"></div>
     </div>
-  </form>
+  </dialog>
 </section>

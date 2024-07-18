@@ -1,0 +1,11 @@
+{% load i18n %}
+{% load form_tags %}
+<form hx-post="{% url 'users:create_api_key' %}">
+  {% csrf_token %}
+  {% render_form_fields form %}
+  <div class="modal-action">
+    <div class="mt-2">
+      <input type="submit" class="btn btn-primary" value="{% translate "Create Key" %}"/>
+    </div>
+  </div>
+</form>
