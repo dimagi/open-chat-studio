@@ -18,13 +18,13 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
-from apps.files.models import File
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
     ExperimentFactory,
     ExperimentSessionFactory,
+    ParticipantFactory,
     SourceMaterialFactory,
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -350,9 +350,12 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
 @pytest.mark.django_db()
 @mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
-@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task", mock.Mock())
-def test_experiment_session_message_view_creates_files(experiment, client):
-    session = ExperimentSessionFactory(experiment=experiment)
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
+def test_experiment_session_message_view_creates_files(delay_mock, experiment, client):
+    task = mock.Mock()
+    task.task_id = 1
+    delay_mock.return_value = task
+    session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
     url = reverse(
         "experiments:experiment_session_message",
         kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.id, "session_id": session.id},
@@ -365,5 +368,8 @@ def test_experiment_session_message_view_creates_files(experiment, client):
     code_interpreter_file.name = "ci.text"
     data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
     client.post(url, data=data)
-    File.objects.get(name="fs.text")
-    File.objects.get(name="ci.text")
+    # Check if tool resources were created with the files
+    ci_resource = session.chat.tool_resources.get(tool_type="code_interpreter")
+    assert ci_resource.files.filter(name="ci.text").exists()
+    fs_resource = session.chat.tool_resources.get(tool_type="file_search")
+    assert fs_resource.files.filter(name="fs.text").exists()
