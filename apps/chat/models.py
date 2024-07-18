@@ -129,8 +129,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return []
 
 
-class ThreadToolResources(BaseModel):
-    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="tool_resources")
+class ChatAttachment(BaseModel):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="attachments")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
     extra = models.JSONField(default=dict, blank=True)

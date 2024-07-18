@@ -369,7 +369,7 @@ def test_experiment_session_message_view_creates_files(delay_mock, experiment, c
     data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
     client.post(url, data=data)
     # Check if tool resources were created with the files
-    ci_resource = session.chat.tool_resources.get(tool_type="code_interpreter")
+    ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
     assert ci_resource.files.filter(name="ci.text").exists()
-    fs_resource = session.chat.tool_resources.get(tool_type="file_search")
+    fs_resource = session.chat.attachments.get(tool_type="file_search")
     assert fs_resource.files.filter(name="fs.text").exists()

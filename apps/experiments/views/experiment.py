@@ -33,7 +33,7 @@ from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType, ThreadToolResources
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -654,7 +654,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
         if resource_type not in uploaded_files:
             continue
 
-        tool_resource, _created = ThreadToolResources.objects.get_or_create(
+        tool_resource, _created = ChatAttachment.objects.get_or_create(
             chat_id=session.chat_id,
             tool_type=resource_type,
         )
@@ -1062,7 +1062,7 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
 
 
 @login_and_team_required
-@permission_required("assistants.view_threadtoolresources")
+@permission_required("chat.view_chatattachment")
 def download_file(request, team_slug: str, pk: int):
     resource = get_object_or_404(File, team__slug=team_slug, id=pk, team=request.team)
     try:
