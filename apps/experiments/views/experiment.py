@@ -643,19 +643,21 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
     message_text = request.POST["message"]
     uploaded_files = request.FILES
+    attachments = []
     created_files = []
     for file_type in ["code_interpreter", "file_search"]:
         if file_type not in uploaded_files:
             continue
         for uploaded_file in uploaded_files.getlist(file_type):
             new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            created_files.append({"type": file_type, "file_id": new_file.id})
+            attachments.append({"type": file_type, "file_id": new_file.id})
+            created_files.append(new_file)
 
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
-    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=created_files)
+    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
@@ -664,6 +666,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
             "session": session,
             "message_text": message_text,
             "task_id": result.task_id,
+            "created_files": created_files,
         },
     )
 

@@ -7,10 +7,10 @@
     </div>
   </div>
   <div class="flex flex-col">
-    {% for file in message.get_attached_files %}
+    {% for file in attachments %}
       <div class="inline">
         <a class="text-sm p-1 hover:bg-gray-300 hover:rounded-lg"
-           href="{% url 'chat:download_file' team_slug=message.chat.team.slug pk=file.id %}"
+           href="{% url 'chat:download_file' team_slug=experiment.team.slug pk=file.id %}"
            download="{{ file.name }}">
           <i class="fa-solid fa-download fa-sm"></i> {{ file.name }}
         </a>
