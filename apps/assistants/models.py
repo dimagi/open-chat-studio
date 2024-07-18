@@ -93,8 +93,6 @@ class ThreadToolResources(BaseModel):
     files = models.ManyToManyField("files.File", blank=True)
     extra = models.JSONField(default=dict, blank=True)
 
-    objects = AuditingManager()
-
     @property
     def label(self):
         return self.tool_type.replace("_", " ").title()
