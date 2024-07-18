@@ -11,9 +11,6 @@ class Attachment(TypedDict):
     file: File
     type: str
 
-    class Config:
-        arbitrary_types_allowed = True
-
 
 class BaseMessage(BaseModel):
     participant_id: str
