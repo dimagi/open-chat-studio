@@ -79,7 +79,7 @@ def test_update_participant_data():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team)
+    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 
@@ -110,7 +110,7 @@ def test_update_participant_data_returns_404():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=TeamWithUsersFactory())
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team)
+    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 

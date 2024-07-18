@@ -12,6 +12,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from apps.channels import tasks
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -91,6 +92,7 @@ def new_api_message(request, experiment_id: uuid):
             experiment=experiment,
             team=request.team,
             participant__user=request.user,
+            experiment_channel__platform=ChannelPlatform.API,
         )
         participant_id = session.participant.identifier
 

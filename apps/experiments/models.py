@@ -451,6 +451,11 @@ class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+    platform = models.CharField(max_length=32)
+
+    class Meta:
+        ordering = ["platform", "identifier"]
+        unique_together = [("team", "platform", "identifier")]
 
     @property
     def email(self):
@@ -459,6 +464,14 @@ class Participant(BaseTeamModel):
 
     def __str__(self):
         return self.identifier
+
+    def get_platform_display(self):
+        from apps.channels.models import ChannelPlatform
+
+        try:
+            return ChannelPlatform(self.platform).label
+        except ValueError:
+            return self.platform
 
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
@@ -530,10 +543,6 @@ class Participant(BaseTeamModel):
                 ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
 
         ParticipantData.objects.bulk_update(records_to_update, fields=["data"])
-
-    class Meta:
-        ordering = ["identifier"]
-        unique_together = [("team", "identifier")]
 
 
 class ParticipantDataObjectManager(models.Manager):
