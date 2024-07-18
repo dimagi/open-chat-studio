@@ -29,6 +29,7 @@ from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
+from apps.assistants.models import ThreadToolResources
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -641,22 +642,30 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
-    message_text = request.POST["message"]
-    uploaded_files = request.FILES
-    attachments = []
-    created_files = []
-    for file_type in ["code_interpreter", "file_search"]:
-        if file_type not in uploaded_files:
-            continue
-        for uploaded_file in uploaded_files.getlist(file_type):
-            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append({"type": file_type, "file_id": new_file.id})
-            created_files.append(new_file)
-
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
+
+    message_text = request.POST["message"]
+    uploaded_files = request.FILES
+    attachments = []
+    created_files = []
+    for resource_type in ["code_interpreter", "file_search"]:
+        if resource_type not in uploaded_files:
+            continue
+
+        tool_resource, _created = ThreadToolResources.objects.get_or_create(
+            chat_id=session.chat_id,
+            tool_type=resource_type,
+        )
+        for uploaded_file in uploaded_files.getlist(resource_type):
+            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            attachments.append({"type": resource_type, "file_id": new_file.id})
+            created_files.append(new_file)
+
+        tool_resource.files.add(*created_files)
+
     result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
     return TemplateResponse(
         request,

@@ -9,7 +9,6 @@ from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
-from apps.files.models import File
 from apps.service_providers.models import LlmProvider
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
@@ -24,7 +23,7 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
     message_attachments = []
     for file_entry in attachments:
         type, file_id = file_entry.values()
-        message_attachments.append(Attachment(file=File.objects.get(id=file_id), type=type))
+        message_attachments.append(Attachment(file_id=file_id, type=type))
 
     message = BaseMessage(
         participant_id=experiment_session.participant.identifier,

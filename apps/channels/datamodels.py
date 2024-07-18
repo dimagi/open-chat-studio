@@ -1,14 +1,12 @@
 import phonenumbers
 from pydantic import BaseModel, Field, field_validator
-from typing_extensions import TypedDict
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
-from apps.files.models import File
 
 
-class Attachment(TypedDict):
-    file: File
+class Attachment(BaseModel):
+    file_id: int
     type: str
 
 
