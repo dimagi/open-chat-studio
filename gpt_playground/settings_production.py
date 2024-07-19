@@ -24,7 +24,11 @@ CSRF_COOKIE_SECURE = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
 
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", ["*"])
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+
+# this default so SECRET_KEY
+CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT")
 
 
 # Your email config goes here.

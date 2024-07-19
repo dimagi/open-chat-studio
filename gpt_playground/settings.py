@@ -493,9 +493,6 @@ DJANGO_TABLES2_ROW_ATTRS = {
 # This is only used for development purposes
 SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 
-# Encryption
-CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
-
 # Taggit
 TAGGIT_CASE_INSENSITIVE = True
 
