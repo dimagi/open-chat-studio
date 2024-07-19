@@ -58,7 +58,7 @@ class TestTwilio:
         ("incoming_message", "message_type"),
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
-    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
@@ -111,7 +111,7 @@ class TestTurnio:
         ("incoming_message", "message_type"),
         [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "audio")],
     )
-    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
