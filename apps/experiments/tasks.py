@@ -17,7 +17,9 @@ from apps.utils.taskbadger import update_taskbadger_data
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str) -> str:
-    experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
+    experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
+        id=experiment_session_id
+    )
     web_channel = WebChannel(
         experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
     )
