@@ -10,6 +10,7 @@ from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
+from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -22,7 +23,8 @@ def get_response_for_webchat_task(self, experiment_session_id: int, message_text
     )
     message = BaseMessage(participant_id=experiment_session.participant.identifier, message_text=message_text)
     update_taskbadger_data(self, web_channel, message)
-    return web_channel.new_user_message(message)
+    with current_team(experiment_session.team):
+        return web_channel.new_user_message(message)
 
 
 @shared_task
