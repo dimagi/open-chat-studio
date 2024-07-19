@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
-import warnings
 from pathlib import Path
 
 import environ
@@ -283,18 +282,7 @@ AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 if AWS_ACCESS_KEY_ID:
     AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
     AWS_S3_REGION = env("AWS_S3_REGION", default=None)
-    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default="")
-    if not WHATSAPP_S3_AUDIO_BUCKET:
-        # try legacy env var
-        # remove this after 2024/05/01
-        WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="")
-        if WHATSAPP_S3_AUDIO_BUCKET:
-            warnings.warn(
-                "WHATSAPP_AWS_AUDIO_BUCKET is deprecated, please use WHATSAPP_S3_AUDIO_BUCKET instead",
-                DeprecationWarning,
-            )
-        else:
-            WHATSAPP_S3_AUDIO_BUCKET = "ocs-whatsapp-voice"
+    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default=None)
 
     USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
     if USE_S3_STORAGE:
