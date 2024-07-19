@@ -505,7 +505,7 @@ class WebChannel(ChannelBase):
 
         if session.experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=session.experiment.seed_message
+                session.id, message_text=session.experiment.seed_message, attachments=[]
             ).task_id
             session.save()
         return session
