@@ -357,7 +357,8 @@ elif "REDIS_TLS_URL" in env:
 else:
     REDIS_HOST = env("REDIS_HOST", default="localhost")
     REDIS_PORT = env("REDIS_PORT", default="6379")
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+    REDIS_SCHEME = "rediss" if env.bool("REDIS_USE_TLS", False) else "redis"
+    REDIS_URL = f"{REDIS_SCHEME}://{REDIS_HOST}:{REDIS_PORT}/0"
 
 if REDIS_URL.startswith("rediss"):
     REDIS_URL = f"{REDIS_URL}?ssl_cert_reqs=none"
