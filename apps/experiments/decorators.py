@@ -67,7 +67,7 @@ def verify_session_access_cookie(view):
         if request.user.is_authenticated:
             if request.experiment_session.participant.user_id == request.user.id:
                 return view(request, *args, **kwargs)
-            elif request.user.has_perm("chat.view_chat"):
+            elif request.team_membership and request.user.has_perm("chat.view_chat"):
                 return view(request, *args, **kwargs)
 
         try:
