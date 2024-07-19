@@ -330,7 +330,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     team = experiment.team
     experiment2 = ExperimentFactory(team=team)
     identifier = "someone@example.com"
-    participant = Participant.objects.create(identifier=identifier, team=team)
+    participant = Participant.objects.create(identifier=identifier, team=team, platform="web")
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, content_object=experiment)
     part_data2 = ParticipantData.objects.create(
         team=experiment2.team, participant=participant, content_object=experiment2

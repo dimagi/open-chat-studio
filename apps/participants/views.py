@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -87,7 +88,7 @@ class ParticipantTableView(SingleTableView):
         query = Participant.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query = query.filter(identifier__icontains=search)
+            query = query.filter(Q(identifier__icontains=search) | Q(platform__iexact=search))
         return query
 
 
