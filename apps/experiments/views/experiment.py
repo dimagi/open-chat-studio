@@ -1065,7 +1065,7 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
 @permission_required("chat.view_chatattachment")
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
-        File, id=pk, team_slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
     )
     try:
         file = resource.file.open()
