@@ -64,6 +64,12 @@ class OpenAiAssistant(BaseTeamModel):
     def get_assistant(self):
         return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
 
+    def supports_code_interpreter(self):
+        return "code_interpreter" in self.builtin_tools
+
+    def supports_file_search(self):
+        return "file_search" in self.builtin_tools
+
 
 @audit_fields(
     "assistant_id",

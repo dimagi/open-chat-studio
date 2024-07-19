@@ -23,8 +23,22 @@
           <div class="dropdown dropdown-top">
             <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
             <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
-              <li><a class="btn btn-sm" @click="$refs.codeInterpreter.click()">Code Interpreter</a></li>
-              <li><a class="btn btn-sm" @click="$refs.fileSearch.click()">File Search</a></li>
+              <li>
+                <a
+                  class="btn btn-sm"
+                  {% if not session.experiment.assistant.supports_code_interpreter %} disabled {% endif %}
+                  @click="$refs.codeInterpreter.click()">
+                  Code Interpreter
+                </a>
+              </li>
+              <li>
+                <a
+                  class="btn btn-sm"
+                  {% if not session.experiment.assistant.supports_file_search %} disabled {% endif %}
+                  @click="$refs.fileSearch.click()">
+                  File Search
+                </a>
+              </li>
             </ul>
           </div>
           <!-- Supported file types for code interpreter: https://platform.openai.com/docs/assistants/tools/code-interpreter/supported-files -->
