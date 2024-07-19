@@ -700,21 +700,15 @@ def _start_experiment_session(
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
     with transaction.atomic():
-        try:
-            participant = Participant.objects.get(
-                team=experiment.team, identifier=participant_identifier, platform=experiment_channel.platform
-            )
-            if participant_user and participant.user is None:
-                # If a participant becomes a user, we must reconcile the user and participant
-                participant.user = participant_user
-                participant.save()
-        except Participant.DoesNotExist:
-            participant = Participant.objects.create(
-                user=participant_user,
-                identifier=participant_identifier,
-                team=experiment.team,
-                platform=experiment_channel.platform,
-            )
+        participant, created = Participant.objects.get_or_create(
+            team=experiment.team,
+            identifier=participant_identifier,
+            platform=experiment_channel.platform,
+            defaults={"user": participant_user},
+        )
+        if not created and participant_user and participant.user is None:
+            participant.user = participant_user
+            participant.save()
 
         session = ExperimentSession.objects.create(
             team=experiment.team,
