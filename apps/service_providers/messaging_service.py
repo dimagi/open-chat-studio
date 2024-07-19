@@ -48,7 +48,6 @@ class MessagingService(pydantic.BaseModel):
 class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK]
-    voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     account_sid: str
@@ -59,6 +58,10 @@ class TwilioService(MessagingService):
         ChannelPlatform.FACEBOOK: "messenger",
     }
     MESSAGE_CHARACTER_LIMIT: int = 1600
+
+    @property
+    def voice_replies_supported(self):
+        return bool(settings.WHATSAPP_S3_AUDIO_BUCKET)
 
     @property
     def client(self) -> Client:

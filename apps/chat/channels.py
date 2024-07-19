@@ -6,7 +6,6 @@ from io import BytesIO
 from typing import ClassVar
 
 import requests
-from django.conf import settings
 from django.db import transaction
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
@@ -567,7 +566,7 @@ class WhatsappChannel(ChannelBase):
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
-        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+        return self.messaging_service.voice_replies_supported
 
     @property
     def supported_message_types(self):
@@ -596,7 +595,7 @@ class FacebookMessengerChannel(ChannelBase):
 
     @property
     def voice_replies_supported(self) -> bool:
-        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+        return self.messaging_service.voice_replies_supported
 
     @property
     def supported_message_types(self):
