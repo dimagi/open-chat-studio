@@ -5,7 +5,7 @@ from celery.app import shared_task
 from langchain.schema import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.channels.datamodels import BaseMessage
+from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
@@ -16,14 +16,23 @@ from apps.utils.taskbadger import update_taskbadger_data
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str) -> str:
+def get_response_for_webchat_task(self, experiment_session_id: int, message_text: str, attachments: list) -> str:
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
         id=experiment_session_id
     )
     web_channel = WebChannel(
         experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
     )
-    message = BaseMessage(participant_id=experiment_session.participant.identifier, message_text=message_text)
+    message_attachments = []
+    for file_entry in attachments:
+        type, file_id = file_entry.values()
+        message_attachments.append(Attachment(file_id=file_id, type=type))
+
+    message = BaseMessage(
+        participant_id=experiment_session.participant.identifier,
+        message_text=message_text,
+        attachments=message_attachments,
+    )
     update_taskbadger_data(self, web_channel, message)
     with current_team(experiment_session.team):
         return web_channel.new_user_message(message)

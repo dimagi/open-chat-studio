@@ -5,10 +5,19 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
 
+class Attachment(BaseModel):
+    file_id: int
+    type: str
+
+
 class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    attachments: list[Attachment] = Field(default={})
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class TelegramMessage(BaseMessage):

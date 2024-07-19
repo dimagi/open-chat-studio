@@ -17,6 +17,7 @@ from .experiment import (  # noqa: F401
     create_channel,
     delete_experiment,
     download_experiment_chats,
+    download_file,
     end_experiment,
     experiment_chat,
     experiment_chat_session,

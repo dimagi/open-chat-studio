@@ -4,7 +4,7 @@ import re
 import time
 from operator import itemgetter
 from time import sleep
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -27,12 +27,15 @@ from langchain_core.runnables import (
 
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.files.models import File
 from apps.service_providers.llm_service.state import (
     AssistantExperimentState,
-    AssistantState,
     ChatExperimentState,
     ChatRunnableState,
 )
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import Attachment
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +99,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
+    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
         callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
@@ -239,22 +242,34 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantState
+    state: AssistantExperimentState
     input_key = "content"
 
     class Config:
         arbitrary_types_allowed = True
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
+    def invoke(
+        self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
+    ) -> ChainOutput:
+        resource_file_ids = self._upload_tool_resource_files(attachments)
+        message_attachments = []
+        for resource_name, openai_file_ids in resource_file_ids.items():
+            message_attachments.extend(
+                [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
+            )
+
         callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        input_dict = {"content": input}
+        input_dict = {"content": input, "attachments": message_attachments}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            if resource_file_ids:
+                chat_message.metadata = chat_message.metadata | resource_file_ids
+                chat_message.save()
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
@@ -271,6 +286,33 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         self.state.save_message_to_history(output, ChatMessageType.AI)
 
         return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
+
+    def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
+        """Uploads the files in `attachments` to OpenAI
+
+        Params:
+            attachments - List of mappings between the resource type and the local file.
+            Example:
+                [{'code_interpreter': <File instance 1>}, {'code_interpreter': <File instance 2>}]
+
+        Returns a mapping of resource to OpenAI file ids. Example:
+            {'code_interpreter': ["file_id1", "file_id2"]}
+        """
+        from apps.assistants.sync import create_files_remote
+
+        resource_file_ids = {}
+        if not attachments:
+            return resource_file_ids
+
+        client = self.state.get_llm_service().get_raw_client()
+
+        for resource_name in ["file_search", "code_interpreter"]:
+            file_ids = [att.file_id for att in attachments if att.type == resource_name]
+            if resource_files := File.objects.filter(id__in=file_ids):
+                # Upload the files to OpenAI
+                openai_file_ids = create_files_remote(client, resource_files)
+                resource_file_ids[resource_name] = openai_file_ids
+        return resource_file_ids
 
     def _get_response_with_retries(self, config, input_dict, thread_id):
         assistant = self.state.get_openai_assistant()
