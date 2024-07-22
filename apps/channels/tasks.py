@@ -10,7 +10,6 @@ from twilio.request_validator import RequestValidator
 from apps.channels.datamodels import BaseMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
-from apps.experiments.models import Experiment
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -113,16 +112,8 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
         channel.new_user_message(message)
 
 
-def handle_api_message(user, experiment: Experiment, message_text: str, participant_id: str, session=None):
+def handle_api_message(user, experiment_channel, message_text: str, participant_id: str, session=None):
     """Synchronously handles the message coming from the API"""
-    if session and session.experiment_channel_id:
-        experiment_channel = session.experiment_channel
-    else:
-        experiment_channel, _created = ExperimentChannel.objects.get_or_create(
-            name=f"{experiment.id}-api",
-            experiment=experiment,
-            platform=ChannelPlatform.API,
-        )
     message = BaseMessage(participant_id=participant_id, message_text=message_text)
     channel = ApiChannel(
         experiment_channel=experiment_channel,
