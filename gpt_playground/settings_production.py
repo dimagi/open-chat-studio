@@ -24,9 +24,11 @@ CSRF_COOKIE_SECURE = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
 
-ALLOWED_HOSTS = [
-    "*",  # update with your production hosts
-]
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+
+# this default so SECRET_KEY
+CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT")
 
 
 # Your email config goes here.
@@ -36,15 +38,16 @@ match EMAIL_BACKEND:
     case "anymail.backends.mailgun.EmailBackend":
         ANYMAIL = {
             "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
-            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default="chatbotmg.dimagi.com"),
+            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
         }
     case "anymail.backends.amazon_ses.EmailBackend":
+        ses_params = {
+            "aws_access_key_id": env("AWS_SES_ACCESS_KEY", default=None),
+            "aws_secret_access_key": env("AWS_SES_SECRET_KEY", default=None),
+            "region_name": env("AWS_SES_REGION", default=None),
+        }
         ANYMAIL = {
-            "AMAZON_SES_CLIENT_PARAMS": {
-                "aws_access_key_id": env("AWS_SES_ACCESS_KEY", default=None),
-                "aws_secret_access_key": env("AWS_SES_SECRET_KEY", default=None),
-                "region_name": env("AWS_SES_REGION", default="us-east-1"),
-            },
+            "AMAZON_SES_CLIENT_PARAMS": dict(item for item in ses_params.items() if item[1]),
         }
     case _:
         raise Exception(f"Unknown email backend: {EMAIL_BACKEND}")

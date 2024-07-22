@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
-import warnings
 from pathlib import Path
 
 import environ
@@ -280,45 +279,36 @@ MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
-if AWS_ACCESS_KEY_ID:
-    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
-    AWS_S3_REGION = env("AWS_S3_REGION", default=None)
-    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default="")
-    if not WHATSAPP_S3_AUDIO_BUCKET:
-        # try legacy env var
-        # remove this after 2024/05/01
-        WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="")
-        if WHATSAPP_S3_AUDIO_BUCKET:
-            warnings.warn(
-                "WHATSAPP_AWS_AUDIO_BUCKET is deprecated, please use WHATSAPP_S3_AUDIO_BUCKET instead",
-                DeprecationWarning,
-            )
-        else:
-            WHATSAPP_S3_AUDIO_BUCKET = "ocs-whatsapp-voice"
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_S3_REGION = env("AWS_S3_REGION", default=None)
+WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default=None)
 
-    USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
-    if USE_S3_STORAGE:
-        # match names in django-storages
-        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
-        AWS_S3_REGION_NAME = AWS_S3_REGION
+USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
+if USE_S3_STORAGE:
+    # match names in django-storages
+    AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
+    AWS_S3_REGION_NAME = AWS_S3_REGION
 
-        # use private storage by default
-        STORAGES["default"] = {
-            "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
-            "OPTIONS": {
-                "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME", default="ocs-resources"),
-                "location": "resources",
-            },
-        }
+    # use private storage by default
+    STORAGES["default"] = {
+        "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
+        "OPTIONS": {
+            "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
+            "location": "resources",
+        },
+    }
 
-        # public storge for media files e.g. user profile pictures
-        AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME", default="ocs-media")
-        PUBLIC_MEDIA_LOCATION = "media"
-        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-        STORAGES["public"] = {
-            "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
-            "OPTIONS": {"bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME, "location": PUBLIC_MEDIA_LOCATION},
-        }
+    # public storge for media files e.g. user profile pictures
+    AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
+    PUBLIC_MEDIA_LOCATION = "media"
+    MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+    STORAGES["public"] = {
+        "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
+        "OPTIONS": {
+            "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
+            "location": PUBLIC_MEDIA_LOCATION,
+        },
+    }
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -367,7 +357,8 @@ elif "REDIS_TLS_URL" in env:
 else:
     REDIS_HOST = env("REDIS_HOST", default="localhost")
     REDIS_PORT = env("REDIS_PORT", default="6379")
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+    REDIS_SCHEME = "rediss" if env.bool("REDIS_USE_TLS", False) else "redis"
+    REDIS_URL = f"{REDIS_SCHEME}://{REDIS_HOST}:{REDIS_PORT}/0"
 
 if REDIS_URL.startswith("rediss"):
     REDIS_URL = f"{REDIS_URL}?ssl_cert_reqs=none"
@@ -501,9 +492,6 @@ DJANGO_TABLES2_ROW_ATTRS = {
 
 # This is only used for development purposes
 SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
-
-# Encryption
-CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
 # Taggit
 TAGGIT_CASE_INSENSITIVE = True
