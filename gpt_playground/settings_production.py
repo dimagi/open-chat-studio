@@ -28,7 +28,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
 
 # this default so SECRET_KEY
 CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
-CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT")
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
 
 # Your email config goes here.
