@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
@@ -12,7 +13,7 @@ from rest_framework.response import Response
 
 from apps.channels import tasks
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 
 
 @csrf_exempt
@@ -98,9 +99,10 @@ def new_api_message(request, experiment_id: uuid):
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
     else:
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel, _ = ExperimentChannel.objects.get_or_create(
-            name=f"{experiment_id}-api",
-            experiment_id=experiment_id,
+            name=f"{experiment.id}-api",
+            experiment=experiment,
             platform=ChannelPlatform.API,
         )
 
