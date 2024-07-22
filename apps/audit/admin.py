@@ -13,7 +13,7 @@ class AuditEventAdmin(admin.ModelAdmin):
         "is_create",
         "is_delete",
     ]
-    list_filter = ["event_date", "object_class_path", "is_create", "is_delete"]
+    list_filter = ["event_date", "is_create", "is_delete", "object_class_path"]
     date_hierarchy = "event_date"
     ordering = ["-event_date"]
     search_fields = ["object_class_path", "change_context"]
