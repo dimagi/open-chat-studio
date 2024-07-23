@@ -5,8 +5,11 @@ from unittest.mock import Mock, patch
 
 import openai
 import pytest
+from openai.pagination import SyncCursorPage
 from openai.types.beta.threads import Message as ThreadMessage
 from openai.types.beta.threads import Run
+from openai.types.beta.threads.file_citation_annotation import FileCitation, FileCitationAnnotation
+from openai.types.beta.threads.file_path_annotation import FilePath, FilePathAnnotation
 from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
 
@@ -38,10 +41,14 @@ def session():
     return session
 
 
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_messages, session):
+def test_assistant_conversation_new_chat(
+    create_and_run, retrieve_run, list_messages, save_response_annotations, session
+):
+    save_response_annotations.return_value = ("ai response", {})
     chat = session.chat
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
@@ -49,6 +56,7 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
     run = _create_run(ASSISTANT_ID, thread_id)
     create_and_run.return_value = run
     retrieve_run.return_value = run
+
     list_messages.return_value = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
@@ -59,11 +67,16 @@ def test_assistant_conversation_new_chat(create_and_run, retrieve_run, list_mess
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.threads.runs.Runs.create")
-def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_message, list_messages, session):
+def test_assistant_conversation_existing_chat(
+    create_run, retrieve_run, create_message, list_messages, save_response_annotations, session
+):
+    ai_response = "ai response"
+    save_response_annotations.return_value = (ai_response, {})
     thread_id = "test_thread_id"
     chat = session.chat
     chat.set_metadata(chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
@@ -71,9 +84,7 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
     run = _create_run(ASSISTANT_ID, thread_id)
     create_run.return_value = run
     retrieve_run.return_value = run
-    list_messages.return_value = _create_thread_messages(
-        ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
-    )
+    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
 
     assistant = _get_assistant_mocked_history_recording(session)
     result = assistant.invoke("test")
@@ -83,10 +94,16 @@ def test_assistant_conversation_existing_chat(create_run, retrieve_run, create_m
     assert result.output == "ai response"
 
 
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-def test_assistant_conversation_input_formatting(create_and_run, retrieve_run, list_messages, session):
+def test_assistant_conversation_input_formatting(
+    create_and_run, retrieve_run, list_messages, save_response_annotations, session
+):
+    ai_response = "ai response"
+    save_response_annotations.return_value = (ai_response, {})
+
     session.experiment.input_formatter = "foo {input} bar"
 
     chat = session.chat
@@ -160,7 +177,9 @@ def test_assistant_runnable_handles_cancellation_status(session):
         ),
     ],
 )
-def test_assistant_runnable_cancels_existing_run(responses, exception, output, session):
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
+    save_response_annotations.return_value = ("normal response", {})
     thread_id = "thread_abc"
     session.chat.set_metadata(session.chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
@@ -177,12 +196,16 @@ def test_assistant_runnable_cancels_existing_run(responses, exception, output, s
 
 
 @pytest.mark.django_db()
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("apps.assistants.sync.create_files_remote")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages, create_files_remote):
+def test_assistant_uploads_new_file(
+    create_and_run, retrieve_run, list_messages, create_files_remote, save_response_annotations
+):
     """Test that attachments are uploaded to OpenAI and that its remote file ids are stored on the chat message"""
+    save_response_annotations.return_value = ("ai response", {})
     session = ExperimentSessionFactory()
     local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
@@ -214,6 +237,88 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
     assert message.metadata == {
         "file_search": ["openai-file-1", "openai-file-2"],
         "code_interpreter": ["openai-file-1", "openai-file-2"],
+    }
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@patch("openai.resources.files.Files.retrieve_content")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+def test_assistant_reponse_with_annotations(
+    list_messages, retrieve_file_content, create_and_run, retrieve_run, get_response_with_retries
+):
+    """Test that attachments on AI messages are being saved (only those of type `file_path`)
+    OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
+    already have that file as an attachment on the chat object
+    """
+    from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+
+    retrieve_file_content.return_value = "This is some file content"
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    get_response_with_retries.return_value = OpenAIAssistantFinish(
+        run_id=run.id, thread_id=thread_id, return_values={"output": "Hi there human"}, log=""
+    )
+    existing_file = FileFactory(external_id="openai-file-2")
+    annotations = [
+        FilePathAnnotation(
+            end_index=174,
+            file_path=FilePath(file_id="openai-file-1"),
+            start_index=134,
+            text="sandbox:/mnt/data/random_string_file.txt",
+            type="file_path",
+        ),
+        FileCitationAnnotation(
+            end_index=174,
+            file_citation=FileCitation(file_id=existing_file.external_id, quote=""),
+            start_index=134,
+            text="[some-ref]",
+            type="file_citation",
+        ),
+    ]
+    list_messages.return_value = SyncCursorPage(
+        data=[
+            ThreadMessage(
+                id="test",
+                assistant_id=ASSISTANT_ID,
+                metadata={},
+                created_at=0,
+                content=[TextContentBlock(text=Text(annotations=annotations, value="Hi there human"), type="text")],
+                object="thread.message",
+                role="assistant",
+                run_id=run.id,
+                thread_id=thread_id,
+                status="completed",
+            )
+        ]
+    )
+    session = ExperimentSessionFactory()
+    local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
+    session.experiment.assistant = local_assistant
+    chat = session.chat
+    # For the file citation, we need to set up an existing file attached to the chat
+    resource, _created = chat.attachments.get_or_create(tool_type="file_path")
+    resource.files.add(existing_file)
+
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+
+    state = AssistantExperimentState(session.experiment, session)
+    assistant = AssistantExperimentRunnable(state=state)
+
+    # Run assistant
+    result = assistant.invoke("test", attachments=[])
+
+    assert result.output == "Hi there human"
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    assert chat.attachments.filter(tool_type="file_path").exists()
+    message = chat.messages.filter(message_type="ai").first()
+    assert message.metadata == {
+        "file_path": ["openai-file-1"],
+        "file_citation": ["openai-file-2"],
     }
 
 

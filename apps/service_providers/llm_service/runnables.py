@@ -341,8 +341,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if generated_files:
             chat = self.state.session.chat
             # TODO: Maybe we'd want to call the tool_type something else?
-            # TODO: Test: I don't think `chat_id` is neccessary in this query?
-            resource, _created = chat.attachments.get_or_create(tool_type="file_path", chat_id=chat.id)
+            resource, _created = chat.attachments.get_or_create(tool_type="file_path")
             resource.files.add(*generated_files)
 
         return output, resource_file_ids
