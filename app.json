@@ -1,17 +1,123 @@
 {
   "name": "Open Chat Studio",
   "repository": "https://github.com/dimagi/open-chat-studio",
-  "keywords": ["ai", "chatbot", "bot", "messaging"],
+  "keywords": [
+    "ai",
+    "chatbot",
+    "bot",
+    "messaging"
+  ],
   "description": "No Code AI Bot builder for teams",
   "scripts": {},
   "env": {
-    "ACCOUNT_EMAIL_VERIFICATION": "none",
+    "ACCOUNT_EMAIL_VERIFICATION": {
+      "description": "Require email verification for new accounts. Options are 'none', 'mandatory', or 'optional'",
+      "value": "none",
+      "required": true
+    },
     "DJANGO_SETTINGS_MODULE": "gpt_playground.settings_production",
     "SECRET_KEY": {
       "generator": "secret"
     },
-    "SIGNUP_ENABLED": "True",
-    "USE_S3_STORAGE": "False"
+    "SIGNUP_ENABLED": {
+      "description": "Allow users to sign up for new accounts",
+      "value": "True",
+      "required": true
+    },
+    "USE_S3_STORAGE": {
+      "description": "Use S3 for media storage. See additional AWS environment variables below",
+      "value": "False",
+      "required": true
+    },
+    "AWS_PRIVATE_STORAGE_BUCKET_NAME": {
+      "description": "S3 bucket name for private media storage. Required if using S3 storage",
+      "required": false
+    },
+    "AWS_PUBLIC_STORAGE_BUCKET_NAME": {
+      "description": "S3 bucket name for public media storage. Required if using S3 storage",
+      "required": false
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "description": "AWS Access Key ID used for accessing S3 for media storage",
+      "required": false
+    },
+    "AWS_SECRET_ACCESS_KEY": {
+      "description": "AWS Secret Access Key used for accessing S3 for media storage",
+      "required": false
+    },
+    "AWS_S3_REGION": {
+      "description": "AWS S3 Region used for media storage",
+      "required": false
+    },
+    "DJANGO_EMAIL_BACKEND": {
+      "description": "Django email backend to use. Options are 'anymail.backends.mailgun.EmailBackend' or 'anymail.backends.amazon_ses.EmailBackend'",
+      "value": "anymail.backends.mailgun.EmailBackend",
+      "required": true
+    },
+    "MAILGUN_API_KEY": {
+      "description": "Mailgun API Key if using Mailgun as the email backend",
+      "required": false
+    },
+    "MAILGUN_SENDER_DOMAIN": {
+      "description": "Mailgun Sender Domain if using Mailgun as the email backend",
+      "required": false
+    },
+    "AWS_SES_ACCESS_KEY": {
+      "description": "AWS SES Access Key if using SES as the email backend",
+      "required": false
+    },
+    "AWS_SES_SECRET_KEY": {
+      "description": "AWS SES Secret Key if using SES as the email backend",
+      "required": false
+    },
+    "AWS_SES_REGION": {
+      "description": "AWS SES Region if using SES as the email backend",
+      "required": false
+    },
+    "SENTRY_DSN": {
+      "description": "Sentry DSN for error tracking",
+      "required": false
+    },
+    "CRYPTOGRAPHY_SALT": {
+      "description": "Salt used for DB field encryption. If not provided, SECRET_KEY will be used",
+      "required": false
+    },
+    "SLACK_BOT_NAME": {
+      "description": "Slack bot name for Slack bot integration",
+      "required": false
+    },
+    "SLACK_CLIENT_ID": {
+      "description": "Slack client ID for Slack bot integration",
+      "required": false
+    },
+    "SLACK_CLIENT_SECRET": {
+      "description": "Slack client secret for Slack bot integration",
+      "required": false
+    },
+    "SLACK_SIGNING_SECRET": {
+      "description": "Slack signing secret for Slack bot integration",
+      "required": false
+    },
+    "TELEGRAM_SECRET_TOKEN": {
+      "description": "Telegram secret token for Telegram bot integration security check",
+      "required": false
+    },
+    "WHATSAPP_S3_AUDIO_BUCKET": {
+      "description": "S3 bucket name for WhatsApp audio message storage",
+      "required": false
+    },
+    "TASKBADGER_API_KEY": {
+      "description": "Taskbadger API key for backend task tracking and analytics",
+      "required": false
+    },
+    "TASKBADGER_ORG": {
+      "description": "Taskbadger organization for backend task tracking and analytics",
+      "required": false
+    },
+    "TASKBADGER_PROJECT": {
+      "description": "Taskbadger project for backend task tracking and analytics",
+      "required": false
+    }
   },
   "formation": {
     "worker": {
