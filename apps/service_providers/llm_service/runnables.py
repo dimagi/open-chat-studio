@@ -324,6 +324,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 file_id = file_citation.file_id
                 cited_file = client.files.retrieve(file_id)
                 if file_citation.quote:
+                    # We need to escape the brackets, since its being omitted when rendering the message as
+                    # markdown
                     citations.append(f"\[{idx}\] {file_citation.quote}: {cited_file.filename}")
                 else:
                     citations.append(f"\[{idx}\]: {cited_file.filename}")
