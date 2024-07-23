@@ -11,7 +11,7 @@
       "generator": "secret"
     },
     "SIGNUP_ENABLED": "True",
-    "USE_S3_STORAGE": "False",
+    "USE_S3_STORAGE": "False"
   },
   "formation": {
     "worker": {
