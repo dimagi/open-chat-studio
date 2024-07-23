@@ -119,10 +119,14 @@ def test_update_participant_data_returns_404():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData for team 1's experiment only
-    data = [
-        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
-        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
-    ]
+    data = {
+        "identifier": participant.identifier,
+        "platform": participant.platform,
+        "data": [
+            {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+            {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+        ],
+    }
     url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 404
