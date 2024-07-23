@@ -114,3 +114,11 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
 class ParticipantExperimentData(serializers.Serializer):
     experiment = serializers.UUIDField(label="Experiment ID")
     data = serializers.DictField(label="Participant Data")
+
+
+class ParticipantDataUpdateRequest(serializers.Serializer):
+    identifier = serializers.CharField(label="Participant identifier")
+    platform = serializers.ChoiceField(
+        choices=ChannelPlatform.choices, default=ChannelPlatform.API, label="Participant Platform"
+    )
+    data = ParticipantExperimentData(many=True)

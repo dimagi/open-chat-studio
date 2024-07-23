@@ -84,11 +84,15 @@ def test_update_participant_data():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
-    data = [
-        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
-        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
-    ]
-    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
+    data = {
+        "identifier": participant.identifier,
+        "platform": participant.platform,
+        "data": [
+            {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+            {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+        ],
+    }
+    url = reverse("api:update-participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -98,7 +102,7 @@ def test_update_participant_data():
     assert participant_data_exp_2.data["name"] == "Doe"
 
     # Let's update the data
-    data = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
+    data["data"] = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
     client.post(url, json.dumps(data), content_type="application/json")
     participant_data_exp_1.refresh_from_db()
     assert participant_data_exp_1.data["name"] == "Harry"
