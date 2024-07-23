@@ -306,6 +306,7 @@ class ScheduledMessage(BaseTeamModel):
 
         self.save()
 
+    @cached_property
     def get_params(self):
         return self.custom_schedule_params or (self.action.params if self.action else {})
 
