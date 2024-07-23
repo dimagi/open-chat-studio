@@ -127,7 +127,7 @@ def test_update_participant_data_returns_404():
             {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
         ],
     }
-    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
+    url = reverse("api:update-participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 404
     assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
