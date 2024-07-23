@@ -37,7 +37,8 @@ def unset_current_team():
 
 @contextmanager
 def current_team(team):
-    """Context manager useful for testing."""
+    """Context manager used for setting the team outside of requests where the team can be set automatically.
+    This is mostly used for auditing but also useful for testing."""
     set_current_team(team)
     try:
         yield
