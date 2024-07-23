@@ -97,23 +97,19 @@ class Migration(migrations.Migration):
                 "frequency": frequency,
                 "time_period": time_period,
                 "repetitions": repetitions,
-                "experiment_id": experiment.id
             }
 
             for identifier in participant_identifiers:
                 participant = Participant.objects.get(team=experiment.team, identifier=identifier)
-                event_action = EventAction.objects.create(
-                    action_type=EventActionType.SCHEDULETRIGGER,
-                    params=event_action_params
-                )
                 ScheduledMessage.objects.create(
                     experiment=experiment,
                     participant=participant,
                     team=experiment.team,
-                    action=event_action,
+                    action=None,
                     last_triggered_at=task.last_run_at,
                     next_trigger_date=next_trigger_date,
-                    total_triggers=total_triggers
+                    total_triggers=total_triggers,
+                    custom_schedule_params=event_action_params,
                 )
 
     dependencies = [
