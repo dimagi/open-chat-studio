@@ -49,7 +49,6 @@ def calculate_total_triggers(task, current_time):
     return int(elapsed_time / interval_duration)
 
 def calc_schedule_components(periodic_task, current_time):
-    task_complete = current_time > periodic_task.expires
     if periodic_task.one_off:
         schedule = periodic_task.clocked
         frequency = 1
@@ -61,8 +60,8 @@ def calc_schedule_components(periodic_task, current_time):
         schedule = periodic_task.interval
         frequency = schedule.every
         time_period = schedule.period
-        repetitions = calculate_remaining_repetitions(periodic_task, current_time) if not task_complete else 0,
-        next_trigger_date = calculate_next_run(periodic_task, current_time)  if not task_complete else None,
+        repetitions = calculate_remaining_repetitions(periodic_task, current_time)
+        next_trigger_date = calculate_next_run(periodic_task, current_time)
         total_triggers = calculate_total_triggers(periodic_task, current_time)
 
     return frequency, time_period, repetitions, total_triggers, next_trigger_date
@@ -82,8 +81,15 @@ class Migration(migrations.Migration):
             participant_identifiers = task_kwargs["chat_ids"]
             message = task_kwargs["message"]
             experiment = Experiment.objects.filter(public_id=task_kwargs["experiment_public_id"])
+            task_complete = current_time > task.expires
+
+            if not experiment or task_complete:
+                continue
 
             frequency, time_period, repetitions, total_triggers, next_trigger_date = calc_schedule_components(task, current_time)
+
+            if repetitions == 0:
+                continue
 
             event_action_params = {
                 "name": "system-generated-event-action",
@@ -96,7 +102,6 @@ class Migration(migrations.Migration):
 
             for identifier in participant_identifiers:
                 participant = Participant.objects.get(team=experiment.team, identifier=identifier)
-
                 event_action = EventAction.objects.create(
                     action_type=EventActionType.SCHEDULETRIGGER,
                     params=event_action_params
