@@ -28,7 +28,6 @@ from langchain_core.runnables import (
 from openai.pagination import SyncCursorPage
 from openai.types.beta.threads.message import Message
 
-from apps.assistants.sync import get_and_store_openai_file
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -305,6 +304,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         - Those of type `file_path` are generated and can be downloaded. A file is created in OCS for each of these
 
         """
+        from apps.assistants.sync import get_and_store_openai_file
+
         raw_client = self.state.get_openai_assistant().client
         page: SyncCursorPage = raw_client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
         message: Message = page.data[0]
@@ -327,7 +328,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                     client=raw_client,
                     file_name=annotation.text.split("/")[-1],
                     file_id=file_id,
-                    team=self.state.experiment.team_id,
+                    team_id=self.state.experiment.team_id,
                 )
                 generated_files.append(created_file)
 
