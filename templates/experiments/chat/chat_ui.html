@@ -17,7 +17,7 @@
     {% with message.content as message_text %}
       {% with message.created_at_datetime as created_at_datetime %}
         {% if message.is_ai_message %}
-          {% include 'experiments/chat/ai_message.html' %}
+          {% include 'experiments/chat/ai_message.html' with attachments=message.get_attached_files %}
         {% elif message.is_human_message %}
           {% include 'experiments/chat/human_message.html' with attachments=message.get_attached_files %}
         {% endif %}

@@ -689,6 +689,13 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
+    attachments = []
+    if progress["success"]:
+        last_ai_message = (
+            ChatMessage.objects.filter(chat=session.chat, message_type="ai").order_by("-created_at").first()
+        )
+        attachments = last_ai_message.get_attached_files()
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -699,6 +706,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
             "progress": progress,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
+            "attachments": attachments,
         },
     )
 

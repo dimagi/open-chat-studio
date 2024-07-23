@@ -124,6 +124,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         file_ids = []
         file_ids.extend(self.metadata.get("file_search", []))
         file_ids.extend(self.metadata.get("code_interpreter", []))
+        file_ids.extend(self.metadata.get("file_citation", []))
+        file_ids.extend(self.metadata.get("file_path", []))
         if file_ids:
             return File.objects.filter(team=self.chat.team, external_id__in=file_ids)
         return []
