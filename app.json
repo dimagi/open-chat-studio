@@ -1,0 +1,36 @@
+{
+  "name": "Open Chat Studio",
+  "repository": "https://github.com/dimagi/open-chat-studio",
+  "keywords": ["ai", "chatbot", "bot", "messaging"],
+  "description": "No Code AI Bot builder for teams",
+  "scripts": {},
+  "env": {
+    "ACCOUNT_EMAIL_VERIFICATION": "none",
+    "DJANGO_SETTINGS_MODULE": "gpt_playground.settings_production",
+    "SECRET_KEY": {
+      "generator": "secret"
+    },
+    "SIGNUP_ENABLED": "True",
+    "USE_S3_STORAGE": "False",
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "Standard-1X"
+    },
+    "web": {
+      "quantity": 1,
+      "size": "Standard-1X"
+    },
+    "beat": {
+      "quantity": 1,
+      "size": "Standard-1X"
+    }
+  },
+  "addons": [
+    "heroku-postgresql",
+    "heroku-redis"
+  ],
+  "buildpacks": [],
+  "stack": "container"
+}
