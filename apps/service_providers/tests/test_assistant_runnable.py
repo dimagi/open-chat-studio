@@ -244,16 +244,40 @@ def test_assistant_uploads_new_file(
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
+@patch("openai.resources.files.Files.retrieve")
 @patch("openai.resources.files.Files.retrieve_content")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 def test_assistant_reponse_with_annotations(
-    list_messages, retrieve_file_content, create_and_run, retrieve_run, get_response_with_retries
+    list_messages, retrieve_file_content, retrieve_file, create_and_run, retrieve_run, get_response_with_retries
 ):
     """Test that attachments on AI messages are being saved (only those of type `file_path`)
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
     already have that file as an attachment on the chat object
     """
     from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+    from openai.types.file_object import FileObject
+
+    file_path_file = FileObject(
+        id="openai-file-1",
+        bytes=69,
+        created_at=123,
+        filename="generated.txt",
+        object="file",
+        purpose="assistants",
+        status="processed",
+        status_details=None,
+    )
+    file_citation_file = FileObject(
+        id="openai-file-2",
+        bytes=69,
+        created_at=123,
+        filename="existing.txt",
+        object="file",
+        purpose="assistants",
+        status="processed",
+        status_details=None,
+    )
+    retrieve_file.side_effect = [file_path_file, file_citation_file]
 
     retrieve_file_content.return_value = "This is some file content"
     thread_id = "test_thread_id"
@@ -312,7 +336,7 @@ def test_assistant_reponse_with_annotations(
     # Run assistant
     result = assistant.invoke("test", attachments=[])
 
-    assert result.output == "Hi there human"
+    assert result.output == "Hi there human\n\[0\]: generated.txt\n\[1\]: existing.txt"
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()

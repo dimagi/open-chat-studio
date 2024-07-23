@@ -306,26 +306,35 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         """
         from apps.assistants.sync import get_and_store_openai_file
 
-        raw_client = self.state.get_openai_assistant().client
-        page: SyncCursorPage = raw_client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
+        client = self.state.get_openai_assistant().client
+        page: SyncCursorPage = client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
         message: Message = page.data[0]
-
+        message_content = message.content[0]
+        annotations = message_content.text.annotations
         output = response.return_values["output"]
         resource_file_ids = {}
         generated_files = []
-        for annotation in message.content[0].text.annotations:
+        citations = []
+        for idx, annotation in enumerate(annotations):
             file_id = None
-            # TODO. Replace file/citation reference with a valid link
-            # file_ref_text = annotation.text
-            # print(f"Original output: {output}\n")
-            # output = output.replace(file_ref_text, "<a href=''>the file</a>")
-            # print(f"Changed output: {output}\n")
+            file_ref_text = annotation.text
+            output = output.replace(file_ref_text, f" [{idx}]")
             if annotation.type == "file_citation":
-                file_id = annotation.file_citation.file_id
+                file_citation = annotation.file_citation
+                file_id = file_citation.file_id
+                cited_file = client.files.retrieve(file_id)
+                if file_citation.quote:
+                    citations.append(f"\[{idx}\] {file_citation.quote}: {cited_file.filename}")
+                else:
+                    citations.append(f"\[{idx}\]: {cited_file.filename}")
+
             elif annotation.type == "file_path":
-                file_id = annotation.file_path.file_id
+                file_path = annotation.file_path
+                file_id = file_path.file_id
+                cited_file = client.files.retrieve(file_id)
+                citations.append(f"\[{idx}\]: {cited_file.filename}")
                 created_file = get_and_store_openai_file(
-                    client=raw_client,
+                    client=client,
                     file_name=annotation.text.split("/")[-1],
                     file_id=file_id,
                     team_id=self.state.experiment.team_id,
@@ -336,6 +345,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 resource_file_ids[annotation.type] = [file_id]
             else:
                 resource_file_ids[annotation.type].append(file_id)
+
+        output += "\n" + "\n".join(citations)
 
         # Attach the generated files to the chat object as an annotation
         if generated_files:
