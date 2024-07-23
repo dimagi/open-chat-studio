@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 from django.db import transaction
@@ -129,16 +130,16 @@ def create_schedule_message(experiment_session: ExperimentSession, message: str,
         cleaned_data = form.cleaned_data
         try:
             with transaction.atomic():
-                experiment = Experiment.objects.get(id=cleaned_data["experiment_id"])
+                name_id = uuid.uuid4()
                 ScheduledMessage.objects.create(
                     custom_schedule_params={
-                        "name": cleaned_data["name"],
+                        "name": f"schedule_message_{name_id}",
                         "prompt_text": message,
                         "frequency": cleaned_data["frequency"],
                         "time_period": cleaned_data["time_period"],
                         "repetitions": cleaned_data["repetitions"],
                     },
-                    experiment=experiment,
+                    experiment=experiment_session.experiment,
                     participant=experiment_session.participant.identifier,
                     team=experiment_session.team,
                 )
