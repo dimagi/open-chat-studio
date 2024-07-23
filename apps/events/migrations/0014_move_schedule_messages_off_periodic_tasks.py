@@ -117,5 +117,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-    migrations.RunPython(migrate_periodic_tasks),
+        migrations.RunPython(migrate_periodic_tasks, elidable=True),
     ]
