@@ -143,9 +143,10 @@ def create_schedule_message(experiment_session: ExperimentSession, message: str,
                     participant=experiment_session.participant.identifier,
                     team=experiment_session.team,
                 )
-            return "Success"
+            return "Success: scheduled message created"
         except Experiment.DoesNotExist:
-            return None
+            return "Experiment does not exist! Could not create scheduled message"
+    return "Could not create scheduled message"
 
 
 TOOL_CLASS_MAP = {
