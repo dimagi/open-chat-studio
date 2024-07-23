@@ -121,6 +121,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             "file_search": ["file_id_3", "file_id_4"]
         }
         """
+        # TODO: Remove mapping to tool_type and keep a flat list of file ids
         file_ids = []
         file_ids.extend(self.metadata.get("file_search", []))
         file_ids.extend(self.metadata.get("code_interpreter", []))
