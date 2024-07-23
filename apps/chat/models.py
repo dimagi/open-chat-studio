@@ -127,7 +127,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         file_ids.extend(self.metadata.get("file_citation", []))
         file_ids.extend(self.metadata.get("file_path", []))
         if file_ids:
-            return File.objects.filter(team=self.chat.team, external_id__in=file_ids)
+            # We should not show files that are on the assistant level. Users should only be able to download
+            # those on the thread (chat) level, since they uploaded them
+            chat_file_ids = ChatAttachment.objects.filter(chat=self.chat).values_list("files")
+            return File.objects.filter(
+                team=self.chat.team, external_id__in=file_ids, id__in=models.Subquery(chat_file_ids)
+            )
         return []
 
 
