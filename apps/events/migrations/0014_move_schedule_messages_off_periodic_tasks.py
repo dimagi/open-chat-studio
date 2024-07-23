@@ -77,7 +77,7 @@ class Migration(migrations.Migration):
         PeriodicTask = apps.get_model('django_celery_beat', 'PeriodicTask')
         current_time = datetime.now()
 
-        for task in PeriodicTask.objects.filter(name__startswith="reminder-", enabled=False):
+        for task in PeriodicTask.objects.filter(name__startswith="reminder-", enabled=True):
             task_kwargs = json.loads(task.kwargs)
             participant_identifiers = task_kwargs["chat_ids"]
             message = task_kwargs["message"]
