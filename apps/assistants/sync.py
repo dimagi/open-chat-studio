@@ -59,8 +59,10 @@ import mimetypes
 import pathlib
 from functools import wraps
 from io import BytesIO
+from tempfile import TemporaryFile
 
 import openai
+from django.core.files import File as DjangoFile
 from openai import OpenAI
 from openai.types.beta import Assistant
 
@@ -358,3 +360,16 @@ def _push_file_to_openai(client: OpenAiAssistant, file: File):
     file.external_id = openai_file.id
     file.external_source = "openai"
     file.save()
+
+
+def get_and_store_openai_file(client, file_name: str, file_id: str, team_id: int) -> File:
+    """Retrieves the content of the openai file with id = `file_id` and creaets a new `File` instance"""
+    file_contents = client.files.retrieve_content(file_id)
+    with TemporaryFile(mode="w+b") as file:
+        file.write(file_contents.encode())
+        return File.objects.create(
+            name=file_name,
+            file=DjangoFile(file, name=file_name),
+            external_id=file_id,
+            team_id=team_id,
+        )

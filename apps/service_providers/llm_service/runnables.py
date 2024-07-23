@@ -7,6 +7,7 @@ from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
+from django.db import transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
@@ -24,7 +25,10 @@ from langchain_core.runnables import (
     RunnableSerializable,
     ensure_config,
 )
+from openai.pagination import SyncCursorPage
+from openai.types.beta.threads.message import Message
 
+from apps.assistants.sync import get_and_store_openai_file
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -251,9 +255,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     def invoke(
         self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
     ) -> ChainOutput:
-        resource_file_ids = self._upload_tool_resource_files(attachments)
+        human_message_resource_file_ids = self._upload_tool_resource_files(attachments)
         message_attachments = []
-        for resource_name, openai_file_ids in resource_file_ids.items():
+        for resource_name, openai_file_ids in human_message_resource_file_ids.items():
             message_attachments.extend(
                 [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
             )
@@ -267,8 +271,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
-            if resource_file_ids:
-                chat_message.metadata = chat_message.metadata | resource_file_ids
+            if human_message_resource_file_ids:
+                chat_message.metadata = chat_message.metadata | human_message_resource_file_ids
                 chat_message.save()
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
@@ -277,15 +281,70 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             input_dict["thread_id"] = thread_id
 
         input_dict["instructions"] = self.state.get_assistant_instructions()
-
         response = self._get_response_with_retries(config, input_dict, thread_id)
+
+        output, ai_message_resource_file_ids = self._save_response_annotations(response)
+
         if not thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
-        output = response.return_values["output"]
-        self.state.save_message_to_history(output, ChatMessageType.AI)
+        ai_message = self.state.save_message_to_history(output, ChatMessageType.AI)
+        if ai_message_resource_file_ids:
+            ai_message.metadata = ai_message.metadata | ai_message_resource_file_ids
+            ai_message.save()
 
-        return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
+        return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
+
+    @transaction.atomic()
+    def _save_response_annotations(self, response: OpenAIAssistantFinish) -> tuple[str, dict]:
+        """
+        This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
+        message, specifically regarding annotations.
+        - Those of type `file_citation` cannot be read, but since we already have those files, we should be fine
+        by only storing the reference to the file i.e. its external_id
+        - Those of type `file_path` are generated and can be downloaded. A file is created in OCS for each of these
+
+        """
+        raw_client = self.state.get_openai_assistant().client
+        page: SyncCursorPage = raw_client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
+        message: Message = page.data[0]
+
+        output = response.return_values["output"]
+        resource_file_ids = {}
+        generated_files = []
+        for annotation in message.content[0].text.annotations:
+            file_id = None
+            # TODO. Replace file/citation reference with a valid link
+            # file_ref_text = annotation.text
+            # print(f"Original output: {output}\n")
+            # output = output.replace(file_ref_text, "<a href=''>the file</a>")
+            # print(f"Changed output: {output}\n")
+            if annotation.type == "file_citation":
+                file_id = annotation.file_citation.file_id
+            elif annotation.type == "file_path":
+                file_id = annotation.file_path.file_id
+                created_file = get_and_store_openai_file(
+                    client=raw_client,
+                    file_name=annotation.text.split("/")[-1],
+                    file_id=file_id,
+                    team=self.state.experiment.team_id,
+                )
+                generated_files.append(created_file)
+
+            if annotation.type not in resource_file_ids:
+                resource_file_ids[annotation.type] = [file_id]
+            else:
+                resource_file_ids[annotation.type].append(file_id)
+
+        # Attach the generated files to the chat object as an annotation
+        if generated_files:
+            chat = self.state.session.chat
+            # TODO: Maybe we'd want to call the tool_type something else?
+            # TODO: Test: I don't think `chat_id` is neccessary in this query?
+            resource, _created = chat.attachments.get_or_create(tool_type="file_path", chat_id=chat.id)
+            resource.files.add(*generated_files)
+
+        return output, resource_file_ids
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
