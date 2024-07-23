@@ -103,7 +103,11 @@ def chat_completions(request, experiment_id: str):
 
     session = serializer.save()
     response_message = handle_api_message(
-        request.user, session.experiment, last_message.get("content"), session.participant.identifier, session
+        request.user,
+        session.experiment_channel,
+        last_message.get("content"),
+        session.participant.identifier,
+        session,
     )
     completion = {
         "id": session.external_id,
