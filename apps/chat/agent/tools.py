@@ -125,22 +125,25 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
 
 
 def create_schedule_message(experiment_session: ExperimentSession, message: str, **kwargs):
-    form = ScheduledMessageConfigForm(data=kwargs, experiment_id=experiment_session.experiment.public_id)
+    name_id = uuid.uuid4()
+    kwargs["name"] = f"schedule_message_{name_id}"
+    kwargs["prompt_text"] = message
+    kwargs["experiment_id"] = experiment_session.experiment.id
+    form = ScheduledMessageConfigForm(data=kwargs, experiment_id=experiment_session.experiment.id)
     if form.is_valid():
         cleaned_data = form.cleaned_data
         try:
             with transaction.atomic():
-                name_id = uuid.uuid4()
                 ScheduledMessage.objects.create(
                     custom_schedule_params={
-                        "name": f"schedule_message_{name_id}",
-                        "prompt_text": message,
+                        "name": cleaned_data["name"],
+                        "prompt_text": cleaned_data["prompt_text"],
                         "frequency": cleaned_data["frequency"],
                         "time_period": cleaned_data["time_period"],
                         "repetitions": cleaned_data["repetitions"],
                     },
                     experiment=experiment_session.experiment,
-                    participant=experiment_session.participant.identifier,
+                    participant=experiment_session.participant,
                     team=experiment_session.team,
                 )
             return "Success: scheduled message created"
