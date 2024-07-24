@@ -75,18 +75,17 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
 
 @pytest.mark.django_db()
-def test_update_participant_data():
+def test_create_and_update_participant_data():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
     data = {
-        "identifier": participant.identifier,
-        "platform": participant.platform,
+        "identifier": identifier,
+        "platform": "api",
         "data": [
             {"experiment": str(experiment.public_id), "data": {"name": "John"}},
             {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
@@ -96,8 +95,8 @@ def test_update_participant_data():
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
-    participant_data_exp_1 = experiment.participant_data.get(participant=participant)
-    participant_data_exp_2 = experiment2.participant_data.get(participant=participant)
+    participant_data_exp_1 = experiment.participant_data.get(participant__identifier=identifier)
+    participant_data_exp_2 = experiment2.participant_data.get(participant__identifier=identifier)
     assert participant_data_exp_1.data["name"] == "John"
     assert participant_data_exp_2.data["name"] == "Doe"
 
