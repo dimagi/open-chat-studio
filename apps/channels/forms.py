@@ -1,6 +1,7 @@
 import logging
 from functools import cached_property
 
+import phonenumbers
 from django import forms
 from django.conf import settings
 from django.urls import reverse
@@ -130,7 +131,16 @@ class TelegramChannelForm(ExtraFormBase):
 
 
 class WhatsappChannelForm(WebhookUrlFormBase):
-    number = forms.CharField(label="Number", max_length=100)
+    number = forms.CharField(
+        label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
+    )
+
+    def clean_number(self):
+        try:
+            number_obj = phonenumbers.parse(self.cleaned_data["number"])
+            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
