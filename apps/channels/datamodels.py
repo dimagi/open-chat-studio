@@ -89,14 +89,14 @@ class TwilioMessage(BaseMessage):
 
 class SureAdhereMessage(BaseMessage):
     """
-    A wrapper class for user messages coming from the sureadhere
+    A wrapper class for user messages coming from the SureAdhere
     """
-
-    content_type_unparsed: str | None = Field(default=None)
 
     @staticmethod
     def parse(message_data: dict) -> "SureAdhereMessage":
-        return SureAdhereMessage(participant_id=message_data["patient_id"], message_text=message_data["message_text"])
+        return SureAdhereMessage(
+            participant_id=str(message_data["patient_id"]), message_text=message_data["message_text"]
+        )
 
 
 class TurnWhatsappMessage(BaseMessage):

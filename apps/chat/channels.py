@@ -593,7 +593,7 @@ class SureAdhereChannel(ChannelBase):
         self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
 
     def send_text_to_user(self, text: str):
-        to_patient = self.chat_id
+        to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
 
     def get_chat_id_from_message(self, message):

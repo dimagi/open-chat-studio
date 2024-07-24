@@ -28,7 +28,7 @@ class TestSureAdhere:
     )
     def test_parse_text_message(self, message, message_type):
         message = SureAdhereMessage.parse(message)
-        assert message.chat_id == 6225
+        assert message.participant_id == 6225
         assert message.message_text == "Hi"
         assert message.content_type == MESSAGE_TYPES.TEXT
 
