@@ -18,6 +18,7 @@ def sureadhere_channel(sureadhere_provider):
         platform=ChannelPlatform.SUREADHERE,
         messaging_provider=sureadhere_provider,
         experiment__team=sureadhere_provider.team,
+        extra_data={"sureadhere_tenant_id": "12"},
     )
 
 
@@ -45,7 +46,7 @@ class TestSureAdhere:
         message_type,
         sureadhere_channel,
     ):
-        handle_sureadhere_message(channel_external_id=sureadhere_channel.external_id, message_data=incoming_message)
+        handle_sureadhere_message(sureadhere_tenant_id="12", message_data=incoming_message)
         send_text_message.assert_called()
 
     @pytest.mark.django_db()
