@@ -200,8 +200,8 @@ def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: Ope
         try:
             vector_store_ids = openai_assistant.tool_resources.file_search.vector_store_ids
             if not vector_store_ids:
-                # OpenAI doesn't create a vector store when you enable file search with no files, so let's not try
-                # to fetch it
+                # OpenAI doesn't create a vector store when you create an assistant through their UI and enable
+                # file search with no files in it, so let's not try to fetch it
                 return
             vector_store_id = vector_store_ids[0]
         except AttributeError:
