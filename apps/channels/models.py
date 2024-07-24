@@ -67,7 +67,7 @@ class ChannelPlatform(models.TextChoices):
             case self.FACEBOOK:
                 return "page_id"
             case self.SUREADHERE:
-                return "client_id"
+                return "sureadhere_tenant_id"
 
 
 class ExperimentChannelObjectManager(AuditingManager):
@@ -86,13 +86,6 @@ class ExperimentChannelObjectManager(AuditingManager):
 class ExperimentChannel(BaseModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
-    PLATFORM = (
-        (TELEGRAM, "Telegram"),
-        (WEB, "Web"),
-        (WHATSAPP, "WhatsApp"),
-        (FACEBOOK, "Facebook"),
-        (SUREADHERE, "SureAdhere"),
-    )
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -168,7 +161,10 @@ class ExperimentChannel(BaseModel):
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
         elif provider_type == MessagingProviderType.sureadhere:
-            uri = reverse("channels:new_sureadhere_message", kwargs={"channel_external_id": self.external_id})
+            uri = reverse(
+                "channels:new_sureadhere_message",
+                kwargs={"sureadhere_tenant_id": self.extra_data.get("sureadhere_tenant_id", "")},
+            )
         return absolute_url(
             uri,
             is_secure=True,

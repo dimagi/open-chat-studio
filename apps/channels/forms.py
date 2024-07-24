@@ -75,7 +75,9 @@ class WhatsappChannelForm(WebhookUrlFormBase):
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
-    client_id = forms.CharField(label="Client ID", max_length=100)
+    sureadhere_tenant_id = forms.CharField(
+        label="SureAdhere Tenant ID", max_length=100, help_text="Enter the Tenant ID provided by SureAdhere."
+    )
 
 
 class FacebookChannelForm(WebhookUrlFormBase):

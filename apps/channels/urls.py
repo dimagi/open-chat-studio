@@ -10,7 +10,7 @@ urlpatterns = [
     path("whatsapp/incoming_message", views.new_twilio_message, name="new_twilio_whatsapp_message"),
     path("twilio/incoming_message", views.new_twilio_message, name="new_twilio_message"),
     path(
-        "sureadhere/<uuid:channel_external_id>/incoming_message",
+        "sureadhere/<str:sureadhere_tenant_id>/incoming_message",
         views.new_sureadhere_message,
         name="new_sureadhere_message",
     ),
