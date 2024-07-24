@@ -117,17 +117,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
         Message metadata example:
         {
-            "code_interpreter": ["file_id_1", "file_id_2"]
-            "file_search": ["file_id_3", "file_id_4"]
+            "openai_file_ids": ["file_id_1", "file_id_2", ...]
         }
         """
-        # TODO: Remove mapping to tool_type and keep a flat list of file ids
-        file_ids = []
-        file_ids.extend(self.metadata.get("file_search", []))
-        file_ids.extend(self.metadata.get("code_interpreter", []))
-        file_ids.extend(self.metadata.get("file_citation", []))
-        file_ids.extend(self.metadata.get("file_path", []))
-        if file_ids:
+        if file_ids := self.metadata.get("openai_file_ids", []):
             # We should not show files that are on the assistant level. Users should only be able to download
             # those on the thread (chat) level, since they uploaded them
             chat_file_ids = ChatAttachment.objects.filter(chat=self.chat).values_list("files")

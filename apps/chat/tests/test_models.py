@@ -24,8 +24,7 @@ def test_get_attached_files():
 
     # Add message with a reference to both the chat and assistant level files
     metadata = {
-        "code_interpreter": ["assistant-file-id-1", "chat-file-id-1"],
-        "file_search": ["assistant-file-id-2", "chat-file-id-2"],
+        "openai_file_ids": ["assistant-file-id-1", "chat-file-id-1", "assistant-file-id-2", "chat-file-id-2"],
     }
     message = ChatMessage.objects.create(chat=chat, message_type="ai", content="Hi", metadata=metadata)
     files = message.get_attached_files()

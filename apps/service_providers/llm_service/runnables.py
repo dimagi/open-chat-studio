@@ -28,7 +28,7 @@ from langchain_core.runnables import (
 from openai.pagination import SyncCursorPage
 from openai.types.beta.threads.message import Message
 
-from apps.chat.models import Chat, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.state import (
@@ -271,8 +271,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if config.get("configurable", {}).get("save_input_to_history", True):
             chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
             if human_message_resource_file_ids:
-                chat_message.metadata = chat_message.metadata | human_message_resource_file_ids
-                chat_message.save()
+                self._add_resource_files_to_message_metadata(chat_message, human_message_resource_file_ids)
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
@@ -289,8 +288,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         ai_message = self.state.save_message_to_history(output, ChatMessageType.AI)
         if ai_message_resource_file_ids:
-            ai_message.metadata = ai_message.metadata | ai_message_resource_file_ids
-            ai_message.save()
+            self._add_resource_files_to_message_metadata(ai_message, ai_message_resource_file_ids)
 
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
@@ -426,3 +424,13 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             cancelling = run.status == "cancelling"
             if cancelling:
                 sleep(assistant.check_every_ms / 1000)
+
+    def _add_resource_files_to_message_metadata(self, message: ChatMessage, resource_file_mapping: dict):
+        """
+        Appends the file ids from each resource to the `openai_file_ids` array in the chat message metadata
+        example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
+        """
+        file_ids = set([file_id for file_ids in resource_file_mapping.values() for file_id in file_ids])
+        existing_file_id_set = set(message.metadata.get("openai_file_ids", []))
+        message.metadata["openai_file_ids"] = list(existing_file_id_set.union(file_ids))
+        message.save()

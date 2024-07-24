@@ -234,10 +234,8 @@ def test_assistant_uploads_new_file(
     assert result.output == "ai response"
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     message = chat.messages.filter(message_type="human").first()
-    assert message.metadata == {
-        "file_search": ["openai-file-1", "openai-file-2"],
-        "code_interpreter": ["openai-file-1", "openai-file-2"],
-    }
+    assert "openai-file-1" in message.metadata["openai_file_ids"]
+    assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
 @pytest.mark.django_db()
@@ -340,10 +338,8 @@ def test_assistant_reponse_with_annotations(
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
-    assert message.metadata == {
-        "file_path": ["openai-file-1"],
-        "file_citation": ["openai-file-2"],
-    }
+    assert "openai-file-1" in message.metadata["openai_file_ids"]
+    assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
 def _get_assistant_mocked_history_recording(session):
