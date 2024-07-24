@@ -46,7 +46,9 @@ class TestSureAdhere:
         message_type,
         sureadhere_channel,
     ):
-        handle_sureadhere_message(sureadhere_tenant_id="12", message_data=incoming_message)
+        handle_sureadhere_message(
+            sureadhere_tenant_id=sureadhere_channel.extra_data.sureadhere_tenant_id, message_data=incoming_message
+        )
         send_text_message.assert_called()
 
     @pytest.mark.django_db()
