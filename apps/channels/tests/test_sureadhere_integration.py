@@ -47,7 +47,7 @@ class TestSureAdhere:
         sureadhere_channel,
     ):
         handle_sureadhere_message(
-            sureadhere_tenant_id=sureadhere_channel.extra_data.sureadhere_tenant_id, message_data=incoming_message
+            sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"], message_data=incoming_message
         )
         send_text_message.assert_called()
 
