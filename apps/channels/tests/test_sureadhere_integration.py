@@ -38,16 +38,13 @@ class TestSureAdhere:
         [(sureadhere_messages.inbound_message(), "text")],
     )
     @patch("apps.service_providers.messaging_service.SureAdhereService.send_text_message")
-    @patch("apps.chat.channels.SureAdhereChannel._get_llm_response")
     def test_sureadhere_channel_implementation(
         self,
-        _get_llm_response,
         send_text_message,
         incoming_message,
         message_type,
         sureadhere_channel,
     ):
-        _get_llm_response.return_value = "Hi"
         handle_sureadhere_message(channel_external_id=sureadhere_channel.external_id, message_data=incoming_message)
         send_text_message.assert_called()
 
