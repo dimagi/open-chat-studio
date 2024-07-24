@@ -10,7 +10,7 @@ def flatten_files_in_chat_message_metadata(apps, schema_editor):
     New structure:
     {"openai_file_ids": ["file_id1", "file_id2", "file_id3"]}
 
-    This migration will not remove the existing data. It should not interfere with anything, so it's safe to keep
+    This migration will not remove the existing data. It will not interfere with anything, so it's safe to keep
     it.
     """
 

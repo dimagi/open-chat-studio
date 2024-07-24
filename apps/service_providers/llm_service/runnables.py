@@ -306,6 +306,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         client = self.state.get_openai_assistant().client
         page: SyncCursorPage = client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
+        # We use a run to get a response, so it's safe to assume a run will have a single message
         message: Message = page.data[0]
         message_content = message.content[0]
         annotations = message_content.text.annotations
@@ -315,12 +316,15 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         citations = []
         for idx, annotation in enumerate(annotations):
             file_id = None
+            # The returned message might include a reference to the annotation which we should replace with
+            # something that looks better. In this case, something like "[1]".
             file_ref_text = annotation.text
             output = output.replace(file_ref_text, f" [{idx}]")
             if annotation.type == "file_citation":
                 file_citation = annotation.file_citation
                 file_id = file_citation.file_id
                 cited_file = client.files.retrieve(file_id)
+
                 if file_citation.quote:
                     # We need to escape the brackets, since its being omitted when rendering the message as
                     # markdown
@@ -351,7 +355,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         # Attach the generated files to the chat object as an annotation
         if generated_files:
             chat = self.state.session.chat
-            # TODO: Maybe we'd want to call the tool_type something else?
             resource, _created = chat.attachments.get_or_create(tool_type="file_path")
             resource.files.add(*generated_files)
 
