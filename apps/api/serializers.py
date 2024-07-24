@@ -111,9 +111,16 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class ParticipantScheduleSerializer(serializers.Serializer):
+    name = serializers.CharField(label="Schedule Name")
+    prompt = serializers.CharField(label="Prompt to send to bot")
+    date = serializers.DateTimeField(label="Schedule Date")
+
+
 class ParticipantExperimentData(serializers.Serializer):
     experiment = serializers.UUIDField(label="Experiment ID")
-    data = serializers.DictField(label="Participant Data")
+    data = serializers.DictField(label="Participant Data", required=False)
+    schedules = ParticipantScheduleSerializer(many=True, required=False)
 
 
 class ParticipantDataUpdateRequest(serializers.Serializer):
