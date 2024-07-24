@@ -1,9 +1,10 @@
 from django.contrib.auth.decorators import permission_required
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
 from rest_framework.decorators import api_view
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -65,17 +66,11 @@ def update_participant_data(request):
 
     identifier = serializer.data["identifier"]
     platform = serializer.data["platform"]
-    participant, _ = Participant.objects.get_or_create(identifier=identifier, team=request.team, platform=platform)
+    team = request.team
+    participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
     experiment_data = serializer.data["data"]
-    experiment_ids = {data["experiment"] for data in experiment_data}
-    experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=request.team)
-    experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
-
-    missing_ids = experiment_ids - set(experiment_map)
-    if missing_ids:
-        response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
-        return JsonResponse(data=response, status=404)
+    experiment_map = _get_participant_experiments(team, experiment_data)
 
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
@@ -84,10 +79,30 @@ def update_participant_data(request):
             participant=participant,
             content_type__model="experiment",
             object_id=experiment.id,
-            team=request.team,
-            defaults={"team": experiment.team, "data": data["data"], "content_object": experiment},
+            team=team,
+            defaults={"data": data["data"], "content_object": experiment},
         )
+
+        if schedule_data := data.get("schedules"):
+            _create_update_schedules(team, experiment, participant, schedule_data)
     return HttpResponse()
+
+
+def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]:
+    experiment_ids = {data["experiment"] for data in experiment_data}
+    experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=team)
+    experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
+
+    missing_ids = experiment_ids - set(experiment_map)
+    if missing_ids:
+        response = {"errors": [{"message": f"Experiment {experiment_id} not found"} for experiment_id in missing_ids]}
+        raise NotFound(detail=response)
+
+    return experiment_map
+
+
+def _create_update_schedules(team, experiment, participant, schedule_data):
+    pass
 
 
 @extend_schema_view(
