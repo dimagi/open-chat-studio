@@ -320,7 +320,7 @@ def test_assistant_reponse_with_annotations(
     citation_link = f"file:{team_slug}:{session.id}:{cited_file.id}"
     expected_output_message = (
         f"Hi there human. The generated file can be [downloaded here]({file_path_link}). Also, leaves are tree"
-        f" stuff [[existing.txt]]({citation_link})."
+        f" stuff [existing.txt]({citation_link})."
     )
     assert result.output == expected_output_message
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
