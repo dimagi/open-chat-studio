@@ -104,6 +104,7 @@ django==4.2.14
     #   django-appconf
     #   django-celery-beat
     #   django-cryptography
+    #   django-health-check
     #   django-hijack
     #   django-otp
     #   django-redis
@@ -132,6 +133,8 @@ django-cryptography==1.1
 django-environ==0.11.2
     # via -r requirements.in
 django-field-audit==1.2.8
+    # via -r requirements.in
+django-health-check==3.18.3
     # via -r requirements.in
 django-hijack==3.4.2
     # via -r requirements.in

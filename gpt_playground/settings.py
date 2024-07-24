@@ -71,6 +71,11 @@ THIRD_PARTY_APPS = [
     "field_audit",
     "taggit",
     "tz_detect",
+    "health_check",
+    "health_check.db",
+    "health_check.cache",
+    "health_check.contrib.celery",
+    "health_check.contrib.redis",
 ]
 
 PROJECT_APPS = [
@@ -543,3 +548,13 @@ SLACK_SCOPES = [
 ]
 SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
 SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET
+
+# Health checks
+# Tokens used to secure the /status endpoint. These should be kept secret
+HEALTH_CHECK_TOKENS = env.list("HEALTH_CHECK_TOKENS", default=[])
+HEALTH_CHECK = {
+    "SUBSETS": {
+        "general": ["Cache backend: default", "DatabaseBackend", "RedisHealthCheck"],
+        "celery": ["CeleryHealthCheckCelery"],
+    },
+}
