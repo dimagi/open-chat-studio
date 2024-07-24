@@ -36,18 +36,22 @@ class SafetyLayerAdmin(admin.ModelAdmin):
     list_filter = ("team",)
 
 
+class ParticipantDataInline(admin.TabularInline):
+    model = models.ParticipantData
+
+
 @admin.register(models.Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("identifier", "team", "public_id")
+    list_display = ("identifier", "team", "public_id", "platform")
     readonly_fields = ("public_id",)
-    list_filter = ("team",)
+    list_filter = ("team", "platform")
     search_fields = ("external_chat_id",)
+    inlines = [ParticipantDataInline]
 
 
 @admin.register(models.ParticipantData)
 class ParticipantData(admin.ModelAdmin):
     list_display = ("participant", "content_type", "object_id")
-    readonly_fields = ("data",)
     list_filter = ("participant",)
 
 
@@ -83,11 +87,10 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
         "participant",
         "status",
         "created_at",
-        "llm",
     )
-    search_fields = ("public_id", "experiment__name", "participant__identifier")
+    search_fields = ("external_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
-    readonly_fields = ("public_id",)
+    readonly_fields = ("external_id",)
 
     @admin.display(description="Team")
     def team(self, obj):
@@ -121,14 +124,3 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
     @admin.display(description="Team")
     def team(self, obj):
         return obj.voice_provider.team.name if obj.voice_provider else ""
-
-
-@admin.register(models.NoActivityMessageConfig)
-class NoActivityMessageConfigAdmin(admin.ModelAdmin):
-    list_display = (
-        "team",
-        "message_for_bot",
-        "name",
-        "max_pings",
-    )
-    list_filter = ("team",)

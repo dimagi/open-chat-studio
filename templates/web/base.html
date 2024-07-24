@@ -67,5 +67,7 @@
     {% block page_js %}
     {% endblock page_js %}
     {% include 'web/components/messages-js.html' %}
+    {% load tz_detect %}
+    {% tz_detect %}
   </body>
 </html>

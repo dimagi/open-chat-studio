@@ -9,6 +9,7 @@ module.exports = {
     site: './assets/javascript/site.js',  // global site javascript
     app: './assets/javascript/app.js',  // logged-in javascript
     'pipeline': './assets/javascript/apps/pipeline.tsx',
+    adminDashboard: './assets/javascript/admin-dashboard.js',
   },
   output: {
     path: path.resolve(__dirname, './static'),

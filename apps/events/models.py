@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from functools import cached_property
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -10,9 +11,11 @@ from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
+from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +23,10 @@ logger = logging.getLogger(__name__)
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
     "log": actions.LogAction,
+    "pipeline_start": actions.PipelineStartAction,
+    "schedule_trigger": actions.ScheduleTriggerAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
     "summarize": actions.SummarizeConversationAction,
-    "schedule_trigger": actions.ScheduleTriggerAction,
 }
 
 
@@ -32,6 +36,7 @@ class EventActionType(models.TextChoices):
     SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
+    PIPELINE_START = ("pipeline_start", "Start a pipeline")
 
 
 class EventAction(BaseModel):
@@ -100,7 +105,7 @@ class StaticTrigger(BaseModel):
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
             self.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
 
     @transaction.atomic()
@@ -162,6 +167,15 @@ class TimeoutTrigger(BaseModel):
             )  # We don't use Count here because otherwise Django wants to do a group_by, which messes up the subquery: https://stackoverflow.com/a/69031027
             .values("count")
         )
+        failure_count_for_last_message = (
+            EventLog.objects.filter(
+                session=OuterRef("pk"),
+                chat_message_id=Subquery(last_human_message_id),
+                status=EventLogStatusChoices.FAILURE,
+            )
+            .annotate(count=Func(F("chat_message_id"), function="Count"))
+            .values("count")
+        )
 
         sessions = (
             ExperimentSession.objects.filter(
@@ -172,6 +186,7 @@ class TimeoutTrigger(BaseModel):
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 log_count=Subquery(log_count_for_last_message),
+                failure_count=Subquery(failure_count_for_last_message),
             )
             .filter(
                 last_human_message_created_at__lt=trigger_time,
@@ -180,16 +195,23 @@ class TimeoutTrigger(BaseModel):
             .filter(
                 Q(log_count__lt=self.total_num_triggers) | Q(log_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
+            .filter(
+                Q(failure_count__lt=TOTAL_FAILURES)
+                # There are still failures left
+            )
         )
         return sessions.select_related("experiment_channel", "experiment").all()
 
-    def fire(self, session):
+    def fire(self, session) -> str | None:
         last_human_message = ChatMessage.objects.filter(
             chat_id=session.chat_id,
             message_type=ChatMessageType.HUMAN,
         ).last()
+
+        result = None
+
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action.params)
+            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -206,14 +228,24 @@ class TimeoutTrigger(BaseModel):
         return result
 
     def _has_triggers_left(self, session, message):
-        return (
+        has_succeeded = (
             self.event_logs.filter(
                 session=session,
                 chat_message=message,
                 status=EventLogStatusChoices.SUCCESS,
             ).count()
-            < self.total_num_triggers
+            >= self.total_num_triggers
         )
+        failed = (
+            self.event_logs.filter(
+                session=session,
+                chat_message=message,
+                status=EventLogStatusChoices.FAILURE,
+            ).count()
+            >= TOTAL_FAILURES
+        )
+
+        return not (has_succeeded or failed)
 
 
 class TimePeriod(models.TextChoices):
@@ -224,7 +256,10 @@ class TimePeriod(models.TextChoices):
 
 
 class ScheduledMessage(BaseTeamModel):
-    action = models.ForeignKey(EventAction, on_delete=models.CASCADE, related_name="scheduled_messages")
+    action = models.ForeignKey(
+        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, default=None
+    )
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
@@ -232,6 +267,7 @@ class ScheduledMessage(BaseTeamModel):
     last_triggered_at = models.DateTimeField(null=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
+    custom_schedule_params = models.JSONField(blank=True, default=dict)
 
     class Meta:
         indexes = [models.Index(fields=["is_complete"])]
@@ -253,8 +289,12 @@ class ScheduledMessage(BaseTeamModel):
         delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
         utc_now = timezone.now()
 
-        experiment_session = self.participant.get_latest_session()
-        experiment_session.send_bot_message(self.action.params["prompt_text"], fail_silently=False)
+        experiment_id = self.action.params.get("experiment_id", self.experiment.id)
+        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        experiment_to_use = Experiment.objects.get(id=experiment_id)
+        experiment_session.ad_hoc_bot_message(
+            self.action.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
+        )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1
@@ -264,3 +304,32 @@ class ScheduledMessage(BaseTeamModel):
             self.next_trigger_date = utc_now + delta
 
         self.save()
+
+    @cached_property
+    def name(self) -> str:
+        return self.action.params["name"]
+
+    @cached_property
+    def frequency(self) -> str:
+        return self.action.params["frequency"]
+
+    @cached_property
+    def time_period(self) -> str:
+        return self.action.params["time_period"]
+
+    @cached_property
+    def repetitions(self) -> str:
+        return self.action.params["repetitions"]
+
+    def as_string(self, as_timezone: str | None = None):
+        schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
+        if self.time_period not in ["hour", "day"]:
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule = (
+                f"{self.name}: Every {self.frequency} {self.time_period} on {weekday} for {self.repetitions} times"
+            )
+        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        return f"{schedule} (next trigger is {next_trigger})"
+
+    def __str__(self):
+        return self.as_string()

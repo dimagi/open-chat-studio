@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.users.models import CustomUser
 
 from .models import Invitation, Membership
+from .utils import current_team
 
 
 def send_invitation(invitation):
@@ -27,11 +28,13 @@ def send_invitation(invitation):
 def process_invitation(invitation: Invitation, user: CustomUser):
     from .tasks import send_invitation_accepted_notification
 
-    membership = Membership.objects.create(team=invitation.team, user=user, role=invitation.role)
-    membership.groups.set(invitation.groups.all())
-    invitation.is_accepted = True
-    invitation.accepted_by = user
-    invitation.save()
+    with current_team(invitation.team):
+        membership = Membership.objects.create(team=invitation.team, user=user)
+        membership.groups.set(invitation.groups.all())
+        invitation.is_accepted = True
+        invitation.accepted_by = user
+        invitation.save()
+
     send_invitation_accepted_notification.delay(invitation.id)
 
 

@@ -13,6 +13,7 @@ module.exports = {
     'alert-info',
     'alert-error',
     'alert-warning',
+    'alertify-notifier',
   ],
   theme: {
     extend: {

@@ -34,11 +34,12 @@ def test_aws_voice_provider(team_with_users):
 def test_aws_voice_provider_error(config_key):
     """Test that any missing param causes failure"""
     form = VoiceProviderType.aws.form_cls(
+        team=None,
         data={
             "aws_access_key_id": "test_key",
             "aws_secret_access_key": "test_secret",
             "aws_region": "test_region",
-        }
+        },
     )
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
@@ -66,10 +67,11 @@ def test_azure_voice_provider(team_with_users):
 def test_azure_voice_provider_error(config_key):
     """Test that any missing param causes failure"""
     form = VoiceProviderType.azure.form_cls(
+        team=None,
         data={
             "azure_subscription_key": "test_key",
             "azure_region": "test_region",
-        }
+        },
     )
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
@@ -77,7 +79,7 @@ def test_azure_voice_provider_error(config_key):
 
 
 def _test_voice_provider_error(provider_type: VoiceProviderType, data):
-    form = provider_type.form_cls(data=data)
+    form = provider_type.form_cls(team=None, data=data)
     assert not form.is_valid()
 
     with pytest.raises(ServiceProviderConfigError):
@@ -85,7 +87,7 @@ def _test_voice_provider_error(provider_type: VoiceProviderType, data):
 
 
 def _test_voice_provider(team, provider_type: VoiceProviderType, data):
-    form = provider_type.form_cls(data=data)
+    form = provider_type.form_cls(team, data=data)
     assert form.is_valid()
     provider = VoiceProvider.objects.create(
         team=team,
@@ -134,11 +136,12 @@ def test_openai_voice_provider(team_with_users):
 def test_openai_voice_provider_error(config_key):
     """Test that any missing param causes failure"""
     form = VoiceProviderType.openai.form_cls(
+        team=None,
         data={
             "openai_api_key": "test_key",
             "openai_api_base": "https://openai.com",
             "openai_organization": "test_organization",
-        }
+        },
     )
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
@@ -197,6 +200,7 @@ def test_openai_ve_provider_delete(team_with_users):
 def test_openai_ve_voice_provider_error(config_key):
     """Test that any missing param causes failure"""
     form = VoiceProviderType.openai_voice_engine.form_cls(
+        team=None,
         data={
             "openai_api_key": "test_key",
             "openai_api_base": "https://openai.com",

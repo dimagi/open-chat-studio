@@ -1,26 +1,20 @@
+{% load markdown %}
+
 <script>
   (() => {
     htmx.on("messages", (event) => {
       event.detail.value.forEach((message) => {
-        Toast.fire({
-          icon: message.tags,
-          title: message.tags[0].toUpperCase() + message.tags.slice(1),
-          text: message.message
-        });
+        alertify.notify(message.message, message.tags, 10);
       });
     })
   })();
 </script>
 {% if messages %}
-  <div class="toast toast-start">
+  <div>
     {% for message in messages %}
       <script>
         (() => {
-          Toast.fire({
-            icon: '{{ message.tags }}',
-            title: '{{ message.tags|capfirst }}',
-            text: '{{ message }}'
-          });
+          alertify.notify("{{ message.message|single_quotes }}", "{{ message.tags }}", 100);
         })();
       </script>
     {% endfor %}

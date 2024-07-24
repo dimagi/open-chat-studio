@@ -1,5 +1,6 @@
 from django.urls import include, path
 
+from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
 
 from . import views
@@ -75,55 +76,71 @@ urlpatterns = [
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
     path("e/<slug:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
-    path("e/<slug:experiment_id>/invitations/send/<slug:session_id>/", views.send_invitation, name="send_invitation"),
+    path("e/<slug:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
     path("e/<int:experiment_id>/download_chats/", views.download_experiment_chats, name="download_experiment_chats"),
     # public links
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/",
+        "e/<slug:experiment_id>/s/<str:session_id>/",
         views.start_session_from_invite,
         name="start_session_from_invite",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/pre-survey/",
+        "e/<slug:experiment_id>/s/<str:session_id>/pre-survey/",
         views.experiment_pre_survey,
         name="experiment_pre_survey",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/chat/",
+        "e/<slug:experiment_id>/s/<str:session_id>/chat/",
         views.experiment_chat,
         name="experiment_chat",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/end/",
+        "e/<slug:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/review/",
+        "e/<slug:experiment_id>/s/<str:session_id>/review/",
         views.experiment_review,
         name="experiment_review",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/complete/",
+        "e/<slug:experiment_id>/s/<str:session_id>/complete/",
         views.experiment_complete,
         name="experiment_complete",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/view/",
+        "e/<slug:experiment_id>/s/<str:session_id>/view/",
         views.experiment_session_details_view,
         name="experiment_session_view",
     ),
     path(
-        "e/<slug:experiment_id>/s/<slug:session_id>/paginate/",
+        "e/<slug:experiment_id>/s/<str:session_id>/paginate/",
         views.experiment_session_pagination_view,
         name="experiment_session_pagination_view",
     ),
     # public link
     path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
+    # Experiment Routes
+    path(
+        "e/<int:experiment_id>/experiment_routes/new",
+        CreateExperimentRoute.as_view(),
+        name="experiment_route_new",
+    ),
+    path(
+        "e/<int:experiment_id>/experiment_routes/<int:pk>/edit",
+        EditExperimentRoute.as_view(),
+        name="experiment_route_edit",
+    ),
+    path(
+        "e/<int:experiment_id>/experiment_routes/<int:pk>/delete",
+        DeleteExperimentRoute.as_view(),
+        name="experiment_route_delete",
+    ),
+    path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
 urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
 urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))
-urlpatterns.extend(make_crud_urls(views, "NoActivityMessageConfig", "no_activity"))

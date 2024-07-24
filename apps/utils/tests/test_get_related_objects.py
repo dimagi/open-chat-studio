@@ -3,24 +3,6 @@ import pytest
 from apps.utils.deletion import get_related_m2m_objects
 
 
-@pytest.fixture()
-def _model_setup():
-    from apps.utils.tests.models import Bot, Param, Tool
-
-    tool1 = Tool.objects.create(name="t1")
-    Param.objects.create(name="p1", tool=tool1)
-
-    tool2 = Tool.objects.create(name="t2")
-    Tool.objects.create(name="t3")
-
-    bot1 = Bot.objects.create(name="b1")
-    bot2 = Bot.objects.create(name="b2")
-    Bot.objects.create(name="b3")
-
-    bot1.tools.set([tool1, tool2])
-    bot2.tools.set([tool1])
-
-
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("_model_setup")
 @pytest.mark.parametrize(

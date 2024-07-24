@@ -96,14 +96,12 @@ class TeamSignupForm(SignupForm):
 class TeamChangeForm(forms.ModelForm):
     class Meta:
         model = Team
-        fields = ("name", "slug")
+        fields = ("name",)
         labels = {
             "name": _("Team Name"),
-            "slug": _("Team ID"),
         }
         help_texts = {
             "name": _("Your team name."),
-            "slug": _("A unique ID for your team. No spaces are allowed!"),
         }
 
 

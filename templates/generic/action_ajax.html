@@ -1,22 +1,23 @@
 <button @click.stop="" class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
         id="action-{{ action_id }}"
         title="{{ title }}"
-        hx-{{ hx_method|lower }}="{% url url_name request.team.slug record.id %}"
+        hx-{{ hx_method|lower }}="{{ action_url }}"
         hx-target="#record-{{ record.id }}"
         hx-swap="outerHTML"
 
         {% if confirm_message %}
-            hx-trigger="confirmed"
-            onClick="Swal.fire({
-                     title: 'Confirm',
-                     text: '{{ confirm_message|escapejs }}',
-                     }).then(function(result) {
-                     if(result.isConfirmed){
-                     htmx.trigger('#action-{{ action_id }}', 'confirmed');
-                     }
-                     })"
+          hx-trigger="confirmed"
+          onClick="alertify.confirm().setting({
+                   title: 'Confirm',
+                   message: '{{ confirm_message|escapejs }}',
+                   transition: 'fade',
+                   onok: function() {
+                   htmx.trigger('#action-{{ action_id }}', 'confirmed');
+                   },
+                   }).show();
+                  "
         {% endif %}
 >
-    <i class="{{ icon_class }} htmx-hide"></i>
-    <span class="loading loading-spinner loading-xs htmx-show"></span>
+  <i class="{{ icon_class }} htmx-hide"></i>
+  <span class="loading loading-spinner loading-xs htmx-show"></span>
 </button>

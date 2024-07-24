@@ -1,3 +1,60 @@
+"""
+### A Brief overview of how Assistants, tool resources and threads play together.
+
+An Assistant can use two built-in tools to operate on files, namely "File Search" and "Code Interpreter".
+
+File Search:
+    Uploaded files are embedded and stored in a vector store. This vector store is then attached to the
+    "file_search" tool resource, which in turn is attached to an assistant.
+
+Code Interpreter:
+    Uploaded files are attached directly to the "code_interpreter" tool resource which n turn is attached to the
+    assistant.
+
+
+## Something like this
+Assistant
+    |______tool_resources
+                |__________code_interpreter
+                |               |__________file1
+                |               |__________file2
+                |               
+                |__________file_search
+                                |__________vector_store1
+                                |               |_________file1
+                                |               |_________file2
+                                |               
+                                |__________vector_store1
+
+
+These resources are available globally within the scope of the assistant. Any user interacting with the assistant
+will have access to these files.
+
+### Threads
+Each chat session with the assistant occurs within a thread. Threads can also utilize these global resources or
+create its own resources (code_interpreter / file_search ), scoped to the current thread. This means that other
+threads or chats with the assistant will not have access to the files uploaded to a specific thread's resources.
+
+Assistant
+    |________Thread1
+                |______tool_resources
+                            |__________code_interpreter
+                            |               |__________file1
+                            |               |__________file2
+                            |               
+                            |__________file_search
+                                            |__________vector_store1
+                                            |               |_________file1
+                                            |               |_________file2
+                                            |               
+                                            |__________vector_store1
+
+Note that a thread-level tool resource will only function if it is enabled at the assistant level. For example,
+the file search tool will not be available within a thread unless it is enabled at the assistant level.
+Once enabled on the assistant, the thread can add its own files to its vector store(s) and interact with those
+files, as well as those provided by the assistant.
+"""
+
 import mimetypes
 import pathlib
 from functools import wraps
@@ -171,13 +228,24 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
 
 
 def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[str]):
-    vector_store_files = (file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_id))
+    kwargs = {}
     to_delete_remote = []
-    for file_id in vector_store_files:
-        try:
-            files_ids.remove(file_id)
-        except ValueError:
-            to_delete_remote.append(file_id)
+
+    while True:
+        vector_store_files = client.beta.vector_stores.files.list(
+            order="asc",
+            vector_store_id=vector_store_id,
+            **kwargs,
+        )
+        for v_file in vector_store_files.data:
+            try:
+                files_ids.remove(v_file.id)
+            except ValueError:
+                to_delete_remote.append(v_file.id)
+
+        if not vector_store_files.has_more:
+            break
+        kwargs["after"] = vector_store_files.last_id
 
     for file_id in to_delete_remote:
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
@@ -204,12 +272,13 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
 def _sync_tool_resources(assistant):
     resource_data = {}
     resources = {resource.tool_type: resource for resource in assistant.tool_resources.all()}
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
     if code_interpreter := resources.get("code_interpreter"):
-        file_ids = _create_files_remote(assistant, code_interpreter.files.all())
+        file_ids = create_files_remote(client, code_interpreter.files.all())
         resource_data["code_interpreter"] = {"file_ids": file_ids}
 
     if file_search := resources.get("file_search"):
-        file_ids = _create_files_remote(assistant, file_search.files.all())
+        file_ids = create_files_remote(client, file_search.files.all())
         store_id = file_search.extra.get("vector_store_id")
         updated_store_id = _update_or_create_vector_store(
             assistant, f"{assistant.name} - File Search", store_id, file_ids
@@ -224,24 +293,23 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store = None
     if vector_store_id:
         try:
-            vector_store = client.beta.vector_stores.retrieve(vector_store_id)
+            client.beta.vector_stores.retrieve(vector_store_id)
         except openai.NotFoundError:
-            pass
+            vector_store_id = None
 
-    if not vector_store and assistant.assistant_id:
+    if not vector_store_id and assistant.assistant_id:
         # check if there is a vector store attached to this assistant that we don't know about
         openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
         try:
-            vector_store = openai_assistant.tool_resources.file_search.vector_store_ids[0]
-        except AttributeError:
+            vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
+        except (AttributeError, IndexError):
             pass
 
-    if vector_store:
-        _sync_vector_store_files_to_openai(client, vector_store.id, file_ids)
-        return vector_store.id
+    if vector_store_id:
+        _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
+        return vector_store_id
 
     vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
     return vector_store.id
@@ -266,17 +334,16 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
     return kwargs
 
 
-def _create_files_remote(assistant, files):
+def create_files_remote(client, files):
     file_ids = []
     for file in files:
         if not file.external_id:
-            _push_file_to_openai(assistant, file)
+            _push_file_to_openai(client, file)
         file_ids.append(file.external_id)
     return file_ids
 
 
-def _push_file_to_openai(assistant: OpenAiAssistant, file: File):
-    client = assistant.llm_provider.get_llm_service().get_raw_client()
+def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
     openai_file = client.files.create(

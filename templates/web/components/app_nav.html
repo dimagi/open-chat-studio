@@ -1,3 +1,20 @@
-<ul class="menu bg-base-100 p-2 rounded-box">
-  {% include 'web/components/app_nav_menu_items.html' %}
-</ul>
+<div class="flex flex-col">
+  <div class="dropdown py-2 pl-6">
+    <div tabindex="0">
+      <svg xmlns="http://www.w3.org/2000/svg" class="inline h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16M4 10h8M4 16h16"/>
+      </svg>
+      {% if team %}
+        {{ team.name }}
+      {% else %}
+        {{ request.user.get_display_name }}
+      {% endif %}
+    </div>
+    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64">
+      {% include "web/components/team_nav_items.html" %}
+    </ul>
+  </div>
+  <ul class="menu bg-base-100 p-2 rounded-box">
+    {% include 'web/components/app_nav_menu_items.html' %}
+  </ul>
+</div>

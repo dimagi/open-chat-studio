@@ -1,24 +1,26 @@
+import dataclasses
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from unittest import mock
+from unittest.mock import patch
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
-from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.token_counters import TokenCounter
 
 
 class FakeLlm(FakeListChatModel):
     """Extension of the FakeListChatModel that allows mocking of the token counts."""
 
-    token_counts: list = []
-    token_i: int = 0
     calls: list = []
 
     def _generate(
@@ -49,16 +51,8 @@ class FakeLlm(FakeListChatModel):
             for c in response:
                 yield ChatGenerationChunk(message=AIMessageChunk(content=c))
 
-    def get_num_tokens_from_messages(self, messages: list) -> int:
-        token_counts = self.token_counts[self.token_i]
-        if self.token_i < len(self.token_counts) - 1:
-            self.token_i += 1
-        else:
-            self.token_i = 0
-        return token_counts
-
     def get_num_tokens(self, text: str) -> int:
-        return self.get_num_tokens_from_messages([])
+        raise NotImplementedError
 
     def get_calls(self):
         return self.calls
@@ -66,18 +60,48 @@ class FakeLlm(FakeListChatModel):
     def get_call_messages(self):
         return [call[1][0] for call in self.calls]
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
+
+    def with_structured_output(self, schema) -> dict:
+        """with_structured_output should return a runnable that returns a dictionary, so we simply replace the LLM
+        with a runnable lambda that returns the dictionary that we specified when we built the FakeLlm:
+
+        Example:
+            FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
+        """
+        return RunnableLambda(lambda *args: self.responses[-1])
+
+
+@dataclasses.dataclass
+class FakeTokenCounter(TokenCounter):
+    token_counts: list[int] = dataclasses.field(default_factory=lambda: [1])
+    token_i: int = 0
+
+    def get_tokens_from_text(self, text) -> int:
+        token_counts = self.token_counts[self.token_i]
+        if self.token_i < len(self.token_counts) - 1:
+            self.token_i += 1
+        else:
+            self.token_i = 0
+        return token_counts
 
 
 class FakeLlmService(LlmService):
     llm: Any
+    token_counter: TokenCounter
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
         return self.llm
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(self.token_counter)
 
 
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
@@ -101,14 +125,22 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
 
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
-    original = experiment.get_llm_service
+    service = build_fake_llm_service(responses=responses, token_counts=token_counts)
 
-    experiment.get_llm_service = lambda: FakeLlmService(
-        llm=FakeLlm(responses=responses, token_counts=token_counts or [0])
-    )
-    if experiment.assistant_id:
-        experiment.assistant.get_assistant = lambda: FakeAssistant(responses=responses)
-    try:
+    def fake_llm_service(self):
+        return service
+
+    assistant = FakeAssistant(responses=responses)
+
+    def fake_get_assistant(self):
+        return assistant
+
+    with (
+        patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
+        patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
+    ):
         yield
-    finally:
-        experiment.get_llm_service = original
+
+
+def build_fake_llm_service(responses, token_counts):
+    return FakeLlmService(llm=FakeLlm(responses=responses), token_counter=FakeTokenCounter(token_counts=token_counts))

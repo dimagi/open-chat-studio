@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, Any
+
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
 from pydantic import ValidationError
@@ -6,8 +8,11 @@ from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import Attachment
 
 
 def create_conversation(
@@ -33,23 +38,39 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 class TopicBot:
-    def __init__(self, session: ExperimentSession):
-        experiment = session.experiment
-        self.prompt = experiment.prompt_text
-        self.input_formatter = experiment.input_formatter
-        self.llm = experiment.get_chat_model()
-        self.source_material = experiment.source_material.material if experiment.source_material else None
-        self.safety_layers = experiment.safety_layers.all()
+    """
+    Parameters
+    ----------
+    session:
+        The session to provide the chat history. New messages will be saved to this session.
+    experiment: (optional)
+        The experiment to provide the source material and other data for the LLM.
+        NOTE: Only use this if you know what you are doing. Normally this should be left empty, in which case
+        the session's own experiment will be used. This is used in a multi-bot setup where the user might want
+        a specific bot to handle a scheduled message, in which case it would be useful for the LLM to have the
+        conversation history of the participant's chat with the router / main bot.
+    """
+
+    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
+        self.experiment = experiment or session.experiment
+        self.prompt = self.experiment.prompt_text
+        self.input_formatter = self.experiment.input_formatter
+        self.llm = self.experiment.get_chat_model()
+        self.source_material = self.experiment.source_material.material if self.experiment.source_material else None
+        self.safety_layers = self.experiment.safety_layers.all()
         self.chat = session.chat
         self.session = session
-        self.max_token_limit = experiment.max_token_limit
+        self.max_token_limit = self.experiment.max_token_limit
         self.input_tokens = 0
         self.output_tokens = 0
 
         # maps keywords to child experiments.
-        self.child_experiment_routes = ExperimentRoute.objects.select_related("child").filter(parent=experiment).all()
+        self.child_experiment_routes = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment).all()
+        )
         self.child_chains = {}
         self.default_child_chain = None
+        self.default_tag = None
         self._initialize()
 
     def _initialize(self):
@@ -58,26 +79,32 @@ class TopicBot:
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
                 self.default_child_chain = child_runnable
+                self.default_tag = child_route.keyword.lower().strip()
 
-        self.chain = create_experiment_runnable(self.session.experiment, self.session)
+        if self.child_chains and not self.default_child_chain:
+            self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
+
+        self.chain = create_experiment_runnable(self.experiment, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-    def _call_predict(self, input_str, save_input_to_history=True):
+    def _call_predict(self, input_str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         if self.child_chains:
-            chain = self._get_child_chain(input_str)
+            tag, chain = self._get_child_chain(input_str, attachments)
         else:
-            chain = self.chain
+            tag, chain = None, self.chain
         result = chain.invoke(
             input_str,
             config={
                 "configurable": {
                     "save_input_to_history": save_input_to_history,
+                    "experiment_tag": tag,
                 }
             },
+            attachments=attachments,
         )
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
@@ -85,7 +112,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_child_chain(self, input_str):
+    def _get_child_chain(self, input_str: str, attachments: list["Attachment"] | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(
             input_str,
             config={
@@ -94,14 +121,16 @@ class TopicBot:
                     "save_output_to_history": False,
                 }
             },
+            attachments=attachments,
         )
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
 
+        keyword = result.output.lower().strip()
         try:
-            return self.child_chains[result.output.lower().strip()]
+            return keyword, self.child_chains[keyword]
         except KeyError:
-            return self.default_child_chain or self.child_chains.values()[0]
+            return self.default_tag, self.default_child_chain
 
     def fetch_and_clear_token_count(self):
         safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
@@ -115,7 +144,7 @@ class TopicBot:
             bot.output_tokens = 0
         return input_tokens, output_tokens
 
-    def process_input(self, user_input: str, save_input_to_history=True):
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         # human safety layers
         for safety_bot in self.safety_bots:
             if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
@@ -123,7 +152,7 @@ class TopicBot:
                 notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                 return self._get_safe_response(safety_bot.safety_layer)
 
-        response = self._call_predict(user_input, save_input_to_history)
+        response = self._call_predict(user_input, save_input_to_history=save_input_to_history, attachments=attachments)
 
         # ai safety layers
         for safety_bot in self.safety_bots:

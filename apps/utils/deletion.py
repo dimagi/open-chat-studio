@@ -1,8 +1,81 @@
+from collections import Counter
+from functools import reduce
+from operator import or_
 from typing import Any
 
 from django.contrib.admin.utils import NestedObjects
-from django.db import router
+from django.db import models, router, transaction
 from django.db.models.deletion import get_candidate_relations_to_delete
+from field_audit.field_audit import get_audited_models
+
+
+def delete_object_with_auditing_of_related_objects(obj):
+    """Deletes the given object and its related objects, auditing the deletion of each object.
+
+    Args:
+        obj: The object to delete.
+    """
+    from field_audit.models import AuditAction, AuditingManager
+
+    collector = NestedObjects(using="default")
+    collector.collect([obj])
+
+    models_to_delete = set(collector.data)
+
+    updates_not_part_of_delete = {}
+    if collector.field_updates:
+        for (field, value), instances_list in collector.field_updates.items():
+            model = field.model
+            if model in models_to_delete or model._meta.auto_created or model not in get_audited_models():
+                continue
+            updates_not_part_of_delete[(field, value)] = instances_list
+
+    counter = Counter()
+    with transaction.atomic():
+        _perform_updates_for_delete(updates_not_part_of_delete)
+
+        for model, instances in reversed(collector.data.items()):
+            if model._meta.auto_created:
+                continue
+
+            if len(instances) == 1:
+                list(instances)[0].delete()
+                counter[model._meta.label] += 1
+                continue
+
+            audit_kwargs = {}
+            if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
+                audit_kwargs["audit_action"] = AuditAction.AUDIT
+
+            _, stats = model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
+            counter.update(stats)
+    return dict(counter)
+
+
+def _perform_updates_for_delete(updates_not_part_of_delete):
+    """Copied from django.db.models.deletion.Collector.delete()
+    to perform updates for objects that are not getting deleted but are affected by the delete operation.
+    e.g. cascading updates to related objects that are not being deleted."""
+    from field_audit.models import AuditAction
+
+    for (field, value), instances_list in updates_not_part_of_delete.items():
+        updates = []
+        objs = []
+        for instances in instances_list:
+            if isinstance(instances, models.QuerySet) and instances._result_cache is None:
+                updates.append(instances)
+            else:
+                objs.extend(instances)
+        if updates:
+            combined_updates = reduce(or_, updates)
+
+            # hack to give the queryset the auditing update method
+            combined_updates.update = field.model.objects.update
+            combined_updates.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
+        if objs:
+            model = objs[0].__class__
+            objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
+            objects_filter.update(**{field.name: value}, audit_action=AuditAction.AUDIT)
 
 
 def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list[Any]]:

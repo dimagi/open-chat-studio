@@ -1,6 +1,6 @@
 import json
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -45,7 +45,7 @@ class TestTwilio:
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(json.loads(message))
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
-        assert whatsapp_message.chat_id == whatsapp_message.from_
+        assert whatsapp_message.participant_id == "+27456897512"
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None
@@ -58,12 +58,13 @@ class TestTwilio:
         ("incoming_message", "message_type"),
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "audio")],
     )
-    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
+    @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
+    @patch("apps.chat.channels.WhatsappChannel._get_experiment_response")
     def test_twilio_uses_whatsapp_channel_implementation(
         self,
         get_llm_response_mock,
@@ -82,7 +83,7 @@ class TestTwilio:
             get_llm_response_mock.return_value = "Hi"
             get_voice_transcript_mock.return_value = "Hi"
 
-            handle_twilio_message(message_data=incoming_message)
+            handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
 
             if message_type == "text":
                 send_text_message.assert_called()
@@ -97,9 +98,9 @@ class TestTurnio:
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)
-        assert message.chat_id == "27456897512"
+        assert message.participant_id == "27456897512"
         if message_type == "text":
-            assert message.body == "Hi there!"
+            assert message.message_text == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT
         else:
             assert message.media_id == "180e1c3f-ae50-481b-a9f0-7c698233965f"
@@ -110,15 +111,15 @@ class TestTurnio:
         ("incoming_message", "message_type"),
         [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "audio")],
     )
-    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_llm_response")
+    @patch("apps.chat.channels.WhatsappChannel._get_experiment_response")
     def test_turnio_whatsapp_channel_implementation(
         self,
-        _get_llm_response,
+        _get_experiment_response,
         send_text_message,
         send_voice_message,
         get_voice_transcript_mock,
@@ -129,7 +130,7 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        _get_llm_response.return_value = "Hi"
+        _get_experiment_response.return_value = "Hi"
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":

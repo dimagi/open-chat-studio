@@ -28,27 +28,24 @@
     </a>
   </li>
 </ul>
-<li class="menu-title">
-  <span>{% translate "Teams" %}</span>
-</li>
-<ul class="menu-list">
-  <li>
-    <a href="{% url 'teams:manage_teams' %}" {% if 'teams' in request.path %}class="active"{% endif %}>
-      <i class="fa fa-group h-4 w-4"></i>
-      {% translate "Teams" %}
-    </a>
-  </li>
-</ul>
-{% if user.is_superuser %}
+{% if user.is_staff or user.is_superuser %}
   <li class="menu-title">
-    <span>{% translate "Admin" %}</span>
+    <span>{% translate "Global Admin" %}</span>
   </li>
   <ul class="menu-list">
     <li>
-      <a href="{% url 'support:hijack_user' %}" {% if active_tab == 'support' %}class="active"{% endif %}>
-        <i class="fa fa-user-secret h-4 w-4"></i>
-        {% translate "Impersonate a User" %}
+      <a href="{% url 'ocs_admin:home' %}" {% if active_tab == 'admin' %}class="active"{% endif %}>
+        <i class="fa fa-bar-chart-o h-4 w-4"></i>
+        {% translate "Admin" %}
       </a>
     </li>
+    {% if user.is_superuser %}
+      <li>
+        <a href="{% url 'support:hijack_user' %}" {% if active_tab == 'support' %}class="active"{% endif %}>
+          <i class="fa fa-user-secret h-4 w-4"></i>
+          {% translate "Impersonate a User" %}
+        </a>
+      </li>
+    {% endif %}
   </ul>
 {% endif %}

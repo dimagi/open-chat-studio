@@ -15,12 +15,9 @@ def home(request):
         else:
             messages.info(
                 request,
-                _(
-                    "Teams are enabled but you have no teams. "
-                    "Create a team below to access the rest of the dashboard."
-                ),
+                _("You are not a member of any teams. Create a new one to get started."),
             )
-            return HttpResponseRedirect(reverse("teams:manage_teams"))
+            return HttpResponseRedirect(reverse("teams:create_team"))
     else:
         return render(request, "web/landing_page.html")
 

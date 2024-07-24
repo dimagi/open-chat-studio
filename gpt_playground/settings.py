@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
-import warnings
 from pathlib import Path
 
 import environ
@@ -33,6 +32,7 @@ SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Application definition
 
@@ -70,15 +70,17 @@ THIRD_PARTY_APPS = [
     "django_tables2",
     "field_audit",
     "taggit",
+    "tz_detect",
 ]
 
 PROJECT_APPS = [
-    "apps.users.apps.UserConfig",
-    "apps.api.apps.APIConfig",
+    "apps.audit",
+    "apps.users",
+    "apps.api",
     "apps.chat",
     "apps.experiments",
     "apps.web",
-    "apps.teams.apps.TeamConfig",
+    "apps.teams",
     "apps.channels",
     "apps.service_providers",
     "apps.analysis",
@@ -88,6 +90,8 @@ PROJECT_APPS = [
     "apps.events",
     "apps.annotations",
     "apps.pipelines",
+    "apps.slack",
+    "apps.participants",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
@@ -110,7 +114,9 @@ MIDDLEWARE = [
     "hijack.middleware.HijackUserMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "field_audit.middleware.FieldAuditMiddleware",
+    "apps.audit.middleware.AuditTransactionMiddleware",
     "apps.web.htmx_middleware.HtmxMessageMiddleware",
+    "tz_detect.middleware.TimezoneMiddleware",
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -138,6 +144,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "apps.web.context_processors.project_meta",
                 "apps.teams.context_processors.team",
+                "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
             ],
@@ -272,45 +279,36 @@ MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
-if AWS_ACCESS_KEY_ID:
-    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
-    AWS_S3_REGION = env("AWS_S3_REGION", default=None)
-    WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default="")
-    if not WHATSAPP_S3_AUDIO_BUCKET:
-        # try legacy env var
-        # remove this after 2024/05/01
-        WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_AWS_AUDIO_BUCKET", default="")
-        if WHATSAPP_S3_AUDIO_BUCKET:
-            warnings.warn(
-                "WHATSAPP_AWS_AUDIO_BUCKET is deprecated, please use WHATSAPP_S3_AUDIO_BUCKET instead",
-                DeprecationWarning,
-            )
-        else:
-            WHATSAPP_S3_AUDIO_BUCKET = "ocs-whatsapp-voice"
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_S3_REGION = env("AWS_S3_REGION", default=None)
+WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default=None)
 
-    USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
-    if USE_S3_STORAGE:
-        # match names in django-storages
-        AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
-        AWS_S3_REGION_NAME = AWS_S3_REGION
+USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
+if USE_S3_STORAGE:
+    # match names in django-storages
+    AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
+    AWS_S3_REGION_NAME = AWS_S3_REGION
 
-        # use private storage by default
-        STORAGES["default"] = {
-            "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
-            "OPTIONS": {
-                "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME", default="ocs-resources"),
-                "location": "resources",
-            },
-        }
+    # use private storage by default
+    STORAGES["default"] = {
+        "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
+        "OPTIONS": {
+            "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
+            "location": "resources",
+        },
+    }
 
-        # public storge for media files e.g. user profile pictures
-        AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME", default="ocs-media")
-        PUBLIC_MEDIA_LOCATION = "media"
-        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-        STORAGES["public"] = {
-            "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
-            "OPTIONS": {"bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME, "location": PUBLIC_MEDIA_LOCATION},
-        }
+    # public storge for media files e.g. user profile pictures
+    AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
+    PUBLIC_MEDIA_LOCATION = "media"
+    MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+    STORAGES["public"] = {
+        "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
+        "OPTIONS": {
+            "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
+            "location": PUBLIC_MEDIA_LOCATION,
+        },
+    }
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -329,8 +327,13 @@ SITE_ID = 1
 
 # DRF config
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["apps.api.permissions.IsAuthenticatedOrHasUserAPIKey"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.api.permissions.ApiKeyAuthentication",
+        "apps.api.permissions.BearerTokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
@@ -339,19 +342,11 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Dimagi Chatbots",
     "DESCRIPTION": "Experiments with AI, GPT and LLMs",
-    "VERSION": "0.1.0",
+    "VERSION": "1",
     "SERVE_INCLUDE_SCHEMA": False,
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
-    "APPEND_COMPONENTS": {
-        "securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "Authorization"}}
-    },
-    "SECURITY": [
-        {
-            "ApiKeyAuth": [],
-        }
-    ],
 }
 
 # Celery setup (using redis)
@@ -362,7 +357,8 @@ elif "REDIS_TLS_URL" in env:
 else:
     REDIS_HOST = env("REDIS_HOST", default="localhost")
     REDIS_PORT = env("REDIS_PORT", default="6379")
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+    REDIS_SCHEME = "rediss" if env.bool("REDIS_USE_TLS", False) else "redis"
+    REDIS_URL = f"{REDIS_SCHEME}://{REDIS_HOST}:{REDIS_PORT}/0"
 
 if REDIS_URL.startswith("rediss"):
     REDIS_URL = f"{REDIS_URL}?ssl_cert_reqs=none"
@@ -434,7 +430,15 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         organization_slug=TASKBADGER_ORG,
         project_slug=TASKBADGER_PROJECT,
         token=TASKBADGER_API_KEY,
-        systems=[CelerySystemIntegration()],
+        systems=[
+            CelerySystemIntegration(
+                excludes=[
+                    # ignore these since they execute often and fire other tasks that we already track
+                    "apps.events.tasks.enqueue_static_triggers",
+                    "apps.events.tasks.enqueue_timed_out_events",
+                ]
+            )
+        ],
     )
 
 LOGGING = {
@@ -459,6 +463,8 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
         },
+        "httpx": {"handlers": ["console"], "level": "WARN"},
+        "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
     },
 }
 
@@ -487,9 +493,6 @@ DJANGO_TABLES2_ROW_ATTRS = {
 # This is only used for development purposes
 SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 
-# Encryption
-CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
-
 # Taggit
 TAGGIT_CASE_INSENSITIVE = True
 
@@ -502,3 +505,41 @@ DOCUMENTATION_LINKS = {
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
+
+# Django Field Audit
+FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
+FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
+    "account_reset_password_from_key",
+]
+FIELD_AUDIT_REQUEST_ID_HEADERS = [
+    "X-Request-ID",  # Heroku
+    "X-Amzn-Trace-Id",  # Amazon
+    "traceparent",  # W3C Trace Context (Google)
+]
+TEST_NON_SERIALIZED_APPS = [
+    "field_audit",
+]
+
+# tz_detect
+TZ_DETECT_COUNTRIES = ["US", "IN", "GB", "ZA", "KE"]
+
+# slack
+SLACK_CLIENT_ID = env("SLACK_CLIENT_ID", default="")
+SLACK_CLIENT_SECRET = env("SLACK_CLIENT_SECRET", default="")
+SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET", default="")
+SLACK_SCOPES = [
+    "channels:history",
+    "channels:join",
+    "channels:read",
+    "chat:write",
+    "chat:write.public",
+    "groups:history",
+    "groups:read",
+    "im:history",
+    "im:read",
+    "mpim:history",
+    "mpim:read",
+    "users.profile:read",
+]
+SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
+SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET

@@ -10,11 +10,11 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import SearchVector
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.db.models import Case, Count, IntegerField, Q, When
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -29,19 +29,19 @@ from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
+from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.channels import WebChannel
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
-    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.events.tables import (
     EventsTable,
 )
-from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.decorators import experiment_session_view, set_session_access_cookie, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
@@ -52,16 +52,27 @@ from apps.experiments.forms import (
     SurveyCompletedForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
-from apps.experiments.tables import ExperimentSessionsTable, ExperimentTable
+from apps.experiments.models import (
+    AgentTools,
+    Experiment,
+    ExperimentSession,
+    SessionStatus,
+    SyntheticVoice,
+)
+from apps.experiments.tables import (
+    ChildExperimentRoutesTable,
+    ExperimentSessionsTable,
+    ExperimentTable,
+    ParentExperimentRoutesTable,
+)
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
+from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.users.models import CustomUser
 
 
 @login_and_team_required
@@ -92,7 +103,13 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
         query_set = Experiment.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query_set = query_set.annotate(document=SearchVector("name", "description")).filter(document=search)
+            search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
+            search_query = SearchQuery(search)
+            query_set = (
+                query_set.annotate(document=search_vector, rank=SearchRank(search_vector, search_query))
+                .filter(Q(document=search_query) | Q(owner__username__icontains=search))
+                .order_by("-rank")
+            )
         return query_set
 
 
@@ -104,8 +121,10 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
-            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
+        query_set = (
+            ExperimentSession.objects.with_last_message_created_at()
+            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .exclude(experiment_channel__platform=ChannelPlatform.API)
         )
         tags_query = self.request.GET.get("tags")
         if tags_query:
@@ -116,8 +135,16 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        Use {source_material} to place source material in the prompt. Use {participant_data} to place participant
-        data in the prompt.
+        <div class="tooltip" data-tip="
+            Available variables to include in your prompt: {source_material}, {participant_data}, and
+            {current_datetime}.
+            {source_material} should be included when there is source material linked to the experiment.
+            {participant_data} is optional.
+            {current_datetime} is only required when the bot is using a tool.
+        ">
+            <i class="text-xs fa fa-circle-question">
+            </i>
+        </div>
     """
     type = forms.ChoiceField(
         choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
@@ -127,6 +154,7 @@ class ExperimentForm(forms.ModelForm):
     prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
 
     class Meta:
         model = Experiment
@@ -141,7 +169,6 @@ class ExperimentForm(forms.ModelForm):
             "prompt_text",
             "input_formatter",
             "safety_layers",
-            "tools_enabled",
             "conversational_consent_enabled",
             "source_material",
             "seed_message",
@@ -150,9 +177,9 @@ class ExperimentForm(forms.ModelForm):
             "consent_form",
             "voice_provider",
             "synthetic_voice",
-            "no_activity_config",
             "safety_violation_notification_emails",
             "voice_response_behaviour",
+            "tools",
         ]
         labels = {
             "source_material": "Inline Source Material",
@@ -181,7 +208,6 @@ class ExperimentForm(forms.ModelForm):
         self.fields["pre_survey"].queryset = team.survey_set
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
-        self.fields["no_activity_config"].queryset = team.noactivitymessageconfig_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
 
         # Alpine.js bindings
@@ -197,6 +223,7 @@ class ExperimentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+
         errors = {}
         bot_type = cleaned_data["type"]
         if bot_type == "llm":
@@ -229,11 +256,18 @@ class ExperimentForm(forms.ModelForm):
 
 def _validate_prompt_variables(form_data):
     required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
-    available_variables = set(["participant_data"])
+    available_variables = set(["participant_data", "current_datetime"])
     if form_data.get("source_material"):
         available_variables.add("source_material")
+
+    if form_data.get("tools"):
+        if "current_datetime" not in required_variables:
+            available_variables.remove("current_datetime")
+        # if there are "tools" then current_datetime is always required
+        required_variables.add("current_datetime")
+
     missing_vars = required_variables - available_variables
-    known_vars = {"source_material", "participant_data"}
+    known_vars = {"source_material", "participant_data", "current_datetime"}
     if missing_vars:
         errors = []
         unknown_vars = missing_vars - known_vars
@@ -241,7 +275,10 @@ def _validate_prompt_variables(form_data):
             errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
             missing_vars -= unknown_vars
         if missing_vars:
-            errors.append(f"Prompt expects {', '.join(missing_vars)} but it is not provided.")
+            errors.append(
+                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
+                "usage."
+            )
         raise forms.ValidationError({"prompt_text": errors})
 
 
@@ -261,6 +298,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "button_text": self.button_title,
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
+                "available_tools": AgentTools.choices,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -323,6 +361,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
         if file_formset:
             files = file_formset.save(self.request)
             self.object.files.set(files)
+
         return HttpResponseRedirect(self.get_success_url())
 
     def form_invalid(self, form, file_formset):
@@ -338,6 +377,10 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial = super().get_initial()
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        return response
 
 
 def _get_voice_provider_alpine_context(request):
@@ -395,9 +438,13 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    user_sessions = ExperimentSession.objects.with_last_message_created_at().filter(
-        participant__user=request.user,
-        experiment=experiment,
+    user_sessions = (
+        ExperimentSession.objects.with_last_message_created_at()
+        .filter(
+            participant__user=request.user,
+            experiment=experiment,
+        )
+        .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
@@ -418,11 +465,12 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platforms": available_platforms,
             "platform_forms": platform_forms,
             "channels": channels,
-            "available_tags": experiment.team.tag_set.all(),
+            "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
             "filter_tags_url": reverse(
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
             **_get_events_context(experiment, team_slug),
+            **_get_routes_context(experiment, team_slug),
         },
     )
 
@@ -464,6 +512,15 @@ def _get_events_context(experiment: Experiment, team_slug: str):
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
 
 
+def _get_routes_context(experiment: Experiment, team_slug: str):
+    parent_links = experiment.parent_links.all()
+    return {
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.all()),
+        "parent_routes_table": ParentExperimentRoutesTable(parent_links),
+        "can_make_child_routes": len(parent_links) == 0,
+    }
+
+
 @login_and_team_required
 @permission_required("channels.add_experimentchannel", raise_exception=True)
 def create_channel(request, team_slug: str, experiment_id: int):
@@ -484,7 +541,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         try:
@@ -497,9 +554,13 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
         form.save(experiment, config_data)
         if extra_form:
-            message = extra_form.get_success_message(channel=form.instance)
-            if message:
-                messages.info(request, message)
+            try:
+                extra_form.post_save(channel=form.instance)
+            except ExperimentChannelException as e:
+                messages.error(request, "Error saving channel: " + str(e))
+            else:
+                if message := extra_form.get_success_message(channel=form.instance):
+                    messages.info(request, message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
@@ -528,7 +589,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
             if extra_form.is_valid():
                 config_data = extra_form.cleaned_data
             else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_text()))
+                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         platform = ChannelPlatform(form.cleaned_data["platform"])
@@ -545,77 +606,20 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
-def _start_experiment_session(
-    experiment: Experiment,
-    experiment_channel: ExperimentChannel,
-    participant_identifier: str,
-    participant_user: CustomUser | None = None,
-    session_status: SessionStatus = SessionStatus.ACTIVE,
-) -> ExperimentSession:
-    if not participant_identifier and not participant_user:
-        raise ValueError("Either participant_identifier or participant_user must be specified!")
-
-    if participant_user and participant_identifier != participant_user.email:
-        # This should technically never happen, since we disable the input for logged in users
-        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
-
-    with transaction.atomic():
-        try:
-            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
-            if participant_user and participant.user is None:
-                # If a participant becomes a user, we must reconcile the user and participant
-                participant.user = participant_user
-                participant.save()
-        except Participant.DoesNotExist:
-            participant = Participant.objects.create(
-                user=participant_user,
-                identifier=participant_identifier,
-                team=experiment.team,
-            )
-        session = ExperimentSession.objects.create(
-            team=experiment.team,
-            experiment=experiment,
-            llm=experiment.llm,
-            experiment_channel=experiment_channel,
-            status=session_status,
-            participant=participant,
-        )
-    if participant.experimentsession_set.count() == 1:
-        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
-    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
-    return _check_and_process_seed_message(session)
-
-
-def _check_and_process_seed_message(session: ExperimentSession):
-    if session.experiment.seed_message:
-        session.seed_task_id = get_response_for_webchat_task.delay(
-            session.id, message_text=session.experiment.seed_message
-        ).task_id
-        session.save()
-    return session
-
-
 @require_POST
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_channel = _ensure_experiment_channel_exists(
-        experiment=experiment, platform="web", name=f"{experiment.id}-web"
-    )
-    session = _start_experiment_session(
+
+    session = WebChannel.start_new_session(
         experiment,
-        experiment_channel=experiment_channel,
         participant_user=request.user,
         participant_identifier=request.user.email,
+        timezone=request.session.get("detected_tz", None),
     )
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
     )
-
-
-def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
-    channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
-    return channel
 
 
 @login_and_team_required
@@ -637,12 +641,31 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
-    message_text = request.POST["message"]
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
-    result = get_response_for_webchat_task.delay(session.id, message_text)
+
+    message_text = request.POST["message"]
+    uploaded_files = request.FILES
+    attachments = []
+    created_files = []
+    for resource_type in ["code_interpreter", "file_search"]:
+        if resource_type not in uploaded_files:
+            continue
+
+        tool_resource, _created = ChatAttachment.objects.get_or_create(
+            chat_id=session.chat_id,
+            tool_type=resource_type,
+        )
+        for uploaded_file in uploaded_files.getlist(resource_type):
+            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            attachments.append({"type": resource_type, "file_id": new_file.id})
+            created_files.append(new_file)
+
+        tool_resource.files.add(*created_files)
+
+    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
@@ -651,6 +674,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
             "session": session,
             "message_text": message_text,
             "task_id": result.task_id,
+            "created_files": created_files,
         },
     )
 
@@ -723,20 +747,17 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            experiment_channel = _ensure_experiment_channel_exists(
-                experiment=experiment, platform="web", name=f"{experiment.id}-web"
-            )
             if consent.capture_identifier:
                 identifier = form.cleaned_data.get("identifier", None)
             else:
                 # The identifier field will be disabled, so we must generate one
                 identifier = user.email if user else str(uuid.uuid4())
 
-            session = _start_experiment_session(
+            session = WebChannel.start_new_session(
                 experiment,
-                experiment_channel=experiment_channel,
                 participant_user=user,
                 participant_identifier=identifier,
+                timezone=request.session.get("detected_tz", None),
             )
             return _record_consent_and_redirect(request, team_slug, session)
 
@@ -784,12 +805,11 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
                 with transaction.atomic():
-                    channel = _ensure_experiment_channel_exists(experiment, platform="web", name=f"{experiment.id}-web")
-                    session = _start_experiment_session(
+                    session = WebChannel.start_new_session(
                         experiment=experiment,
-                        experiment_channel=channel,
                         participant_identifier=post_form.cleaned_data["email"],
                         session_status=SessionStatus.SETUP,
+                        timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
                     send_experiment_invitation(session)
@@ -825,7 +845,7 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
 @permission_required("experiments.invite_participants", raise_exception=True)
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, public_id=session_id)
+    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
     send_experiment_invitation(session)
     return TemplateResponse(
         request,
@@ -847,7 +867,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
     response = HttpResponseRedirect(
         reverse(
             redirct_url_name,
-            args=[team_slug, experiment_session.experiment.public_id, experiment_session.public_id],
+            args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
     return set_session_access_cookie(response, experiment_session)
@@ -856,7 +876,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, public_id=session_id)
+    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
     consent = experiment.consent_form
 
     initial = {
@@ -871,7 +891,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            _check_and_process_seed_message(experiment_session)
+            WebChannel.check_and_process_seed_message(experiment_session)
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:
@@ -971,7 +991,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "survey_link": survey_link,
             "survey_text": survey_text,
             "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         },
     )
 
@@ -1011,7 +1031,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 (gettext("Experiment"), experiment.name),
                 (gettext("Platform"), session.get_platform_name),
             ],
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
             "event_triggers": [
                 {
                     "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
@@ -1028,7 +1048,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
 def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
-    query = ExperimentSession.objects.exclude(public_id=session_id).filter(experiment=experiment)
+    query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)
     if request.GET.get("dir", "next") == "next":
         next_session = query.filter(created_at__lte=session.created_at).first()
     else:
@@ -1038,4 +1058,17 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
         messages.warning(request, "No more sessions to paginate")
         return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
 
-    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.public_id)
+    return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
+
+
+@login_and_team_required
+@permission_required("chat.view_chatattachment")
+def download_file(request, team_slug: str, session_id: int, pk: int):
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404()

@@ -11,7 +11,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 @pytest.fixture()
 def session():
     session = ExperimentSessionFactory()
-    participant = Participant.objects.create(team=session.team, identifier="test@test.com")
+    participant = Participant.objects.create(team=session.team, identifier="test@test.com", platform="web")
     session.participant = participant
     session.save()
     return session
@@ -74,7 +74,7 @@ def test_access_cookie_not_set_on_session_start_get(client, session):
     response = client.get(
         reverse(
             "experiments:start_session_from_invite",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         ),
     )
     assert response.status_code == 200
@@ -86,7 +86,7 @@ def test_access_cookie_not_set_on_session_start_with_inavalid_form(client, sessi
     response = client.post(
         reverse(
             "experiments:start_session_from_invite",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         ),
         data={},
     )
@@ -98,7 +98,7 @@ def _start_session(client, session):
     response = client.post(
         reverse(
             "experiments:start_session_from_invite",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         ),
         data={
             "consent_agreement": "on",
@@ -112,12 +112,12 @@ def _start_session(client, session):
     if session.experiment.pre_survey:
         next_url = reverse(
             "experiments:experiment_pre_survey",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         )
     else:
         next_url = reverse(
             "experiments:experiment_chat",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.public_id],
+            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         )
     assert response.headers["Location"] == next_url
 

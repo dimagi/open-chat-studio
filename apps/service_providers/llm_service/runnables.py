@@ -1,20 +1,21 @@
+import functools
 import logging
 import re
 import time
-from abc import ABC
 from operator import itemgetter
 from time import sleep
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import openai
-from django.utils import timezone
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
+from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+from langchain_core.prompt_values import PromptValue
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -24,10 +25,17 @@ from langchain_core.runnables import (
     ensure_config,
 )
 
-from apps.chat.agent.tools import get_tools
-from apps.chat.conversation import compress_chat_history
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.files.models import File
+from apps.service_providers.llm_service.state import (
+    AssistantExperimentState,
+    ChatExperimentState,
+    ChatRunnableState,
+)
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import Attachment
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +49,18 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession) -> "BaseExperimentRunnable":
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
-        return AssistantExperimentRunnable(experiment=experiment, session=session)
+        return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
+    state = ChatExperimentState(experiment=experiment, session=session)
     if experiment.tools_enabled:
-        return AgentExperimentRunnable(experiment=experiment, session=session)
+        return AgentExperimentRunnable(state=state)
 
-    return SimpleExperimentRunnable(experiment=experiment, session=session)
+    return SimpleExperimentRunnable(state=state)
 
 
 class ChainOutput(Serializable):
@@ -75,41 +84,13 @@ class ChainOutput(Serializable):
         return ["ocs", "schema", "chain_output"]
 
 
-class BaseExperimentRunnable(RunnableSerializable[dict, ChainOutput], ABC):
-    experiment: Experiment
-    session: ExperimentSession
-    input_key: str = "input"
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    @property
-    def llm_service(self):
-        return self.experiment.get_llm_service()
-
-    @property
-    def callback_handler(self):
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        return self.llm_service.get_callback_handler(model)
-
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-        )
-
-    def format_input(self, input: dict):
-        if self.experiment.input_formatter:
-            input[self.input_key] = self.experiment.input_formatter.format(input=input[self.input_key])
-        return input
-
-
-class ExperimentRunnable(BaseExperimentRunnable):
+class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
+    state: ChatRunnableState
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
     check_every_ms: int = 1000
+    input_key: str = "input"
 
     class Config:
         arbitrary_types_allowed = True
@@ -118,16 +99,16 @@ class ExperimentRunnable(BaseExperimentRunnable):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.callback_handler
+    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
+        callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        self._populate_memory()
+        self._populate_memory(input)
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(input, ChatMessageType.HUMAN)
+            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = self._get_output_check_cancellation(input, config)
         result = ChainOutput(
@@ -137,7 +118,8 @@ class ExperimentRunnable(BaseExperimentRunnable):
             raise GenerationCancelled(result)
 
         if config.get("configurable", {}).get("save_output_to_history", True):
-            self._save_message_to_history(output, ChatMessageType.AI)
+            experiment_tag = config.get("configurable", {}).get("experiment_tag")
+            self.state.save_message_to_history(output, ChatMessageType.AI, experiment_tag)
         return result
 
     def _get_output_check_cancellation(self, input, config):
@@ -163,66 +145,55 @@ class ExperimentRunnable(BaseExperimentRunnable):
 
         self.last_cancel_check = time.time()
 
-        self.session.chat.refresh_from_db(fields=["metadata"])
-        # temporary mechanism to cancel the chat
-        # TODO: change this to something specific to the current chat message
-        if self.session.chat.metadata.get("cancelled", False):
-            self.cancelled = True
-
+        self.cancelled = self.state.check_cancellation()
         return self.cancelled
-
-    @property
-    def source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
-
-    @property
-    def participant_data(self):
-        return self.experiment.get_participant_data(self.session.participant) or ""
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
     @property
     def prompt(self):
-        current_datetime = timezone.now().strftime("%A, %d %B %Y %H:%M:%S %Z")
-        prompt = self.experiment.prompt_text + f"\nThe current datetime is {current_datetime}"
-        system_prompt = SystemMessagePromptTemplate.from_template(prompt)
         return ChatPromptTemplate.from_messages(
             [
-                system_prompt,
+                ("system", self.state.get_prompt()),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
         )
 
-    def _populate_memory(self):
-        # TODO: convert to use BaseChatMessageHistory object
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        messages = compress_chat_history(self.session.chat, model, self.experiment.max_token_limit)
-        self.memory.chat_memory.messages = messages
+    def _populate_memory(self, input: str):
+        input_messages = self.get_input_messages(input)
+        self.memory.chat_memory.messages = self.state.get_chat_history(input_messages)
 
-    def _save_message_to_history(self, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-        )
+    def get_input_messages(self, input: str) -> list[BaseMessage]:
+        """Return a list of messages which represent the fully populated LLM input.
+        This will be used during history compression.
+        """
+        raise NotImplementedError
 
 
 class SimpleExperimentRunnable(ExperimentRunnable):
-    def _build_chain(self) -> Runnable[dict[str, Any], str]:
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
+    def get_input_messages(self, input: str):
+        chain = self._input_chain()
+        return chain.invoke(input).to_messages()
+
+    def _build_chain(self):
+        return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
+
+    def _input_chain(self) -> Runnable[str, PromptValue]:
+        source_material = RunnableLambda(lambda x: self.state.get_source_material())
+        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
+        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
         return (
             {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
+            | RunnablePassthrough.assign(source_material=source_material)
+            | RunnablePassthrough.assign(participant_data=participant_data)
+            | RunnablePassthrough.assign(current_datetime=current_datetime)
             | RunnablePassthrough.assign(
                 history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
             )
-            | RunnableLambda(self.format_input)
+            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
             | self.prompt
-            | model
-            | StrOutputParser()
         )
 
 
@@ -230,15 +201,21 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def _parse_output(self, output):
         return output.get("output", "")
 
-    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        assert self.experiment.tools_enabled
-        model = self.llm_service.get_chat_model(self.experiment.llm, self.experiment.temperature)
-        tools = get_tools(self.session)
-        agent = (
-            RunnablePassthrough.assign(source_material=RunnableLambda(lambda x: self.source_material))
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: self.participant_data))
-            | RunnableLambda(self.format_input)
-            | create_tool_calling_agent(llm=model, tools=tools, prompt=self.prompt)
+    def _input_chain(self) -> Runnable[dict[str, Any], dict]:
+        source_material = RunnableLambda(lambda x: self.state.get_source_material())
+        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
+        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
+        return (
+            RunnablePassthrough.assign(source_material=source_material)
+            | RunnablePassthrough.assign(participant_data=participant_data)
+            | RunnablePassthrough.assign(current_datetime=current_datetime)
+            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
+        )
+
+    def _build_chain(self):
+        tools = self.state.get_tools()
+        agent = self._input_chain() | create_tool_calling_agent(
+            llm=self.state.get_chat_model(), tools=tools, prompt=self.prompt
         )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -253,45 +230,94 @@ class AgentExperimentRunnable(ExperimentRunnable):
         prompt = super().prompt
         return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
 
+    def get_input_messages(self, input: str):
+        chain = (
+            self._input_chain()
+            # Since it's hard to guess what the agent_scratchpad will look like, let's just assume its empty
+            | RunnablePassthrough.assign(agent_scratchpad=lambda x: [])
+            | self.prompt
+        )
+        chain = {"input": RunnablePassthrough()} | chain
+        return chain.invoke(input).to_messages()
 
-class AssistantExperimentRunnable(BaseExperimentRunnable):
+
+class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+    state: AssistantExperimentState
     input_key = "content"
 
     class Config:
         arbitrary_types_allowed = True
 
-    @property
-    def chat(self):
-        return self.session.chat
+    def invoke(
+        self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
+    ) -> ChainOutput:
+        resource_file_ids = self._upload_tool_resource_files(attachments)
+        message_attachments = []
+        for resource_name, openai_file_ids in resource_file_ids.items():
+            message_attachments.extend(
+                [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
+            )
 
-    def invoke(self, input: str, config: RunnableConfig | None = None) -> ChainOutput:
-        callback = self.callback_handler
+        callback = self.state.callback_handler
         config = ensure_config(config)
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        input_dict = {"content": input}
+        input_dict = {"content": input, "attachments": message_attachments}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            self._save_message_to_history(input, ChatMessageType.HUMAN)
+            chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            if resource_file_ids:
+                chat_message.metadata = chat_message.metadata | resource_file_ids
+                chat_message.save()
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.chat.get_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID)
+        thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
         if thread_id:
             input_dict["thread_id"] = thread_id
 
+        input_dict["instructions"] = self.state.get_assistant_instructions()
+
         response = self._get_response_with_retries(config, input_dict, thread_id)
         if not thread_id:
-            self.chat.set_metadata(self.chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
         output = response.return_values["output"]
-        self._save_message_to_history(output, ChatMessageType.AI)
+        self.state.save_message_to_history(output, ChatMessageType.AI)
 
         return ChainOutput(output=response.return_values["output"], prompt_tokens=0, completion_tokens=0)
 
+    def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
+        """Uploads the files in `attachments` to OpenAI
+
+        Params:
+            attachments - List of mappings between the resource type and the local file.
+            Example:
+                [{'code_interpreter': <File instance 1>}, {'code_interpreter': <File instance 2>}]
+
+        Returns a mapping of resource to OpenAI file ids. Example:
+            {'code_interpreter': ["file_id1", "file_id2"]}
+        """
+        from apps.assistants.sync import create_files_remote
+
+        resource_file_ids = {}
+        if not attachments:
+            return resource_file_ids
+
+        client = self.state.get_llm_service().get_raw_client()
+
+        for resource_name in ["file_search", "code_interpreter"]:
+            file_ids = [att.file_id for att in attachments if att.type == resource_name]
+            if resource_files := File.objects.filter(id__in=file_ids):
+                # Upload the files to OpenAI
+                openai_file_ids = create_files_remote(client, resource_files)
+                resource_file_ids[resource_name] = openai_file_ids
+        return resource_file_ids
+
     def _get_response_with_retries(self, config, input_dict, thread_id):
-        assistant = self.experiment.assistant.get_assistant()
-        assistant_runnable = RunnableLambda(self.format_input) | assistant
+        assistant = self.state.get_openai_assistant()
+        format_input = functools.partial(self.state.format_input, self.input_key)
+        assistant_runnable = RunnableLambda(format_input) | assistant
         for i in range(3):
             try:
                 response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)

@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+    .alertify .ajs-dialog {
+        @apply bg-white shadow-md rounded-lg;
+    }
+
+    .alertify .ajs-header {
+        @apply text-black font-bold bg-white border-b border-gray-300 rounded-t-lg;
+    }
+
+    .alertify .ajs-body {
+        @apply text-black;
+    }
+
+    .alertify .ajs-body .ajs-content .ajs-input {
+        @apply w-full m-1 p-2 border border-gray-300 rounded block;
+    }
+
+    .alertify .ajs-body .ajs-content p {
+        @apply m-0;
+    }
+
+    .alertify .ajs-footer {
+        @apply bg-white p-4 border-t border-gray-300 rounded-b-lg;
+    }
+
+    .alertify .ajs-footer .ajs-buttons .ajs-button {
+        @apply text-black font-bold uppercase bg-transparent border-none;
+    }
+
+    .alertify .ajs-footer .ajs-buttons .ajs-button.ajs-ok {
+        @apply text-blue-500;
+    }
+
+    .alertify-notifier .ajs-message {
+        @apply text-center border border-black rounded bg-white;
+    }
+
+    .alertify-notifier .ajs-message.ajs-success {
+        @apply text-success-content bg-success;
+    }
+
+    .alertify-notifier .ajs-message.ajs-error {
+        @apply text-error-content bg-error !important;
+    }
+
+    .alertify-notifier .ajs-message.ajs-warning {
+        @apply text-warning-content bg-warning;
+    }
+
+}

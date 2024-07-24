@@ -3,6 +3,6 @@
 import 'htmx.org';
 import './htmx';
 import './alpine';
-import './sweetalert2';
+import './alertify';
 import './tiktoken';
 import './tom-select';

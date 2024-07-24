@@ -48,8 +48,10 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "alertifyjs": "^1.14.0",
     "alpinejs": "^3.13.1",
     "axios": "^1.6.8",
+    "chart.js": "^4.4.3",
     "daisyui": "^4",
     "htmx.org": "^1.9.6",
     "js-cookie": "^3.0.5",
@@ -60,9 +62,8 @@
     "react-error-boundary": "^4.0.13",
     "reactflow": "^11.10.4",
     "short-unique-id": "^5.0.3",
-    "sweetalert2": "^11.10.5",
     "tailwindcss": "^3.3.3",
-    "zustand": "^4.5.2",
-    "tom-select": "^2.3.1"
+    "tom-select": "^2.3.1",
+    "zustand": "^4.5.2"
   }
 }

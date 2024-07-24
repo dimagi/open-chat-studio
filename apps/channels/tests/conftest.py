@@ -23,3 +23,15 @@ def sureadhere_provider():
         type=MessagingProviderType.sureadhere,
         config={"client_id": "123", "client_secret": "456", "base_url": "https://example.com"},
     )
+
+
+@pytest.fixture()
+def slack_provider():
+    return MessagingProviderFactory(
+        name="slack",
+        type=MessagingProviderType.slack,
+        config={
+            "slack_channel_id": "CHANNEL_ID",
+            "slack_installation_id": 1,
+        },
+    )

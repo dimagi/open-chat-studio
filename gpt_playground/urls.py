@@ -19,8 +19,9 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 from django.views.generic import RedirectView
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
+from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
 from apps.web.urls import team_urlpatterns as web_team_urls
@@ -39,13 +40,16 @@ team_urlpatterns = [
     path("assistants/", include("apps.assistants.urls")),
     path("pipelines/", include("apps.pipelines.urls")),
     path("files/", include("apps.files.urls")),
-    path("annotations/", include("apps.annotations.urls", namespace="annotations")),
+    path("annotations/", include("apps.annotations.urls")),
+    path("participants/", include("apps.participants.urls")),
+    path("slack/", include("apps.slack.urls")),
 ]
 
 urlpatterns = [
+    path("admin/", include("apps.admin.urls")),
     # redirect Django admin login to main login page
-    path("admin/login/", RedirectView.as_view(pattern_name="account_login")),
-    path("admin/", admin.site.urls),
+    path("django-admin/login/", RedirectView.as_view(pattern_name="account_login")),
+    path("django-admin/", admin.site.urls),
     path("i18n/", include("django.conf.urls.i18n")),
     path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django.contrib.sitemaps.views.sitemap"),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
@@ -54,15 +58,15 @@ urlpatterns = [
     path("users/", include("apps.users.urls")),
     path("teams/", include("apps.teams.urls")),
     path("", include("apps.web.urls")),
+    path("", include(slack_global_urls)),
     path("support/", include("apps.support.urls")),
     path("celery-progress/", include("celery_progress.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    # Optional UI - you may wish to remove one of these depending on your preference
-    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # hijack urls for impersonation
     path("hijack/", include("hijack.urls", namespace="hijack")),
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("api/", include("apps.api.urls", namespace="api")),
+    path("tz_detect/", include("tz_detect.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

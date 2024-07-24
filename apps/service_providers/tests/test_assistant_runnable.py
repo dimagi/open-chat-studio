@@ -1,7 +1,7 @@
 from contextlib import nullcontext as does_not_raise
 from typing import Literal
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import openai
 import pytest
@@ -10,14 +10,17 @@ from openai.types.beta.threads import Run
 from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
 
+from apps.channels.datamodels import Attachment
 from apps.chat.models import Chat
 from apps.service_providers.llm_service.runnables import (
     AssistantExperimentRunnable,
     GenerationCancelled,
     GenerationError,
 )
+from apps.service_providers.llm_service.state import AssistantExperimentState
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.langchain import mock_experiment_llm
 
 ASSISTANT_ID = "test_assistant_id"
@@ -30,6 +33,8 @@ def session():
     session = ExperimentSessionFactory.build(chat=chat)
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
+    session.get_participant_data = lambda *args, **kwargs: None
+    session.get_participant_timezone = lambda *args, **kwargs: ""
     return session
 
 
@@ -171,9 +176,51 @@ def test_assistant_runnable_cancels_existing_run(responses, exception, output, s
         cancel_run.assert_called_once()
 
 
+@pytest.mark.django_db()
+@patch("apps.assistants.sync.create_files_remote")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages, create_files_remote):
+    """Test that attachments are uploaded to OpenAI and that its remote file ids are stored on the chat message"""
+    session = ExperimentSessionFactory()
+    local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
+    session.experiment.assistant = local_assistant
+    create_files_remote.return_value = ["openai-file-1", "openai-file-2"]
+    files = FileFactory.create_batch(2)
+
+    chat = session.chat
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    list_messages.return_value = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
+    )
+
+    state = AssistantExperimentState(session.experiment, session)
+    assistant = AssistantExperimentRunnable(state=state)
+    attachments = [
+        Attachment(type="code_interpreter", file_id=files[0].id),
+        Attachment(type="file_search", file_id=files[1].id),
+    ]
+
+    result = assistant.invoke("test", attachments=attachments)
+    assert result.output == "ai response"
+    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    message = chat.messages.filter(message_type="human").first()
+    assert message.metadata == {
+        "file_search": ["openai-file-1", "openai-file-2"],
+        "code_interpreter": ["openai-file-1", "openai-file-2"],
+    }
+
+
 def _get_assistant_mocked_history_recording(session):
-    assistant = AssistantExperimentRunnable(experiment=session.experiment, session=session)
-    assistant.__dict__["_save_message_to_history"] = lambda *args, **kwargs: None
+    state = AssistantExperimentState(session.experiment, session)
+    assistant = AssistantExperimentRunnable(state=state)
+    state.save_message_to_history = Mock()
     return assistant
 
 

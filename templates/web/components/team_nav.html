@@ -36,13 +36,6 @@
           {% translate "Consent Forms" %}
         </a>
       </li>
-      <li>
-        <a href="{% url 'experiments:no_activity_home' request.team.slug %}"
-           {% if active_tab == 'no_activity_config' %}class="active"{% endif %}>
-          <i class="fa-solid fa-hourglass-end fa-fw"></i>
-          {% translate "No Activity Config" %}
-        </a>
-      </li>
       {% if perms.annotations.add_tag %}
         <li>
           <a href="{% url 'annotations:tag_home' request.team.slug %}"
@@ -54,6 +47,15 @@
       {% endif %}
     </ul>
   </li>
+  {% if perms.experiments.view_participant %}
+    <li>
+      <a href="{% url 'participants:participant_home' request.team.slug %}"
+         {% if active_tab == 'participants' %}class="active"{% endif %}>
+        <i class="fa fa-users" aria-hidden="true"></i></i>
+      {% translate "Participants" %}
+    </a>
+    </li>
+  {% endif %}
   <li>
     <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>
       <i class="fa fa-ruler fa-fw"></i>
@@ -78,16 +80,14 @@
       {% endif %}
     </li>
   {% endflag %}
-{#  <li>#}
-{#    <a href="{% url 'experiments:my_chats' request.team.slug %}" {% if active_tab == 'chat_home' %}class="active"{% endif %}>#}
-{#      <i class="fa fa-comments fa-fw"></i>#}
-{#      {% translate "Chats" %}#}
-{#    </a>#}
-{#  </li>#}
-  <li>
-    <a href="{% url 'single_team:manage_team' request.team.slug %}" {% if active_tab == 'manage-team' %}class="active"{% endif %}>
-      <i class="fa fa-gear fa-fw"></i>
-      {% translate "My Team" %}
-    </a>
-  </li>
+  {% flag "pipelines-v2" %}
+    <li>
+      {% if perms.pipelines.view_pipelines %}
+        <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
+          <i class="fa-solid fa-puzzle-piece"></i>
+          {% translate "Pipelines" %}<span class="badge badge-sm">new!</span>
+        </a>
+      {% endif %}
+    </li>
+  {% endflag %}
 {% endif %}

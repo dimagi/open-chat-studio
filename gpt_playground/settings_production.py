@@ -24,9 +24,11 @@ CSRF_COOKIE_SECURE = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
 
-ALLOWED_HOSTS = [
-    "*",  # update with your production hosts
-]
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+
+# this defaults to SECRET_KEY
+CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
 
 # Your email config goes here.
@@ -36,15 +38,16 @@ match EMAIL_BACKEND:
     case "anymail.backends.mailgun.EmailBackend":
         ANYMAIL = {
             "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
-            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default="chatbotmg.dimagi.com"),
+            "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
         }
     case "anymail.backends.amazon_ses.EmailBackend":
+        ses_params = {
+            "aws_access_key_id": env("AWS_SES_ACCESS_KEY", default=None),
+            "aws_secret_access_key": env("AWS_SES_SECRET_KEY", default=None),
+            "region_name": env("AWS_SES_REGION", default=None),
+        }
         ANYMAIL = {
-            "AMAZON_SES_CLIENT_PARAMS": {
-                "aws_access_key_id": env("AWS_SES_ACCESS_KEY", default=None),
-                "aws_secret_access_key": env("AWS_SES_SECRET_KEY", default=None),
-                "region_name": env("AWS_SES_REGION", default="us-east-1"),
-            },
+            "AMAZON_SES_CLIENT_PARAMS": dict(item for item in ses_params.items() if item[1]),
         }
     case _:
         raise Exception(f"Unknown email backend: {EMAIL_BACKEND}")
@@ -60,3 +63,11 @@ ADMINS = [
 # set these values if you want to subscribe people to a mailchimp list after they sign up.
 MAILCHIMP_API_KEY = env("MAILCHIMP_API_KEY", default=None)
 MAILCHIMP_LIST_ID = env("MAILCHIMP_LIST_ID", default=None)
+
+# Allow unacknowledged tasks to be rescheduled after 5 minutes
+# (the default is 1 hour). If this number is too low, a task may
+# get executed more than once at a time. The higher the number,
+# the longer it will take for a lost task to get rescheduled.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 60 * 5}
+# Reschedule un-acked tasks on worker failure (ie SIGKILL)
+CELERY_REJECT_ON_WORKER_LOST = True

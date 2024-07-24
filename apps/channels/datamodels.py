@@ -1,28 +1,26 @@
+import phonenumbers
 from pydantic import BaseModel, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
 
-class WebMessage(BaseModel):
-    """
-    A wrapper class for user messages coming from the UI. It's easier to pass this object to the WebChannel
-    and expose some attributes/methods to access chat specific data from the message. This follows a similar
-    pattern then that of other channels
-    """
+class Attachment(BaseModel):
+    file_id: int
+    type: str
 
+
+class BaseMessage(BaseModel):
+    participant_id: str
     message_text: str
-    chat_id: str
-
-    @property
-    def content(self) -> str:
-        return self.message_text
-
-
-class TelegramMessage(BaseModel):
-    chat_id: int
-    body: str | None
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    attachments: list[Attachment] = Field(default={})
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class TelegramMessage(BaseMessage):
     media_id: str | None
     content_type_unparsed: str | None = Field(default=None)
     message_id: int
@@ -36,8 +34,8 @@ class TelegramMessage(BaseModel):
     @staticmethod
     def parse(update_obj) -> "TelegramMessage":
         return TelegramMessage(
-            chat_id=update_obj.message.chat.id,
-            body=update_obj.message.text,
+            participant_id=str(update_obj.message.chat.id),
+            message_text=update_obj.message.text or "",
             content_type=update_obj.message.content_type,
             media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
             message_id=update_obj.message.message_id,
@@ -45,15 +43,12 @@ class TelegramMessage(BaseModel):
         )
 
 
-class TwilioMessage(BaseModel):
+class TwilioMessage(BaseMessage):
     """
     A wrapper class for user messages coming from the twilio
     """
 
-    from_: str
     to: str
-    body: str
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
@@ -67,14 +62,6 @@ class TwilioMessage(BaseModel):
         if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
 
-    @property
-    def chat_id(self) -> str:
-        return self.from_
-
-    @property
-    def message_text(self) -> str:
-        return self.body
-
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
@@ -82,36 +69,38 @@ class TwilioMessage(BaseModel):
         content_type = message_data.get("MediaContentType0")
 
         prefix_to_remove = f"{prefix}:"
+        platform = prefix_channel_map[prefix]
+        to = message_data["To"].removeprefix(prefix_to_remove)
+        if platform == ChannelPlatform.WHATSAPP:
+            # Parse the number to E164 format, since this is the format of numbers in the DB
+            # Normally they are already in this format, but this is just an extra layer of security
+            number_obj = phonenumbers.parse(to)
+            to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
         return TwilioMessage(
-            from_=message_data["From"].removeprefix(prefix_to_remove),
-            to=message_data["To"].removeprefix(prefix_to_remove),
-            body=message_data["Body"],
+            participant_id=message_data["From"].removeprefix(prefix_to_remove),
+            to=to,
+            message_text=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
-            platform=prefix_channel_map[prefix],
+            platform=platform,
         )
 
 
-class SureAdhereMessage(BaseModel):
+class SureAdhereMessage(BaseMessage):
     """
     A wrapper class for user messages coming from the sureadhere
     """
 
-    chat_id: int
-    message_text: str | None
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    content_type_unparsed: str | None = Field(default=None)
 
     @staticmethod
     def parse(message_data: dict) -> "SureAdhereMessage":
-        return SureAdhereMessage(chat_id=message_data["patient_id"], message_text=message_data["message_text"])
+        return SureAdhereMessage(participant_id=message_data["patient_id"], message_text=message_data["message_text"])
 
 
-class TurnWhatsappMessage(BaseModel):
-    from_number: str
+class TurnWhatsappMessage(BaseMessage):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
-    body: str
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
 
@@ -120,14 +109,6 @@ class TurnWhatsappMessage(BaseModel):
     def determine_content_type(cls, value):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
-
-    @property
-    def chat_id(self) -> str:
-        return self.from_number
-
-    @property
-    def message_text(self) -> str:
-        return self.body
 
     @staticmethod
     def parse(message_data: dict):
@@ -138,23 +119,20 @@ class TurnWhatsappMessage(BaseModel):
             body = message["text"]["body"]
 
         return TurnWhatsappMessage(
-            from_number=message_data["contacts"][0]["wa_id"],
-            body=body,
+            participant_id=message_data["contacts"][0]["wa_id"],
+            message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
         )
 
 
-class FacebookMessage(BaseModel):
+class FacebookMessage(BaseMessage):
     """
     A wrapper class for user messages coming from Facebook
     """
 
     page_id: str
-    user_id: str
-    message_text: str | None
-    content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     media_url: str | None = None
     content_type_unparsed: str | None = Field(default=None)
 
@@ -165,10 +143,6 @@ class FacebookMessage(BaseModel):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio":
             return MESSAGE_TYPES.VOICE
-
-    @property
-    def chat_id(self) -> str:
-        return self.user_id
 
     @staticmethod
     def parse(message_data: dict) -> "FacebookMessage":
@@ -183,7 +157,7 @@ class FacebookMessage(BaseModel):
             content_type = attachment["type"]
 
         return FacebookMessage(
-            user_id=message_data["sender"]["id"],
+            participant_id=message_data["sender"]["id"],
             page_id=page_id,
             message_text=message_data["message"].get("text", ""),
             media_url=media_url,
@@ -192,18 +166,7 @@ class FacebookMessage(BaseModel):
         )
 
 
-class ApiMessage(BaseModel):
-    """
-    A wrapper class for user messages coming from the API
-    """
-
-    participant_id: str
-    message: str
-
-    @property
-    def chat_id(self) -> str:
-        return self.participant_id
-
-    @property
-    def message_text(self) -> str:
-        return self.message
+class SlackMessage(BaseMessage):
+    channel_id: str
+    thread_ts: str
+    message_text: str

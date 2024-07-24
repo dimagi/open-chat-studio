@@ -14,6 +14,10 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
 
 
+class TagCategories(models.TextChoices):
+    BOT_RESPONSE = "bot_response", _("Bot Response")
+
+
 @audit_fields(
     "name",
     "slug",
@@ -22,12 +26,14 @@ from apps.users.models import CustomUser
 )
 class Tag(TagBase, BaseTeamModel):
     name = models.CharField(verbose_name=pgettext_lazy("A tag name", "name"), max_length=100)
-    created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    created_by = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
+    is_system_tag = models.BooleanField(default=False)
+    category = models.CharField(choices=TagCategories.choices, blank=True, default="")
 
     class Meta:
         verbose_name = _("Tag")
         verbose_name_plural = _("Tags")
-        unique_together = ("team", "name")
+        unique_together = ("team", "name", "is_system_tag", "category")
         ordering = ["name"]
 
     def get_absolute_url(self):
@@ -42,7 +48,7 @@ class Tag(TagBase, BaseTeamModel):
     "content_type",
 )
 class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
-    user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING)
+    user = models.ForeignKey("users.CustomUser", on_delete=models.DO_NOTHING, null=True, default=None)
     tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items", on_delete=models.CASCADE)
 
     class Meta:
@@ -83,13 +89,21 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     tags = TaggableManager(through=CustomTaggedItem)
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
-        for tag in tags:
-            self.tags.add(tag, through_defaults={"team": team, "user": added_by})
+        tag_objs = Tag.objects.filter(team=team, name__in=tags)
+        for tag in tag_objs:
+            self.add_tag(tag, team, added_by)
+
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
+        self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     @property
     def get_linked_tags(self):
         # return [{"user": item.user.username, "tag": item.tag.name} for item in self.tagged_items.all()]
         return [item.tag.name for item in self.tagged_items.all()]
+
+    @property
+    def get_system_tags(self):
+        return self.tags.filter(is_system_tag=True)
 
 
 class UserComment(BaseTeamModel):

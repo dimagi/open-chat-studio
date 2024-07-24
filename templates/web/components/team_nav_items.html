@@ -1,0 +1,34 @@
+{% load i18n %}
+{% load team_tags %}
+{% if team %}
+  {% if request.team_membership %}
+    <li>
+      <a href="{% url 'single_team:manage_team' team.slug %}">
+        <i class="fa fa-gear"></i>
+        {% translate "Team Settings" %}
+      </a>
+    </li>
+  {% endif %}
+  {% if other_teams %}
+    <li>
+      <details>
+        <summary>{% translate "Switch Team" %}</summary>
+        <ul>
+          {% for name, url in other_teams.items %}
+            <li>
+              <a href="{{ url }}"><i class="fa fa-arrow-right"></i>{{ name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+    </li>
+  {% endif %}
+{% endif %}
+{% if request.user.is_authenticated %}
+  <li>
+    <a href="{% url 'teams:create_team' %}">
+      <i class="fa fa-plus"></i>
+      {% translate "Add Team" %}
+    </a>
+  </li>
+{% endif %}
