@@ -1,6 +1,6 @@
 {% load chat_tags %}
 {% if not skip_render %}
-  <div class="chat-message-system flex flex-col"
+  <div class="chat-message-system flex"
        {% if not progress.complete %}
          hx-get="{% url 'experiments:get_message_response' team.slug experiment.id session.id task_id %}"
          hx-trigger="load delay:1s"
@@ -22,23 +22,6 @@
           <span class="loading loading-dots loading-sm"></span>
         {% endif %}
       </div>
-    </div>
-    <div class="flex flex-col">
-      {% for file in attachments %}
-        <div class="inline">
-          {% if request.user.is_authenticated %}
-            <a class="text-sm p-1 hover:bg-gray-300 hover:rounded-lg"
-               href="{% url 'experiments:download_file' team_slug=experiment.team.slug session_id=session.id pk=file.id %}"
-               download="{{ file.name }}">
-              <i class="fa-solid fa-download fa-sm"></i> {{ file.name }}
-            </a>
-          {% else %}
-            <div class="inline text-sm p-1">
-              <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
-            </div>
-          {% endif %}
-        </div>
-      {% endfor %}
     </div>
   </div>
 {% endif %}
