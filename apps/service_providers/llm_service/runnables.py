@@ -2,12 +2,13 @@ import functools
 import logging
 import re
 import time
+from collections import defaultdict
 from operator import itemgetter
 from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
-from django.db import transaction
+from django.db import models, transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
@@ -28,6 +29,7 @@ from langchain_core.runnables import (
 from openai.pagination import SyncCursorPage
 from openai.types.beta.threads.message import Message
 
+from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -311,46 +313,50 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         message_content = message.content[0]
         annotations = message_content.text.annotations
         output = response.return_values["output"]
-        resource_file_ids = {}
+        resource_file_ids = defaultdict(list)
         generated_files = []
-        citations = []
+        session_id = self.state.session.id
+        team_slug = self.state.session.team.slug
+
+        assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
+            "files"
+        )
+        assistant_files_ids = File.objects.filter(
+            team__slug=team_slug, id__in=models.Subquery(assistant_file_ids)
+        ).values_list("external_id", flat=True)
+
         for idx, annotation in enumerate(annotations):
             file_id = None
-            # The returned message might include a reference to the annotation which we should replace with
-            # something that looks better. In this case, something like "[1]".
             file_ref_text = annotation.text
-            output = output.replace(file_ref_text, f" [{idx}]")
             if annotation.type == "file_citation":
                 file_citation = annotation.file_citation
                 file_id = file_citation.file_id
-                cited_file = client.files.retrieve(file_id)
 
-                if file_citation.quote:
-                    # We need to escape the brackets, since its being omitted when rendering the message as
-                    # markdown
-                    citations.append(f"\[{idx}\] {file_citation.quote}: {cited_file.filename}")
-                else:
-                    citations.append(f"\[{idx}\]: {cited_file.filename}")
+                file_link = ""
+                if file_id not in assistant_files_ids:
+                    # Assistant level files should have an empty link
+                    team_slug = self.state.session.team.slug
+                    file = File.objects.get(external_id=file_id, team__slug=team_slug)
+                    file_link = f"file:{team_slug}:{session_id}:{file.id}"
+
+                # Original citation text:【6:0†source】
+                output = output.replace(file_ref_text, f" [{file.name}]({file_link})")
 
             elif annotation.type == "file_path":
                 file_path = annotation.file_path
                 file_id = file_path.file_id
-                cited_file = client.files.retrieve(file_id)
-                citations.append(f"\[{idx}\]: {cited_file.filename}")
                 created_file = get_and_store_openai_file(
                     client=client,
                     file_name=annotation.text.split("/")[-1],
                     file_id=file_id,
                     team_id=self.state.experiment.team_id,
                 )
+                # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
+                # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                output = output.replace(file_ref_text, f"file:{team_slug}:{session_id}:{created_file.id}")
                 generated_files.append(created_file)
 
-            if annotation.type not in resource_file_ids:
-                resource_file_ids[annotation.type] = [file_id]
-            else:
-                resource_file_ids[annotation.type].append(file_id)
-
-        output += "\n" + "\n".join(citations)
+            resource_file_ids[annotation.type].append(file_id)
 
         # Attach the generated files to the chat object as an annotation
         if generated_files:

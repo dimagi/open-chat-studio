@@ -239,67 +239,50 @@ def test_assistant_uploads_new_file(
 
 
 @pytest.mark.django_db()
+@patch("apps.assistants.sync.get_and_store_openai_file")
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
-@patch("openai.resources.files.Files.retrieve")
-@patch("openai.resources.files.Files.retrieve_content")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 def test_assistant_reponse_with_annotations(
-    list_messages, retrieve_file_content, retrieve_file, create_and_run, retrieve_run, get_response_with_retries
+    list_messages, create_and_run, retrieve_run, get_response_with_retries, get_and_store_openai_file
 ):
     """Test that attachments on AI messages are being saved (only those of type `file_path`)
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
     already have that file as an attachment on the chat object
     """
     from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
-    from openai.types.file_object import FileObject
 
-    file_path_file = FileObject(
-        id="openai-file-1",
-        bytes=69,
-        created_at=123,
-        filename="generated.txt",
-        object="file",
-        purpose="assistants",
-        status="processed",
-        status_details=None,
-    )
-    file_citation_file = FileObject(
-        id="openai-file-2",
-        bytes=69,
-        created_at=123,
-        filename="existing.txt",
-        object="file",
-        purpose="assistants",
-        status="processed",
-        status_details=None,
-    )
-    retrieve_file.side_effect = [file_path_file, file_citation_file]
+    session = ExperimentSessionFactory()
+    created_file = FileFactory(external_id="openai-file-1")
+    get_and_store_openai_file.return_value = created_file
 
-    retrieve_file_content.return_value = "This is some file content"
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
-    get_response_with_retries.return_value = OpenAIAssistantFinish(
-        run_id=run.id, thread_id=thread_id, return_values={"output": "Hi there human"}, log=""
-    )
-    existing_file = FileFactory(external_id="openai-file-2")
+    cited_file = FileFactory(external_id="openai-file-2", team=session.team, name="existing.txt")
     annotations = [
         FilePathAnnotation(
             end_index=174,
             file_path=FilePath(file_id="openai-file-1"),
             start_index=134,
-            text="sandbox:/mnt/data/random_string_file.txt",
+            text="sandbox:/mnt/data/file.txt",
             type="file_path",
         ),
         FileCitationAnnotation(
             end_index=174,
-            file_citation=FileCitation(file_id=existing_file.external_id, quote=""),
+            file_citation=FileCitation(file_id=cited_file.external_id, quote=""),
             start_index=134,
-            text="[some-ref]",
+            text="【6:0†source】",
             type="file_citation",
         ),
     ]
+    ai_message = (
+        "Hi there human. The generated file can be [downloaded here](sandbox:/mnt/data/file.txt). Also, leaves are"
+        " tree stuff【6:0†source】."
+    )
+    get_response_with_retries.return_value = OpenAIAssistantFinish(
+        run_id=run.id, thread_id=thread_id, return_values={"output": ai_message}, log=""
+    )
     list_messages.return_value = SyncCursorPage(
         data=[
             ThreadMessage(
@@ -307,7 +290,7 @@ def test_assistant_reponse_with_annotations(
                 assistant_id=ASSISTANT_ID,
                 metadata={},
                 created_at=0,
-                content=[TextContentBlock(text=Text(annotations=annotations, value="Hi there human"), type="text")],
+                content=[TextContentBlock(text=Text(annotations=annotations, value=ai_message), type="text")],
                 object="thread.message",
                 role="assistant",
                 run_id=run.id,
@@ -316,13 +299,12 @@ def test_assistant_reponse_with_annotations(
             )
         ]
     )
-    session = ExperimentSessionFactory()
     local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
     chat = session.chat
     # For the file citation, we need to set up an existing file attached to the chat
-    resource, _created = chat.attachments.get_or_create(tool_type="file_path")
-    resource.files.add(existing_file)
+    attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
+    attachment.files.add(cited_file)
 
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
     create_and_run.return_value = run
@@ -333,8 +315,14 @@ def test_assistant_reponse_with_annotations(
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
-
-    assert result.output == "Hi there human\n\[0\]: generated.txt\n\[1\]: existing.txt"
+    team_slug = session.team.slug
+    file_path_link = f"file:{team_slug}:{session.id}:{created_file.id}"
+    citation_link = f"file:{team_slug}:{session.id}:{cited_file.id}"
+    expected_output_message = (
+        f"Hi there human. The generated file can be [downloaded here]({file_path_link}). Also, leaves are tree"
+        f" stuff [[existing.txt]]({citation_link})."
+    )
+    assert result.output == expected_output_message
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
