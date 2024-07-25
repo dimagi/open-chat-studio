@@ -167,10 +167,20 @@ def test_create_participant_schedules(experiment):
     assert participant_data_exp_1.data["name"] == "John"
     schedules = list(experiment.scheduled_messages.filter(participant__identifier=identifier))
     assert len(schedules) == 2
-    assert schedules[0].name == "schedule1"
-    assert schedules[0].prompt == "tell ET to phone home"
-    assert schedules[0].date == trigger_date1
+    assert schedules[0].custom_schedule_params == {
+        "name": "schedule1",
+        "prompt_text": "tell ET to phone home",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert schedules[0].next_trigger_date == trigger_date1
 
-    assert schedules[1].name == "schedule2"
-    assert schedules[1].prompt == "email john"
-    assert schedules[1].date == trigger_date2
+    assert schedules[1].custom_schedule_params == {
+        "name": "schedule2",
+        "prompt_text": "email john",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert schedules[1].next_trigger_date == trigger_date2

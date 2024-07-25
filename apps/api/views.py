@@ -15,6 +15,7 @@ from apps.api.serializers import (
     ExperimentSessionSerializer,
     ParticipantDataUpdateRequest,
 )
+from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
 
@@ -102,7 +103,24 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
 
 
 def _create_update_schedules(team, experiment, participant, schedule_data):
-    pass
+    messages = [
+        ScheduledMessage(
+            team=team,
+            experiment=experiment,
+            participant=participant,
+            next_trigger_date=data["date"],
+            custom_schedule_params={
+                "name": data["name"],
+                "prompt_text": data["prompt"],
+                "repetitions": 1,
+                # these aren't really needed since it's one-off schedule
+                "frequency": 1,
+                "time_period": TimePeriod.DAYS,
+            },
+        )
+        for data in schedule_data
+    ]
+    ScheduledMessage.objects.bulk_create(messages)
 
 
 @extend_schema_view(
