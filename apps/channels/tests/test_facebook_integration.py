@@ -52,7 +52,7 @@ class TestTwilio:
             (twilio_messages.Messenger.audio_message(), "audio"),
         ],
     )
-    @override_settings(AWS_ACCESS_KEY_ID="123")
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")

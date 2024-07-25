@@ -92,27 +92,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
-  /api/participants/{participant_id}/:
+  /api/participants/:
     post:
       operationId: update_participant_data
       description: Upsert participant data for all specified experiments in the payload
       summary: Update Participant Data
-      parameters:
-      - in: path
-        name: participant_id
-        schema:
-          type: string
-        description: Channel specific participant identifier
-        required: true
       tags:
       - Participants
       requestBody:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/ParticipantExperimentData'
+              $ref: '#/components/schemas/ParticipantDataUpdateRequest'
         required: true
       security:
       - apiKeyAuth: []
@@ -449,6 +440,24 @@ components:
         identifier:
           type: string
           maxLength: 320
+    ParticipantDataUpdateRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          title: Participant identifier
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          default: api
+          title: Participant Platform
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantExperimentData'
+      required:
+      - data
+      - identifier
     ParticipantExperimentData:
       type: object
       properties:
@@ -463,6 +472,22 @@ components:
       required:
       - data
       - experiment
+    PlatformEnum:
+      enum:
+      - telegram
+      - web
+      - whatsapp
+      - facebook
+      - api
+      - slack
+      type: string
+      description: |-
+        * `telegram` - Telegram
+        * `web` - Web
+        * `whatsapp` - WhatsApp
+        * `facebook` - Facebook
+        * `api` - API
+        * `slack` - Slack
     Team:
       type: object
       properties:

@@ -1,6 +1,8 @@
 # Open Chat Studio
 
-Experiments with AI, GPT and LLMs. See [this wiki](https://github.com/dimagi/open-chat-studio/wiki) for more information.
+Experiments with AI, GPT and LLMs. See [this wiki](https://dimagi.atlassian.net/wiki/spaces/OCS/overview) for more information.
+
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/dimagi/open-chat-studio)
 
 ## Dev Environment Setup
 
