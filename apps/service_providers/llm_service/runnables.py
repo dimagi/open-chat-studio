@@ -307,17 +307,13 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.state.get_openai_assistant().client
-        page: SyncCursorPage = client.beta.threads.messages.list(response.thread_id, run_id=response.run_id)
-        # We use a run to get a response, so it's safe to assume a run will have a single message
-        message: Message = page.data[0]
-        message_content = message.content[0]
-        annotations = message_content.text.annotations
-        output = response.return_values["output"]
-        resource_file_ids = defaultdict(list)
+        new_messages = self._fetch_thread_run_messages(response.thread_id, run_id=response.run_id, client=client)
         generated_files = []
+
+        # This output is a concatanation of all messages in this run
+        output_message = response.return_values["output"]
         session_id = self.state.session.id
         team_slug = self.state.session.team.slug
-
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
         )
@@ -325,38 +321,44 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             team__slug=team_slug, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
 
-        for idx, annotation in enumerate(annotations):
-            file_id = None
-            file_ref_text = annotation.text
-            if annotation.type == "file_citation":
-                file_citation = annotation.file_citation
-                file_id = file_citation.file_id
+        resource_file_ids = defaultdict(list)
+        for message in new_messages:
+            for message_content in message.content:
+                annotations = message_content.text.annotations
+                for idx, annotation in enumerate(annotations):
+                    file_id = None
+                    file_ref_text = annotation.text
+                    if annotation.type == "file_citation":
+                        file_citation = annotation.file_citation
+                        file_id = file_citation.file_id
 
-                file_link = ""
-                if file_id not in assistant_files_ids:
-                    # Assistant level files should have an empty link
-                    team_slug = self.state.session.team.slug
-                    file = File.objects.get(external_id=file_id, team__slug=team_slug)
-                    file_link = f"file:{team_slug}:{session_id}:{file.id}"
+                        file_link = ""
+                        if file_id not in assistant_files_ids:
+                            # Don't allow downloading assistant level files
+                            team_slug = self.state.session.team.slug
+                            file = File.objects.get(external_id=file_id, team__slug=team_slug)
+                            file_link = f"file:{team_slug}:{session_id}:{file.id}"
 
-                # Original citation text:【6:0†source】
-                output = output.replace(file_ref_text, f" [{file.name}]({file_link})")
+                        # Original citation text example:【6:0†source】
+                        output_message = output_message.replace(file_ref_text, f" [{file.name}]({file_link})")
 
-            elif annotation.type == "file_path":
-                file_path = annotation.file_path
-                file_id = file_path.file_id
-                created_file = get_and_store_openai_file(
-                    client=client,
-                    file_name=annotation.text.split("/")[-1],
-                    file_id=file_id,
-                    team_id=self.state.experiment.team_id,
-                )
-                # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
-                # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                output = output.replace(file_ref_text, f"file:{team_slug}:{session_id}:{created_file.id}")
-                generated_files.append(created_file)
+                    elif annotation.type == "file_path":
+                        file_path = annotation.file_path
+                        file_id = file_path.file_id
+                        created_file = get_and_store_openai_file(
+                            client=client,
+                            file_name=annotation.text.split("/")[-1],
+                            file_id=file_id,
+                            team_id=self.state.experiment.team_id,
+                        )
+                        # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
+                        # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                        output_message = output_message.replace(
+                            file_ref_text, f"file:{team_slug}:{session_id}:{created_file.id}"
+                        )
+                        generated_files.append(created_file)
 
-            resource_file_ids[annotation.type].append(file_id)
+                    resource_file_ids[annotation.type].append(file_id)
 
         # Attach the generated files to the chat object as an annotation
         if generated_files:
@@ -364,7 +366,18 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             resource, _created = chat.attachments.get_or_create(tool_type="file_path")
             resource.files.add(*generated_files)
 
-        return output, resource_file_ids
+        return output_message, resource_file_ids
+
+    def _fetch_thread_run_messages(self, thread_id: str, run_id: str, client) -> list[Message]:
+        messages = []
+        page_kwargs = {}
+        while True:
+            page: SyncCursorPage = client.beta.threads.messages.list(thread_id, run_id=run_id, **page_kwargs)
+            messages.extend(page.data)
+            if not page.has_more:
+                break
+            page_kwargs["after"] = page.last_id
+        return messages
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
