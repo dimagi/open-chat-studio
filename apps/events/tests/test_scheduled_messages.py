@@ -29,7 +29,7 @@ def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequen
 @pytest.mark.django_db()
 @pytest.mark.parametrize("period", ["hours", "days", "weeks"])
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
-def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
+def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_message, period):
     session = ExperimentSessionFactory()
     event_action, params = _construct_event_action(time_period=TimePeriod(period), experiment_id=session.experiment.id)
     with freeze_time("2024-01-01"):
@@ -39,6 +39,8 @@ def test_create_scheduled_message_sets_start_date(ad_hoc_bot_message, period):
         delta = relativedelta(**{params["time_period"]: params["frequency"]})
         rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
         assert rel_delta == delta
+        assert message.external_id is not None
+        assert message.external_id != ""
 
 
 @pytest.mark.django_db()
