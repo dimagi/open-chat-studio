@@ -283,10 +283,13 @@ def test_assistant_reponse_with_annotations(
     already have that file as an attachment on the chat object
     """
 
-    session = ExperimentSessionFactory()
+    # I'm specifying the ids manually to make it easier to follow the expected output string that contains DB ids
+    session = ExperimentSessionFactory(id=1)
+    session.team.slug = "dimagi-test"
+    session.team.save()
     chat = session.chat
     openai_generated_file_id = "openai-file-1"
-    openai_generated_file = FileFactory(external_id=openai_generated_file_id)
+    openai_generated_file = FileFactory(external_id=openai_generated_file_id, id=10)
     get_and_store_openai_file.return_value = openai_generated_file
 
     thread_id = "test_thread_id"
@@ -305,7 +308,7 @@ def test_assistant_reponse_with_annotations(
             status_details=None,
         )
     else:
-        local_file = FileFactory(external_id=local_file_openai_id, team=session.team, name="existing.txt")
+        local_file = FileFactory(external_id=local_file_openai_id, team=session.team, name="existing.txt", id=9)
         # Attach the local file to the chat
         attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
         attachment.files.add(local_file)
@@ -353,16 +356,17 @@ def test_assistant_reponse_with_annotations(
     # Run assistant
     result = assistant.invoke("test", attachments=[])
 
-    team_slug = session.team.slug
-    file_path_link = f"file:{team_slug}:{session.id}:{openai_generated_file.id}"
-
-    citation_link = ""
-    if not cited_file_missing:
-        citation_link = f"file:{team_slug}:{session.id}:{local_file.id}"
-    expected_output_message = (
-        f"Hi there human. The generated file can be [downloaded here]({file_path_link}). Also, leaves are tree"
-        f" stuff [existing.txt]({citation_link})."
-    )
+    if cited_file_missing:
+        # The cited file link is empty, since it's missing from the DB
+        expected_output_message = (
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
+            " tree stuff [existing.txt]()."
+        )
+    else:
+        expected_output_message = (
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
+            " tree stuff [existing.txt](file:dimagi-test:1:9)."
+        )
     assert result.output == expected_output_message
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
