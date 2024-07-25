@@ -82,7 +82,7 @@
   {% endflag %}
   {% flag "pipelines-v2" %}
     <li>
-      {% if perms.pipelines.view_pipelines %}
+      {% if perms.pipelines.view_pipeline %}
         <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
           <i class="fa-solid fa-puzzle-piece"></i>
           {% translate "Pipelines" %}<span class="badge badge-sm">new!</span>
