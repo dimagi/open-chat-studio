@@ -14,7 +14,7 @@ from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -33,7 +33,7 @@ from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -68,6 +68,7 @@ from apps.experiments.tables import (
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
+from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
@@ -640,12 +641,31 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
-    message_text = request.POST["message"]
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
-    result = get_response_for_webchat_task.delay(session.id, message_text)
+
+    message_text = request.POST["message"]
+    uploaded_files = request.FILES
+    attachments = []
+    created_files = []
+    for resource_type in ["code_interpreter", "file_search"]:
+        if resource_type not in uploaded_files:
+            continue
+
+        tool_resource, _created = ChatAttachment.objects.get_or_create(
+            chat_id=session.chat_id,
+            tool_type=resource_type,
+        )
+        for uploaded_file in uploaded_files.getlist(resource_type):
+            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            attachments.append({"type": resource_type, "file_id": new_file.id})
+            created_files.append(new_file)
+
+        tool_resource.files.add(*created_files)
+
+    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
@@ -654,6 +674,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
             "session": session,
             "message_text": message_text,
             "task_id": result.task_id,
+            "created_files": created_files,
         },
     )
 
@@ -1038,3 +1059,16 @@ def experiment_session_pagination_view(request, team_slug: str, experiment_id: s
         return redirect("experiments:experiment_session_view", team_slug, experiment_id, session_id)
 
     return redirect("experiments:experiment_session_view", team_slug, experiment_id, next_session.external_id)
+
+
+@login_and_team_required
+@permission_required("chat.view_chatattachment")
+def download_file(request, team_slug: str, session_id: int, pk: int):
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404()

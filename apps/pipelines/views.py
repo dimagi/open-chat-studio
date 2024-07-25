@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from apps.pipelines.flow import PipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
+from apps.service_providers.models import LlmProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -62,7 +63,14 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        return {**data, "pipeline_id": kwargs["pk"], "input_types": _pipeline_node_input_types()}
+        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "llm_models").all()
+        return {
+            **data,
+            "pipeline_id": kwargs["pk"],
+            "input_types": _pipeline_node_input_types(),
+            "parameter_values": _pipeline_node_parameter_values(llm_providers),
+            "default_values": _pipeline_node_default_values(llm_providers),
+        }
 
 
 class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -75,8 +83,26 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
+def _pipeline_node_parameter_values(llm_providers):
+    """Returns the possible values for each input type"""
+    return {
+        "LlmProviderId": [{"id": provider["id"], "name": provider["name"]} for provider in llm_providers],
+        "LlmModel": {provider["id"]: provider["llm_models"] for provider in llm_providers},
+    }
+
+
+def _pipeline_node_default_values(llm_providers):
+    """Returns the default values for each input type"""
+    return {
+        "LlmProviderId": llm_providers[0]["id"],
+        "LlmModel": llm_providers[0]["llm_models"][0],
+        "LlmTemperature": 0.7,
+    }
+
+
 def _pipeline_node_input_types():
     """Returns all the input types for the various nodes"""
+
     from apps.pipelines.nodes import nodes
 
     class InputParam(BaseModel):

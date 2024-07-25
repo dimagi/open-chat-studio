@@ -5,10 +5,19 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 
 
+class Attachment(BaseModel):
+    file_id: int
+    type: str
+
+
 class BaseMessage(BaseModel):
     participant_id: str
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
+    attachments: list[Attachment] = Field(default={})
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class TelegramMessage(BaseMessage):
@@ -75,6 +84,18 @@ class TwilioMessage(BaseMessage):
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
             platform=platform,
+        )
+
+
+class SureAdhereMessage(BaseMessage):
+    """
+    A wrapper class for user messages coming from the SureAdhere
+    """
+
+    @staticmethod
+    def parse(message_data: dict) -> "SureAdhereMessage":
+        return SureAdhereMessage(
+            participant_id=str(message_data["patient_id"]), message_text=message_data["message_text"]
         )
 
 
