@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 import openai
 import pytest
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
-from openai.pagination import SyncCursorPage
 from openai.types.beta.threads import Message as ThreadMessage
 from openai.types.beta.threads import Run
 from openai.types.beta.threads.file_citation_annotation import FileCitation, FileCitationAnnotation
@@ -240,27 +239,6 @@ def test_assistant_uploads_new_file(
     assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
-def cursor_page(thread_id, annotations, message, run_id, has_more):
-    return SyncCursorPage(
-        data=[
-            ThreadMessage(
-                id="test",
-                assistant_id=ASSISTANT_ID,
-                metadata={},
-                created_at=0,
-                content=[TextContentBlock(text=Text(annotations=annotations, value=message), type="text")],
-                object="thread.message",
-                role="assistant",
-                run_id=run_id,
-                thread_id=thread_id,
-                status="completed",
-            )
-        ],
-        has_more=has_more,
-        last_id="",
-    )
-
-
 @pytest.mark.django_db()
 @pytest.mark.parametrize("cited_file_missing", [False, True])
 @patch("openai.resources.files.Files.retrieve")
@@ -331,19 +309,17 @@ def test_assistant_reponse_with_annotations(
             type="file_citation",
         ),
     ]
-    first_message = "Hi there human. The generated file can be [downloaded here](sandbox:/mnt/data/file.txt)."
-    second_message = " Also, leaves are tree stuff【6:0†source】."
-    ai_message = first_message + second_message
+    ai_message = (
+        "Hi there human. The generated file can be [downloaded here](sandbox:/mnt/data/file.txt)."
+        " Also, leaves are tree stuff【6:0†source】."
+    )
     get_response_with_retries.return_value = OpenAIAssistantFinish(
         run_id=run.id, thread_id=thread_id, return_values={"output": ai_message}, log=""
     )
 
-    # Let the first message have the generated file annotation.
-    # Let the second message have the file citation annotation.
-    list_messages.side_effect = [
-        cursor_page(thread_id, [annotations[0]], first_message, run.id, has_more=True),
-        cursor_page(thread_id, [annotations[1]], second_message, run.id, has_more=False),
-    ]
+    list_messages.return_value = _create_thread_messages(
+        ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
+    )
 
     local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID)
     session.experiment.assistant = local_assistant
@@ -383,7 +359,9 @@ def _get_assistant_mocked_history_recording(session):
     return assistant
 
 
-def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict[str, str]]):
+def _create_thread_messages(
+    assistant_id, run_id, thread_id, messages: list[dict[str, str]], annotations: list | None = None
+):
     """
     Create a list of ThreadMessage objects from a list of message dictionaries:
     [
@@ -397,7 +375,12 @@ def _create_thread_messages(assistant_id, run_id, thread_id, messages: list[dict
             assistant_id=assistant_id,
             metadata={},
             created_at=0,
-            content=[TextContentBlock(text=Text(annotations=[], value=list(message.values())[0]), type="text")],
+            content=[
+                TextContentBlock(
+                    text=Text(annotations=annotations if annotations else [], value=list(message.values())[0]),
+                    type="text",
+                )
+            ],
             object="thread.message",
             role=list(message)[0],
             run_id=run_id,

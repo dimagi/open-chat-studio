@@ -26,8 +26,6 @@ from langchain_core.runnables import (
     RunnableSerializable,
     ensure_config,
 )
-from openai.pagination import SyncCursorPage
-from openai.types.beta.threads.message import Message
 
 from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -307,7 +305,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.state.raw_client
-        new_messages = self._fetch_thread_run_messages(response.thread_id, run_id=response.run_id, client=client)
         generated_files = []
 
         # This output is a concatanation of all messages in this run
@@ -321,7 +318,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         ).values_list("external_id", flat=True)
 
         resource_file_ids = defaultdict(list)
-        for message in new_messages:
+        for message in client.beta.threads.messages.list(response.thread_id, run_id=response.run_id):
             for message_content in message.content:
                 annotations = message_content.text.annotations
                 for idx, annotation in enumerate(annotations):
@@ -384,17 +381,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
         return file_name, file_link
-
-    def _fetch_thread_run_messages(self, thread_id: str, run_id: str, client) -> list[Message]:
-        messages = []
-        page_kwargs = {}
-        while True:
-            page: SyncCursorPage = client.beta.threads.messages.list(thread_id, run_id=run_id, **page_kwargs)
-            messages.extend(page.data)
-            if not page.has_more:
-                break
-            page_kwargs["after"] = page.last_id
-        return messages
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
