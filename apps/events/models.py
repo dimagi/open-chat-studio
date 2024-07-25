@@ -287,19 +287,19 @@ class ScheduledMessage(BaseTeamModel):
             logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
 
     def _trigger(self):
-        delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+        delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
         utc_now = timezone.now()
 
-        experiment_id = self.action.params.get("experiment_id", self.experiment.id)
+        experiment_id = self.params.get("experiment_id", self.experiment.id)
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
         experiment_to_use = Experiment.objects.get(id=experiment_id)
         experiment_session.ad_hoc_bot_message(
-            self.action.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
+            self.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
         )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        if self.total_triggers >= self.action.params["repetitions"]:
+        if self.total_triggers >= self.params["repetitions"]:
             self.is_complete = True
         else:
             self.next_trigger_date = utc_now + delta
