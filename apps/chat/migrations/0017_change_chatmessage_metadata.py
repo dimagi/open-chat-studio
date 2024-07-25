@@ -33,5 +33,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(flatten_files_in_chat_message_metadata, reverse_code=migrations.RunPython.noop),
+        migrations.RunPython(flatten_files_in_chat_message_metadata, reverse_code=migrations.RunPython.noop, elidable=True),
     ]
