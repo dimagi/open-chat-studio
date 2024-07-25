@@ -1,23 +1,38 @@
 from django.utils.text import slugify
 
 
-def get_next_unique_slug(model_class, display_name, slug_field_name):
+def get_next_unique_slug(model_class, input_value, field_name, model_instance=None):
     """
     Gets the next unique slug based on the name. Appends -1, -2, etc. until it finds
     a unique value.
+
+    Args:
+        model_class: The model class to check for uniqueness.
+        input_value: The input value to generate the slug.
+        field_name: The field name to check for uniqueness.
+        model_instance: The model instance to exclude from the uniqueness check.
     """
-    base_value = slugify(display_name)
-    if model_class.objects.filter(slug=base_value).exists():
-        # todo make this do fewer queries
-        suffix = 2
-        while True:
-            next_slug = get_next_slug(base_value, suffix)
-            if not model_class.objects.filter(**{slug_field_name: next_slug}).exists():
-                return next_slug
-            else:
-                suffix += 1
-    else:
-        return base_value
+    for next_value in next_slug_iterator(input_value):
+        if not _instance_exists(model_class, field_name, next_value, model_instance):
+            return next_value
+
+
+def _instance_exists(model_class, field_name, field_value, model_instance=None):
+    base_qs = model_class.objects.all()
+    if model_instance and model_instance.pk:
+        base_qs = base_qs.exclude(pk=model_instance.id)
+
+    return base_qs.filter(**{f"{field_name}__exact": field_value}).exists()
+
+
+def next_slug_iterator(display_name):
+    base_slug = slugify(display_name)
+    yield base_slug
+
+    suffix = 2
+    while True:
+        yield get_next_slug(base_slug, suffix)
+        suffix += 1
 
 
 def get_next_slug(base_value, suffix, max_length=100):
