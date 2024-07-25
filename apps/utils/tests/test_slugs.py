@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from ..slug import get_next_slug, get_next_unique_slug
+from ..slug import get_next_slug, get_next_unique_id, get_next_unique_slug
 
 
 def test_next_slug_basic():
@@ -25,4 +25,11 @@ def test_get_next_unique_slug():
     with patch("apps.utils.slug._instance_exists", side_effect=[True, True, False]) as exists:
         slug = get_next_unique_slug(Mock(), "test abc", field_name="slug")
     assert slug == "test-abc-3"
+    assert exists.call_count == 3
+
+
+def test_get_next_unique_id():
+    with patch("apps.utils.slug._instance_exists", side_effect=[True, True, False]) as exists:
+        hash_id = get_next_unique_id(Mock(), ["test abc", 1, 3], field_name="id", length=5)
+    assert len(hash_id) == 5
     assert exists.call_count == 3
