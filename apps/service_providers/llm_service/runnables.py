@@ -368,7 +368,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
-        client = self.state.raw_client
         file_name = ""
         file_link = ""
 
@@ -381,6 +380,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 file_link = f"file:{team_slug}:{session_id}:{file.id}"
                 file_name = file.name
             except File.DoesNotExist:
+                client = self.state.raw_client
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
         return file_name, file_link

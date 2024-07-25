@@ -297,6 +297,7 @@ def test_assistant_reponse_with_annotations(
 
     local_file_openai_id = "openai-file-2"
     if cited_file_missing:
+        # Mock the call to OpenAI to retrieve the file, since it will be called when a file is missing
         retrieve_openai_file.return_value = FileObject(
             id="local_file_openai_id",
             bytes=1,
