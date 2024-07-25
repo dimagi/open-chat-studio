@@ -17,8 +17,10 @@ from pydantic import BaseModel
 from apps.pipelines.flow import PipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
+from apps.service_providers.models import LlmProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Team
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -62,7 +64,12 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        return {**data, "pipeline_id": kwargs["pk"], "input_types": _pipeline_node_input_types()}
+        return {
+            **data,
+            "pipeline_id": kwargs["pk"],
+            "input_types": _pipeline_node_input_types(),
+            "parameter_values": _pipeline_node_parameter_values(self.request.team),
+        }
 
 
 class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -73,6 +80,11 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         pipeline.delete()
         messages.success(request, f"{pipeline.name} deleted")
         return HttpResponse()
+
+
+def _pipeline_node_parameter_values(team: Team):
+    """Returns the possible values for each input type"""
+    return {"LlmProviderId": [p for p in LlmProvider.objects.filter(team=team).values("id", "name").all()]}
 
 
 def _pipeline_node_input_types():

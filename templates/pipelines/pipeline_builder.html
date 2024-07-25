@@ -10,6 +10,7 @@
   </div>
 {% endblock %}
 {% block page_js %}
+  {{ parameter_values|json_script:"parameter-values" }}
   {{ input_types|json_script:"node-input-types" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
