@@ -17,6 +17,15 @@ def turn_io_provider():
 
 
 @pytest.fixture()
+def sureadhere_provider():
+    return MessagingProviderFactory(
+        name="sureadhere",
+        type=MessagingProviderType.sureadhere,
+        config={"client_id": "123", "client_secret": "456", "base_url": "https://example.com"},
+    )
+
+
+@pytest.fixture()
 def slack_provider():
     return MessagingProviderFactory(
         name="slack",
