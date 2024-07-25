@@ -6,7 +6,8 @@ from django.utils import timezone
 import json
 
 def calculate_next_run(task, current_time):
-	delta = timedelta(seconds=task.interval.every.total_seconds())
+	interval_duration = get_interval_duration(task.interval)
+	delta = timedelta(seconds=interval_duration.total_seconds())
 	next_time = task.start_time
 	while next_time <= current_time:
 		next_time += delta
@@ -76,8 +77,8 @@ class Migration(migrations.Migration):
             task_kwargs = json.loads(task.kwargs)
             participant_identifiers = task_kwargs["chat_ids"]
             message = task_kwargs["message"]
-            experiment = Experiment.objects.filter(public_id=task_kwargs["experiment_public_id"])
-            task_complete = current_time > task.expires
+            experiment = Experiment.objects.filter(public_id=task_kwargs["experiment_public_id"]).first()
+            task_complete = current_time > task.expires if task.expires else False #if task doesn't expire then it's not complete
 
             if not experiment or task_complete:
                 continue
@@ -86,7 +87,6 @@ class Migration(migrations.Migration):
 
             if repetitions == 0:
                 continue
-
             event_action_params = {
                 "name": "system-generated-event-action",
                 "prompt_text": message,
@@ -96,7 +96,10 @@ class Migration(migrations.Migration):
             }
 
             for identifier in participant_identifiers:
-                participant = Participant.objects.get(team=experiment.team, identifier=identifier)
+                try:
+                    participant = Participant.objects.get(team=experiment.team, identifier=identifier)
+                except Participant.DoesNotExist:
+                    continue
                 ScheduledMessage.objects.create(
                     experiment=experiment,
                     participant=participant,
