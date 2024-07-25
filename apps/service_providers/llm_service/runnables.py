@@ -306,13 +306,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         """
         from apps.assistants.sync import get_and_store_openai_file
 
-        client = self.state.get_openai_assistant().client
+        client = self.state.raw_client
         new_messages = self._fetch_thread_run_messages(response.thread_id, run_id=response.run_id, client=client)
         generated_files = []
 
         # This output is a concatanation of all messages in this run
         output_message = response.return_values["output"]
-        session_id = self.state.session.id
         team_slug = self.state.session.team.slug
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
@@ -331,16 +330,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                     if annotation.type == "file_citation":
                         file_citation = annotation.file_citation
                         file_id = file_citation.file_id
-
-                        file_link = ""
-                        if file_id not in assistant_files_ids:
-                            # Don't allow downloading assistant level files
-                            team_slug = self.state.session.team.slug
-                            file = File.objects.get(external_id=file_id, team__slug=team_slug)
-                            file_link = f"file:{team_slug}:{session_id}:{file.id}"
+                        file_name, file_link = self._get_file_name_and_link_for_citation(
+                            file_id=file_id, forbidden_file_ids=assistant_files_ids
+                        )
 
                         # Original citation text example:【6:0†source】
-                        output_message = output_message.replace(file_ref_text, f" [{file.name}]({file_link})")
+                        output_message = output_message.replace(file_ref_text, f" [{file_name}]({file_link})")
 
                     elif annotation.type == "file_path":
                         file_path = annotation.file_path
@@ -353,6 +348,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         )
                         # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
                         # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                        session_id = self.state.session.id
                         output_message = output_message.replace(
                             file_ref_text, f"file:{team_slug}:{session_id}:{created_file.id}"
                         )
@@ -367,6 +363,27 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             resource.files.add(*generated_files)
 
         return output_message, resource_file_ids
+
+    def _get_file_name_and_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str]:
+        """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
+        `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
+        """
+        client = self.state.raw_client
+        file_name = ""
+        file_link = ""
+
+        if file_id not in forbidden_file_ids:
+            # Don't allow downloading assistant level files
+            team_slug = self.state.session.team.slug
+            session_id = self.state.session.id
+            try:
+                file = File.objects.get(external_id=file_id, team__slug=team_slug)
+                file_link = f"file:{team_slug}:{session_id}:{file.id}"
+                file_name = file.name
+            except File.DoesNotExist:
+                openai_file = client.files.retrieve(file_id=file_id)
+                file_name = openai_file.filename
+        return file_name, file_link
 
     def _fetch_thread_run_messages(self, thread_id: str, run_id: str, client) -> list[Message]:
         messages = []

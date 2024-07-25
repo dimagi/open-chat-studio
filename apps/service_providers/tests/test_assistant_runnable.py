@@ -13,6 +13,7 @@ from openai.types.beta.threads.file_citation_annotation import FileCitation, Fil
 from openai.types.beta.threads.file_path_annotation import FilePath, FilePathAnnotation
 from openai.types.beta.threads.text import Text
 from openai.types.beta.threads.text_content_block import TextContentBlock
+from openai.types.file_object import FileObject
 
 from apps.channels.datamodels import Attachment
 from apps.chat.models import Chat
@@ -261,13 +262,21 @@ def cursor_page(thread_id, annotations, message, run_id, has_more):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("cited_file_missing", [False, True])
+@patch("openai.resources.files.Files.retrieve")
 @patch("apps.assistants.sync.get_and_store_openai_file")
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 def test_assistant_reponse_with_annotations(
-    list_messages, create_and_run, retrieve_run, get_response_with_retries, get_and_store_openai_file
+    list_messages,
+    create_and_run,
+    retrieve_run,
+    get_response_with_retries,
+    get_and_store_openai_file,
+    retrieve_openai_file,
+    cited_file_missing,
 ):
     """Test that attachments on AI messages are being saved (only those of type `file_path`)
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
@@ -284,10 +293,22 @@ def test_assistant_reponse_with_annotations(
     run = _create_run(ASSISTANT_ID, thread_id)
 
     local_file_openai_id = "openai-file-2"
-    local_file = FileFactory(external_id=local_file_openai_id, team=session.team, name="existing.txt")
-    # Attach the local file to the chat
-    attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
-    attachment.files.add(local_file)
+    if cited_file_missing:
+        retrieve_openai_file.return_value = FileObject(
+            id="local_file_openai_id",
+            bytes=1,
+            created_at=1,
+            filename="existing.txt",
+            object="file",
+            purpose="assistants",
+            status="processed",
+            status_details=None,
+        )
+    else:
+        local_file = FileFactory(external_id=local_file_openai_id, team=session.team, name="existing.txt")
+        # Attach the local file to the chat
+        attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
+        attachment.files.add(local_file)
 
     # Build OpenAI responses
     annotations = [
@@ -334,7 +355,10 @@ def test_assistant_reponse_with_annotations(
 
     team_slug = session.team.slug
     file_path_link = f"file:{team_slug}:{session.id}:{openai_generated_file.id}"
-    citation_link = f"file:{team_slug}:{session.id}:{local_file.id}"
+
+    citation_link = ""
+    if not cited_file_missing:
+        citation_link = f"file:{team_slug}:{session.id}:{local_file.id}"
     expected_output_message = (
         f"Hi there human. The generated file can be [downloaded here]({file_path_link}). Also, leaves are tree"
         f" stuff [existing.txt]({citation_link})."

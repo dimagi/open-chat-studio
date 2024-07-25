@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from functools import cache
+from functools import cache, cached_property
 
 from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
@@ -174,6 +174,10 @@ class AssistantState(RunnableState):
     def save_message_to_history(self, message: str, type_: ChatMessageType):
         pass
 
+    @abstractmethod
+    def raw_client(self):
+        pass
+
 
 class AssistantExperimentState(ExperimentState, AssistantState):
     def get_assistant_instructions(self):
@@ -186,6 +190,10 @@ class AssistantExperimentState(ExperimentState, AssistantState):
 
     def get_openai_assistant(self):
         return self.experiment.assistant.get_assistant()
+
+    @cached_property
+    def raw_client(self):
+        return self.get_openai_assistant().client
 
     @property
     def chat(self):
