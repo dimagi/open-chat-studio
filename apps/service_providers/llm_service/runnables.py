@@ -2,7 +2,6 @@ import functools
 import logging
 import re
 import time
-from collections import defaultdict
 from operator import itemgetter
 from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
@@ -28,7 +27,7 @@ from langchain_core.runnables import (
 )
 
 from apps.assistants.models import ToolResources
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.state import (
@@ -269,9 +268,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         input_dict = {"content": input, "attachments": message_attachments}
 
         if config.get("configurable", {}).get("save_input_to_history", True):
-            chat_message = self.state.save_message_to_history(input, ChatMessageType.HUMAN)
-            if human_message_resource_file_ids:
-                self._add_resource_files_to_message_metadata(chat_message, human_message_resource_file_ids)
+            file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
+            self.state.save_message_to_history(input, ChatMessageType.HUMAN, annotation_file_ids=list(file_ids))
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
         thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
@@ -281,15 +279,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         input_dict["instructions"] = self.state.get_assistant_instructions()
         response = self._get_response_with_retries(config, input_dict, thread_id)
 
-        output, ai_message_resource_file_ids = self._save_response_annotations(response)
+        output, annotation_file_ids = self._save_response_annotations(response)
 
         if not thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
-        ai_message = self.state.save_message_to_history(output, ChatMessageType.AI)
-        if ai_message_resource_file_ids:
-            self._add_resource_files_to_message_metadata(ai_message, ai_message_resource_file_ids)
-
+        self.state.save_message_to_history(output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids)
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     @transaction.atomic()
@@ -309,15 +304,15 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         # This output is a concatanation of all messages in this run
         output_message = response.return_values["output"]
-        team_slug = self.state.session.team.slug
+        team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
         )
         assistant_files_ids = File.objects.filter(
-            team__slug=team_slug, id__in=models.Subquery(assistant_file_ids)
+            team_id=team.id, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
 
-        resource_file_ids = defaultdict(list)
+        file_ids = set()
         for message in client.beta.threads.messages.list(response.thread_id, run_id=response.run_id):
             for message_content in message.content:
                 annotations = message_content.text.annotations
@@ -347,11 +342,11 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
                         session_id = self.state.session.id
                         output_message = output_message.replace(
-                            file_ref_text, f"file:{team_slug}:{session_id}:{created_file.id}"
+                            file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
                         )
                         generated_files.append(created_file)
 
-                    resource_file_ids[annotation.type].append(file_id)
+                    file_ids.add(file_id)
 
         # Attach the generated files to the chat object as an annotation
         if generated_files:
@@ -359,7 +354,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             resource, _created = chat.attachments.get_or_create(tool_type="file_path")
             resource.files.add(*generated_files)
 
-        return output_message, resource_file_ids
+        return output_message, list(file_ids)
 
     def _get_file_name_and_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
@@ -370,11 +365,11 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         if file_id not in forbidden_file_ids:
             # Don't allow downloading assistant level files
-            team_slug = self.state.session.team.slug
+            team = self.state.session.team
             session_id = self.state.session.id
             try:
-                file = File.objects.get(external_id=file_id, team__slug=team_slug)
-                file_link = f"file:{team_slug}:{session_id}:{file.id}"
+                file = File.objects.get(external_id=file_id, team_id=team.id)
+                file_link = f"file:{team.slug}:{session_id}:{file.id}"
                 file_name = file.name
             except File.DoesNotExist:
                 client = self.state.raw_client
@@ -449,13 +444,3 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             cancelling = run.status == "cancelling"
             if cancelling:
                 sleep(assistant.check_every_ms / 1000)
-
-    def _add_resource_files_to_message_metadata(self, message: ChatMessage, resource_file_mapping: dict):
-        """
-        Appends the file ids from each resource to the `openai_file_ids` array in the chat message metadata
-        example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
-        """
-        file_ids = set([file_id for file_ids in resource_file_mapping.values() for file_id in file_ids])
-        existing_file_id_set = set(message.metadata.get("openai_file_ids", []))
-        message.metadata["openai_file_ids"] = list(existing_file_id_set.union(file_ids))
-        message.save()
