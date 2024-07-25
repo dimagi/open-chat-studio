@@ -5,9 +5,6 @@ from django.db import migrations
 from django.utils import timezone
 import json
 
-from apps.events.models import EventAction, EventActionType, ScheduledMessage
-from apps.experiments.models import ExperimentSession
-
 def calculate_next_run(task, current_time):
 	delta = timedelta(seconds=task.interval.every.total_seconds())
 	next_time = task.start_time
