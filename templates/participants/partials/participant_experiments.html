@@ -18,8 +18,8 @@
           x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
         >
           <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
-          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on }}</td>
-          <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message }}</td>
+          <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
+          <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
           <td class="">
             <i class="fa-solid fa-chevron-down" x-show="experimentsRow !== {{ forloop.counter }}"></i>
             <i class="fa-solid fa-chevron-up" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></i>
