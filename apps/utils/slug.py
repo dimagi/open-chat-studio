@@ -11,7 +11,7 @@ def get_next_unique_slug(model_class: type[Model], input_value: str, field_name:
     a unique value.
 
     Args:
-        model_class: The Django emodel class to check for uniqueness.
+        model_class: The Django model class to check for uniqueness.
         input_value: The input value to generate the slug.
         field_name: The field name to check for uniqueness.
         model_instance: The model instance to exclude from the uniqueness check.
