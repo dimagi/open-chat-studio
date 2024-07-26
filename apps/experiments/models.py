@@ -508,9 +508,15 @@ class Participant(BaseTeamModel):
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
-            .filter(sessions__participant=self)
+            .filter(Q(sessions__participant=self) | Q(participant_data__participant=self))
             .distinct()
         )
+
+    def get_data_for_experiment(self, experiment) -> dict:
+        try:
+            return self.data_set.get(bots=experiment).data
+        except ParticipantData.DoesNotExist:
+            return {}
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment | None = None):
