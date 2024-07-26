@@ -3,6 +3,8 @@ from django.conf import settings
 from django.contrib.auth.forms import UserChangeForm
 from django.utils.translation import gettext
 
+from ..api.models import UserAPIKey
+from ..teams.models import Team
 from .models import CustomUser
 
 
@@ -25,3 +27,22 @@ class CustomUserChangeForm(UserChangeForm):
 
 class UploadAvatarForm(forms.Form):
     avatar = forms.FileField()
+
+
+class ApiKeyForm(forms.ModelForm):
+    class Meta:
+        model = UserAPIKey
+        fields = ("team", "name")
+
+    def __init__(self, request, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = request.user
+        self.fields["team"].queryset = Team.objects.filter(membership__user=request.user)
+        self.fields["team"].initial = request.team
+
+    def save(self):
+        instance = super().save(commit=False)
+        instance.user = self.user
+        key = UserAPIKey.objects.assign_key(instance)
+        instance.save()
+        return instance, key

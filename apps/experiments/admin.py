@@ -42,9 +42,9 @@ class ParticipantDataInline(admin.TabularInline):
 
 @admin.register(models.Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("identifier", "team", "public_id")
+    list_display = ("identifier", "team", "public_id", "platform")
     readonly_fields = ("public_id",)
-    list_filter = ("team",)
+    list_filter = ("team", "platform")
     search_fields = ("external_chat_id",)
     inlines = [ParticipantDataInline]
 
@@ -124,14 +124,3 @@ class SyntheticVoiceAdmin(admin.ModelAdmin):
     @admin.display(description="Team")
     def team(self, obj):
         return obj.voice_provider.team.name if obj.voice_provider else ""
-
-
-@admin.register(models.NoActivityMessageConfig)
-class NoActivityMessageConfigAdmin(admin.ModelAdmin):
-    list_display = (
-        "team",
-        "message_for_bot",
-        "name",
-        "max_pings",
-    )
-    list_filter = ("team",)

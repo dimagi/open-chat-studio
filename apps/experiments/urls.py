@@ -137,10 +137,10 @@ urlpatterns = [
         DeleteExperimentRoute.as_view(),
         name="experiment_route_delete",
     ),
+    path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
 urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
 urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))
-urlpatterns.extend(make_crud_urls(views, "NoActivityMessageConfig", "no_activity"))

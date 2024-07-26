@@ -72,7 +72,7 @@
         {% endflag %}
       </div>
 
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools" x-show="type === 'llm'">
       <div role="tabpanel" class="tab-content">
         <div class="py-4 form-text">
           <h3 class="text-md font-bold">{% translate "Please note" %} <i class="fas fa-exclamation-triangle"></i></h3>

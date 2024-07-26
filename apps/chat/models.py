@@ -7,6 +7,7 @@ from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
+from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -73,6 +74,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
+    metadata = models.JSONField(default=dict)
 
     class Meta:
         ordering = ["created_at"]
@@ -108,3 +110,35 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 },
             },
         }
+
+    def get_attached_files(self):
+        """For display purposes. Returns the tool resource files for which this message has references to. The
+        reference will be the file's external id
+
+        Message metadata example:
+        {
+            "openai_file_ids": ["file_id_1", "file_id_2", ...]
+        }
+        """
+        if file_ids := self.metadata.get("openai_file_ids", []):
+            # We should not show files that are on the assistant level. Users should only be able to download
+            # those on the thread (chat) level, since they uploaded them
+            chat_file_ids = ChatAttachment.objects.filter(chat=self.chat).values_list("files")
+            return File.objects.filter(
+                team=self.chat.team, external_id__in=file_ids, id__in=models.Subquery(chat_file_ids)
+            )
+        return []
+
+
+class ChatAttachment(BaseModel):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="attachments")
+    tool_type = models.CharField(max_length=128)
+    files = models.ManyToManyField("files.File", blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    @property
+    def label(self):
+        return self.tool_type.replace("_", " ").title()
+
+    def __str__(self):
+        return f"Tool Resources for chat {self.chat.id}: {self.tool_type}"

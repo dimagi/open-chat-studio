@@ -3,16 +3,14 @@ from uuid import UUID
 
 from celery.app import shared_task
 from django.conf import settings
-from django.core.cache import cache
 from django.core.mail import send_mail
-from django.db.models import Count, F, OuterRef, Q, Subquery, functions
+from django.db.models import OuterRef, Subquery
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
-from apps.utils.django_db import MakeInterval
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger(__name__)
@@ -44,7 +42,7 @@ def _get_latest_sessions_for_participants(
     )
 
 
-@shared_task
+@shared_task(ignore_result=True)
 def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruction: bool, experiment_public_id: UUID):
     """This sends `message` to the sessions related to `chat_ids` as the bot.
 
@@ -73,83 +71,7 @@ def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruct
             logger.exception(exception)
 
 
-@shared_task(bind=True)
-def no_activity_pings(self):
-    key = f"no_activity_pings{self.app.oid}"
-    lock = cache.lock(key, timeout=60 * 5)
-    if lock.acquire(blocking=False):
-        try:
-            _no_activity_pings()
-        finally:
-            lock.release()
-    else:
-        logger.warning("Unable to acquire lock for no_activity_pings")
-
-
-def _no_activity_pings():
-    experiment_sessions_to_ping = _get_sessions_to_ping()
-
-    for experiment_session in experiment_sessions_to_ping:
-        bot_ping_message = experiment_session.experiment.no_activity_config.message_for_bot
-
-        experiment_channel = experiment_session.experiment_channel
-        if experiment_session.is_stale():
-            # The experiment channel's experiment might have changed
-            logger.warning(
-                f"ExperimentChannel is pointing to experiment '{experiment_channel.experiment.name}'"
-                "whereas the current experiment session points to experiment"
-                f"'{experiment_session.experiment.name}'"
-            )
-            return
-        try:
-            experiment_session.ad_hoc_bot_message(instruction_prompt=bot_ping_message)
-        finally:
-            experiment_session.no_activity_ping_count += 1
-            experiment_session.save(update_fields=["no_activity_ping_count"])
-
-
-def _get_sessions_to_ping():
-    """
-    Criteria:
-    1. The user have communicated with the bot
-    2. The experiment session is not considered "complete"
-    3. The experiment_session has a "no activity config" and the number of pings already received is smaller than
-    the max number of pings defined in the config
-    4. The last message in a session was from a bot and was created more than <user defined> minutes ago
-    """
-
-    chats_with_human_msgs = (
-        ChatMessage.objects.annotate(human_msgs=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)))
-        .filter(human_msgs__gt=0)
-        .values("chat_id")
-    )
-
-    max_pings = F("chat__experiment_session__experiment__no_activity_config__max_pings")
-    last_messages = (
-        ChatMessage.objects.filter(chat_id__in=chats_with_human_msgs)
-        .exclude(chat__experiment_session__status__in=STATUSES_FOR_COMPLETE_CHATS)
-        .exclude(chat__experiment_session__experiment__no_activity_config=None)
-        .exclude(chat__experiment_session__no_activity_ping_count__gte=max_pings)
-        .order_by("chat_id", "-created_at")
-        .distinct("chat_id")
-    )
-
-    ping_after = MakeInterval("secs", F("chat__experiment_session__experiment__no_activity_config__ping_after"))
-    matches = (
-        ChatMessage.objects.filter(id__in=last_messages)
-        .filter(message_type=ChatMessageType.AI, created_at__lt=functions.Now() - ping_after)
-        .select_related(
-            "chat__experiment_session",
-            "chat__experiment_session__experiment_channel",
-            "chat__experiment_session__experiment",
-            "chat__experiment_session__experiment__no_activity_config",
-        )
-    )
-
-    return [chat_msg.chat.experiment_session for chat_msg in matches]
-
-
-@shared_task
+@shared_task(ignore_result=True)
 def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
     experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
     experiment = experiment_session.experiment

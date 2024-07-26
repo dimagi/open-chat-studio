@@ -64,10 +64,11 @@ def verify_session_access_cookie(view):
 
     @wraps(view)
     def _inner(request, *args, **kwargs):
-        if request.user.is_authenticated and (
-            request.experiment_session.participant.user_id == request.user.id or request.user.has_perm("chat.view_chat")
-        ):
-            return view(request, *args, **kwargs)
+        if request.user.is_authenticated:
+            if request.experiment_session.participant.user_id == request.user.id:
+                return view(request, *args, **kwargs)
+            elif request.team_membership and request.user.has_perm("chat.view_chat"):
+                return view(request, *args, **kwargs)
 
         try:
             access_value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(

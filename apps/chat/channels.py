@@ -6,7 +6,6 @@ from io import BytesIO
 from typing import ClassVar
 
 import requests
-from django.conf import settings
 from django.db import transaction
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
@@ -172,6 +171,8 @@ class ChannelBase(ABC):
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
             channel_cls = ApiChannel
+        elif platform == "sureadhere":
+            channel_cls = SureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
         else:
@@ -365,9 +366,7 @@ class ChannelBase(ABC):
 
     def _get_experiment_response(self, message: str) -> str:
         experiment_bot = TopicBot(self.experiment_session)
-        answer = experiment_bot.process_input(message)
-        self.experiment_session.no_activity_ping_count = 0
-        self.experiment_session.save()
+        answer = experiment_bot.process_input(message, attachments=self.message.attachments)
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
@@ -492,8 +491,8 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel = _ensure_experiment_channel_exists(
-            experiment=experiment, platform="web", name=f"{experiment.id}-web"
+        experiment_channel, _ = ExperimentChannel.objects.get_or_create(
+            experiment=experiment, platform=ChannelPlatform.WEB, name=f"{experiment.id}-web"
         )
         session = super().start_new_session(
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
@@ -507,7 +506,7 @@ class WebChannel(ChannelBase):
 
         if session.experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=session.experiment.seed_message
+                session.id, message_text=session.experiment.seed_message, attachments=[]
             ).task_id
             session.save()
         return session
@@ -569,7 +568,7 @@ class WhatsappChannel(ChannelBase):
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
-        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+        return self.messaging_service.voice_replies_supported
 
     @property
     def supported_message_types(self):
@@ -589,6 +588,30 @@ class WhatsappChannel(ChannelBase):
         )
 
 
+class SureAdhereChannel(ChannelBase):
+    def initialize(self):
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
+    def send_text_to_user(self, text: str):
+        to_patient = self.participant_identifier
+        self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
+
+    def get_chat_id_from_message(self, message):
+        return message.chat_id
+
+    @property
+    def supported_message_types(self):
+        return self.messaging_service.supported_message_types
+
+    @property
+    def message_content_type(self):
+        return self.message.content_type
+
+    @property
+    def message_text(self):
+        return self.message.message_text
+
+
 class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
@@ -598,7 +621,7 @@ class FacebookMessengerChannel(ChannelBase):
 
     @property
     def voice_replies_supported(self) -> bool:
-        return bool(settings.AWS_ACCESS_KEY_ID) and self.messaging_service.voice_replies_supported
+        return self.messaging_service.voice_replies_supported
 
     @property
     def supported_message_types(self):
@@ -702,18 +725,15 @@ def _start_experiment_session(
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
     with transaction.atomic():
-        try:
-            participant = Participant.objects.get(team=experiment.team, identifier=participant_identifier)
-            if participant_user and participant.user is None:
-                # If a participant becomes a user, we must reconcile the user and participant
-                participant.user = participant_user
-                participant.save()
-        except Participant.DoesNotExist:
-            participant = Participant.objects.create(
-                user=participant_user,
-                identifier=participant_identifier,
-                team=experiment.team,
-            )
+        participant, created = Participant.objects.get_or_create(
+            team=experiment.team,
+            identifier=participant_identifier,
+            platform=experiment_channel.platform,
+            defaults={"user": participant_user},
+        )
+        if not created and participant_user and participant.user is None:
+            participant.user = participant_user
+            participant.save()
 
         session = ExperimentSession.objects.create(
             team=experiment.team,
@@ -732,8 +752,3 @@ def _start_experiment_session(
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
-
-
-def _ensure_experiment_channel_exists(experiment: Experiment, platform: str, name: str) -> ExperimentChannel:
-    channel, _created = ExperimentChannel.objects.get_or_create(experiment=experiment, platform=platform, name=name)
-    return channel

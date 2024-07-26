@@ -49,10 +49,6 @@ class ConsentFormObjectManager(AuditingManager):
     pass
 
 
-class NoActivityMessageConfigObjectManager(AuditingManager):
-    pass
-
-
 class SyntheticVoiceObjectManager(AuditingManager):
     pass
 
@@ -267,26 +263,6 @@ class SyntheticVoice(BaseModel):
         return SyntheticVoice.objects.filter(general_services | team_services, ~Q(service__in=exclude_services))
 
 
-@audit_fields(*model_audit_fields.NO_ACTIVITY_CONFIG_FIELDS, audit_special_queryset_writes=True)
-class NoActivityMessageConfig(BaseTeamModel):
-    """Configuration for when the user doesn't respond to the bot's message"""
-
-    objects = NoActivityMessageConfigObjectManager()
-    message_for_bot = models.CharField(help_text="This message will be sent to the LLM along with the message history")
-    name = models.CharField(max_length=128)
-    max_pings = models.IntegerField()
-    ping_after = models.IntegerField(help_text="The amount of minutes after which to ping the user. Minimum 1.")
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-    def get_absolute_url(self):
-        return reverse("experiments:no_activity_edit", args=[self.team.slug, self.id])
-
-
 class VoiceResponseBehaviours(models.TextChoices):
     ALWAYS = "always", gettext("Always")
     RECIPROCAL = "reciprocal", gettext("Reciprocal")
@@ -370,13 +346,6 @@ class Experiment(BaseTeamModel):
     )
     synthetic_voice = models.ForeignKey(
         SyntheticVoice, null=True, blank=True, related_name="experiments", on_delete=models.SET_NULL
-    )
-    no_activity_config = models.ForeignKey(
-        NoActivityMessageConfig,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        help_text="This is an experimental feature and might exhibit undesirable behaviour for external channels",
     )
     conversational_consent_enabled = models.BooleanField(
         default=False,
@@ -482,6 +451,11 @@ class Participant(BaseTeamModel):
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+    platform = models.CharField(max_length=32)
+
+    class Meta:
+        ordering = ["platform", "identifier"]
+        unique_together = [("team", "platform", "identifier")]
 
     @property
     def email(self):
@@ -490,6 +464,14 @@ class Participant(BaseTeamModel):
 
     def __str__(self):
         return self.identifier
+
+    def get_platform_display(self):
+        from apps.channels.models import ChannelPlatform
+
+        try:
+            return ChannelPlatform(self.platform).label
+        except ValueError:
+            return self.platform
 
     def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
@@ -561,10 +543,6 @@ class Participant(BaseTeamModel):
                 ParticipantData.objects.create(team=self.team, content_object=experiment, data=data, participant=self)
 
         ParticipantData.objects.bulk_update(records_to_update, fields=["data"])
-
-    class Meta:
-        ordering = ["identifier"]
-        unique_together = [("team", "identifier")]
 
 
 class ParticipantDataObjectManager(models.Manager):
@@ -638,7 +616,6 @@ class ExperimentSession(BaseTeamModel):
     seed_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
     )
-    no_activity_ping_count = models.IntegerField(default=0, null=False, blank=False)
     experiment_channel = models.ForeignKey(
         "channels.ExperimentChannel",
         on_delete=models.SET_NULL,

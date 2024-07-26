@@ -1,19 +1,18 @@
 from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView, HasUserAPIKey
+from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import (
     ExperimentSerializer,
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
-    ParticipantExperimentData,
+    ParticipantDataUpdateRequest,
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 
@@ -39,7 +38,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
     ),
 )
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "id"
@@ -52,31 +51,26 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
     operation_id="update_participant_data",
     summary="Update Participant Data",
     tags=["Participants"],
-    request=ParticipantExperimentData(many=True),
+    request=ParticipantDataUpdateRequest(),
     responses={200: {}},
-    parameters=[
-        OpenApiParameter(
-            name="participant_id",
-            type=OpenApiTypes.STR,
-            location=OpenApiParameter.PATH,
-            description="Channel specific participant identifier",
-        ),
-    ],
 )
 @api_view(["POST"])
-@permission_classes([HasUserAPIKey])
 @permission_required("experiments.change_participantdata")
-def update_participant_data(request, participant_id: str):
+def update_participant_data(request):
     """
     Upsert participant data for all specified experiments in the payload
     """
-    serializer = ParticipantExperimentData(data=request.data, many=True)
+    serializer = ParticipantDataUpdateRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
-    experiment_data = serializer.validated_data
+
+    identifier = serializer.data["identifier"]
+    platform = serializer.data["platform"]
+    participant, _ = Participant.objects.get_or_create(identifier=identifier, team=request.team, platform=platform)
+
+    experiment_data = serializer.data["data"]
     experiment_ids = {data["experiment"] for data in experiment_data}
     experiments = Experiment.objects.filter(public_id__in=experiment_ids, team=request.team)
-    experiment_map = {experiment.public_id: experiment for experiment in experiments}
-    participant = get_object_or_404(Participant, identifier=participant_id, team=request.team)
+    experiment_map = {str(experiment.public_id): experiment for experiment in experiments}
 
     missing_ids = experiment_ids - set(experiment_map)
     if missing_ids:
@@ -123,7 +117,7 @@ def update_participant_data(request, participant_id: str):
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [HasUserAPIKey, DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]

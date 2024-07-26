@@ -15,7 +15,6 @@ EXPERIMENT_FIELDS = [
     "consent_form",
     "voice_provider",
     "synthetic_voice",
-    "no_activity_config",
     "conversational_consent_enabled",
     "team",
     "voice_response_behaviour",

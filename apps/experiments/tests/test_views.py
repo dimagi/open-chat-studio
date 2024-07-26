@@ -1,4 +1,5 @@
 from contextlib import nullcontext as does_not_raise
+from io import BytesIO
 from unittest import mock
 
 import pytest
@@ -19,7 +20,13 @@ from apps.experiments.models import (
 from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SourceMaterialFactory
+from apps.utils.factories.experiment import (
+    ConsentFormFactory,
+    ExperimentFactory,
+    ExperimentSessionFactory,
+    ParticipantFactory,
+    SourceMaterialFactory,
+)
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
@@ -323,7 +330,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     team = experiment.team
     experiment2 = ExperimentFactory(team=team)
     identifier = "someone@example.com"
-    participant = Participant.objects.create(identifier=identifier, team=team)
+    participant = Participant.objects.create(identifier=identifier, team=team, platform="web")
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, content_object=experiment)
     part_data2 = ParticipantData.objects.create(
         team=experiment2.team, participant=participant, content_object=experiment2
@@ -339,3 +346,30 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     part_data2.refresh_from_db()
     assert part_data1.data["timezone"] == "Africa/Johannesburg"
     assert part_data2.data["timezone"] == "Africa/Johannesburg"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
+def test_experiment_session_message_view_creates_files(delay_mock, experiment, client):
+    task = mock.Mock()
+    task.task_id = 1
+    delay_mock.return_value = task
+    session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
+    url = reverse(
+        "experiments:experiment_session_message",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.id, "session_id": session.id},
+    )
+
+    client.force_login(experiment.owner)
+    file_search_file = BytesIO(b"some content")
+    file_search_file.name = "fs.text"
+    code_interpreter_file = BytesIO(b"some content")
+    code_interpreter_file.name = "ci.text"
+    data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
+    client.post(url, data=data)
+    # Check if tool resources were created with the files
+    ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
+    assert ci_resource.files.filter(name="ci.text").exists()
+    fs_resource = session.chat.attachments.get(tool_type="file_search")
+    assert fs_resource.files.filter(name="fs.text").exists()

@@ -1,71 +1,60 @@
-import typing
-
-from django.http import HttpRequest
+from django.conf import settings
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated
-from rest_framework_api_key.permissions import BaseHasAPIKey
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.permissions import DjangoModelPermissions
+from rest_framework_api_key.permissions import KeyParser
 
 from apps.teams.utils import set_current_team
 
-from .helpers import get_team_from_request, get_team_membership_for_request, get_user_from_request
+from .helpers import get_team_membership_for_request
 from .models import UserAPIKey
 
 
-class BearerTokenAuthentication(TokenAuthentication):
-    """Used by OpenAI API"""
-
-    keyword = "Bearer"
-    model = UserAPIKey
+class BaseKeyAuthentication(BaseAuthentication):
+    def get_key(self, request):
+        raise NotImplementedError
 
     def authenticate(self, request):
-        user_auth_tuple = super().authenticate(request)
-        if user_auth_tuple:
-            user, api_key = user_auth_tuple
-            request.user = user
-            request.team = api_key.team
-            request.team_membership = get_team_membership_for_request(request)
-            if not request.team_membership:
-                raise exceptions.AuthenticationFailed()
+        key = self.get_key(request)
+        if not key:
+            return None
 
-            # this is unset by the request_finished signal
-            set_current_team(api_key.team)
-        return user_auth_tuple
-
-    def authenticate_credentials(self, key):
-        model = self.get_model()
         try:
-            token = model.objects.get_from_key(key)
-        except model.DoesNotExist:
+            token = UserAPIKey.objects.get_from_key(key)
+        except UserAPIKey.DoesNotExist:
             raise exceptions.AuthenticationFailed(_("Invalid token."))
 
         if not token.user.is_active:
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
 
-        return token.user, token
+        user = token.user
+        request.user = user
+        request.team = token.team
+        request.team_membership = get_team_membership_for_request(request)
+        if not request.team_membership:
+            raise exceptions.AuthenticationFailed()
+
+        # this is unset by the request_finished signal
+        set_current_team(token.team)
+        return user, token
 
 
-class HasUserAPIKey(BaseHasAPIKey):
-    model = UserAPIKey
-
-    def has_permission(self, request: HttpRequest, view: typing.Any) -> bool:
-        has_perm = super().has_permission(request, view)
-        if has_perm:
-            # if they have permission, also populate the request.user object for convenience
-            request.user = get_user_from_request(request)
-            request.team = get_team_from_request(request)
-            request.team_membership = get_team_membership_for_request(request)
-            if not request.team_membership:
-                return False
-
-            # this is unset by the request_finished signal
-            set_current_team(request.team)
-        return has_perm
+class ApiKeyAuthentication(BaseKeyAuthentication):
+    def get_key(self, request):
+        return KeyParser().get_from_header(request, settings.API_KEY_CUSTOM_HEADER)
 
 
-# hybrid permission class that can check for API keys or authentication
-IsAuthenticatedOrHasUserAPIKey = IsAuthenticated | HasUserAPIKey
+class BearerTokenAuthentication(BaseKeyAuthentication):
+    keyword = "Bearer"
+
+    def get_key(self, request):
+        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
+
+
+class ConfigurableKeyParser(KeyParser):
+    def __init__(self, keyword: str):
+        self.keyword = keyword
 
 
 class DjangoModelPermissionsWithView(DjangoModelPermissions):

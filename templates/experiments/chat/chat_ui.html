@@ -19,7 +19,7 @@
         {% if message.is_ai_message %}
           {% include 'experiments/chat/ai_message.html' %}
         {% elif message.is_human_message %}
-          {% include 'experiments/chat/human_message.html' %}
+          {% include 'experiments/chat/human_message.html' with attachments=message.get_attached_files %}
         {% endif %}
       {% endwith %}
     {% endwith %}

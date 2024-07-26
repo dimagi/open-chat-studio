@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -6,20 +7,21 @@ from unittest.mock import patch
 
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
-from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.token_counters import TokenCounter
 
 
 class FakeLlm(FakeListChatModel):
     """Extension of the FakeListChatModel that allows mocking of the token counts."""
 
-    token_counts: list = []
-    token_i: int = 0
     calls: list = []
 
     def _generate(
@@ -50,16 +52,8 @@ class FakeLlm(FakeListChatModel):
             for c in response:
                 yield ChatGenerationChunk(message=AIMessageChunk(content=c))
 
-    def get_num_tokens_from_messages(self, messages: list) -> int:
-        token_counts = self.token_counts[self.token_i]
-        if self.token_i < len(self.token_counts) - 1:
-            self.token_i += 1
-        else:
-            self.token_i = 0
-        return token_counts
-
     def get_num_tokens(self, text: str) -> int:
-        return self.get_num_tokens_from_messages([])
+        raise NotImplementedError
 
     def get_calls(self):
         return self.calls
@@ -80,14 +74,35 @@ class FakeLlm(FakeListChatModel):
         return RunnableLambda(lambda *args: self.responses[-1])
 
 
+@dataclasses.dataclass
+class FakeTokenCounter(TokenCounter):
+    token_counts: list[int] = dataclasses.field(default_factory=lambda: [1])
+    token_i: int = 0
+
+    def get_tokens_from_text(self, text) -> int:
+        token_counts = self.token_counts[self.token_i]
+        if self.token_i < len(self.token_counts) - 1:
+            self.token_i += 1
+        else:
+            self.token_i = 0
+        return token_counts
+
+
 class FakeLlmService(LlmService):
     llm: Any
+    token_counter: TokenCounter
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
         return self.llm
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(self.token_counter)
 
 
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
@@ -109,9 +124,17 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
         return response
 
 
+class FakeLlmSimpleTokenCount(FakeLlm):
+    def get_num_tokens(self, text: str) -> int:
+        return len(text.split())
+
+    def get_num_tokens_from_messages(self, messages: list) -> int:
+        return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
+
+
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
-    service = FakeLlmService(llm=FakeLlm(responses=responses, token_counts=token_counts or [0]))
+    service = build_fake_llm_service(responses=responses, token_counts=token_counts)
 
     def fake_llm_service(self):
         return service
@@ -126,3 +149,9 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
         patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
     ):
         yield
+
+
+def build_fake_llm_service(responses, token_counts, llm=None):
+    return FakeLlmService(
+        llm=FakeLlmSimpleTokenCount(responses=responses), token_counter=FakeTokenCounter(token_counts=token_counts)
+    )
