@@ -1,3 +1,1 @@
-export type NodeParams = {
-  [key: string]: string;
-};
+export type NodeParams = Record<string, string>;

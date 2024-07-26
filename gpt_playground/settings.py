@@ -558,3 +558,5 @@ HEALTH_CHECK = {
         "celery": ["CeleryHealthCheckCelery"],
     },
 }
+
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")

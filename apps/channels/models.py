@@ -20,6 +20,7 @@ WEB = "web"
 TELEGRAM = "telegram"
 WHATSAPP = "whatsapp"
 FACEBOOK = "facebook"
+SUREADHERE = "sureadhere"
 
 
 class ChannelPlatform(models.TextChoices):
@@ -27,16 +28,13 @@ class ChannelPlatform(models.TextChoices):
     WEB = "web", "Web"
     WHATSAPP = "whatsapp", "WhatsApp"
     FACEBOOK = "facebook", "Facebook"
+    SUREADHERE = "sureadhere", "SureAdhere"
     API = "api", "API"
     SLACK = "slack", "Slack"
 
     @classmethod
     def for_dropdown(cls):
-        available = [
-            cls.TELEGRAM,
-            cls.WHATSAPP,
-            cls.FACEBOOK,
-        ]
+        available = [cls.TELEGRAM, cls.WHATSAPP, cls.FACEBOOK, cls.SUREADHERE]
         if settings.SLACK_ENABLED:
             available.append(cls.SLACK)
         return available
@@ -58,6 +56,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.WhatsappChannelForm(channel=channel, *args, **kwargs)
             case self.FACEBOOK:
                 return forms.FacebookChannelForm(channel=channel, *args, **kwargs)
+            case self.SUREADHERE:
+                return forms.SureAdhereChannelForm(channel=channel, *args, **kwargs)
             case self.SLACK:
                 return forms.SlackChannelForm(*args, **kwargs)
 
@@ -70,6 +70,8 @@ class ChannelPlatform(models.TextChoices):
                 return "number"
             case self.FACEBOOK:
                 return "page_id"
+            case self.SUREADHERE:
+                return "sureadhere_tenant_id"
             case self.SLACK:
                 return "slack_channel_id"
 
@@ -155,6 +157,11 @@ class ExperimentChannel(BaseModel):
             uri = reverse("channels:new_twilio_message")
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
+        elif provider_type == MessagingProviderType.sureadhere:
+            uri = reverse(
+                "channels:new_sureadhere_message",
+                kwargs={"sureadhere_tenant_id": self.extra_data.get("sureadhere_tenant_id", "")},
+            )
         return absolute_url(
             uri,
             is_secure=True,

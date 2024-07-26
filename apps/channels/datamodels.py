@@ -87,6 +87,18 @@ class TwilioMessage(BaseMessage):
         )
 
 
+class SureAdhereMessage(BaseMessage):
+    """
+    A wrapper class for user messages coming from the SureAdhere
+    """
+
+    @staticmethod
+    def parse(message_data: dict) -> "SureAdhereMessage":
+        return SureAdhereMessage(
+            participant_id=str(message_data["patient_id"]), message_text=message_data["message_text"]
+        )
+
+
 class TurnWhatsappMessage(BaseMessage):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)

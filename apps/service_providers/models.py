@@ -234,6 +234,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 class MessagingProviderType(models.TextChoices):
     twilio = "twilio", _("Twilio")
     turnio = "turnio", _("Turn.io")
+    sureadhere = "sureadhere", _("SureAdhere")
     slack = "slack", _("Slack")
 
     @property
@@ -243,6 +244,8 @@ class MessagingProviderType(models.TextChoices):
                 return forms.TwilioMessagingConfigForm
             case MessagingProviderType.turnio:
                 return forms.TurnIOMessagingConfigForm
+            case MessagingProviderType.sureadhere:
+                return forms.SureAdhereMessagingConfigForm
             case MessagingProviderType.slack:
                 return forms.SlackMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
@@ -253,6 +256,8 @@ class MessagingProviderType(models.TextChoices):
                 return messaging_service.TwilioService(**config)
             case MessagingProviderType.turnio:
                 return messaging_service.TurnIOService(**config)
+            case MessagingProviderType.sureadhere:
+                return messaging_service.SureAdhereService(**config)
             case MessagingProviderType.slack:
                 return messaging_service.SlackService(**config)
         raise Exception(f"No messaging service configured for {self}")

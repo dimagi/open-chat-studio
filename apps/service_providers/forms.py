@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
@@ -155,6 +156,22 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["auth_token"]
 
     auth_token = forms.CharField(label=_("Auth Token"))
+
+
+class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["client_secret"]
+
+    client_id = forms.CharField(
+        label=_("Client ID"), help_text=_("Azure AD B2C Application ID used for authentication.")
+    )
+    client_secret = forms.CharField(
+        label=_("Client Secret"), help_text=_("Secret used for authentication with Azure AD B2C.")
+    )
+    base_url = forms.URLField(
+        label=_("Base URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("URL of the SureAdhere backend server"),
+    )
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

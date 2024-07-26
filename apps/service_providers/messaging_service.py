@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
+from urllib.parse import urljoin
 
 import boto3
 import pydantic
@@ -148,6 +149,37 @@ class TurnIOService(MessagingService):
         response = self.client.media.get_media(message.media_id)
         ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+
+class SureAdhereService(MessagingService):
+    _type: ClassVar[str] = "sureadhere"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.SUREADHERE]
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    client_id: str
+    client_secret: str
+    base_url: str
+
+    def get_access_token(self):
+        auth_url = "https://sureadherelabs.b2clogin.com/sureadherelabs.onmicrosoft.com/B2C_1_Patients/oauth2/v2.0/token"
+        auth_data = {
+            "grant_type": "client_credentials",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "scope": "https://sureadherelabs.onmicrosoft.com/auth_demo_api1/.default",
+        }
+        response = requests.post(auth_url, data=auth_data)
+        response.raise_for_status()
+        return response.json()["access_token"]
+
+    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
+        access_token = self.get_access_token()
+        send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
+        data = {"patient_Id": to, "message_Body": message}
+        response = requests.post(send_msg_url, headers=headers, json=data)
+        response.raise_for_status()
 
 
 class SlackService(MessagingService):
