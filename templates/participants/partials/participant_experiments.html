@@ -9,7 +9,7 @@
       <th scope="col" class=""></th>
     </tr>
   </thead>
-  <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: null}">
+  <tbody class="divide-y divide-gray-200" x-data="{experimentsRow: 1}">
     {% for experiment, info in experiment_data.items %}
       {% with sessions=info|dict_lookup:"sessions" participant_data=info|dict_lookup:"participant_data" %}
         <tr
