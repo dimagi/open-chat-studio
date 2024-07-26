@@ -689,6 +689,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
