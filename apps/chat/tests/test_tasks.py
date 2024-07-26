@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.test import TestCase
 
@@ -72,7 +74,9 @@ class TasksTest(TestCase):
 
 
 @pytest.mark.django_db()
-def test_no_activity_ping_with_assistant_bot():
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+def test_no_activity_ping_with_assistant_bot(save_response_annotations):
+    save_response_annotations.return_value = "Hey, answer me!", {}
     session = ExperimentSessionFactory()
     local_assistant = OpenAiAssistantFactory()
     session.experiment.assistant = local_assistant
