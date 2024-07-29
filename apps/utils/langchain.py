@@ -71,7 +71,7 @@ class FakeLlm(FakeListChatModel):
         Example:
             FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
         """
-        return RunnableLambda(lambda *args: self.responses[-1])
+        return RunnableLambda(lambda message, *args, **kwargs: self._call([message]))
 
 
 @dataclasses.dataclass
@@ -151,7 +151,6 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
         yield
 
 
-def build_fake_llm_service(responses, token_counts, llm=None):
-    return FakeLlmService(
-        llm=FakeLlmSimpleTokenCount(responses=responses), token_counter=FakeTokenCounter(token_counts=token_counts)
-    )
+def build_fake_llm_service(responses, token_counts, fake_llm=None):
+    fake_llm = fake_llm or FakeLlmSimpleTokenCount(responses=responses)
+    return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))

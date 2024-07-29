@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
 from apps.experiments.models import ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -102,55 +102,53 @@ class ExtractStructuredData(LLMResponse):
     __human_name__ = "Extract structured data"
     data_schema: str
 
-    def _prompt_chain(self, participant_data):
-        prompt = PromptTemplate.from_template(template="Current user data: {participant_data}: Conversations: {input}")
+    def _prompt_chain(self, user_data):
+        prompt = PromptTemplate.from_template(template="Current user data: {user_data}\n Conversations: {input}")
         return (
             {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(participant_data=RunnableLambda(lambda x: participant_data))
+            | RunnablePassthrough.assign(user_data=RunnableLambda(lambda x: user_data))
             | prompt
         )
 
-    def extraction_chain(self, json_schema, participant_data):
-        return self._prompt_chain(participant_data) | super().get_chat_model().with_structured_output(json_schema)
+    def extraction_chain(self, json_schema, user_data):
+        return self._prompt_chain(user_data) | super().get_chat_model().with_structured_output(json_schema)
 
     def _process(self, state: PipelineState) -> RunnableLambda:
         json_schema = ExtractStructuredData.to_json_schema(json.loads(self.data_schema))
         participant_data = self.get_participant_data(state)
         input: str = state["messages"][-1]
 
-        chain = self.extraction_chain(json_schema=json_schema, participant_data=participant_data)
+        participant_data_chain = self.extraction_chain(json_schema=json_schema, user_data=participant_data)
         prompt_token_count = self._get_prompt_token_count(participant_data)
 
-        chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
-        while len(chunks) > 1:
-            self.logger.info(f"{len(chunks)} chunks created")
-            extracted_data = []
-            for idx, message_chunk in enumerate(chunks):
-                output = chain.invoke(message_chunk, config=self._config)
-                chunk_head = message_chunk[:100]
-                chunk_tail = message_chunk[-100:]
+        message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
+        chunk_outputs: list[dict] = []
+        for idx, message_chunk in enumerate(message_chunks, start=1):
+            structured_output = participant_data_chain.invoke(message_chunk, config=self._config)
+            chunk_head = message_chunk[:100]
+            chunk_tail = message_chunk[-100:]
+            self.logger.info(
+                f"Chunk {idx}",
+                input=f"\n{chunk_head}\n...\n{chunk_tail}\n",
+                output=f"\nExtracted data:\n{structured_output}",
+            )
+            chunk_outputs.append(structured_output)
+
+        if len(chunk_outputs) > 1:
+            # One pass with the current participant data + a single chunk's output
+            prev_chunk_output = chunk_outputs[0]
+            for idx, chunk_output in enumerate(chunk_outputs[1:], start=2):
+                reduce_chain = self.extraction_chain(json_schema=json_schema, user_data=prev_chunk_output)
+                prev_chunk_output = reduce_chain.invoke(chunk_output)
                 self.logger.info(
-                    f"Chunk {idx}", input=f"\n{chunk_head}\n...\n{chunk_tail}\n", output=f"Extracted data:\n{output}"
+                    "Merging chunks",
+                    input=f"Previous chunk:\n{prev_chunk_output}\nCurrent chunk:\n{chunk_output}\n",
+                    output=prev_chunk_output,
                 )
-                extracted_data.append(output)
 
-            # Reducing step
-            input = "\n".join([json.dumps(data) for data in extracted_data])
-            self.logger.info("Merging extracted data from chunks for re-evaluation")
-            new_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
-
-            if len(new_chunks) >= len(chunks):
-                # This will happen when the output tokens are more than the number of tokens per chunk.
-                # This is unlikely to happen, but can when the amount of participant data is large enough
-                # to drive the allowed chunk size down to a very small number.
-                # Additionally, when the `data_schema` is also large, the model will output a large amount of
-                # tokens per chunk, resulting in the output tokens being more than the chunk size. This will cause
-                # more chunks and an infinite loop
-                raise PipelineNodeRunError("Stopping due to bloating chunks. Reduce the size of the data schema")
-            chunks = new_chunks
-
-        output = chain.invoke(chunks[0], config=self._config)
-        self.logger.info("Running final inference", input=chunks[0], output=f"Extracted data:\n{output}")
+            output = prev_chunk_output
+        else:
+            output = chunk_outputs[0]
         return output
 
     def _get_prompt_token_count(self, participant_data: dict) -> int:

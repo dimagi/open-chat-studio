@@ -174,9 +174,8 @@ def test_render_template():
 
 
 @contextmanager
-def extract_structured_data_pipeline(provider):
-    llm = FakeLlmSimpleTokenCount(responses=[{"name": "John"}])
-    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], llm=llm)
+def extract_structured_data_pipeline(provider, llm=None):
+    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
 
     with (
         mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
@@ -218,18 +217,43 @@ def test_extract_structured_data_no_chunking(provider):
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_extract_structured_data_with_chunking(provider):
     session = ExperimentSessionFactory()
+    ParticipantData.objects.create(
+        team=session.team, content_object=session.experiment, data={"drink": "martini"}, participant=session.participant
+    )
+    llm = FakeLlmSimpleTokenCount(
+        responses=[
+            {"name": None},  # the first chunk sees nothing of value
+            {"name": "james"},  # the second chunk message sees the name
+            {"name": None},  # the third chunk sees nothing of value
+            {"name": "james"},  # the first + second chunk outputs the name
+            {"name": "james"},  # the output of that + no new data still outputs the name
+        ]
+    )
 
     with (
-        extract_structured_data_pipeline(provider) as graph,
+        extract_structured_data_pipeline(provider, llm) as graph,
         mock.patch(
             "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
-            side_effect=[["chunk1", "chunk2", "chunk3"], ["chunk1", "chunk2"], ["chunk1"]],
-        ) as chunk_messages,
+            return_value=["I am bond", "james bond", "007"],
+        ),
     ):
         state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
-        assert graph.invoke(state)["messages"][-1] == {"name": "John"}
+        extracted_data = graph.invoke(state)["messages"][-1]
 
-    assert chunk_messages.call_count == 3
+    # The problem is that the participant data is only in the first inference call. What if we need it in the 3rd
+    # call?
+
+    # This is what the LLM sees. First extract data
+    inferences = llm.get_call_messages()
+    assert inferences[0][0].text == "Current user data: {'drink': 'martini'}\n Conversations: I am bond"
+    assert inferences[1][0].text == "Current user data: {'drink': 'martini'}\n Conversations: james bond"
+    assert inferences[2][0].text == "Current user data: {'drink': 'martini'}\n Conversations: 007"
+    # Then merge
+    assert inferences[3][0].text == "Current user data: {'name': None}\n Conversations: {'name': 'james'}"
+    assert inferences[4][0].text == "Current user data: {'name': 'james'}\n Conversations: {'name': None}"
+
+    # Expected node output
+    assert extracted_data == {"name": "james"}
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
