@@ -138,7 +138,11 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def clean_number(self):
         try:
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
-            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+            number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+            service = self.messaging_provider.get_messaging_service()
+            if not service.is_valid_number(number):
+                raise forms.ValidationError(f"{number} was not found at the provider.")
+            return number
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
 

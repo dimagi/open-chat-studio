@@ -1,3 +1,5 @@
+from unittest.mock import PropertyMock, patch
+
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
@@ -42,8 +44,32 @@ def test_channel_form_reveals_provider_types(team_with_users, platform, expected
         ("+32 (0)27888484", True),
     ],
 )
-def test_whatsapp_form(number, is_valid):
+@patch("apps.channels.forms.WhatsappChannelForm.messaging_provider")
+def test_whatsapp_form_validates_number_format(messaging_provider, number, is_valid):
     form = WhatsappChannelForm({"number": number})
     assert form.is_valid() == is_valid
     if not is_valid:
         assert form.errors["number"] == ["Enter a valid phone number (e.g. +12125552368)."]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("provider_type", "number", "is_valid"),
+    [
+        (MessagingProviderType.twilio, "+12125552368", True),
+        (MessagingProviderType.twilio, "+12125552333", False),
+        # Turnio doesn't have a way to list account numbers, so assume it's always valid
+        (MessagingProviderType.turnio, "+12125552368", True),
+        (MessagingProviderType.turnio, "+12125552333", True),
+    ],
+)
+@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
+@patch("apps.service_providers.messaging_service.TwilioService._get_account_numbers")
+def test_whatsapp_form_checks_number(_get_account_numbers, messaging_provider, provider_type, number, is_valid):
+    _get_account_numbers.return_value = ["+12125552368"]
+    provider = MessagingProviderFactory(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
+    messaging_provider.return_value = provider
+    form = WhatsappChannelForm({"number": number, "messaging_provider": provider.id})
+    assert form.is_valid() == is_valid
+    if not is_valid:
+        assert form.errors == {"number": [f"{number} was not found at the provider."]}
