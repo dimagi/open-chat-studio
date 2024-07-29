@@ -31,7 +31,7 @@ def get_interval_duration(interval):
 
 def calculate_remaining_repetitions(task, current_time):
     interval_duration = get_interval_duration(task.interval)
-    remaining_time = task.expires - current_time if task.expires else None
+    remaining_time = current_time - task.expires if task.expires else None
     if not remaining_time or not interval_duration:
         return 0
     remaining_repetitions = remaining_time / interval_duration
