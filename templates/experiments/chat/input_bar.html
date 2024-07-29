@@ -109,8 +109,8 @@
 {% if session.experiment.assistant %}
   <script>
     document.addEventListener('alpine:init', () => {
-      const metabyte_in_bytes = 1048576;
-      const byte_limit = metabyte_in_bytes*512;
+      const megabyte_in_bytes = 1048576;
+      const byte_limit = megabyte_in_bytes*512;
       const code_interpreter_max_files = 20
       Alpine.data('fileUploads', () => ({
         code_interpreter_files: [],
@@ -126,7 +126,7 @@
           }
 
           if (this.total_upload_size_bytes + new_upload_bytes > byte_limit) {
-            let current_files_mb = this.total_upload_size_bytes/metabyte_in_bytes
+            let current_files_mb = this.total_upload_size_bytes/megabyte_in_bytes
             let message = "Unable to add new file(s). The maximum upload capacity is 512MB. Current size is " + current_files_mb + "MB";
             alert(message);
             return;
