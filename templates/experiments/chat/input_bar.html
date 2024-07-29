@@ -105,11 +105,26 @@
 {% if session.experiment.assistant %}
   <script>
     document.addEventListener('alpine:init', () => {
+      const metabyte_in_bytes = 1048576;
+      const byte_limit = metabyte_in_bytes*512;
       Alpine.data('fileUploads', () => ({
         code_interpreter_files: [],
         file_search_files: [],
+        total_upload_size_bytes: 0,
         handleFileChange(event, targetArray) {
           const files = Array.from(event.target.files);
+          let new_upload_bytes = 0
+          for (let i = 0; i < files.length; i++){
+            new_upload_bytes = new_upload_bytes + files[i].size
+          }
+
+          if (this.total_upload_size_bytes + new_upload_bytes > byte_limit) {
+            let current_files_mb = this.total_upload_size_bytes/metabyte_in_bytes
+            let message = "Unable to add new file(s). The maximum upload capacity is 512MB. Current size is " + current_files_mb + "MB";
+            alert(message);
+            return;
+          }
+          this.total_upload_size_bytes = this.total_upload_size_bytes + new_upload_bytes
           this[targetArray].push(...files);
           const dataTransfer = new DataTransfer();
           this[targetArray].forEach(file => dataTransfer.items.add(file));
@@ -118,7 +133,12 @@
         removeFile(index, targetArray) {
           this[targetArray].splice(index, 1);
           const dataTransfer = new DataTransfer();
-          this[targetArray].forEach(file => dataTransfer.items.add(file));
+          this.total_upload_size_bytes = 0;
+
+          this[targetArray].forEach(file => {
+            dataTransfer.items.add(file)
+            this.total_upload_size_bytes = this.total_upload_size_bytes + file.size
+          });
           if (targetArray === 'code_interpreter_files') {
             this.$refs.codeInterpreter.files = dataTransfer.files;
           } else if (targetArray === 'file_search_files') {
