@@ -1,4 +1,5 @@
-from django.db.models.signals import post_save
+from django.core.exceptions import ProtectedError
+from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
 from apps.teams.models import Team
@@ -22,3 +23,20 @@ def create_default_consent_for_team(team):
             "consent_text": DEFAULT_CONSENT_TEXT,
         },
     )
+
+
+@receiver(pre_delete, sender="service_providers.LlmProvider")
+@receiver(pre_delete, sender="assistants.OpenAiAssistant")
+@receiver(pre_delete, sender="SourceMaterial")
+@receiver(pre_delete, sender="Survey")
+@receiver(pre_delete, sender="ConsentForm")
+@receiver(pre_delete, sender="service_providers.VoiceProvider")
+@receiver(pre_delete, sender="SyntheticVoice")
+def protect_referenced_objects(sender, instance, **kwargs):
+    try:
+        instance.delete()
+    except ProtectedError:
+        print(
+            f"Cannot delete {instance}. It is still referenced by an ExperimentVersion. Please delete the references first."
+        )
+        raise

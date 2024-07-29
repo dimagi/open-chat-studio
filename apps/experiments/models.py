@@ -285,35 +285,28 @@ class Experiment(BaseTeamModel):
     objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
-    description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
+    description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")
     llm_provider = models.ForeignKey(
-        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
+        "service_providers.LlmProvider", on_delete=models.PROTECT, null=True, blank=True, verbose_name="LLM Provider"
     )
     llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="OpenAI Assistant",
+        "assistants.OpenAiAssistant", on_delete=models.PROTECT, null=True, blank=True, verbose_name="OpenAI Assistant"
     )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
-
     prompt_text = models.TextField(blank=True, default="")
     input_formatter = models.TextField(
         blank=True,
         default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
+        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot.",
     )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
     )
-
     source_material = models.ForeignKey(
         SourceMaterial,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         help_text="If provided, the source material will be given to every bot in the chain.",
@@ -321,38 +314,34 @@ class Experiment(BaseTeamModel):
     seed_message = models.TextField(
         blank=True,
         default="",
-        help_text="If set, send this message to the bot when the session starts, "
-        "and prompt the user with the initial response.",
+        help_text="If set, send this message to the bot when the session starts, and prompt the user with the initial response.",
     )
     pre_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.SET_NULL
+        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.PROTECT
     )
     post_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.SET_NULL
+        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.PROTECT
     )
-    public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    public_id = models.UUIDField(default=uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="experiments",
         help_text="Consent form content to show to users before participation in experiments.",
     )
     voice_provider = models.ForeignKey(
         "service_providers.VoiceProvider",
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         verbose_name="Voice Provider",
     )
     synthetic_voice = models.ForeignKey(
-        SyntheticVoice, null=True, blank=True, related_name="experiments", on_delete=models.SET_NULL
+        SyntheticVoice, null=True, blank=True, related_name="experiments", on_delete=models.PROTECT
     )
     conversational_consent_enabled = models.BooleanField(
         default=False,
-        help_text=(
-            "If enabled, the consent form will be sent at the start of a conversation for external channels. Note: "
-            "This requires the experiment to have a seed message."
-        ),
+        help_text="If enabled, the consent form will be sent at the start of a conversation for external channels. Note: This requires the experiment to have a seed message.",
     )
     safety_violation_notification_emails = ArrayField(
         models.CharField(max_length=512),
@@ -364,8 +353,7 @@ class Experiment(BaseTeamModel):
     )
     max_token_limit = models.PositiveIntegerField(
         default=8192,
-        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
-        "If 0, compression will be disabled which may result in errors or high LLM costs.",
+        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
     voice_response_behaviour = models.CharField(
         max_length=10,
