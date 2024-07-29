@@ -9,7 +9,7 @@ import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.fields import ArrayField, JSONField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
@@ -445,6 +445,28 @@ class ExperimentRoute(BaseTeamModel):
             ("parent", "child"),
             ("parent", "keyword"),
         )
+
+
+class ExperimentVersion(models.Model):
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="versions")
+    version_data = JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_default = models.BooleanField(default=False)
+    version_number = models.PositiveIntegerField()
+    name = models.CharField(max_length=128)
+    is_active = models.BooleanField()
+
+    class Meta:
+        unique_together = ("experiment", "version_number")
+
+    def __str__(self):
+        return f"{self.experiment.name} - Version {self.version_number}"
+
+    def save(self, *args, **kwargs):
+        version_data = json.loads(self.version_data)
+        self.name = version_data.get("name")
+        self.is_active = version_data.get("is_active")
+        super().save(*args, **kwargs)
 
 
 class Participant(BaseTeamModel):
