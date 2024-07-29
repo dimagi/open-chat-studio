@@ -1,4 +1,4 @@
-from django.core.exceptions import ProtectedError
+from django.db.models import ProtectedError
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
@@ -27,11 +27,11 @@ def create_default_consent_for_team(team):
 
 @receiver(pre_delete, sender="service_providers.LlmProvider")
 @receiver(pre_delete, sender="assistants.OpenAiAssistant")
-@receiver(pre_delete, sender="SourceMaterial")
-@receiver(pre_delete, sender="Survey")
-@receiver(pre_delete, sender="ConsentForm")
+@receiver(pre_delete, sender="experiments.SourceMaterial")
+@receiver(pre_delete, sender="experiments.Survey")
+@receiver(pre_delete, sender="experiments.ConsentForm")
 @receiver(pre_delete, sender="service_providers.VoiceProvider")
-@receiver(pre_delete, sender="SyntheticVoice")
+@receiver(pre_delete, sender="experiments.SyntheticVoice")
 def protect_referenced_objects(sender, instance, **kwargs):
     try:
         instance.delete()

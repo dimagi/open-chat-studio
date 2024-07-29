@@ -322,7 +322,7 @@ class Experiment(BaseTeamModel):
     post_survey = models.ForeignKey(
         Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.PROTECT
     )
-    public_id = models.UUIDField(default=uuid4, unique=True)
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
         on_delete=models.PROTECT,
