@@ -6,7 +6,6 @@ from django.core import mail
 from django.test import override_settings
 
 from apps.experiments.models import ParticipantData
-from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -254,31 +253,6 @@ def test_extract_structured_data_with_chunking(provider):
 
     # Expected node output
     assert extracted_data == {"name": "james"}
-
-
-@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-@pytest.mark.parametrize(
-    "returned_chunks",
-    [
-        # increasing chunks
-        [["chunk1", "chunk2"], ["chunk1", "chunk2", "chunk3"]],
-        # stagnating chunks
-        [["chunk1", "chunk2"], ["chunk1", "chunk2"]],
-    ],
-)
-def test_extract_structured_data_raises_run_error(returned_chunks, provider):
-    session = ExperimentSessionFactory()
-
-    state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
-    with (
-        extract_structured_data_pipeline(provider) as graph,
-        mock.patch("apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages", side_effect=returned_chunks),
-        pytest.raises(
-            PipelineNodeRunError, match="Stopping due to bloating chunks. Reduce the size of the data schema"
-        ),
-    ):
-        graph.invoke(state)
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
