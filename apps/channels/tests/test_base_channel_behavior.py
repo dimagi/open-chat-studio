@@ -524,20 +524,24 @@ def test_participant_reused_across_experiments(_get_experiment_response):
 
 @pytest.mark.django_db()
 def test_strip_urls_and_emojis():
+    """
+    Test that unique urls are extracted and emojis are stripped out
+    """
     text = (
         "Hey there! 😊 Check out this amazing website: https://www.example.com! Also, don't forget to visit"
         " http://www.another-site.org. If you're a fan of coding, you'll love"
         " https://developer.mozilla.org/some/path. Have you seen this awesome cat video? 🐱🐾 Watch it at"
-        " https://www.catvideos.com. Let's stay connected on social media: Twitter (https://twitter.com) and"
-        "Facebook (https://facebook.com?page=page1). Can't wait to see you there! 🎉✨"
+        " [https://www.catvideos.com](https://www.catvideos.com). Let's stay connected on social media: Twitter"
+        " (https://twitter.com) and Facebook (https://facebook.com?page=page1). Can't wait to see you there! 🎉✨"
     )
     expected_text = (
         "Hey there!  Check out this amazing website: ! Also, don't forget to visit . If you're a fan of coding, "
-        "you'll love . Have you seen this awesome cat video?  Watch it at . Let's stay connected on social "
-        "media: Twitter () andFacebook (). Can't wait to see you there! "
+        "you'll love . Have you seen this awesome cat video?  Watch it at [](). Let's stay connected on social "
+        "media: Twitter () and Facebook (). Can't wait to see you there! "
     )
 
     output, urls = strip_urls_and_emojis(text)
+    assert len(urls) == 6
     assert output == expected_text
     assert "https://www.example.com" in urls
     assert "http://www.another-site.org" in urls
@@ -582,6 +586,8 @@ def test_url_regex():
     ]
     matches = url_pattern.findall("\n".join(expected_matches))
 
+    assert len(matches) == 20
+
     for url in expected_matches:
         assert url in matches
 
@@ -614,5 +620,7 @@ def test_voice_response_with_urls(
     telegram_channel.new_user_message(telegram_messages.text_message())
 
     assert send_voice_to_user.called is True
-    expected_url_str = "http://example.co.za?key1=1&key2=2\nhttps://some.com\nhttps://some.com"
-    assert send_text_to_user.mock_calls[0].args[0] == expected_url_str
+
+    text_message = send_text_to_user.mock_calls[0].args[0]
+    assert "http://example.co.za?key1=1&key2=2" in text_message
+    assert "https://some.com" in text_message
