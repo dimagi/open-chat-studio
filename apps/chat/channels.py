@@ -549,9 +549,10 @@ class TelegramChannel(ChannelBase):
         self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
 
     def transcription_finished(self, transcript: str):
-        self.telegram_bot.send_message(
-            self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
-        )
+        if self.experiment.echo_transcript:
+            self.telegram_bot.send_message(
+                self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
+            )
 
 
 class WhatsappChannel(ChannelBase):
@@ -575,7 +576,8 @@ class WhatsappChannel(ChannelBase):
         return self.messaging_service.supported_message_types
 
     def transcription_finished(self, transcript: str):
-        self.send_text_to_user(f'I heard: "{transcript}"')
+        if self.experiment.echo_transcript:
+            self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
@@ -628,7 +630,8 @@ class FacebookMessengerChannel(ChannelBase):
         return self.messaging_service.supported_message_types
 
     def transcription_finished(self, transcript: str):
-        self.send_text_to_user(f'I heard: "{transcript}"')
+        if self.experiment.echo_transcript:
+            self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
