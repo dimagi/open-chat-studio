@@ -112,7 +112,7 @@ class Migration(migrations.Migration):
                 )
 
     dependencies = [
-        ('events', '0013_alter_scheduledmessage_action'),
+        ('events', '0014_scheduledmessage_external_id_and_more'),
     ]
 
     operations = [
