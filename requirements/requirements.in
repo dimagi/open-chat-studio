@@ -49,3 +49,4 @@ turn-python>=0.2.0
 twilio
 whitenoise[brotli]
 phonenumberslite
+emoji

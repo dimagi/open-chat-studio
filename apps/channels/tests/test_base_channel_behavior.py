@@ -532,9 +532,9 @@ def test_strip_urls_and_emojis():
         "Facebook (https://facebook.com?page=page1). Can't wait to see you there! 🎉✨"
     )
     expected_text = (
-        "Hey there! 😊 Check out this amazing website: ! Also, don't forget to visit . If you're a fan of coding, "
-        "you'll love . Have you seen this awesome cat video? 🐱🐾 Watch it at . Let's stay connected on social "
-        "media: Twitter () andFacebook (). Can't wait to see you there! 🎉✨"
+        "Hey there!  Check out this amazing website: ! Also, don't forget to visit . If you're a fan of coding, "
+        "you'll love . Have you seen this awesome cat video?  Watch it at . Let's stay connected on social "
+        "media: Twitter () andFacebook (). Can't wait to see you there! "
     )
 
     output, urls = strip_urls_and_emojis(text)

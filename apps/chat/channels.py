@@ -6,6 +6,7 @@ from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
+import emoji
 import requests
 from django.db import transaction
 from telebot import TeleBot
@@ -42,10 +43,13 @@ URL_REGEX = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^
 
 def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
+    text = emoji.replace_emoji(text, replace="")
+
     url_pattern = re.compile(URL_REGEX)
     urls = [match[0] for match in url_pattern.findall(text)]
     for url in urls:
         text = text.replace(url, "")
+
     return text, urls
 
 
