@@ -14,4 +14,4 @@ urlpatterns = [
     ),
 ]
 
-urlpatterns.extend(make_crud_urls(views, "Participant", "participant"))
+urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))

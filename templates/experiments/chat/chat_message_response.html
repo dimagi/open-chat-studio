@@ -8,18 +8,20 @@
        {% endif %}
        data-last-message-datetime="{{ last_message_datetime|safe }}"
   >
-    {% include "experiments/chat/components/system_icon.html" %}
-    <div class="message-contents">
-      {% if progress.complete and progress.success %}
-        {{ progress.result|render_markdown }}
-      {% elif progress.complete %}
-        <p class="pg-text-danger">
-          Sorry something went wrong. This was likely an intermittent error related to load.
-          Please try again, and wait a few minutes if this keeps happening.
-        </p>
-      {% else %}
-        <span class="loading loading-dots loading-sm"></span>
-      {% endif %}
+    <div class="flex flex-row">
+      {% include "experiments/chat/components/system_icon.html" %}
+      <div class="message-contents">
+        {% if progress.complete and progress.success %}
+          {{ progress.result|render_markdown }}
+        {% elif progress.complete %}
+          <p class="pg-text-danger">
+            Sorry something went wrong. This was likely an intermittent error related to load.
+            Please try again, and wait a few minutes if this keeps happening.
+          </p>
+        {% else %}
+          <span class="loading loading-dots loading-sm"></span>
+        {% endif %}
+      </div>
     </div>
   </div>
 {% endif %}

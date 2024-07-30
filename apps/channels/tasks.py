@@ -7,9 +7,9 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.datamodels import BaseMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ApiChannel, FacebookMessengerChannel, TelegramChannel, WhatsappChannel
+from apps.chat.channels import ApiChannel, FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -25,6 +25,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         .first()
     )
     if not experiment_channel:
+        log.info(f"No experiment channel found for external_id: {channel_external_id}")
         return
 
     update = types.Update.de_json(message_data)
@@ -64,6 +65,7 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
         .first()
     )
     if not experiment_channel:
+        log.info(f"No experiment channel found for {channel_id_key}: {message.to}")
         return
 
     validate_twillio_request(experiment_channel, raw_data, request_uri, signature)
@@ -91,6 +93,22 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
             log.error("Twilio signature validation failed")
 
 
+@shared_task(bind=True, base=TaskbadgerTask)
+def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dict):
+    message = SureAdhereMessage.parse(message_data)
+    experiment_channel = ExperimentChannel.objects.filter(
+        extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
+        platform=ChannelPlatform.SUREADHERE,
+        messaging_provider__type=MessagingProviderType.sureadhere,
+    ).first()
+    if not experiment_channel:
+        log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
+        return
+    channel = SureAdhereChannel(experiment_channel=experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)
+
+
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
@@ -104,6 +122,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
         .first()
     )
     if not experiment_channel:
+        log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
     channel = WhatsappChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)

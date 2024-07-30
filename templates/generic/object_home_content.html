@@ -10,10 +10,10 @@
       </div>
       <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
-    {% if allow_new|default:True or actions %}
+    {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end">
         <div class="join">
-          {% if allow_new|default:True %}
+          {% if allow_new|default_if_none:True %}
             <a class="btn btn-sm join-item {{ button_style|default:"btn-primary" }}"
                href="{{ new_object_url }}">Add new
             </a>

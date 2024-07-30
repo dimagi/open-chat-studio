@@ -379,6 +379,10 @@ class Experiment(BaseTeamModel):
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    echo_transcript = models.BooleanField(
+        default=True,
+        help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -508,9 +512,15 @@ class Participant(BaseTeamModel):
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
-            .filter(sessions__participant=self)
+            .filter(Q(sessions__participant=self) | Q(participant_data__participant=self))
             .distinct()
         )
+
+    def get_data_for_experiment(self, experiment) -> dict:
+        try:
+            return self.data_set.get(bots=experiment).data
+        except ParticipantData.DoesNotExist:
+            return {}
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment | None = None):
@@ -765,7 +775,6 @@ class ExperimentSession(BaseTeamModel):
             Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
             participant=self.participant,
             team=self.team,
-            action__isnull=False,
         ).select_related("action")
 
         scheduled_messages = []

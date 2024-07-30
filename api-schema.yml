@@ -478,6 +478,7 @@ components:
       - web
       - whatsapp
       - facebook
+      - sureadhere
       - api
       - slack
       type: string
@@ -486,6 +487,7 @@ components:
         * `web` - Web
         * `whatsapp` - WhatsApp
         * `facebook` - Facebook
+        * `sureadhere` - SureAdhere
         * `api` - API
         * `slack` - Slack
     Team:

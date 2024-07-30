@@ -64,6 +64,32 @@ class ExtraFormBase(forms.Form):
         pass
 
 
+class WebhookUrlFormBase(ExtraFormBase):
+    webook_url = forms.CharField(
+        widget=forms.TextInput(attrs={"readonly": "readonly"}),
+        label="Webhook URL",
+        disabled=True,
+        required=False,
+        help_text="Use this as the URL when setting up the webhook",
+    )
+
+    def __init__(self, *args, **kwargs):
+        initial = kwargs.get("initial", {})
+        channel: ExperimentChannel = kwargs.pop("channel", None)
+        if channel:
+            initial["webook_url"] = channel.webhook_url
+            kwargs["initial"] = initial
+
+        super().__init__(*args, **kwargs)
+        if not channel:
+            # We only show the webhook URL field when there is something to show
+            self.fields["webook_url"].widget = forms.HiddenInput()
+
+    def get_success_message(self, channel: ExperimentChannel):
+        """The message to be displayed when the channel is successfully linked"""
+        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+
 class TelegramChannelForm(ExtraFormBase):
     bot_token = forms.CharField(label="Bot Token", max_length=100)
 
@@ -104,67 +130,31 @@ class TelegramChannelForm(ExtraFormBase):
         return bot_token
 
 
-class WhatsappChannelForm(ExtraFormBase):
+class WhatsappChannelForm(WebhookUrlFormBase):
     number = forms.CharField(
         label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
     )
-    webook_url = forms.CharField(
-        widget=forms.TextInput(attrs={"readonly": "readonly"}),
-        label="Webhook URL",
-        disabled=True,
-        required=False,
-        help_text="Use this as the URL when setting up the webhook",
-    )
-
-    def __init__(self, *args, **kwargs):
-        initial = kwargs.get("initial", {})
-        channel: ExperimentChannel = kwargs.pop("channel", None)
-        if channel:
-            initial["webook_url"] = channel.webhook_url
-            kwargs["initial"] = initial
-
-        super().__init__(*args, **kwargs)
-        if not channel:
-            # We only show the webhook URL field when there is something to show
-            self.fields["webook_url"].widget = forms.HiddenInput()
-
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
 
     def clean_number(self):
         try:
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
-            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+            number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+            service = self.messaging_provider.get_messaging_service()
+            if not service.is_valid_number(number):
+                raise forms.ValidationError(f"{number} was not found at the provider.")
+            return number
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
 
 
-class FacebookChannelForm(ExtraFormBase):
-    page_id = forms.CharField(label="Page ID", max_length=100)
-    webook_url = forms.CharField(
-        widget=forms.TextInput(attrs={"readonly": "readonly"}),
-        label="Webhook URL",
-        disabled=True,
-        required=False,
-        help_text="Use this as the URL when setting up the webhook",
+class SureAdhereChannelForm(WebhookUrlFormBase):
+    sureadhere_tenant_id = forms.CharField(
+        label="SureAdhere Tenant ID", max_length=100, help_text="Enter the Tenant ID provided by SureAdhere."
     )
 
-    def __init__(self, *args, **kwargs):
-        initial = kwargs.get("initial", {})
-        channel: ExperimentChannel = kwargs.pop("channel", None)
-        if channel:
-            initial["webook_url"] = channel.webhook_url
-            kwargs["initial"] = initial
 
-        super().__init__(*args, **kwargs)
-        if not channel:
-            # We only show the webhook URL field when there is something to show
-            self.fields["webook_url"].widget = forms.HiddenInput()
-
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+class FacebookChannelForm(WebhookUrlFormBase):
+    page_id = forms.CharField(label="Page ID", max_length=100)
 
 
 class SlackChannelForm(ExtraFormBase):

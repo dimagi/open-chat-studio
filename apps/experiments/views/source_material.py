@@ -1,4 +1,6 @@
 from django.contrib import messages
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -20,6 +22,7 @@ class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
             "title": "Source Material",
             "new_object_url": reverse("experiments:source_material_new", args=[team_slug]),
             "table_url": reverse("experiments:source_material_table", args=[team_slug]),
+            "enable_search": True,
         }
 
 
@@ -30,7 +33,17 @@ class SourceMaterialTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return SourceMaterial.objects.filter(team=self.request.team)
+        query_set = SourceMaterial.objects.filter(team=self.request.team)
+        search = self.request.GET.get("search")
+        if search:
+            search_vector = SearchVector("topic", weight="A") + SearchVector("description", weight="B")
+            search_query = SearchQuery(search)
+            query_set = (
+                query_set.annotate(document=search_vector, rank=SearchRank(search_vector, search_query))
+                .filter(Q(document=search_query))
+                .order_by("-rank")
+            )
+        return query_set
 
 
 class CreateSourceMaterial(CreateView):
