@@ -1,10 +1,12 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
+import emoji
 import requests
 from django.db import transaction
 from telebot import TeleBot
@@ -34,6 +36,21 @@ UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supported_types} messages types. Respond only with the message for the user
 """
+
+# The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
+URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
+
+
+def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
+    """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
+    text = emoji.replace_emoji(text, replace="")
+
+    url_pattern = re.compile(URL_REGEX)
+    urls = set(url_pattern.findall(text))
+    for url in urls:
+        text = text.replace(url, "")
+
+    return text, urls
 
 
 class MESSAGE_TYPES(Enum):
@@ -341,6 +358,8 @@ class ChannelBase(ABC):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
+        text, extracted_urls = strip_urls_and_emojis(text)
+
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
         try:
@@ -349,6 +368,10 @@ class ChannelBase(ABC):
         except AudioSynthesizeException as e:
             logging.exception(e)
             self.send_text_to_user(text)
+
+        if extracted_urls:
+            urls_text = "\n".join(extracted_urls)
+            self.send_text_to_user(urls_text)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
