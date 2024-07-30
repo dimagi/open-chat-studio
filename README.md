@@ -44,7 +44,7 @@ pre-commit install --install-hooks
 Start the database and redis services and run the DB migrations:
 
 ```shell
-docker compose -f docker-compose.dev.yml up -d  # equivalent of `inv up`
+docker compose -f docker-compose-dev.yml up -d  # equivalent of `inv up`
 cp .env.example .env
 ./manage.py migrate
 ```
@@ -155,7 +155,7 @@ We use [ruff](https://docs.astral.sh/ruff/) for linting and formatting. You can 
 command:
 
 ```
-Usage: inv[oke] [--core-opts] ruff [--options] [other tasks here ...]
+Usage: inv ruff [--options]
 
 Docstring:
   Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes.
