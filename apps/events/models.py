@@ -15,6 +15,7 @@ from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
@@ -256,6 +257,8 @@ class TimePeriod(models.TextChoices):
 
 
 class ScheduledMessage(BaseTeamModel):
+    # this only has to be unique per experiment / participant combination
+    external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
     action = models.ForeignKey(
         EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, default=None
     )
@@ -270,9 +273,15 @@ class ScheduledMessage(BaseTeamModel):
     custom_schedule_params = models.JSONField(blank=True, default=dict)
 
     class Meta:
+        unique_together = ("experiment", "participant", "external_id")
         indexes = [models.Index(fields=["is_complete"])]
 
     def save(self, *args, **kwargs):
+        if not self.external_id:
+            inputs = [self.name, self.experiment_id, self.participant_id]
+            self.external_id = get_next_unique_id(
+                ScheduledMessage, inputs, "external_id", length=5, model_instance=self
+            )
         if not self.next_trigger_date:
             params = self.params
             delta = relativedelta(**{params["time_period"]: params["frequency"]})

@@ -48,10 +48,15 @@ def convert_no_activity_pings_to_event(apps, schema_editor):
                     )
             experiment.save()
 
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('events', '0011_update_timed_out_events_trigger_schedule'),
+    ]
+
+    run_before = [
+        ("experiments", "0083_remove_experiment_no_activity_config_and_more"),
     ]
 
     operations = [
