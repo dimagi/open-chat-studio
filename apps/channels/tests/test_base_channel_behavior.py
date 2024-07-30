@@ -614,5 +614,5 @@ def test_voice_response_with_urls(
     telegram_channel.new_user_message(telegram_messages.text_message())
 
     assert send_voice_to_user.called is True
-    expected_url_str = "http://example.co.za?key1=1&key2=2\nhttps://some.com"
+    expected_url_str = "http://example.co.za?key1=1&key2=2\nhttps://some.com\nhttps://some.com"
     assert send_text_to_user.mock_calls[0].args[0] == expected_url_str
