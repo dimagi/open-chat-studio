@@ -54,6 +54,8 @@ cp .env.example .env
 To build JavaScript and CSS files, first install npm packages:
 
 ```bash
+inv npm --install
+# or
 npm install
 npm run dev
 ```
