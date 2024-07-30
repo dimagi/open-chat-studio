@@ -223,9 +223,7 @@ def test_extract_structured_data_with_chunking(provider):
         responses=[
             {"name": None},  # the first chunk sees nothing of value
             {"name": "james"},  # the second chunk message sees the name
-            {"name": None},  # the third chunk sees nothing of value
-            {"name": "james"},  # the first + second chunk outputs the name
-            {"name": "james"},  # the output of that + no new data still outputs the name
+            {"name": "james"},  # the third chunk sees nothing of value
         ]
     )
 
@@ -239,17 +237,11 @@ def test_extract_structured_data_with_chunking(provider):
         state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
         extracted_data = graph.invoke(state)["messages"][-1]
 
-    # The problem is that the participant data is only in the first inference call. What if we need it in the 3rd
-    # call?
-
-    # This is what the LLM sees. First extract data
+    # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == "Current user data: {'drink': 'martini'}\n Conversations: I am bond"
-    assert inferences[1][0].text == "Current user data: {'drink': 'martini'}\n Conversations: james bond"
-    assert inferences[2][0].text == "Current user data: {'drink': 'martini'}\n Conversations: 007"
-    # Then merge
-    assert inferences[3][0].text == "Current user data: {'name': None}\n Conversations: {'name': 'james'}"
-    assert inferences[4][0].text == "Current user data: {'name': 'james'}\n Conversations: {'name': None}"
+    assert inferences[0][0].text == "Current user data: {}\nConversations: I am bond"
+    assert inferences[1][0].text == "Current user data: {'name': None}\nConversations: james bond"
+    assert inferences[2][0].text == "Current user data: {'name': 'james'}\nConversations: 007"
 
     # Expected node output
     assert extracted_data == {"name": "james"}
@@ -257,59 +249,7 @@ def test_extract_structured_data_with_chunking(provider):
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-@pytest.mark.parametrize(
-    ("key_name", "input", "existing_data", "expected_data_structure", "expect_error"),
-    [
-        (None, {"cats": "yes", "name": "John"}, None, {"cats": "yes", "name": "John"}, False),
-        (None, {"cats": "yes", "name": "John"}, {}, {"cats": "yes", "name": "John"}, False),
-        ("pets", {"cats": []}, {}, {"pets": {"cats": []}}, False),
-        ("pets", {"cats": []}, {"pets": {"dogs": []}}, {"pets": {"cats": []}}, False),
-        ("name", "John", {}, {"name": "John"}, False),
-        ("name", "John", {"name": "Johnny", "surname": "Wick"}, {"name": "John", "surname": "Wick"}, False),
-        ("profiles", [{"name": "John"}], {}, {"profiles": [{"name": "John"}]}, False),
-        ("profiles", [{"name": "John"}], {"profiles": "there are none"}, {"profiles": [{"name": "John"}]}, False),
-        (None, "some input", {}, None, True),
-        (None, [], {}, None, True),
-    ],
-)
-def test_update_participant_data_node(key_name, input, existing_data, expected_data_structure, expect_error):
-    session = ExperimentSessionFactory()
-    if existing_data:
-        ParticipantData.objects.create(
-            team=session.team, participant=session.participant, data=existing_data, content_object=session.experiment
-        )
-
-    runnable = PipelineGraph.build_runnable_from_json(
-        {
-            "edges": [],
-            "nodes": [
-                {
-                    "data": {
-                        "id": "llm-GUk0C",
-                        "label": "Update participant memory",
-                        "type": "UpdateParticipantMemory",
-                        "params": {
-                            "key_name": key_name,
-                        },
-                    },
-                    "id": "llm-GUk0C",
-                },
-            ],
-        }
-    )
-    state = PipelineState(messages=[input], experiment_session=session)
-    if expect_error:
-        with pytest.raises(KeyError, match="A key is expected for a string or list value."):
-            runnable.invoke(state)
-    else:
-        runnable.invoke(state)
-        participant_data = ParticipantData.objects.get(participant=session.participant)
-        assert participant_data.data == expected_data_structure
-
-
-@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_and_update_data_pipeline(provider):
+def test_extract_participant_data(provider):
     """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
     participant to make sure it creates data. Then we run it again a few times to test that it updates the data
     correctly.
@@ -352,38 +292,22 @@ def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dic
     ):
         runnable = PipelineGraph.build_runnable_from_json(
             {
-                "edges": [
-                    {
-                        "id": "extraction->update_data",
-                        "source": "extraction",
-                        "target": "update_data",
-                    },
-                ],
+                "edges": [],
                 "nodes": [
                     {
                         "data": {
                             "id": "extraction",
                             "label": "Extract some data",
-                            "type": "ExtractStructuredData",
+                            "type": "ExtractParticipantData",
                             "params": {
                                 "llm_provider_id": provider.id,
                                 "llm_model": "fake-model",
                                 "data_schema": '{"name": "the name of the user"}',
-                            },
-                        },
-                        "id": "extraction",
-                    },
-                    {
-                        "data": {
-                            "id": "update_data",
-                            "label": "Update participant memory",
-                            "type": "UpdateParticipantMemory",
-                            "params": {
                                 "key_name": key_name,
                             },
                         },
-                        "id": "update_data",
-                    },
+                        "id": "extraction",
+                    }
                 ],
                 "id": 1,
                 "name": "New Pipeline",

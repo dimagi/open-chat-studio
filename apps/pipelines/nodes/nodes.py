@@ -98,61 +98,54 @@ class Passthrough(PipelineNode):
         return input
 
 
-class ExtractStructuredData(LLMResponse):
-    __human_name__ = "Extract structured data"
-    data_schema: str
-
-    def _prompt_chain(self, user_data):
-        prompt = PromptTemplate.from_template(template="Current user data: {user_data}\n Conversations: {input}")
+class ExtractStructuredDataNodeMixin:
+    def _prompt_chain(self, reference_data):
+        prompt = PromptTemplate.from_template(template="Current user data: {reference_data}\nConversations: {input}")
         return (
             {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(user_data=RunnableLambda(lambda x: user_data))
+            | RunnablePassthrough.assign(reference_data=RunnableLambda(lambda x: reference_data))
             | prompt
         )
 
-    def extraction_chain(self, json_schema, user_data):
-        return self._prompt_chain(user_data) | super().get_chat_model().with_structured_output(json_schema)
+    def extraction_chain(self, json_schema, reference_data):
+        return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
+
+    def get_json_schema(self):
+        return ExtractStructuredData.to_json_schema(json.loads(self.data_schema))
 
     def _process(self, state: PipelineState) -> RunnableLambda:
-        json_schema = ExtractStructuredData.to_json_schema(json.loads(self.data_schema))
-        participant_data = self.get_participant_data(state)
+        json_schema = self.get_json_schema()
         input: str = state["messages"][-1]
-
-        participant_data_chain = self.extraction_chain(json_schema=json_schema, user_data=participant_data)
-        prompt_token_count = self._get_prompt_token_count(participant_data)
-
+        reference_data = self.get_reference_data(state)
+        prompt_token_count = self._get_prompt_token_count(reference_data)
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
-        chunk_outputs: list[dict] = []
+
+        new_reference_data = reference_data
         for idx, message_chunk in enumerate(message_chunks, start=1):
-            structured_output = participant_data_chain.invoke(message_chunk, config=self._config)
+            chain = self.extraction_chain(json_schema=json_schema, reference_data=new_reference_data)
+            output = chain.invoke(message_chunk, config=self._config)
             self.logger.info(
                 f"Chunk {idx}",
-                input=f"\n{message_chunk}\n\n",
-                output=f"\nExtracted data:\n{structured_output}",
+                input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
+                output=f"\nExtracted data:\n{output}",
             )
-            chunk_outputs.append(structured_output)
+            new_reference_data = self.update_reference_data(output, reference_data)
 
-        if len(chunk_outputs) > 1:
-            # One pass with the current participant data + a single chunk's output
-            prev_chunk_output = chunk_outputs[0]
-            for idx, chunk_output in enumerate(chunk_outputs[1:], start=2):
-                reduce_chain = self.extraction_chain(json_schema=json_schema, user_data=prev_chunk_output)
-                new_chunk = reduce_chain.invoke(chunk_output)
-                self.logger.info(
-                    "Merging chunks",
-                    input=f"Previous chunk:\n{prev_chunk_output}\nCurrent chunk:\n{chunk_output}\n",
-                    output=new_chunk,
-                )
-                prev_chunk_output = new_chunk
+        self.post_extraction_hook(new_reference_data, state)
+        return new_reference_data
 
-            output = prev_chunk_output
-        else:
-            output = chunk_outputs[0]
-        return output
+    def post_extraction_hook(self, output, state):
+        pass
 
-    def _get_prompt_token_count(self, participant_data: dict) -> int:
+    def get_reference_data(self, state):
+        return {}
+
+    def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
+        return new_data
+
+    def _get_prompt_token_count(self, reference_data: dict) -> int:
         llm = super().get_chat_model()
-        prompt_chain = self._prompt_chain(participant_data)
+        prompt_chain = self._prompt_chain(reference_data)
         # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
         # is what we want.
         output = prompt_chain.invoke(input="")
@@ -188,10 +181,6 @@ class ExtractStructuredData(LLMResponse):
 
         return text_splitter.split_text(input)
 
-    def get_participant_data(self, state: PipelineState):
-        session = state["experiment_session"]
-        return session.get_participant_data()
-
     @staticmethod
     def to_json_schema(data: dict):
         """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
@@ -224,40 +213,47 @@ class ExtractStructuredData(LLMResponse):
         return schema
 
 
-class UpdateParticipantMemory(PipelineNode):
-    """A simple component to merge the the input data into the participant's memory data. If key_name is specified
-    the input data will be merged with `key_name` as the key name.
-    """
+class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
+    __human_name__ = "Extract Structured Data"
+    data_schema: str
 
-    __human_name__ = "Update participant memory"
+
+class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
+    __human_name__ = "Extract Participant Data"
+    data_schema: str
     key_name: str | None = None
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        """Strategy:
-        - If the input is a string or list, a `key_name` must be present to be valid JSON.
-        - If `key_name` is present, we create a new dictionary with `input` as the value to `key_name`.
-        - Merge this new dictionary with the current participant data, essentially overriding existing data
-        """
-        new_data = state["messages"][-1]
-        session = state["experiment_session"]
+    def get_json_schema(self):
+        return ExtractParticipantData.to_json_schema(json.loads(self.data_schema))
 
+    def get_reference_data(self, state):
+        session = state["experiment_session"]
+        data = session.get_participant_data()
+        return data
+
+    def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         if isinstance(new_data, str) or isinstance(new_data, list):
             if not self.key_name:
                 raise KeyError("A key is expected for a string or list value.")
 
         if self.key_name:
             new_data = {self.key_name: new_data}
+
+        return reference_data | new_data
+
+    def post_extraction_hook(self, output, state):
+        session = state["experiment_session"]
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
             )
 
-            participant_data.data = participant_data.data | new_data
+            participant_data.data = participant_data.data | output
             participant_data.save()
         except ParticipantData.DoesNotExist:
             ParticipantData.objects.create(
                 participant=session.participant,
                 content_object=session.experiment,
                 team=session.team,
-                data=new_data,
+                data=output,
             )
