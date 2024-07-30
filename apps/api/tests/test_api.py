@@ -143,8 +143,8 @@ def test_create_participant_schedules(experiment):
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
-    trigger_date1 = timezone.now() + relativedelta(days=1)
-    trigger_date2 = timezone.now() + relativedelta(hours=1)
+    trigger_date1 = timezone.now() + relativedelta(hours=1)
+    trigger_date2 = timezone.now() + relativedelta(days=1)
     data = {
         "identifier": identifier,
         "platform": "api",
@@ -165,7 +165,9 @@ def test_create_participant_schedules(experiment):
 
     participant_data_exp_1 = experiment.participant_data.get(participant__identifier=identifier)
     assert participant_data_exp_1.data["name"] == "John"
-    schedules = list(experiment.scheduled_messages.filter(participant__identifier=identifier))
+    schedules = list(
+        experiment.scheduled_messages.filter(participant__identifier=identifier).order_by("next_trigger_date")
+    )
     assert len(schedules) == 2
     assert schedules[0].custom_schedule_params == {
         "name": "schedule1",
@@ -184,3 +186,71 @@ def test_create_participant_schedules(experiment):
         "time_period": "days",
     }
     assert schedules[1].next_trigger_date == trigger_date2
+    return schedules
+
+
+@pytest.mark.django_db()
+def test_update_participant_schedules(experiment):
+    schedules = test_create_participant_schedules(experiment)
+
+    identifier = "part1"
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    trigger_date3 = timezone.now() + relativedelta(days=1)
+    data = {
+        "identifier": identifier,
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(experiment.public_id),
+                "schedules": [
+                    # Create a new schedule
+                    {
+                        "id": "provided ID",
+                        "name": "schedule3",
+                        "prompt": "don't forget to floss",
+                        "date": trigger_date3.isoformat(),
+                    },
+                    # delete one we created before
+                    {"id": schedules[0].external_id, "delete": True},
+                    # update another one
+                    {
+                        "id": schedules[1].external_id,
+                        "name": "schedule2 updated",
+                        "prompt": "email john smith",
+                        "date": schedules[1].next_trigger_date.isoformat(),
+                    },
+                ],
+            },
+        ],
+    }
+    url = reverse("api:update-participant-data")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    # make sure the data hasn't changed
+    participant_data = experiment.participant_data.get(participant__identifier=identifier)
+    assert participant_data.data["name"] == "John"
+
+    updated_schedules = list(
+        experiment.scheduled_messages.filter(participant__identifier=identifier).order_by("next_trigger_date")
+    )
+    assert len(updated_schedules) == 2
+    assert updated_schedules[0].custom_schedule_params == {
+        "name": "schedule2 updated",
+        "prompt_text": "email john smith",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert updated_schedules[0].next_trigger_date == schedules[1].next_trigger_date
+
+    assert updated_schedules[1].custom_schedule_params == {
+        "name": "schedule3",
+        "prompt_text": "don't forget to floss",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert updated_schedules[1].next_trigger_date == trigger_date3

@@ -286,10 +286,12 @@ class ScheduledMessage(BaseTeamModel):
 
     def assign_external_id(self):
         if not self.external_id:
-            inputs = [self.name, self.experiment_id, self.participant_id]
-            self.external_id = get_next_unique_id(
-                ScheduledMessage, inputs, "external_id", length=5, model_instance=self
-            )
+            self.external_id = self.generate_external_id(self.name, self.experiment.id, self.participant.id)
+
+    @staticmethod
+    def generate_external_id(name: str, experiment_id: int, participant_id: int, instance=None):
+        inputs = [name, experiment_id, participant_id]
+        return get_next_unique_id(ScheduledMessage, inputs, "external_id", length=5, model_instance=instance)
 
     def safe_trigger(self):
         """This wraps a call to the _trigger method in a try-catch block"""

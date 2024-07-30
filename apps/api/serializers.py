@@ -113,9 +113,20 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
 
 class ParticipantScheduleSerializer(serializers.Serializer):
     id = serializers.CharField(label="Schedule ID", required=False, max_length=32)
-    name = serializers.CharField(label="Schedule Name")
-    prompt = serializers.CharField(label="Prompt to send to bot")
-    date = serializers.DateTimeField(label="Schedule Date")
+    name = serializers.CharField(label="Schedule Name", required=False)
+    prompt = serializers.CharField(label="Prompt to send to bot", required=False)
+    date = serializers.DateTimeField(label="Schedule Date", required=False)
+    delete = serializers.BooleanField(label="Delete Schedule", required=False, default=False)
+
+    def validate(self, data):
+        if data.get("delete"):
+            if not data.get("id"):
+                raise serializers.ValidationError("Schedule ID is required to delete a schedule")
+        elif not all([data.get("name"), data.get("prompt"), data.get("date")]):
+            raise serializers.ValidationError(
+                "Schedule Name, Prompt, and Date are required to create or update a schedule"
+            )
+        return data
 
 
 class ParticipantExperimentData(serializers.Serializer):

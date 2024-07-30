@@ -1,7 +1,9 @@
 from django.contrib.auth.decorators import permission_required
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.http import HttpResponse
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import NotFound
@@ -55,6 +57,53 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
     tags=["Participants"],
     request=ParticipantDataUpdateRequest(),
     responses={200: {}},
+    examples=[
+        OpenApiExample(
+            name="Create Participant Data",
+            value={
+                "identifier": "part1",
+                "platform": "api",
+                "experiment": "exp1",
+                "data": [
+                    {"experiment": "exp1", "data": {"name": "John"}},
+                    {
+                        "experiment": "exp2",
+                        "data": {"name": "Doe"},
+                        "schedules": [
+                            {
+                                "id": "sched1",
+                                "name": "Schedule 1",
+                                "date": "2022-01-01T00:00:00Z",
+                                "prompt": "Prompt 1",
+                            },
+                        ],
+                    },
+                ],
+            },
+        ),
+        OpenApiExample(
+            name="Update Participant Schedules",
+            value={
+                "identifier": "part1",
+                "platform": "api",
+                "experiment": "exp1",
+                "data": [
+                    {
+                        "experiment": "exp1",
+                        "schedules": [
+                            {
+                                "id": "sched1",
+                                "name": "Schedule 1 updated",
+                                "date": "2022-01-01T00:00:00Z",
+                                "prompt": "Prompt updated",
+                            },
+                            {"id": "sched2", "delete": True},
+                        ],
+                    },
+                ],
+            },
+        ),
+    ],
 )
 @api_view(["POST"])
 @permission_required("experiments.change_participantdata")
@@ -73,15 +122,16 @@ def update_participant_data(request):
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
+    content_type = ContentType.objects.get_for_model(Experiment)
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
         ParticipantData.objects.update_or_create(
             participant=participant,
-            content_type__model="experiment",
+            content_type=content_type,
             object_id=experiment.id,
             team=team,
-            defaults={"data": data["data"], "content_object": experiment},
+            defaults={"data": data["data"]} if data.get("data") else {},
         )
 
         if schedule_data := data.get("schedules"):
@@ -102,29 +152,53 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
     return experiment_map
 
 
+@transaction.atomic()
 def _create_update_schedules(team, experiment, participant, schedule_data):
-    messages = [
-        ScheduledMessage(
-            team=team,
-            experiment=experiment,
-            participant=participant,
-            next_trigger_date=data["date"],
-            external_id=data.get("id"),
-            custom_schedule_params={
-                "name": data["name"],
-                "prompt_text": data["prompt"],
-                "repetitions": 1,
-                # these aren't really needed since it's one-off schedule
-                "frequency": 1,
-                "time_period": TimePeriod.DAYS,
-            },
-        )
-        for data in schedule_data
-    ]
-    for message in messages:
-        message.assign_external_id()
+    def _get_id(data):
+        return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
 
-    ScheduledMessage.objects.bulk_create(messages)
+    data_by_id = {_get_id(data): data for data in schedule_data if not data.get("delete")}
+    existing_by_id = {
+        message.external_id: message
+        for message in ScheduledMessage.objects.filter(
+            external_id__in=data_by_id.keys(), participant=participant, experiment=experiment
+        )
+    }
+    new = []
+    updated = []
+    for external_id, data in data_by_id.items():
+        if external_id in existing_by_id:
+            message = existing_by_id.get(external_id)
+            message.next_trigger_date = data["date"]
+            message.custom_schedule_params["name"] = data["name"]
+            message.custom_schedule_params["prompt_text"] = data["prompt"]
+            updated.append(message)
+        else:
+            new.append(
+                ScheduledMessage(
+                    team=team,
+                    experiment=experiment,
+                    participant=participant,
+                    next_trigger_date=data["date"],
+                    external_id=external_id,
+                    custom_schedule_params={
+                        "name": data["name"],
+                        "prompt_text": data["prompt"],
+                        "repetitions": 1,
+                        # these aren't really needed since it's one-off schedule
+                        "frequency": 1,
+                        "time_period": TimePeriod.DAYS,
+                    },
+                )
+            )
+
+    delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
+    if delete_ids:
+        ScheduledMessage.objects.filter(external_id__in=delete_ids).delete()
+    if updated:
+        ScheduledMessage.objects.bulk_update(updated, fields=["next_trigger_date", "custom_schedule_params"])
+    if new:
+        ScheduledMessage.objects.bulk_create(new)
 
 
 @extend_schema_view(
