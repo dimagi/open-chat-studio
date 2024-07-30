@@ -580,7 +580,7 @@ def test_url_regex():
         "http://example!",
         "http://example?",
     ]
-    matches = [match[0] for match in url_pattern.findall("\n".join(expected_matches))]
+    matches = url_pattern.findall("\n".join(expected_matches))
 
     for url in expected_matches:
         assert url in matches
@@ -605,7 +605,7 @@ def test_voice_response_with_urls(
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
     get_llm_response.return_value = (
-        "Sure! Here's are two urls for you: http://example.co.za?key1=1&key2=2 and https://some.com"
+        "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
     )
     experiment = telegram_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
@@ -614,4 +614,5 @@ def test_voice_response_with_urls(
     telegram_channel.new_user_message(telegram_messages.text_message())
 
     assert send_voice_to_user.called is True
-    assert send_text_to_user.mock_calls[0].args[0] == "http://example.co.za?key1=1&key2=2\nhttps://some.com"
+    expected_url_str = "http://example.co.za?key1=1&key2=2\nhttps://some.com"
+    assert send_text_to_user.mock_calls[0].args[0] == expected_url_str
