@@ -125,11 +125,9 @@ class ExtractStructuredData(LLMResponse):
         chunk_outputs: list[dict] = []
         for idx, message_chunk in enumerate(message_chunks, start=1):
             structured_output = participant_data_chain.invoke(message_chunk, config=self._config)
-            chunk_head = message_chunk[:100]
-            chunk_tail = message_chunk[-100:]
             self.logger.info(
                 f"Chunk {idx}",
-                input=f"\n{chunk_head}\n...\n{chunk_tail}\n",
+                input=f"\n{message_chunk}\n\n",
                 output=f"\nExtracted data:\n{structured_output}",
             )
             chunk_outputs.append(structured_output)
@@ -139,12 +137,13 @@ class ExtractStructuredData(LLMResponse):
             prev_chunk_output = chunk_outputs[0]
             for idx, chunk_output in enumerate(chunk_outputs[1:], start=2):
                 reduce_chain = self.extraction_chain(json_schema=json_schema, user_data=prev_chunk_output)
-                prev_chunk_output = reduce_chain.invoke(chunk_output)
+                new_chunk = reduce_chain.invoke(chunk_output)
                 self.logger.info(
                     "Merging chunks",
                     input=f"Previous chunk:\n{prev_chunk_output}\nCurrent chunk:\n{chunk_output}\n",
-                    output=prev_chunk_output,
+                    output=new_chunk,
                 )
+                prev_chunk_output = new_chunk
 
             output = prev_chunk_output
         else:
@@ -168,7 +167,7 @@ class ExtractStructuredData(LLMResponse):
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        model_token_limit = 200  # Get this from model metadata
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
