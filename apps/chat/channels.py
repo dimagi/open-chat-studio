@@ -144,6 +144,10 @@ class ChannelBase(ABC):
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
 
+    def echo_transcript(self, transcript: str):
+        """Sends a text message to the user with a transcript of what the user said"""
+        pass
+
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
         pass
@@ -352,6 +356,8 @@ class ChannelBase(ABC):
 
         audio_file = self.get_message_audio()
         transcript = self._transcribe_audio(audio_file)
+        if self.experiment.echo_transcript:
+            self.echo_transcript(transcript)
         self.transcription_finished(transcript)
         return transcript
 
@@ -548,7 +554,7 @@ class TelegramChannel(ChannelBase):
     def transcription_started(self):
         self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.telegram_bot.send_message(
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
@@ -574,7 +580,7 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -627,7 +633,7 @@ class FacebookMessengerChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
