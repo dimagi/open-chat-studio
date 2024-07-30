@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
@@ -34,6 +35,18 @@ UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supported_types} messages types. Respond only with the message for the user
 """
+
+# https://www.geeksforgeeks.org/python-check-url-string/
+URL_REGEX = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
+
+
+def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
+    """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
+    url_pattern = re.compile(URL_REGEX)
+    urls = [match[0] for match in url_pattern.findall(text)]
+    for url in urls:
+        text = text.replace(url, "")
+    return text, urls
 
 
 class MESSAGE_TYPES(Enum):
@@ -337,14 +350,26 @@ class ChannelBase(ABC):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
+        print(f"Stripping {text} for urls")
+        text, extracted_urls = strip_urls_and_emojis(text)
+        print(f"Done:\n{text}\n")
+        print(f"extracted_urls: {extracted_urls}")
+
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
         try:
+            print("Synthesizing")
             synthetic_voice_audio = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            print("Done. Sending to user")
             self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
             logging.exception(e)
+            print("Sum ting went wong")
             self.send_text_to_user(text)
+
+        if extracted_urls:
+            urls_text = "\n".join(extracted_urls)
+            self.send_text_to_user(urls_text)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message

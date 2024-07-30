@@ -3,12 +3,13 @@ This test suite is designed to ensure that the base channel functionality is wor
 intended. It utilizes the Telegram channel subclass to serve as a testing framework.
 """
 
+import re
 from unittest.mock import Mock, patch
 
 import pytest
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ChannelBase, TelegramChannel
+from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -519,3 +520,98 @@ def test_participant_reused_across_experiments(_get_experiment_response):
     assert Participant.objects.filter(team=team2, identifier=chat_id).count() == 1
     # but 2 participants accross all teams with identifier = chat_id
     assert Participant.objects.filter(identifier=chat_id).count() == 2
+
+
+@pytest.mark.django_db()
+def test_strip_urls_and_emojis():
+    text = (
+        "Hey there! 😊 Check out this amazing website: https://www.example.com! Also, don't forget to visit"
+        " http://www.another-site.org. If you're a fan of coding, you'll love"
+        " https://developer.mozilla.org/some/path. Have you seen this awesome cat video? 🐱🐾 Watch it at"
+        " https://www.catvideos.com. Let's stay connected on social media: Twitter (https://twitter.com) and"
+        "Facebook (https://facebook.com?page=page1). Can't wait to see you there! 🎉✨"
+    )
+    expected_text = (
+        "Hey there! 😊 Check out this amazing website: ! Also, don't forget to visit . If you're a fan of coding, "
+        "you'll love . Have you seen this awesome cat video? 🐱🐾 Watch it at . Let's stay connected on social "
+        "media: Twitter () andFacebook (). Can't wait to see you there! 🎉✨"
+    )
+
+    output, urls = strip_urls_and_emojis(text)
+    assert output == expected_text
+    assert "https://www.example.com" in urls
+    assert "http://www.another-site.org" in urls
+    assert "https://developer.mozilla.org/some/path" in urls
+    assert "https://twitter.com" in urls
+    assert "https://www.catvideos.com" in urls
+    assert "https://facebook.com?page=page1" in urls
+
+
+def test_url_regex():
+    url_pattern = re.compile(URL_REGEX)
+    expected_matches = [
+        "http://www.example.com",
+        "http://www.example.co.za",
+        "http://www.example.com/",
+        "http://www.example.com?key1=val1&key2=val2",
+        "http://www.example.com/some/path?key1=val1&key2=val2",
+        "http://example.com",
+        "http://example.co.za",
+        "http://example.com/",
+        "http://example.com?key1=val1&key2=val2",
+        "http://example.com/some/path?key1=val1&key2=val2",
+        "https://www.example.com",
+        "https://www.example.co.za",
+        "https://www.example.com/",
+        "https://www.example.com?key1=val1&key2=val2",
+        "https://www.example.com/some/path?key1=val1&key2=val2",
+        "https://example.com",
+        "https://example.co.za",
+        "https://example.com/",
+        "https://example.com?key1=val1&key2=val2",
+        "https://example.com/some/path?key1=val1&key2=val2",
+    ]
+
+    no_matches = [
+        "https//example.com",
+        "htrps//example.com",
+        "htrps\\example.com",
+        "http://example.",
+        "http://example!",
+        "http://example?",
+    ]
+    matches = [match[0] for match in url_pattern.findall("\n".join(expected_matches))]
+
+    for url in expected_matches:
+        assert url in matches
+
+    for url in no_matches:
+        assert url not in matches
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.models.VoiceProvider.get_speech_service")
+@patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.chat.channels.TelegramChannel.send_voice_to_user")
+@patch("apps.chat.channels.TelegramChannel._get_experiment_response")
+def test_voice_response_with_urls(
+    get_llm_response,
+    send_voice_to_user,
+    send_text_to_user,
+    get_voice_transcript,
+    get_speech_service,
+    telegram_channel,
+):
+    get_voice_transcript.return_value = "Hello bot. Give me a URL"
+    get_llm_response.return_value = (
+        "Sure! Here's are two urls for you: http://example.co.za?key1=1&key2=2 and https://some.com"
+    )
+    experiment = telegram_channel.experiment
+    experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
+    experiment.save()
+
+    telegram_channel.new_user_message(telegram_messages.text_message())
+
+    assert send_voice_to_user.called is True
+    assert send_text_to_user.mock_calls[0].args[0] == "http://example.co.za?key1=1&key2=2\nhttps://some.com"
