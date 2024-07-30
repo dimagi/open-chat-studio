@@ -283,7 +283,8 @@ class ScheduledMessage(BaseTeamModel):
                 ScheduledMessage, inputs, "external_id", length=5, model_instance=self
             )
         if not self.next_trigger_date:
-            delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+            params = self.params
+            delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
 
@@ -295,19 +296,19 @@ class ScheduledMessage(BaseTeamModel):
             logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
 
     def _trigger(self):
-        delta = relativedelta(**{self.action.params["time_period"]: self.action.params["frequency"]})
+        delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
         utc_now = timezone.now()
 
-        experiment_id = self.action.params.get("experiment_id", self.experiment.id)
+        experiment_id = self.params.get("experiment_id", self.experiment.id)
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
         experiment_to_use = Experiment.objects.get(id=experiment_id)
         experiment_session.ad_hoc_bot_message(
-            self.action.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
+            self.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
         )
 
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        if self.total_triggers >= self.action.params["repetitions"]:
+        if self.total_triggers >= self.params["repetitions"]:
             self.is_complete = True
         else:
             self.next_trigger_date = utc_now + delta
@@ -315,20 +316,24 @@ class ScheduledMessage(BaseTeamModel):
         self.save()
 
     @cached_property
+    def params(self):
+        return self.custom_schedule_params or (self.action.params if self.action else {})
+
+    @cached_property
     def name(self) -> str:
-        return self.action.params["name"]
+        return self.params["name"]
 
     @cached_property
     def frequency(self) -> str:
-        return self.action.params["frequency"]
+        return self.params["frequency"]
 
     @cached_property
     def time_period(self) -> str:
-        return self.action.params["time_period"]
+        return self.params["time_period"]
 
     @cached_property
     def repetitions(self) -> str:
-        return self.action.params["repetitions"]
+        return self.params["repetitions"]
 
     def as_string(self, as_timezone: str | None = None):
         schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
