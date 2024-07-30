@@ -277,16 +277,19 @@ class ScheduledMessage(BaseTeamModel):
         indexes = [models.Index(fields=["is_complete"])]
 
     def save(self, *args, **kwargs):
-        if not self.external_id:
-            inputs = [self.name, self.experiment_id, self.participant_id]
-            self.external_id = get_next_unique_id(
-                ScheduledMessage, inputs, "external_id", length=5, model_instance=self
-            )
+        self.assign_external_id()
         if not self.next_trigger_date:
             params = self.params
             delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
+
+    def assign_external_id(self):
+        if not self.external_id:
+            inputs = [self.name, self.experiment_id, self.participant_id]
+            self.external_id = get_next_unique_id(
+                ScheduledMessage, inputs, "external_id", length=5, model_instance=self
+            )
 
     def safe_trigger(self):
         """This wraps a call to the _trigger method in a try-catch block"""

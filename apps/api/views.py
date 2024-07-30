@@ -109,6 +109,7 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
             experiment=experiment,
             participant=participant,
             next_trigger_date=data["date"],
+            external_id=data.get("id"),
             custom_schedule_params={
                 "name": data["name"],
                 "prompt_text": data["prompt"],
@@ -120,6 +121,9 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         )
         for data in schedule_data
     ]
+    for message in messages:
+        message.assign_external_id()
+
     ScheduledMessage.objects.bulk_create(messages)
 
 

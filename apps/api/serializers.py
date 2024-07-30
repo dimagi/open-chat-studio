@@ -112,6 +112,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
 
 
 class ParticipantScheduleSerializer(serializers.Serializer):
+    id = serializers.CharField(label="Schedule ID", required=False, max_length=32)
     name = serializers.CharField(label="Schedule Name")
     prompt = serializers.CharField(label="Prompt to send to bot")
     date = serializers.DateTimeField(label="Schedule Date")
