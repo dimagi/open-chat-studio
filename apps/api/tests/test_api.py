@@ -1,4 +1,5 @@
 import json
+import uuid
 
 import pytest
 from dateutil.relativedelta import relativedelta
@@ -207,7 +208,7 @@ def test_update_participant_schedules(experiment):
                 "schedules": [
                     # Create a new schedule
                     {
-                        "id": "provided ID",
+                        "id": uuid.uuid4().hex,
                         "name": "schedule3",
                         "prompt": "don't forget to floss",
                         "date": trigger_date3.isoformat(),

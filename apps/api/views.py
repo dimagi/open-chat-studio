@@ -59,7 +59,8 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
     responses={200: {}},
     examples=[
         OpenApiExample(
-            name="Create Participant Data",
+            name="CreateParticipantData",
+            summary="Create participant data for multiple experiments",
             value={
                 "identifier": "part1",
                 "platform": "api",
@@ -82,7 +83,8 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
             },
         ),
         OpenApiExample(
-            name="Update Participant Schedules",
+            name="UpdateParticipantSchedules",
+            summary="Update and delete participant schedules",
             value={
                 "identifier": "part1",
                 "platform": "api",
