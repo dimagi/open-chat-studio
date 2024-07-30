@@ -160,7 +160,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 200  # Get this from model metadata
+        model_token_limit = 8192  # Get this from model metadata
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
@@ -226,9 +226,11 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     def get_json_schema(self):
         return ExtractParticipantData.to_json_schema(json.loads(self.data_schema))
 
-    def get_reference_data(self, state):
+    def get_reference_data(self, state) -> dict:
         session = state["experiment_session"]
         data = session.get_participant_data()
+        if self.key_name:
+            return data.get(self.key_name, {})
         return data
 
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
@@ -236,13 +238,18 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
             if not self.key_name:
                 raise KeyError("A key is expected for a string or list value.")
 
-        if self.key_name:
-            new_data = {self.key_name: new_data}
+        if isinstance(new_data, str):
+            return new_data
+
+        if isinstance(new_data, list):
+            return new_data
 
         return reference_data | new_data
 
     def post_extraction_hook(self, output, state):
         session = state["experiment_session"]
+        if self.key_name:
+            output = {self.key_name: output}
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
