@@ -86,13 +86,17 @@ Celery can be used to run background tasks.
 You can run it using:
 
 ```bash
-celery -A gpt_playground worker -l INFO
+inv celery
+# or
+celery -A gpt_playground worker -l INFO -B --pool=solo
 ```
 
-Or with celery beat (for scheduled tasks):
+To run a celery process more similar to production, you can use the following command:
 
 ```bash
-celery -A gpt_playground worker -l INFO -B
+inv celery --gevent
+# or
+celery -A gpt_playground worker -l INFO -B --pool gevent --concurrency 10
 ```
 
 ## Updating translations
