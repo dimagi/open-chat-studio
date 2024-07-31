@@ -42,8 +42,6 @@ class SyntheticVoiceData(BaseModel):
 class ExperimentVersionData(BaseModel):
     name: str
     description: str | None = ""
-    llm_provider_id: int | None
-    llm: str
     assistant_id: str | None
     temperature: float
     prompt_text: str | None = ""
@@ -56,7 +54,6 @@ class ExperimentVersionData(BaseModel):
     post_survey: SurveyData | None
     public_id: UUID
     consent_form: ConsentFormData
-    voice_provider_id: int | None
     synthetic_voice: SyntheticVoiceData | None
     conversational_consent_enabled: bool
     safety_violation_notification_emails: list[str] = []

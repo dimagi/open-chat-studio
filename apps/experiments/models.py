@@ -9,7 +9,7 @@ import pytz
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.fields import ArrayField, JSONField
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
@@ -435,9 +435,14 @@ class ExperimentRoute(BaseTeamModel):
         )
 
 
-class ExperimentVersion(models.Model):
+class ExperimentVersion(BaseTeamModel):
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="versions")
-    version_data = JSONField()
+    llm_provider = models.ForeignKey("service_providers.LlmProvider", on_delete=models.PROTECT, null=True, blank=True)
+    voice_provider = models.ForeignKey(
+        "service_providers.VoiceProvider", on_delete=models.PROTECT, null=True, blank=True
+    )
+    files = models.ManyToManyField(blank=True, to="files.file")
+    version_data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_default = models.BooleanField(default=False)
     version_number = models.PositiveIntegerField()
@@ -451,9 +456,11 @@ class ExperimentVersion(models.Model):
         return f"{self.experiment.name} - Version {self.version_number}"
 
     def save(self, *args, **kwargs):
-        version_data = json.loads(self.version_data)
-        self.name = version_data.get("name")
-        self.is_active = version_data.get("is_active")
+        version_data_dict = self.version_data.model_dump(exclude_unset=True, exclude_none=True)
+        self.name = version_data_dict.get("name")
+        self.is_active = version_data_dict.get("is_active")
+        self.version_data = version_data_dict
+
         super().save(*args, **kwargs)
 
 
