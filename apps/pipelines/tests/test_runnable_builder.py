@@ -209,7 +209,7 @@ def test_extract_structured_data_no_chunking(provider):
 
     with extract_structured_data_pipeline(provider) as graph:
         state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
-        assert graph.invoke(state)["messages"][-1] == {"name": "John"}
+        assert graph.invoke(state)["messages"][-1] == '{"name": "John"}'
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))

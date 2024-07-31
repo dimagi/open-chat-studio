@@ -109,7 +109,6 @@ paths:
                 value:
                   identifier: part1
                   platform: api
-                  experiment: exp1
                   data:
                   - experiment: exp1
                     data:
@@ -127,7 +126,6 @@ paths:
                 value:
                   identifier: part1
                   platform: api
-                  experiment: exp1
                   data:
                   - experiment: exp1
                     schedules:
