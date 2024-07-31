@@ -64,7 +64,6 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
             value={
                 "identifier": "part1",
                 "platform": "api",
-                "experiment": "exp1",
                 "data": [
                     {"experiment": "exp1", "data": {"name": "John"}},
                     {
@@ -88,7 +87,6 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
             value={
                 "identifier": "part1",
                 "platform": "api",
-                "experiment": "exp1",
                 "data": [
                     {
                         "experiment": "exp1",
