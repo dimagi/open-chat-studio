@@ -126,10 +126,7 @@ class ExtractStructuredDataNodeMixin:
                 input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
                 output=f"\nExtracted data:\n{output}",
             )
-            print(f"Reference data: {new_reference_data}")
-            print(f"Updateing reference data with: {output}")
             new_reference_data = self.update_reference_data(output, reference_data)
-            print(f"New reference data with: {new_reference_data}")
 
         self.post_extraction_hook(new_reference_data, state)
         return new_reference_data
