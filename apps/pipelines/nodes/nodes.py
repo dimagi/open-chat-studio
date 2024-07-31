@@ -110,11 +110,8 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def get_json_schema(self):
-        return ExtractStructuredData.to_json_schema(json.loads(self.data_schema))
-
     def _process(self, state: PipelineState) -> RunnableLambda:
-        json_schema = self.get_json_schema()
+        json_schema = self.to_json_schema(json.loads(self.data_schema))
         input: str = state["messages"][-1]
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data)
@@ -129,7 +126,10 @@ class ExtractStructuredDataNodeMixin:
                 input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
                 output=f"\nExtracted data:\n{output}",
             )
+            print(f"Reference data: {new_reference_data}")
+            print(f"Updateing reference data with: {output}")
             new_reference_data = self.update_reference_data(output, reference_data)
+            print(f"New reference data with: {new_reference_data}")
 
         self.post_extraction_hook(new_reference_data, state)
         return new_reference_data
@@ -138,7 +138,7 @@ class ExtractStructuredDataNodeMixin:
         pass
 
     def get_reference_data(self, state):
-        return {}
+        return ""
 
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         return new_data
@@ -160,7 +160,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        model_token_limit = 400  # Get this from model metadata
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
@@ -181,8 +181,7 @@ class ExtractStructuredDataNodeMixin:
 
         return text_splitter.split_text(input)
 
-    @staticmethod
-    def to_json_schema(data: dict):
+    def to_json_schema(self, data: dict):
         """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
         The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
 
@@ -223,38 +222,36 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     data_schema: str
     key_name: str | None = None
 
-    def get_json_schema(self):
-        return ExtractParticipantData.to_json_schema(json.loads(self.data_schema))
-
     def get_reference_data(self, state) -> dict:
+        """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
+        corresponding to that key will be returned insteadg
+        """
         session = state["experiment_session"]
-        data = session.get_participant_data()
+        participant_data = (
+            ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
+        )
+        data = participant_data.data if participant_data else ""
         if self.key_name:
-            return data.get(self.key_name, {})
+            # string, list or dict
+            return data.get(self.key_name, "")
         return data
 
-    def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
-        if isinstance(new_data, str) or isinstance(new_data, list):
-            if not self.key_name:
-                raise KeyError("A key is expected for a string or list value.")
+    def update_reference_data(self, new_data: dict, reference_data: dict | list | str) -> dict:
+        if isinstance(reference_data, dict):
+            return reference_data | new_data
 
-        if isinstance(new_data, str):
-            return new_data
-
-        if isinstance(new_data, list):
-            return new_data
-
-        return reference_data | new_data
+        # if reference data is a string or list, we cannot merge, so let's override
+        return new_data
 
     def post_extraction_hook(self, output, state):
         session = state["experiment_session"]
         if self.key_name:
             output = {self.key_name: output}
+
         try:
             participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
                 participant=session.participant
             )
-
             participant_data.data = participant_data.data | output
             participant_data.save()
         except ParticipantData.DoesNotExist:

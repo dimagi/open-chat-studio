@@ -239,7 +239,7 @@ def test_extract_structured_data_with_chunking(provider):
 
     # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == "Current user data: {}\nConversations: I am bond"
+    assert inferences[0][0].text == "Current user data: \nConversations: I am bond"
     assert inferences[1][0].text == "Current user data: {'name': None}\nConversations: james bond"
     assert inferences[2][0].text == "Current user data: {'name': 'james'}\nConversations: 007"
 
