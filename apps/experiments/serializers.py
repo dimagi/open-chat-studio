@@ -1,7 +1,42 @@
 from uuid import UUID
 
-from experiments.models import Experiment
-from pydantic import BaseModel
+from experiments.models import Experiment, SourceMaterial
+from pydantic import BaseModel, Field, HttpUrl
+
+
+class SafetyLayerData(BaseModel):
+    name: str
+    prompt_text: str
+    messages_to_review: str
+    default_response_to_user: str | None = ""
+    prompt_to_bot: str | None = ""
+
+
+class SurveyData(BaseModel):
+    name: str
+    url: HttpUrl
+    confirmation_text: str
+
+
+class ConsentFormData(BaseModel):
+    name: str
+    consent_text: str
+    capture_identifier: bool
+    identifier_label: str
+    identifier_type: str
+    is_default: bool
+    confirmation_text: str
+
+
+class SyntheticVoiceData(BaseModel):
+    name: str
+    neural: bool
+    language: str
+    language_code: str
+    gender: str | None
+    service: str
+    voice_provider: str | None
+    file: str | None
 
 
 class ExperimentVersionData(BaseModel):
@@ -9,20 +44,20 @@ class ExperimentVersionData(BaseModel):
     description: str | None = ""
     llm_provider_id: int | None
     llm: str
-    assistant_id: int | None
+    assistant_id: str | None
     temperature: float
     prompt_text: str | None = ""
     input_formatter: str | None = ""
-    safety_layer_ids: list[int] = []
+    safety_layers: list[SafetyLayerData] = Field(default_factory=list)
     is_active: bool
-    source_material_id: int | None
+    source_material: SourceMaterial | None
     seed_message: str | None = ""
-    pre_survey_id: int | None
-    post_survey_id: int | None
+    pre_survey: SurveyData | None
+    post_survey: SurveyData | None
     public_id: UUID
-    consent_form_id: int
+    consent_form: ConsentFormData
     voice_provider_id: int | None
-    synthetic_voice_id: int | None
+    synthetic_voice: SyntheticVoiceData | None
     conversational_consent_enabled: bool
     safety_violation_notification_emails: list[str] = []
     max_token_limit: int
