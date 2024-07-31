@@ -100,7 +100,14 @@ class Passthrough(PipelineNode):
 
 class ExtractStructuredDataNodeMixin:
     def _prompt_chain(self, reference_data):
-        prompt = PromptTemplate.from_template(template="Current user data: {reference_data}\nConversations: {input}")
+        template = (
+            "Extract user data using the current user data and conversation history as reference. Use JSON output."
+            "\nCurrent user data:"
+            "\n{reference_data}"
+            "\nConversation history:"
+            "\n{input}"
+        )
+        prompt = PromptTemplate.from_template(template=template)
         return (
             {"input": RunnablePassthrough()}
             | RunnablePassthrough.assign(reference_data=RunnableLambda(lambda x: reference_data))
@@ -129,7 +136,7 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        return new_reference_data
+        return json.dumps(new_reference_data)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -228,7 +235,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
         participant_data = (
             ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
         )
-        data = participant_data.data if participant_data else ""
+        if not participant_data:
+            return ""
+
+        data = participant_data.data
         if self.key_name:
             # string, list or dict
             return data.get(self.key_name, "")
@@ -236,6 +246,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
 
     def update_reference_data(self, new_data: dict, reference_data: dict | list | str) -> dict:
         if isinstance(reference_data, dict):
+            # new_data may be a subset, superset or wholly different set of keys than the reference_data, so merge
             return reference_data | new_data
 
         # if reference data is a string or list, we cannot merge, so let's override

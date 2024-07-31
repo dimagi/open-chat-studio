@@ -239,12 +239,32 @@ def test_extract_structured_data_with_chunking(provider):
 
     # This is what the LLM sees.
     inferences = llm.get_call_messages()
-    assert inferences[0][0].text == "Current user data: \nConversations: I am bond"
-    assert inferences[1][0].text == "Current user data: {'name': None}\nConversations: james bond"
-    assert inferences[2][0].text == "Current user data: {'name': 'james'}\nConversations: 007"
+    assert inferences[0][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n"
+        "\nConversation history:"
+        "\nI am bond"
+    )
+
+    assert inferences[1][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n{'name': None}"
+        "\nConversation history:"
+        "\njames bond"
+    )
+
+    assert inferences[2][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n{'name': 'james'}"
+        "\nConversation history:"
+        "\n007"
+    )
 
     # Expected node output
-    assert extracted_data == {"name": "james"}
+    assert extracted_data == '{"name": "james"}'
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
