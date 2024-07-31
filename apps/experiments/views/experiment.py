@@ -180,6 +180,7 @@ class ExperimentForm(forms.ModelForm):
             "safety_violation_notification_emails",
             "voice_response_behaviour",
             "tools",
+            "echo_transcript",
         ]
         labels = {
             "source_material": "Inline Source Material",

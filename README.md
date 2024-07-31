@@ -44,7 +44,7 @@ pre-commit install --install-hooks
 Start the database and redis services and run the DB migrations:
 
 ```shell
-docker compose -f docker-compose.dev.yml up -d  # equivalent of `inv up`
+docker compose -f docker-compose-dev.yml up -d  # equivalent of `inv up`
 cp .env.example .env
 ./manage.py migrate
 ```
@@ -54,6 +54,8 @@ cp .env.example .env
 To build JavaScript and CSS files, first install npm packages:
 
 ```bash
+inv npm --install
+# or
 npm install
 npm run dev
 ```
@@ -86,13 +88,17 @@ Celery can be used to run background tasks.
 You can run it using:
 
 ```bash
-celery -A gpt_playground worker -l INFO
+inv celery
+# or
+celery -A gpt_playground worker -l INFO -B --pool=solo
 ```
 
-Or with celery beat (for scheduled tasks):
+To run a celery process more similar to production, you can use the following command:
 
 ```bash
-celery -A gpt_playground worker -l INFO -B
+inv celery --gevent
+# or
+celery -A gpt_playground worker -l INFO -B --pool gevent --concurrency 10
 ```
 
 ## Updating translations
@@ -151,7 +157,7 @@ We use [ruff](https://docs.astral.sh/ruff/) for linting and formatting. You can 
 command:
 
 ```
-Usage: inv[oke] [--core-opts] ruff [--options] [other tasks here ...]
+Usage: inv ruff [--options]
 
 Docstring:
   Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes.

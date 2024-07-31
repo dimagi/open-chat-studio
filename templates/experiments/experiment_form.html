@@ -55,7 +55,7 @@
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" %}
+        {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Source Material" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">

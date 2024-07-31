@@ -379,6 +379,10 @@ class Experiment(BaseTeamModel):
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    echo_transcript = models.BooleanField(
+        default=True,
+        help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -771,7 +775,6 @@ class ExperimentSession(BaseTeamModel):
             Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
             participant=self.participant,
             team=self.team,
-            action__isnull=False,
         ).select_related("action")
 
         scheduled_messages = []
