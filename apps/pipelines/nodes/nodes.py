@@ -114,7 +114,7 @@ class ExtractStructuredDataNodeMixin:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         input: str = state["messages"][-1]
         reference_data = self.get_reference_data(state)
-        prompt_token_count = self._get_prompt_token_count(reference_data)
+        prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
@@ -140,13 +140,14 @@ class ExtractStructuredDataNodeMixin:
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         return new_data
 
-    def _get_prompt_token_count(self, reference_data: dict) -> int:
+    def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict) -> int:
         llm = super().get_chat_model()
         prompt_chain = self._prompt_chain(reference_data)
         # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
         # is what we want.
         output = prompt_chain.invoke(input="")
-        return llm.get_num_tokens(output.text)
+        json_schema_tokens = llm.get_num_tokens(json.dumps(json_schema))
+        return llm.get_num_tokens(output.text) + json_schema_tokens
 
     def chunk_messages(self, input: str, prompt_token_count: int) -> list[str]:
         """Chunk messages using a splitter that considers the token count.
