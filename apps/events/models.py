@@ -277,16 +277,21 @@ class ScheduledMessage(BaseTeamModel):
         indexes = [models.Index(fields=["is_complete"])]
 
     def save(self, *args, **kwargs):
-        if not self.external_id:
-            inputs = [self.name, self.experiment_id, self.participant_id]
-            self.external_id = get_next_unique_id(
-                ScheduledMessage, inputs, "external_id", length=5, model_instance=self
-            )
+        self.assign_external_id()
         if not self.next_trigger_date:
             params = self.params
             delta = relativedelta(**{params["time_period"]: params["frequency"]})
             self.next_trigger_date = timezone.now() + delta
         super().save(*args, **kwargs)
+
+    def assign_external_id(self):
+        if not self.external_id:
+            self.external_id = self.generate_external_id(self.name, self.experiment.id, self.participant.id)
+
+    @staticmethod
+    def generate_external_id(name: str, experiment_id: int, participant_id: int, instance=None):
+        inputs = [name, experiment_id, participant_id]
+        return get_next_unique_id(ScheduledMessage, inputs, "external_id", length=5, model_instance=instance)
 
     def safe_trigger(self):
         """This wraps a call to the _trigger method in a try-catch block"""
@@ -296,9 +301,6 @@ class ScheduledMessage(BaseTeamModel):
             logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
 
     def _trigger(self):
-        delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
-        utc_now = timezone.now()
-
         experiment_id = self.params.get("experiment_id", self.experiment.id)
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
         experiment_to_use = Experiment.objects.get(id=experiment_id)
@@ -306,11 +308,13 @@ class ScheduledMessage(BaseTeamModel):
             self.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
         )
 
+        utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
         if self.total_triggers >= self.params["repetitions"]:
             self.is_complete = True
         else:
+            delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
             self.next_trigger_date = utc_now + delta
 
         self.save()
