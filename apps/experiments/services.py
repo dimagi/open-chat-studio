@@ -23,9 +23,11 @@ def switch_default_experiment_version(experiment: Experiment, version_id: int) -
     try:
         with transaction.atomic():
             ExperimentVersion.objects.filter(experiment=experiment, is_default=True).update(is_default=False)
-            version = ExperimentVersion.objects.get(id=version_id, experiment=experiment)
-            version.is_default = True
-            version.save()
+            update_count = ExperimentVersion.objects.filter(id=version_id, experiment=experiment).update(
+                is_default=True
+            )
+            if update_count != 1:
+                return "Failed to switch default version. No version was updated."
         return "Default version switched successfully"
     except ExperimentVersion.DoesNotExist:
         return "Version not found"
