@@ -158,7 +158,7 @@ def celery(c: Context, gevent=False):
     if gevent:
         cmd += " --pool gevent --concurrency 10"
     else:
-        cmd += " -B"
+        cmd += " -B --pool=solo"
 
     if gevent:
         cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")
