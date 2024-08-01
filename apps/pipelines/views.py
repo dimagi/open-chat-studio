@@ -145,6 +145,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()
         pipeline.save()
+        pipeline.set_nodes(data.data.nodes)
         return JsonResponse({"data": {"message": "Pipeline saved"}})
 
     try:

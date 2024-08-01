@@ -14,9 +14,16 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
+class PipelineManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related("node_set")
+
+
 class Pipeline(BaseTeamModel):
     name = models.CharField(max_length=128)
     data = models.JSONField()
+
+    objects = PipelineManager()
 
     class Meta:
         ordering = ["-created_at"]
@@ -26,6 +33,21 @@ class Pipeline(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
+
+    def set_nodes(self, nodes):
+        # Add new nodes, update old nodes, remove deleted nodes
+
+        # Delete old nodes
+        current_ids = set(self.node_set.values_list("flow_id", flat=True).all())
+        new_ids = set(node.id for node in nodes)
+        to_delete = current_ids - new_ids
+        Node.objects.filter(pipeline=self, flow_id__in=to_delete).delete()
+
+        for node in nodes:
+            node_object, _ = Node.objects.get_or_create(pipeline=self, flow_id=node.id)
+            node_object.type = node.data.get("type")
+            node_object.params = node.data.get("params", {})
+            node_object.save()
 
     @cached_property
     def node_ids(self):
@@ -59,6 +81,17 @@ class Pipeline(BaseTeamModel):
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
         return output
+
+
+class Node(BaseModel):
+    flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
+    type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
+    params = models.JSONField(default=dict)  # Parameters for the specific node type
+
+    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.flow_id
 
 
 class PipelineRunStatus(models.TextChoices):
