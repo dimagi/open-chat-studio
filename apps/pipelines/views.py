@@ -14,7 +14,7 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 from pydantic import BaseModel
 
-from apps.pipelines.flow import PipelineData
+from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
 from apps.service_providers.models import LlmProvider
@@ -141,7 +141,7 @@ def _pipeline_node_input_types():
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
         pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
-        data = PipelineData.model_validate_json(request.body)
+        data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()
         pipeline.save()
@@ -154,7 +154,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline = Pipeline.objects.create(
             id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
         )
-    return JsonResponse({"pipeline": {"id": pipeline.id, "name": pipeline.name, "data": pipeline.data}})
+    return JsonResponse({"pipeline": {"id": pipeline.id, "name": pipeline.name, "data": pipeline.flow_data}})
 
 
 @login_and_team_required
