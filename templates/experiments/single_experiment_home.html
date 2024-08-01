@@ -131,26 +131,28 @@
           </ul>
         </div>
         {% for platform, available in platforms.items %}
-          <dialog id="{{ platform.value }}_modal" class="modal">
-            <div class="modal-box">
-              <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-              <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                    x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
-                {% csrf_token %}
-                {% render_form_fields platform_forms|dict_lookup:platform %}
-                {% if platform.extra_form %}
-                  <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                    {% render_form_fields platform.extra_form %}
+          {% if available %}
+            <dialog id="{{ platform.value }}_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+                <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+                      x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                  {% csrf_token %}
+                  {% render_form_fields platform_forms|dict_lookup:platform %}
+                  {% if platform.extra_form %}
+                    <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
+                      {% render_form_fields platform.extra_form %}
+                    </div>
+                  {% endif %}
+                  <div class="modal-action">
+                    <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+                    <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+                    <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
                   </div>
-                {% endif %}
-                <div class="modal-action">
-                  <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                  <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                  <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                </div>
-              </form>
-            </div>
-          </dialog>
+                </form>
+              </div>
+            </dialog>
+          {% endif %}
         {% endfor %}
       {% endif %}
     </div>
