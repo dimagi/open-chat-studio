@@ -448,10 +448,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     )
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
-    available_platforms = set(ChannelPlatform.for_dropdown(experiment.team)) - used_platforms
+    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}
     form_kwargs = {"team": request.team}
-    for platform in available_platforms:
+    for platform in available_platforms.keys():
         if platform.form(**form_kwargs):
             platform_forms[platform] = platform.form(**form_kwargs)
 

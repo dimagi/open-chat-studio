@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import pytest
 from django.test import override_settings
 from django.urls import reverse
@@ -84,7 +86,7 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("slack_enabled", "messaging_provider_types", "expected_channels"),
+    ("slack_enabled", "messaging_provider_types", "channels_enabled"),
     [
         (False, [], [ChannelPlatform.TELEGRAM]),
         (
@@ -101,17 +103,23 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
         (False, [MessagingProviderType.sureadhere], [ChannelPlatform.TELEGRAM, ChannelPlatform.SUREADHERE]),
         (
             True,
-            [MessagingProviderType.sureadhere],
+            [MessagingProviderType.sureadhere, MessagingProviderType.slack],
             [ChannelPlatform.TELEGRAM, ChannelPlatform.SLACK, ChannelPlatform.SUREADHERE],
         ),
     ],
 )
-def test_available_channels(slack_enabled, messaging_provider_types, expected_channels, experiment):
+def test_available_channels(slack_enabled, messaging_provider_types, channels_enabled, experiment):
     for provider_type in messaging_provider_types:
         _build_provider(provider_type, team=experiment.team)
 
+    all_platforms = ChannelPlatform.as_list(exclude=[ChannelPlatform.API, ChannelPlatform.WEB])
+    expected_status = OrderedDict.fromkeys(all_platforms, value=False)
+    for platform in channels_enabled:
+        expected_status[platform] = True
+
     with override_settings(SLACK_ENABLED=slack_enabled):
-        assert ChannelPlatform.for_dropdown(experiment.team) - set(expected_channels) == set()
+        for platform, enabled in ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team).items():
+            assert expected_status[platform] == enabled
 
 
 def _build_provider(provider_type: MessagingProviderType, team):
@@ -123,4 +131,6 @@ def _build_provider(provider_type: MessagingProviderType, team):
             config = {"auth_token": "test_key"}
         case MessagingProviderType.sureadhere:
             config = {"client_id": "", "client_secret": "", "base_url": ""}
+        case MessagingProviderType.slack:
+            config = {"slack_team_id": "", "slack_installation_id": 123}
     MessagingProviderFactory(type=provider_type, team=team, config=config)

@@ -112,12 +112,25 @@
             <i class="fa-regular fa-plus"></i>
           </button>
           <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
-            {% for platform in platforms %}
-              <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+            {% for platform, available in platforms.items %}
+              <li>
+                <button
+                  class="disabled:text-gray-600 tooltip tooltip-right"
+                  {% if not available %}
+                    disabled
+                    data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
+                  {% endif %}
+                  onclick="{{ platform.value }}_modal.showModal()"
+
+                >
+                  {{ platform.label }} {% if not available %}
+                  {% endif %}
+                </button>
+              </li>
             {% endfor %}
           </ul>
         </div>
-        {% for platform in platforms %}
+        {% for platform, available in platforms.items %}
           <dialog id="{{ platform.value }}_modal" class="modal">
             <div class="modal-box">
               <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>

@@ -1,4 +1,5 @@
 import uuid
+from collections import OrderedDict
 
 from django.conf import settings
 from django.db import models
@@ -33,21 +34,26 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
 
     @classmethod
-    def for_dropdown(cls, team):
-        """Returns availabel platforms for this team. Platforms available through messaging providers will only be
-        returned if a provider is configured.
-        """
+    def for_dropdown(cls, used_platforms, team) -> OrderedDict:
+        """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
-        available_platforms = [cls.TELEGRAM]
-        if settings.SLACK_ENABLED:
-            available_platforms.append(cls.SLACK)
+        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB])
+        platform_availability = OrderedDict.fromkeys(all_platforms, value=False)
+        platform_availability[cls.TELEGRAM] = True
 
-        providers = MessagingProvider.objects.filter(team=team)
-        for provider in providers:
-            available_platforms.extend(provider.get_messaging_service().supported_platforms)
+        for provider in MessagingProvider.objects.filter(team=team):
+            for platform in provider.get_messaging_service().supported_platforms:
+                platform_availability[platform] = True
 
-        return set(available_platforms)
+        if not settings.SLACK_ENABLED:
+            platform_availability.pop(cls.SLACK)
+
+        # Platforms already used should not be displayed
+        for platform in used_platforms:
+            platform_availability.pop(platform)
+
+        return platform_availability
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm
@@ -84,6 +90,10 @@ class ChannelPlatform(models.TextChoices):
                 return "sureadhere_tenant_id"
             case self.SLACK:
                 return "slack_channel_id"
+
+    @staticmethod
+    def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:
+        return [ChannelPlatform(value) for value in ChannelPlatform.values if value not in exclude]
 
 
 class ExperimentChannelObjectManager(AuditingManager):
