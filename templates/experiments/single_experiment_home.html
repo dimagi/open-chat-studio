@@ -52,10 +52,23 @@
             </a>
           </div>
           <div class="tooltip" data-tip="Delete">
-            <a class="btn btn-primary join-item rounded-r-full"
-               href="{% url 'experiments:delete' team.slug experiment.id %}">
+            <button
+              id="action-delete-{{ experiment.id }}"
+              class="btn btn-primary join-item rounded-r-full"
+              hx-delete="{% url 'experiments:delete' team.slug experiment.id %}"
+              hx-trigger="confirmed"
+              onClick="alertify.confirm().setting({
+                       title: 'Confirm',
+                       message: 'Are you sure you want to delete \'{{ experiment.name }}\'?',
+                       transition: 'fade',
+                       onok: function() {
+                       htmx.trigger('#action-delete-{{ experiment.id }}', 'confirmed');
+                       },
+                       }).show();
+                      "
+            >
               <i class="fa-solid fa-trash"></i>
-            </a>
+            </button>
           </div>
         </div>
       </div>
