@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import pytest
 from django.test import override_settings
 from django.urls import reverse
@@ -113,7 +111,7 @@ def test_available_channels(slack_enabled, messaging_provider_types, channels_en
         _build_provider(provider_type, team=experiment.team)
 
     all_platforms = ChannelPlatform.as_list(exclude=[ChannelPlatform.API, ChannelPlatform.WEB])
-    expected_status = OrderedDict.fromkeys(all_platforms, value=False)
+    expected_status = {platform: False for platform in all_platforms}
     for platform in channels_enabled:
         expected_status[platform] = True
 

@@ -1,5 +1,4 @@
 import uuid
-from collections import OrderedDict
 
 from django.conf import settings
 from django.db import models
@@ -34,12 +33,12 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
 
     @classmethod
-    def for_dropdown(cls, used_platforms, team) -> OrderedDict:
+    def for_dropdown(cls, used_platforms, team) -> dict:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
         all_platforms = cls.as_list(exclude=[cls.API, cls.WEB])
-        platform_availability = OrderedDict.fromkeys(all_platforms, value=False)
+        platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
 
         for provider in MessagingProvider.objects.filter(team=team):
