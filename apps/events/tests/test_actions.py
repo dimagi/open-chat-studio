@@ -1,6 +1,5 @@
 import pytest
 from django.test import override_settings
-from langchain_core.messages.base import get_msg_title_repr
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -53,7 +52,7 @@ def test_end_conversation_runs_pipeline(session, pipeline):
     log = static_trigger.event_logs.first()
     assert log.status == "success"
 
-    output_message = f"{get_msg_title_repr('Human Message')}\n\n{input}"
+    output_message = f"human: {input}"
     assert log.log == str(
         {
             "messages": [

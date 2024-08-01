@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest import mock
 
 import pytest
@@ -9,7 +10,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.langchain import FakeLlmSimpleTokenCount, build_fake_llm_service
 from apps.utils.pytest import django_db_with_data
 
 
@@ -171,16 +172,14 @@ def test_render_template():
     assert runnable.invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1] == "Cycling is cool"
 
 
-@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_structured_data_basic(provider):
-    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0])
-    session = ExperimentSessionFactory()
+@contextmanager
+def extract_structured_data_pipeline(provider, llm=None):
+    service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
 
     with (
         mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
     ):
-        runnable = PipelineGraph.build_runnable_from_json(
+        graph = PipelineGraph.build_runnable_from_json(
             {
                 "edges": [],
                 "nodes": [
@@ -188,7 +187,7 @@ def test_extract_structured_data_basic(provider):
                         "data": {
                             "id": "llm-GUk0C",
                             "label": "Extract some data",
-                            "type": "ExtractStructuredDataBasic",
+                            "type": "ExtractStructuredData",
                             "params": {
                                 "llm_provider_id": provider.id,
                                 "llm_model": "fake-model",
@@ -200,65 +199,77 @@ def test_extract_structured_data_basic(provider):
                 ],
             }
         )
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
-        assert runnable.invoke(state)["messages"][-1] == {"name": "John"}
+        yield graph
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-@pytest.mark.parametrize(
-    ("key_name", "input", "existing_data", "expected_data_structure", "expect_error"),
-    [
-        (None, {"cats": "yes", "name": "John"}, None, {"cats": "yes", "name": "John"}, False),
-        (None, {"cats": "yes", "name": "John"}, {}, {"cats": "yes", "name": "John"}, False),
-        ("pets", {"cats": []}, {}, {"pets": {"cats": []}}, False),
-        ("pets", {"cats": []}, {"pets": {"dogs": []}}, {"pets": {"cats": []}}, False),
-        ("name", "John", {}, {"name": "John"}, False),
-        ("name", "John", {"name": "Johnny", "surname": "Wick"}, {"name": "John", "surname": "Wick"}, False),
-        ("profiles", [{"name": "John"}], {}, {"profiles": [{"name": "John"}]}, False),
-        ("profiles", [{"name": "John"}], {"profiles": "there are none"}, {"profiles": [{"name": "John"}]}, False),
-        (None, "some input", {}, None, True),
-        (None, [], {}, None, True),
-    ],
-)
-def test_update_participant_data_node(key_name, input, existing_data, expected_data_structure, expect_error):
+def test_extract_structured_data_no_chunking(provider):
     session = ExperimentSessionFactory()
-    if existing_data:
-        ParticipantData.objects.create(
-            team=session.team, participant=session.participant, data=existing_data, content_object=session.experiment
-        )
 
-    runnable = PipelineGraph.build_runnable_from_json(
-        {
-            "edges": [],
-            "nodes": [
-                {
-                    "data": {
-                        "id": "llm-GUk0C",
-                        "label": "Update participant memory",
-                        "type": "UpdateParticipantMemory",
-                        "params": {
-                            "key_name": key_name,
-                        },
-                    },
-                    "id": "llm-GUk0C",
-                },
-            ],
-        }
-    )
-    state = PipelineState(messages=[input], experiment_session=session)
-    if expect_error:
-        with pytest.raises(KeyError, match="A key is expected for a string or list value."):
-            runnable.invoke(state)
-    else:
-        runnable.invoke(state)
-        participant_data = ParticipantData.objects.get(participant=session.participant)
-        assert participant_data.data == expected_data_structure
+    with extract_structured_data_pipeline(provider) as graph:
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        assert graph.invoke(state)["messages"][-1] == '{"name": "John"}'
 
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_and_update_data_pipeline(provider):
+def test_extract_structured_data_with_chunking(provider):
+    session = ExperimentSessionFactory()
+    ParticipantData.objects.create(
+        team=session.team, content_object=session.experiment, data={"drink": "martini"}, participant=session.participant
+    )
+    llm = FakeLlmSimpleTokenCount(
+        responses=[
+            {"name": None},  # the first chunk sees nothing of value
+            {"name": "james"},  # the second chunk message sees the name
+            {"name": "james"},  # the third chunk sees nothing of value
+        ]
+    )
+
+    with (
+        extract_structured_data_pipeline(provider, llm) as graph,
+        mock.patch(
+            "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
+            return_value=["I am bond", "james bond", "007"],
+        ),
+    ):
+        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        extracted_data = graph.invoke(state)["messages"][-1]
+
+    # This is what the LLM sees.
+    inferences = llm.get_call_messages()
+    assert inferences[0][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n"
+        "\nConversation history:"
+        "\nI am bond"
+    )
+
+    assert inferences[1][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n{'name': None}"
+        "\nConversation history:"
+        "\njames bond"
+    )
+
+    assert inferences[2][0].text == (
+        "Extract user data using the current user data and conversation history as reference. Use JSON output."
+        "\nCurrent user data:"
+        "\n{'name': 'james'}"
+        "\nConversation history:"
+        "\n007"
+    )
+
+    # Expected node output
+    assert extracted_data == '{"name": "james"}'
+
+
+@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_extract_participant_data(provider):
     """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
     participant to make sure it creates data. Then we run it again a few times to test that it updates the data
     correctly.
@@ -301,38 +312,22 @@ def _run_data_extract_and_update_pipeline(session, provider, extracted_data: dic
     ):
         runnable = PipelineGraph.build_runnable_from_json(
             {
-                "edges": [
-                    {
-                        "id": "extraction->update_data",
-                        "source": "extraction",
-                        "target": "update_data",
-                    },
-                ],
+                "edges": [],
                 "nodes": [
                     {
                         "data": {
                             "id": "extraction",
                             "label": "Extract some data",
-                            "type": "ExtractStructuredDataBasic",
+                            "type": "ExtractParticipantData",
                             "params": {
                                 "llm_provider_id": provider.id,
                                 "llm_model": "fake-model",
                                 "data_schema": '{"name": "the name of the user"}',
-                            },
-                        },
-                        "id": "extraction",
-                    },
-                    {
-                        "data": {
-                            "id": "update_data",
-                            "label": "Update participant memory",
-                            "type": "UpdateParticipantMemory",
-                            "params": {
                                 "key_name": key_name,
                             },
                         },
-                        "id": "update_data",
-                    },
+                        "id": "extraction",
+                    }
                 ],
                 "id": 1,
                 "name": "New Pipeline",
