@@ -132,12 +132,14 @@ class TwilioService(MessagingService):
         return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
 
     def is_valid_number(self, number: str) -> bool:
-        if settings.DEBUG:
-            # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
-            # let's just always return True
-            return True
+        # if settings.DEBUG:
+        #     # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
+        #     # let's just always return True
+        #     return True
 
-        return number in self._get_account_numbers()
+        # return number in self._get_account_numbers()
+        # TODO: Seems like the incoming_phone_numbers isn't a reliable way to verify phone numbers.
+        return True
 
 
 class TurnIOService(MessagingService):
