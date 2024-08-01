@@ -33,11 +33,21 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
 
     @classmethod
-    def for_dropdown(cls):
-        available = [cls.TELEGRAM, cls.WHATSAPP, cls.FACEBOOK, cls.SUREADHERE]
+    def for_dropdown(cls, team):
+        """Returns availabel platforms for this team. Platforms available through messaging providers will only be
+        returned if a provider is configured.
+        """
+        from apps.service_providers.models import MessagingProvider
+
+        available_platforms = [cls.TELEGRAM]
         if settings.SLACK_ENABLED:
-            available.append(cls.SLACK)
-        return available
+            available_platforms.append(cls.SLACK)
+
+        providers = MessagingProvider.objects.filter(team=team)
+        for provider in providers:
+            available_platforms.extend(provider.get_messaging_service().supported_platforms)
+
+        return set(available_platforms)
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm
