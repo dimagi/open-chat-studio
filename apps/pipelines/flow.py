@@ -11,13 +11,13 @@ class FlowNodeData(pydantic.BaseModel):
     type: str
     label: str
     params: dict = {}  # Allowed in pydantic: https://docs.pydantic.dev/latest/concepts/models/#fields-with-non-hashable-default-values
-    inputParams: list[dict]
+    inputParams: list[dict] = []
 
 
 class FlowNode(pydantic.BaseModel):
     id: str
     type: Literal["pipelineNode"] = "pipelineNode"
-    position: dict
+    position: dict = {}
     data: FlowNodeData
 
 

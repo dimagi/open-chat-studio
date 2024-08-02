@@ -25,17 +25,6 @@ class PipelineGraph(pydantic.BaseModel):
     edges: list[Edge]
 
     @classmethod
-    def from_json(cls, obj: dict) -> "PipelineGraph":
-        node_data = [Node(**node["data"]) for node in obj["nodes"]]
-        edge_data = [Edge(**edge) for edge in obj["edges"]]
-        return cls(nodes=node_data, edges=edge_data)
-
-    @classmethod
-    def build_runnable_from_json(cls, obj: dict) -> RunnableSequence:
-        graph = cls.from_json(obj)
-        return graph.build_runnable()
-
-    @classmethod
     def build_runnable_from_pipeline(cls, pipeline: Pipeline) -> RunnableSequence:
         node_data = [
             Node(id=node.flow_id, label=node.label, type=node.type, params=node.params)
