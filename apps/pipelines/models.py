@@ -114,8 +114,6 @@ class Pipeline(BaseTeamModel):
 
 
 class Node(BaseModel):
-    # TODO: Remove node params etc from data in pipeline (so we aren't duplicating)
-    # TODO: Get data from this model when serializing to the frontend
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
