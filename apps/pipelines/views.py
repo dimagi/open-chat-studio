@@ -12,10 +12,10 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
-from pydantic import BaseModel
 
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
+from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
 from apps.service_providers.models import LlmProvider
 from apps.teams.decorators import login_and_team_required
@@ -105,15 +105,6 @@ def _pipeline_node_input_types():
 
     from apps.pipelines.nodes import nodes
 
-    class InputParam(BaseModel):
-        name: str
-        type: str
-
-    class NodeInputType(BaseModel):
-        name: str
-        human_name: str
-        input_params: list[InputParam]
-
     fields = []
 
     node_classes = [
@@ -122,17 +113,8 @@ def _pipeline_node_input_types():
         if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
     ]
     for node_class in node_classes:
-        inputs = [
-            InputParam(name=field_name, type=str(info.annotation))
-            for field_name, info in node_class.model_fields.items()
-        ]
-        fields.append(
-            NodeInputType(
-                name=node_class.__name__,
-                human_name=getattr(node_class, "__human_name__", node_class.__name__),
-                input_params=inputs,
-            ).model_dump()
-        )
+        fields.append(get_input_types_for_node(node_class))
+
     return fields
 
 

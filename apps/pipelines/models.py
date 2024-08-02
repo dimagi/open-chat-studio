@@ -8,8 +8,10 @@ from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -34,24 +36,52 @@ class Pipeline(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
-    def set_nodes(self, nodes):
-        # Add new nodes, update old nodes, remove deleted nodes
+    def set_nodes(self, nodes: list[FlowNode]) -> None:
+        """Set the nodes on the pipeline from data coming from the frontend"""
 
         # Delete old nodes
-        current_ids = set(self.node_set.values_list("flow_id", flat=True).all())
+        current_ids = set(self.node_ids)
         new_ids = set(node.id for node in nodes)
         to_delete = current_ids - new_ids
         Node.objects.filter(pipeline=self, flow_id__in=to_delete).delete()
 
+        # Set new nodes or update existing ones
         for node in nodes:
             node_object, _ = Node.objects.get_or_create(pipeline=self, flow_id=node.id)
-            node_object.type = node.data.get("type")
-            node_object.params = node.data.get("params", {})
+            node_object.type = node.data.type
+            node_object.params = node.data.params
+            node_object.label = node.data.label
             node_object.save()
 
     @cached_property
+    def flow_data(self) -> dict:
+        from apps.pipelines.nodes import nodes as pipeline_nodes
+
+        flow = Flow(**self.data)
+        flow_nodes_by_id = {node.id: node for node in flow.nodes}
+        nodes = []
+        for node in self.node_set.all():
+            node_class = getattr(pipeline_nodes, node.type)
+            input_types = get_input_types_for_node(node_class)
+            nodes.append(
+                FlowNode(
+                    id=node.flow_id,
+                    position=flow_nodes_by_id[node.flow_id].position,
+                    data=FlowNodeData(
+                        id=node.flow_id,
+                        type=node.type,
+                        label=node.label,
+                        params=node.params,
+                        inputParams=input_types["input_params"],
+                    ),
+                )
+            )
+        flow.nodes = nodes
+        return flow.model_dump()
+
+    @cached_property
     def node_ids(self):
-        return [node.get("data", {}).get("id") for node in self.data.get("nodes", [])]
+        return self.node_set.values_list("flow_id", flat=True).all()
 
     def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
@@ -84,8 +114,11 @@ class Pipeline(BaseTeamModel):
 
 
 class Node(BaseModel):
+    # TODO: Remove node params etc from data in pipeline (so we aren't duplicating)
+    # TODO: Get data from this model when serializing to the frontend
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
+    label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = models.JSONField(default=dict)  # Parameters for the specific node type
 
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)

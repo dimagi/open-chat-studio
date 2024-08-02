@@ -1,14 +1,24 @@
 """Datamodels to hold state from react-flow for the front-end
 """
 
+from typing import Literal
+
 import pydantic
+
+
+class FlowNodeData(pydantic.BaseModel):
+    id: str
+    type: str
+    label: str
+    params: dict = {}  # Allowed in pydantic: https://docs.pydantic.dev/latest/concepts/models/#fields-with-non-hashable-default-values
+    inputParams: list[dict]
 
 
 class FlowNode(pydantic.BaseModel):
     id: str
-    type: str
+    type: Literal["pipelineNode"] = "pipelineNode"
     position: dict
-    data: dict
+    data: FlowNodeData
 
 
 class FlowEdge(pydantic.BaseModel):
