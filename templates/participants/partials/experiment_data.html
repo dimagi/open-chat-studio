@@ -1,0 +1,16 @@
+<tr>
+  <td colspan="100%" class="px-3 py-2">
+    <div role="tablist" class="tabs tabs-bordered">
+      <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Sessions" checked />
+      <div role="tabpanel" class="tab-content">
+        {% include 'participants/partials/experiment_sessions.html' %}
+      </div>
+      {% if perms.experiments.view_participantdata %}
+        <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Participant Data" />
+        <div role="tabpanel" class="tab-content">
+          {% include 'participants/partials/participant_data.html' %}
+        </div>
+      {% endif %}
+    </div>
+  </td>
+</tr>

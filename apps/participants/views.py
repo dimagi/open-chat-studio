@@ -74,14 +74,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         )
         context["active_tab"] = "participants"
         context["participant"] = participant
-        experiment_data = {}
-        for experiment in participant.get_experiments_for_display():
-            sessions = participant.experimentsession_set.filter(experiment=experiment).all()
-            experiment_data[experiment] = {
-                "sessions": sessions,
-                "participant_data": json.dumps(participant.get_data_for_experiment(experiment), indent=4),
-            }
-        context["experiment_data"] = experiment_data
+        context["experiments"] = participant.get_experiments_for_display()
         return context
 
 
@@ -100,3 +93,20 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
         return redirect(reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id]))
+
+
+class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "experiments.view_participant"
+    template_name = "participants/partials/experiment_data.html"
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        experiment = get_object_or_404(Experiment, id=self.kwargs["experiment_id"])
+        participant = Participant.objects.prefetch_related("experimentsession_set").get(
+            id=self.kwargs["participant_id"]
+        )
+        context["participant"] = participant
+        context["experiment"] = experiment
+        context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
+        context["participant_data"] = json.dumps(participant.get_data_for_experiment(experiment), indent=4)
+        return context
