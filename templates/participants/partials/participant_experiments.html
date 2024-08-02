@@ -16,9 +16,14 @@
         x-bind:class="experimentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
         x-on:click="experimentsRow = (experimentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
         hx-get="{% url 'participants:experiment_data' participant.team.slug participant.id experiment.id %}"
-        hx-trigger="click"
+        {% if forloop.counter == 1 %}
+          hx-trigger="load"
+        {% else %}
+          hx-trigger="click once"
+        {% endif %}
+        load
         hx-target="#row-{{ forloop.counter }}"
-        hx-swap="outerHTML"
+        hx-swap="innerHTML"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.name }}</td>
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
@@ -28,7 +33,7 @@
           <i class="fa-solid fa-chevron-up" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></i>
         </td>
       </tr>
-      <tr id="row-{{ forloop.counter }}"></tr>
+      <tr id="row-{{ forloop.counter }}" x-show="experimentsRow === {{ forloop.counter }}" x-cloak></tr>
     {% endfor %}
   </tbody>
 </table>
