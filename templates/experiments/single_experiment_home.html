@@ -112,32 +112,47 @@
             <i class="fa-regular fa-plus"></i>
           </button>
           <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
-            {% for platform in platforms %}
-              <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+            {% for platform, available in platforms.items %}
+              <li>
+                <button
+                  class="disabled:text-gray-600 tooltip tooltip-right"
+                  {% if not available %}
+                    disabled
+                    data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
+                  {% endif %}
+                  onclick="{{ platform.value }}_modal.showModal()"
+
+                >
+                  {{ platform.label }} {% if not available %}
+                  {% endif %}
+                </button>
+              </li>
             {% endfor %}
           </ul>
         </div>
-        {% for platform in platforms %}
-          <dialog id="{{ platform.value }}_modal" class="modal">
-            <div class="modal-box">
-              <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-              <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                    x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
-                {% csrf_token %}
-                {% render_form_fields platform_forms|dict_lookup:platform %}
-                {% if platform.extra_form %}
-                  <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                    {% render_form_fields platform.extra_form %}
+        {% for platform, available in platforms.items %}
+          {% if available %}
+            <dialog id="{{ platform.value }}_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+                <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+                      x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                  {% csrf_token %}
+                  {% render_form_fields platform_forms|dict_lookup:platform %}
+                  {% if platform.extra_form %}
+                    <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
+                      {% render_form_fields platform.extra_form %}
+                    </div>
+                  {% endif %}
+                  <div class="modal-action">
+                    <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+                    <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+                    <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
                   </div>
-                {% endif %}
-                <div class="modal-action">
-                  <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                  <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                  <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                </div>
-              </form>
-            </div>
-          </dialog>
+                </form>
+              </div>
+            </dialog>
+          {% endif %}
         {% endfor %}
       {% endif %}
     </div>
