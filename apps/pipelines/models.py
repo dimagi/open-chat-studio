@@ -86,7 +86,7 @@ class Pipeline(BaseTeamModel):
     def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
-        runnable = PipelineGraph.build_runnable_from_json(self.data)
+        runnable = PipelineGraph.build_runnable_from_pipeline(self)
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
         # the session instead of the session object.
         pipeline_run = PipelineRun.objects.create(
