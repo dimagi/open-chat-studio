@@ -199,7 +199,7 @@
               id="sessions-table"
               hx-trigger="load, tagFilter"
               hx-target="this"
-              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}?sort={{ sort }}"
               hx-swap="innerHTML"
             ></div>
           </div>

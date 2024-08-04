@@ -446,6 +446,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         )
         .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
+    sort = request.GET.get("sort", None)
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
@@ -469,6 +470,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "filter_tags_url": reverse(
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
+            "sort": sort,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
         },
