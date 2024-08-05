@@ -66,11 +66,20 @@ class TopicBot:
 
         # maps keywords to child experiments.
         self.child_experiment_routes = (
-            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment).all()
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="processor").all()
         )
         self.child_chains = {}
         self.default_child_chain = None
         self.default_tag = None
+
+        post_processor_route = (
+            ExperimentRoute.objects.select_related("child")
+            .filter(parent=self.experiment, type="post_processor")
+            .first()
+        )
+        self.post_processor_chain = None
+        if post_processor_route:
+            self.post_processor_chain = create_experiment_runnable(post_processor_route.child, self.session)
         self._initialize()
 
     def _initialize(self):
@@ -107,7 +116,11 @@ class TopicBot:
             attachments=attachments,
         )
 
+        if self.post_processor_chain:
+            result = self.post_processor_chain.invoke(result.output)
+
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
+        # TODO: Uh, the other chains should also contribute to these tokens
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
