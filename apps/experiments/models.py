@@ -418,7 +418,7 @@ class Experiment(BaseTeamModel):
 
 class ExperimentRouteType(models.TextChoices):
     PROCESSOR = "processor"
-    POST_PROCESSOR = "post_processor"
+    TERMINAL = "terminal"
 
 
 class ExperimentRoute(BaseTeamModel):

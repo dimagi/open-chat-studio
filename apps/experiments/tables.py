@@ -193,7 +193,7 @@ class ChildExperimentRoutesTable(tables.Table):
         empty_text = "No routes yet!"
 
 
-class PostProcessorBotsTable(ChildExperimentRoutesTable):
+class TerminalBotsTable(ChildExperimentRoutesTable):
     child = columns.Column(
         verbose_name="Bot",
         linkify=True,
@@ -208,7 +208,7 @@ class PostProcessorBotsTable(ChildExperimentRoutesTable):
         fields = ["child", "is_default", "actions"]
         orderable = False
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No post processor bots yet!"
+        empty_text = "No terminal bots yet!"
 
 
 class ParentExperimentRoutesTable(tables.Table):

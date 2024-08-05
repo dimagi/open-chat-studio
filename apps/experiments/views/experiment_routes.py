@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -10,13 +12,27 @@ from apps.experiments.models import Experiment, ExperimentRoute, ExperimentRoute
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
+class BaseExperimentRouteMixin:
+    route_type_titles = {
+        ExperimentRouteType.PROCESSOR: "Create Child Route",
+        ExperimentRouteType.TERMINAL: "Add Terminal Bot",
+    }
+
+
 class CreateExperimentRoute(CreateView):
     model = ExperimentRoute
     template_name = "generic/object_form.html"
     extra_context = {
-        "title": "Create Child Route",
         "button_text": "Create",
     }
+    route_type_titles = {
+        ExperimentRouteType.PROCESSOR: "Create Child Route",
+        ExperimentRouteType.TERMINAL: "Add Terminal Bot",
+    }
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        self.extra_context["title"] = self.route_type_titles[self.kwargs["type"]]
+        return super().get_context_data(**kwargs)
 
     def get_form(self, form_class=None):
         form_class = EXPERIMENT_ROUTE_TYPE_FORMS[self.kwargs["type"]]
@@ -27,7 +43,7 @@ class CreateExperimentRoute(CreateView):
 
     def get_success_url(self):
         url = reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
-        tab = "routes" if self.kwargs["type"] == "processor" else "post_processor"
+        tab = "routes" if self.kwargs["type"] == ExperimentRouteType.PROCESSOR else "terminal_bots"
         return f"{url}#{tab}"
 
     def form_valid(self, form):
@@ -44,9 +60,16 @@ class EditExperimentRoute(UpdateView):
     model = ExperimentRoute
     template_name = "generic/object_form.html"
     extra_context = {
-        "title": "Update experiment routes",
         "button_text": "Update",
     }
+    route_type_titles = {
+        ExperimentRouteType.PROCESSOR: "Update Experiment Routes",
+        ExperimentRouteType.TERMINAL: "Update Terminal Bot",
+    }
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        self.extra_context["title"] = self.route_type_titles[self.object.type]
+        return super().get_context_data(**kwargs)
 
     def get_form(self, form_class=None):
         form_class = EXPERIMENT_ROUTE_TYPE_FORMS[self.object.type]

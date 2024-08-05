@@ -67,7 +67,7 @@ class ProcessorBotForm(forms.ModelForm):
         fields = ["child", "keyword", "is_default"]
 
 
-class PostProcessorBotForm(forms.ModelForm):
+class TerminalBotForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         kwargs["initial"] = {**kwargs.get("initial", {}), "is_default": True}
         super().__init__(*args, **kwargs)
@@ -75,11 +75,11 @@ class PostProcessorBotForm(forms.ModelForm):
     class Meta:
         model = ExperimentRoute
         fields = ["child", "is_default"]
-        labels = {"child": "Post processor bot"}
+        labels = {"child": "Terminal bot"}
         widgets = {"is_default": forms.HiddenInput()}
 
 
 EXPERIMENT_ROUTE_TYPE_FORMS = {
     ExperimentRouteType.PROCESSOR.value: ProcessorBotForm,
-    ExperimentRouteType.POST_PROCESSOR.value: PostProcessorBotForm,
+    ExperimentRouteType.TERMINAL.value: TerminalBotForm,
 }
