@@ -261,11 +261,21 @@
     <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
         {% if can_make_child_routes %}
-          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
           {% render_table child_routes_table %}
         {% else %}
           Child experiments cannot have their own routes.
         {% endif %}
+      </div>
+    </div>
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Post Processors" id="tab-post_processor"/>
+    <div role="tabpanel" class="tab-content" id="content-post_processor">
+      <div class="app-card">
+        {% if post_processors_table.data|length == 0 %}
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'post_processor' %}"><i class="fa-regular fa-plus"></i> Add post processor</a>
+        {% endif %}
+        {% render_table post_processors_table %}
       </div>
     </div>
   </div>

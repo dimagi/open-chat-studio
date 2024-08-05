@@ -193,6 +193,24 @@ class ChildExperimentRoutesTable(tables.Table):
         empty_text = "No routes yet!"
 
 
+class PostProcessorBotsTable(ChildExperimentRoutesTable):
+    child = columns.Column(
+        verbose_name="Bot",
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+
+    class Meta:
+        model = ExperimentRoute
+        fields = ["child", "is_default", "actions"]
+        orderable = False
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        empty_text = "No post processor bots yet!"
+
+
 class ParentExperimentRoutesTable(tables.Table):
     parent = columns.Column(
         linkify=True,
