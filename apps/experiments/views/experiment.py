@@ -55,6 +55,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentRouteType,
     ExperimentSession,
     SessionStatus,
     SyntheticVoice,
@@ -517,9 +518,10 @@ def _get_events_context(experiment: Experiment, team_slug: str):
 
 
 def _get_routes_context(experiment: Experiment, team_slug: str):
-    parent_links = experiment.parent_links.filter(type="processor").all()
+    route_type = ExperimentRouteType.PROCESSOR
+    parent_links = experiment.parent_links.filter(type=route_type).all()
     return {
-        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type="processor").all()),
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
         "parent_routes_table": ParentExperimentRoutesTable(parent_links),
         "can_make_child_routes": len(parent_links) == 0,
     }
@@ -527,7 +529,9 @@ def _get_routes_context(experiment: Experiment, team_slug: str):
 
 def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
     return {
-        "terminal_bots_table": TerminalBotsTable(experiment.child_links.filter(type="terminal").all()),
+        "terminal_bots_table": TerminalBotsTable(
+            experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
+        ),
     }
 
 
