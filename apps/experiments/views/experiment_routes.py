@@ -12,13 +12,6 @@ from apps.experiments.models import Experiment, ExperimentRoute, ExperimentRoute
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class BaseExperimentRouteMixin:
-    route_type_titles = {
-        ExperimentRouteType.PROCESSOR: "Create Child Route",
-        ExperimentRouteType.TERMINAL: "Add Terminal Bot",
-    }
-
-
 class CreateExperimentRoute(CreateView):
     model = ExperimentRoute
     template_name = "generic/object_form.html"

@@ -10,10 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterUniqueTogether(
-            name='experimentroute',
-            unique_together={('parent', 'child')},
-        ),
         migrations.AddField(
             model_name='experimentroute',
             name='condition',
