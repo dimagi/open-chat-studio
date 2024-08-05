@@ -416,6 +416,11 @@ class Experiment(BaseTeamModel):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
 
+class ExperimentRouteType(models.TextChoices):
+    PROCESSOR = "processor"
+    POST_PROCESSOR = "post_processor"
+
+
 class ExperimentRoute(BaseTeamModel):
     """
     Through model for Experiment.children routes.
@@ -425,6 +430,8 @@ class ExperimentRoute(BaseTeamModel):
     child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
     keyword = models.SlugField(max_length=128)
     is_default = models.BooleanField(default=False)
+    type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
+    condition = models.CharField(max_length=64, blank=True)
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
@@ -447,7 +454,7 @@ class ExperimentRoute(BaseTeamModel):
     class Meta:
         unique_together = (
             ("parent", "child"),
-            ("parent", "keyword"),
+            ("parent", "keyword", "condition"),
         )
 
 
