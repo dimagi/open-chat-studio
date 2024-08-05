@@ -284,9 +284,10 @@ def _validate_prompt_variables(form_data):
             )
         raise forms.ValidationError({"prompt_text": errors})
 
-    if prompt_text.count("{source_material}") > 1:
-        error_msg = "Multiple source material variables found in the prompt. You can only use it once"
-        raise forms.ValidationError({"prompt_text": error_msg})
+    for prompt_var in ["{source_material}", "{participant_data}"]:
+        if prompt_text.count(prompt_var) > 1:
+            error_msg = f"Multiple {prompt_var} variables found in the prompt. You can only use it once"
+            raise forms.ValidationError({"prompt_text": error_msg})
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
