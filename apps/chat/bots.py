@@ -76,7 +76,6 @@ class TopicBot:
             ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
         )
         self.terminal_chain = None
-        self.terminal_chain_tag = terminal_route.child.name if terminal_route else None
         if terminal_route:
             self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
         self._initialize()
@@ -123,7 +122,7 @@ class TopicBot:
                 config={
                     "configurable": {
                         "save_input_to_history": False,
-                        "experiment_tag": self.terminal_chain_tag,
+                        "experiment_tag": tag,
                     }
                 },
             )
