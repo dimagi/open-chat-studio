@@ -109,6 +109,8 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 
         self._populate_memory(input)
 
+        print(f"config: {config}")
+
         if config.get("configurable", {}).get("save_input_to_history", True):
             self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
