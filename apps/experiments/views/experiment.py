@@ -55,6 +55,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentRouteType,
     ExperimentSession,
     SessionStatus,
     SyntheticVoice,
@@ -64,6 +65,7 @@ from apps.experiments.tables import (
     ExperimentSessionsTable,
     ExperimentTable,
     ParentExperimentRoutesTable,
+    TerminalBotsTable,
 )
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
@@ -473,6 +475,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "sort": sort,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
+            **_get_terminal_bots_context(experiment, team_slug),
         },
     )
 
@@ -515,11 +518,20 @@ def _get_events_context(experiment: Experiment, team_slug: str):
 
 
 def _get_routes_context(experiment: Experiment, team_slug: str):
-    parent_links = experiment.parent_links.all()
+    route_type = ExperimentRouteType.PROCESSOR
+    parent_links = experiment.parent_links.filter(type=route_type).all()
     return {
-        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.all()),
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
         "parent_routes_table": ParentExperimentRoutesTable(parent_links),
         "can_make_child_routes": len(parent_links) == 0,
+    }
+
+
+def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
+    return {
+        "terminal_bots_table": TerminalBotsTable(
+            experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
+        ),
     }
 
 

@@ -106,6 +106,7 @@ class ExtractStructuredDataNodeMixin:
             "\n{reference_data}"
             "\nConversation history:"
             "\n{input}"
+            "The conversation history should carry more weight in the outcome. It can change the user's current data"
         )
         prompt = PromptTemplate.from_template(template=template)
         return (
@@ -165,7 +166,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 400  # Get this from model metadata
+        model_token_limit = 8192  # Get this from model metadata
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)

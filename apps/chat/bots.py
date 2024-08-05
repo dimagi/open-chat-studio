@@ -66,11 +66,18 @@ class TopicBot:
 
         # maps keywords to child experiments.
         self.child_experiment_routes = (
-            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment).all()
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="processor").all()
         )
         self.child_chains = {}
         self.default_child_chain = None
         self.default_tag = None
+
+        terminal_route = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
+        )
+        self.terminal_chain = None
+        if terminal_route:
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
         self._initialize()
 
     def _initialize(self):
@@ -106,6 +113,9 @@ class TopicBot:
             },
             attachments=attachments,
         )
+
+        if self.terminal_chain:
+            result = self.terminal_chain.invoke(result.output)
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
