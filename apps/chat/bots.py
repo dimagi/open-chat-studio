@@ -120,7 +120,6 @@ class TopicBot:
             result = self.post_processor_chain.invoke(result.output)
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
-        # TODO: Uh, the other chains should also contribute to these tokens
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
