@@ -256,8 +256,10 @@ class ExperimentForm(forms.ModelForm):
 
 
 def _validate_prompt_variables(form_data):
-    required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
+    prompt_text = form_data.get("prompt_text")
+    required_variables = set(PromptTemplate.from_template(prompt_text).input_variables)
     available_variables = set(["participant_data", "current_datetime"])
+
     if form_data.get("source_material"):
         available_variables.add("source_material")
 
@@ -281,6 +283,10 @@ def _validate_prompt_variables(form_data):
                 "usage."
             )
         raise forms.ValidationError({"prompt_text": errors})
+
+    if prompt_text.count("{source_material}") > 1:
+        error_msg = "Multiple source material variables found in the prompt. You can only use it once"
+        raise forms.ValidationError({"prompt_text": error_msg})
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
