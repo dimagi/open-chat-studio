@@ -133,7 +133,7 @@ def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm
     result = chain.invoke("hi", config={"configurable": {"include_conversation_history": False}})
 
     assert result.output == "this is a test message"
-    fake_llm_service.llm.get_calls()[0].args[0] == [
+    assert fake_llm_service.llm.get_calls()[0].args[0] == [
         SystemMessage(content="You are a helpful assistant"),
         HumanMessage(content="hi"),
     ]
