@@ -533,8 +533,7 @@ class Participant(BaseTeamModel):
     def update_memory(self, data: dict, experiment: Experiment):
         """
         Updates this participant's data records by merging `data` with the existing data. By default, data for all
-        experiments that this participant participated in will be updated. If there are no records for a specific
-        experiment, one will be created.
+        experiments that this participant participated in will be updated.
 
         Paramters
         data:
@@ -543,13 +542,14 @@ class Participant(BaseTeamModel):
             Create a new record for this experiment if one does not exist
         """
         # Update all existing records
-        participant_data = ParticipantData.objects.filter(participant=self).select_for_update()
+        experiment_content_type = ContentType.objects.get_for_model(Experiment)
+        participant_data = ParticipantData.objects.filter(
+            participant=self, content_type=experiment_content_type
+        ).select_for_update()
         experiments = set()
         with transaction.atomic():
-            experiment_content_type = ContentType.objects.get_for_model(Experiment)
             for record in participant_data:
-                if record.content_type == experiment_content_type:
-                    experiments.add(record.object_id)
+                experiments.add(record.object_id)
                 record.data = record.data | data
             ParticipantData.objects.bulk_update(participant_data, fields=["data"])
 
