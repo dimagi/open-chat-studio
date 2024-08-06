@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import freezegun
 import pytest
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import AgentTools, SourceMaterial
@@ -122,6 +122,23 @@ def test_runnable_save_input_to_history(runnable, session, chat, fake_llm_servic
     assert result.output == "this is a test message"
     assert len(fake_llm_service.llm.get_calls()) == 1
     assert chat.messages.count() == 2
+
+
+@pytest.mark.django_db()
+def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm_service):
+    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
+    session.chat = chat
+    assert chat.messages.count() == 1
+    # The existing message should not be included in the LLM all, only the system message an human message
+    result = chain.invoke("hi", config={"configurable": {"include_conversation_history": False}})
+
+    assert result.output == "this is a test message"
+    fake_llm_service.llm.get_calls()[0].args[0] == [
+        SystemMessage(content="You are a helpful assistant"),
+        HumanMessage(content="hi"),
+    ]
+    assert len(fake_llm_service.llm.get_calls()) == 1
+    assert chat.messages.count() == 3
 
 
 @pytest.mark.django_db()
