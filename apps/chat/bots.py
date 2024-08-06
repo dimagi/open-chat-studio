@@ -123,6 +123,7 @@ class TopicBot:
                     "configurable": {
                         "save_input_to_history": False,
                         "experiment_tag": tag,
+                        "include_conversation_history": False,
                     }
                 },
             )
