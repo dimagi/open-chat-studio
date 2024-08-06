@@ -129,7 +129,7 @@ def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     session.chat = chat
     assert chat.messages.count() == 1
-    # The existing message should not be included in the LLM all, only the system message an human message
+    # The existing message should not be included in the LLM call, only the system message an human message
     result = chain.invoke("hi", config={"configurable": {"include_conversation_history": False}})
 
     assert result.output == "this is a test message"
