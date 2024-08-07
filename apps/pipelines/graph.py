@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph
 from pydantic_core import ValidationError
 
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.models import Pipeline
 
 
 class Node(pydantic.BaseModel):
@@ -24,15 +25,13 @@ class PipelineGraph(pydantic.BaseModel):
     edges: list[Edge]
 
     @classmethod
-    def from_json(cls, obj: dict) -> "PipelineGraph":
-        node_data = [Node(**node["data"]) for node in obj["nodes"]]
-        edge_data = [Edge(**edge) for edge in obj["edges"]]
-        return cls(nodes=node_data, edges=edge_data)
-
-    @classmethod
-    def build_runnable_from_json(cls, obj: dict) -> RunnableSequence:
-        graph = cls.from_json(obj)
-        return graph.build_runnable()
+    def build_runnable_from_pipeline(cls, pipeline: Pipeline) -> RunnableSequence:
+        node_data = [
+            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params)
+            for node in pipeline.node_set.all()
+        ]
+        edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
+        return cls(nodes=node_data, edges=edge_data).build_runnable()
 
     def build_runnable(self) -> RunnableSequence:
         from apps.pipelines.nodes.base import PipelineState
