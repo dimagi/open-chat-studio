@@ -1,7 +1,10 @@
 import json
+import uuid
 
 import pytest
+from dateutil.relativedelta import relativedelta
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.experiments.models import Participant
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
@@ -75,30 +78,33 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
 
 @pytest.mark.django_db()
-def test_update_participant_data():
+def test_create_and_update_participant_data():
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
-    participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData
-    data = [
-        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
-        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
-    ]
-    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
+    data = {
+        "identifier": identifier,
+        "platform": "api",
+        "data": [
+            {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+            {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+        ],
+    }
+    url = reverse("api:update-participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
-    participant_data_exp_1 = experiment.participant_data.get(participant=participant)
-    participant_data_exp_2 = experiment2.participant_data.get(participant=participant)
+    participant_data_exp_1 = experiment.participant_data.get(participant__identifier=identifier)
+    participant_data_exp_2 = experiment2.participant_data.get(participant__identifier=identifier)
     assert participant_data_exp_1.data["name"] == "John"
     assert participant_data_exp_2.data["name"] == "Doe"
 
     # Let's update the data
-    data = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
+    data["data"] = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
     client.post(url, json.dumps(data), content_type="application/json")
     participant_data_exp_1.refresh_from_db()
     assert participant_data_exp_1.data["name"] == "Harry"
@@ -115,13 +121,137 @@ def test_update_participant_data_returns_404():
     client = ApiTestClient(user, experiment.team)
 
     # This call should create ParticipantData for team 1's experiment only
-    data = [
-        {"experiment": str(experiment.public_id), "data": {"name": "John"}},
-        {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
-    ]
-    url = reverse("api:update-participant-data", kwargs={"participant_id": participant.identifier})
+    data = {
+        "identifier": participant.identifier,
+        "platform": participant.platform,
+        "data": [
+            {"experiment": str(experiment.public_id), "data": {"name": "John"}},
+            {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
+        ],
+    }
+    url = reverse("api:update-participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 404
     assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
     # Assert that nothing was created
     assert experiment.participant_data.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db()
+def test_create_participant_schedules(experiment):
+    identifier = "part1"
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    # This call should create ParticipantData
+    trigger_date1 = timezone.now() + relativedelta(hours=1)
+    trigger_date2 = timezone.now() + relativedelta(days=1)
+    data = {
+        "identifier": identifier,
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(experiment.public_id),
+                "data": {"name": "John"},
+                "schedules": [
+                    {"name": "schedule1", "prompt": "tell ET to phone home", "date": trigger_date1.isoformat()},
+                    {"name": "schedule2", "prompt": "email john", "date": trigger_date2.isoformat()},
+                ],
+            },
+        ],
+    }
+    url = reverse("api:update-participant-data")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    participant_data_exp_1 = experiment.participant_data.get(participant__identifier=identifier)
+    assert participant_data_exp_1.data["name"] == "John"
+    schedules = list(
+        experiment.scheduled_messages.filter(participant__identifier=identifier).order_by("next_trigger_date")
+    )
+    assert len(schedules) == 2
+    assert schedules[0].custom_schedule_params == {
+        "name": "schedule1",
+        "prompt_text": "tell ET to phone home",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert schedules[0].next_trigger_date == trigger_date1
+
+    assert schedules[1].custom_schedule_params == {
+        "name": "schedule2",
+        "prompt_text": "email john",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert schedules[1].next_trigger_date == trigger_date2
+    return schedules
+
+
+@pytest.mark.django_db()
+def test_update_participant_schedules(experiment):
+    schedules = test_create_participant_schedules(experiment)
+
+    identifier = "part1"
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    trigger_date3 = timezone.now() + relativedelta(days=1)
+    data = {
+        "identifier": identifier,
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(experiment.public_id),
+                "schedules": [
+                    # Create a new schedule
+                    {
+                        "id": uuid.uuid4().hex,
+                        "name": "schedule3",
+                        "prompt": "don't forget to floss",
+                        "date": trigger_date3.isoformat(),
+                    },
+                    # delete one we created before
+                    {"id": schedules[0].external_id, "delete": True},
+                    # update another one
+                    {
+                        "id": schedules[1].external_id,
+                        "name": "schedule2 updated",
+                        "prompt": "email john smith",
+                        "date": schedules[1].next_trigger_date.isoformat(),
+                    },
+                ],
+            },
+        ],
+    }
+    url = reverse("api:update-participant-data")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    # make sure the data hasn't changed
+    participant_data = experiment.participant_data.get(participant__identifier=identifier)
+    assert participant_data.data["name"] == "John"
+
+    updated_schedules = list(
+        experiment.scheduled_messages.filter(participant__identifier=identifier).order_by("next_trigger_date")
+    )
+    assert len(updated_schedules) == 2
+    assert updated_schedules[0].custom_schedule_params == {
+        "name": "schedule2 updated",
+        "prompt_text": "email john smith",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert updated_schedules[0].next_trigger_date == schedules[1].next_trigger_date
+
+    assert updated_schedules[1].custom_schedule_params == {
+        "name": "schedule3",
+        "prompt_text": "don't forget to floss",
+        "repetitions": 1,
+        "frequency": 1,
+        "time_period": "days",
+    }
+    assert updated_schedules[1].next_trigger_date == trigger_date3

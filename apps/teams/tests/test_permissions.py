@@ -30,8 +30,11 @@ IGNORE_APPS = {
     "api",
     "audit",
     "auth",
+    "cache",  # heath_check.cache
+    "celery",  # heath_check.celery
     "celery_progress",
     "contenttypes",
+    "db",  # heath_check.db
     "django_celery_beat",
     "django_otp",
     "django_tables2",
@@ -39,12 +42,14 @@ IGNORE_APPS = {
     "field_audit",
     "forms",
     "generics",
+    "health_check",
     "hijack",
     "hijack_admin",
     "humanize",
     "messages",
     "otp_static",
     "otp_totp",
+    "redis",  # heath_check.redis
     "rest_framework",
     "rest_framework_api_key",
     "runserver_nostatic",

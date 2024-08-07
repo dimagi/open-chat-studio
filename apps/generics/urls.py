@@ -1,7 +1,7 @@
 from django.urls import path
 
 
-def make_crud_urls(views_module, model_name: str, prefix: str = ""):
+def make_crud_urls(views_module, model_name: str, prefix: str = "", new=True, edit=True, delete=True):
     f"""Make the CRUD URLs for a given model.
 
     Views (all are expected to be class based views):
@@ -18,16 +18,36 @@ def make_crud_urls(views_module, model_name: str, prefix: str = ""):
     """
     url_prefix = f"{prefix}/" if prefix else ""
     name_prefix = f"{prefix}_" if prefix else ""
-    return [
+    urls = [
         path(f"{url_prefix}", getattr(views_module, f"{model_name}Home").as_view(), name=f"{name_prefix}home"),
-        path(f"{url_prefix}new/", getattr(views_module, f"Create{model_name}").as_view(), name=f"{name_prefix}new"),
-        path(f"{url_prefix}<int:pk>/", getattr(views_module, f"Edit{model_name}").as_view(), name=f"{name_prefix}edit"),
         path(
-            f"{url_prefix}<int:pk>/delete/",
-            getattr(views_module, f"Delete{model_name}").as_view(),
-            name=f"{name_prefix}delete",
-        ),
-        path(
-            f"{url_prefix}table/", getattr(views_module, f"{model_name}TableView").as_view(), name=f"{name_prefix}table"
+            f"{url_prefix}table/",
+            getattr(views_module, f"{model_name}TableView").as_view(),
+            name=f"{name_prefix}table",
         ),
     ]
+
+    if new:
+        urls.append(
+            path(f"{url_prefix}new/", getattr(views_module, f"Create{model_name}").as_view(), name=f"{name_prefix}new")
+        )
+
+    if edit:
+        urls.append(
+            path(
+                f"{url_prefix}<int:pk>/",
+                getattr(views_module, f"Edit{model_name}").as_view(),
+                name=f"{name_prefix}edit",
+            )
+        )
+
+    if delete:
+        urls.append(
+            path(
+                f"{url_prefix}<int:pk>/delete/",
+                getattr(views_module, f"Delete{model_name}").as_view(),
+                name=f"{name_prefix}delete",
+            )
+        )
+
+    return urls

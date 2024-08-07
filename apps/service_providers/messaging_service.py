@@ -45,6 +45,12 @@ class MessagingService(pydantic.BaseModel):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 
+    def is_valid_number(self, number: str) -> bool:
+        """Returns False if `number` does not belong to this account. Returns `True` by default so that this
+        doesn't prevent users from adding numbers if we cannot check the account.
+        """
+        return True
+
 
 class TwilioService(MessagingService):
     _type: ClassVar[str] = "twilio"
@@ -120,6 +126,20 @@ class TwilioService(MessagingService):
         # Example header: {'Content-Type': 'audio/ogg'}
         content_type = response.headers["Content-Type"].split("/")[1]
         return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
+
+    def _get_account_numbers(self) -> list[str]:
+        """Returns all numbers associated with this client account"""
+        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
+
+    def is_valid_number(self, number: str) -> bool:
+        # if settings.DEBUG:
+        #     # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
+        #     # let's just always return True
+        #     return True
+
+        # return number in self._get_account_numbers()
+        # TODO: Seems like the incoming_phone_numbers isn't a reliable way to verify phone numbers.
+        return True
 
 
 class TurnIOService(MessagingService):

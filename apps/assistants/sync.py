@@ -59,8 +59,10 @@ import mimetypes
 import pathlib
 from functools import wraps
 from io import BytesIO
+from tempfile import TemporaryFile
 
 import openai
+from django.core.files import File as DjangoFile
 from openai import OpenAI
 from openai.types.beta import Assistant
 
@@ -196,7 +198,12 @@ def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: Ope
     if "file_search" in tools:
         ocs_file_search, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="file_search")
         try:
-            vector_store_id = openai_assistant.tool_resources.file_search.vector_store_ids[0]
+            vector_store_ids = openai_assistant.tool_resources.file_search.vector_store_ids
+            if not vector_store_ids:
+                # OpenAI doesn't create a vector store when you create an assistant through their UI and enable
+                # file search with no files in it, so let's not try to fetch it
+                return
+            vector_store_id = vector_store_ids[0]
         except AttributeError:
             pass
         else:
@@ -353,3 +360,18 @@ def _push_file_to_openai(client: OpenAiAssistant, file: File):
     file.external_id = openai_file.id
     file.external_source = "openai"
     file.save()
+
+
+def get_and_store_openai_file(client, file_name: str, file_id: str, team_id: int) -> File:
+    """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance"""
+    file_content_obj = client.files.content(file_id)
+    file_content_bytes = file_content_obj.read()
+
+    with TemporaryFile(mode="w+b") as file:
+        file.write(file_content_bytes)
+        return File.objects.create(
+            name=file_name,
+            file=DjangoFile(file, name=file_name),
+            external_id=file_id,
+            team_id=team_id,
+        )

@@ -52,10 +52,23 @@
             </a>
           </div>
           <div class="tooltip" data-tip="Delete">
-            <a class="btn btn-primary join-item rounded-r-full"
-               href="{% url 'experiments:delete' team.slug experiment.id %}">
+            <button
+              id="action-delete-{{ experiment.id }}"
+              class="btn btn-primary join-item rounded-r-full"
+              hx-delete="{% url 'experiments:delete' team.slug experiment.id %}"
+              hx-trigger="confirmed"
+              onClick="alertify.confirm().setting({
+                       title: 'Confirm',
+                       message: 'Are you sure you want to delete \'{{ experiment.name }}\'?',
+                       transition: 'fade',
+                       onok: function() {
+                       htmx.trigger('#action-delete-{{ experiment.id }}', 'confirmed');
+                       },
+                       }).show();
+                      "
+            >
               <i class="fa-solid fa-trash"></i>
-            </a>
+            </button>
           </div>
         </div>
       </div>
@@ -99,32 +112,47 @@
             <i class="fa-regular fa-plus"></i>
           </button>
           <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52 border">
-            {% for platform in platforms %}
-              <li><a onclick="{{ platform.value }}_modal.showModal()">{{ platform.label }}</a></li>
+            {% for platform, available in platforms.items %}
+              <li>
+                <button
+                  class="disabled:text-gray-600 tooltip tooltip-right"
+                  {% if not available %}
+                    disabled
+                    data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
+                  {% endif %}
+                  onclick="{{ platform.value }}_modal.showModal()"
+
+                >
+                  {{ platform.label }} {% if not available %}
+                  {% endif %}
+                </button>
+              </li>
             {% endfor %}
           </ul>
         </div>
-        {% for platform in platforms %}
-          <dialog id="{{ platform.value }}_modal" class="modal">
-            <div class="modal-box">
-              <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-              <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                    x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
-                {% csrf_token %}
-                {% render_form_fields platform_forms|dict_lookup:platform %}
-                {% if platform.extra_form %}
-                  <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                    {% render_form_fields platform.extra_form %}
+        {% for platform, available in platforms.items %}
+          {% if available %}
+            <dialog id="{{ platform.value }}_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
+                <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+                      x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
+                  {% csrf_token %}
+                  {% render_form_fields platform_forms|dict_lookup:platform %}
+                  {% if platform.extra_form %}
+                    <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
+                      {% render_form_fields platform.extra_form %}
+                    </div>
+                  {% endif %}
+                  <div class="modal-action">
+                    <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+                    <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+                    <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
                   </div>
-                {% endif %}
-                <div class="modal-action">
-                  <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                  <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                  <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                </div>
-              </form>
-            </div>
-          </dialog>
+                </form>
+              </div>
+            </dialog>
+          {% endif %}
         {% endfor %}
       {% endif %}
     </div>
@@ -171,7 +199,7 @@
               id="sessions-table"
               hx-trigger="load, tagFilter"
               hx-target="this"
-              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}{% if sort %}?sort={{ sort }}{% endif %}"
               hx-swap="innerHTML"
             ></div>
           </div>
@@ -233,11 +261,21 @@
     <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
         {% if can_make_child_routes %}
-          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create child route</a>
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
           {% render_table child_routes_table %}
         {% else %}
           Child experiments cannot have their own routes.
         {% endif %}
+      </div>
+    </div>
+
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
+    <div role="tabpanel" class="tab-content" id="content-terminal_bots">
+      <div class="app-card">
+        {% if terminal_bots_table.data|length == 0 %}
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
+        {% endif %}
+        {% render_table terminal_bots_table %}
       </div>
     </div>
   </div>

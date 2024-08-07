@@ -71,6 +71,11 @@ THIRD_PARTY_APPS = [
     "field_audit",
     "taggit",
     "tz_detect",
+    "health_check",
+    "health_check.db",
+    "health_check.cache",
+    "health_check.contrib.celery",
+    "health_check.contrib.redis",
 ]
 
 PROJECT_APPS = [
@@ -222,7 +227,7 @@ ACCOUNT_FORMS = {
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
-ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="mandatory")
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
 
 ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
@@ -543,3 +548,15 @@ SLACK_SCOPES = [
 ]
 SLACK_BOT_NAME = env("SLACK_BOT_NAME", default="@ocs")
 SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET
+
+# Health checks
+# Tokens used to secure the /status endpoint. These should be kept secret
+HEALTH_CHECK_TOKENS = env.list("HEALTH_CHECK_TOKENS", default=[])
+HEALTH_CHECK = {
+    "SUBSETS": {
+        "general": ["Cache backend: default", "DatabaseBackend", "RedisHealthCheck"],
+        "celery": ["CeleryHealthCheckCelery"],
+    },
+}
+
+CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")

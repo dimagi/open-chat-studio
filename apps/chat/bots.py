@@ -66,11 +66,18 @@ class TopicBot:
 
         # maps keywords to child experiments.
         self.child_experiment_routes = (
-            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment).all()
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="processor").all()
         )
         self.child_chains = {}
         self.default_child_chain = None
         self.default_tag = None
+
+        terminal_route = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
+        )
+        self.terminal_chain = None
+        if terminal_route:
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
         self._initialize()
 
     def _initialize(self):
@@ -96,16 +103,30 @@ class TopicBot:
             tag, chain = self._get_child_chain(input_str, attachments)
         else:
             tag, chain = None, self.chain
+
         result = chain.invoke(
             input_str,
             config={
                 "configurable": {
                     "save_input_to_history": save_input_to_history,
+                    "save_output_to_history": self.terminal_chain is None,
                     "experiment_tag": tag,
                 }
             },
             attachments=attachments,
         )
+
+        if self.terminal_chain:
+            result = self.terminal_chain.invoke(
+                result.output,
+                config={
+                    "configurable": {
+                        "save_input_to_history": False,
+                        "experiment_tag": tag,
+                        "include_conversation_history": False,
+                    }
+                },
+            )
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens

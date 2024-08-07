@@ -119,10 +119,10 @@ class PipelineStartAction(EventActionHandlerBase):
             raise ValueError("The action is missing the input type")
         if input_type == PipelineEventInputs.FULL_HISTORY:
             messages = session.chat.get_langchain_messages()
-            input = "\n".join(message.pretty_repr() for message in messages)
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
             messages = session.chat.get_langchain_messages_until_summary()
-            input = "\n".join(message.pretty_repr() for message in messages)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
-            input = session.chat.messages.last().to_langchain_message().pretty_repr()
+            messages = [session.chat.messages.last().to_langchain_message()]
+
+        input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         return pipeline.invoke(PipelineState(messages=[input], experiment_session=session), session)
