@@ -24,7 +24,7 @@ def sureadhere_provider():
         config={
             "client_id": "123",
             "client_secret": "456",
-            "client_scope": "https://exanmple.onmicrosoft.com/example-app-api/.default",
+            "client_scope": "https://example.onmicrosoft.com/example-app-api/.default",
             "base_url": "https://example.com",
         },
     )
