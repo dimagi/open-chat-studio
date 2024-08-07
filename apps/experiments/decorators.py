@@ -2,11 +2,12 @@ from functools import wraps
 
 from django.contrib import messages
 from django.core import signing
+from django.db.models import Q
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
 
 MAX_AGE = 180 * 24 * 60 * 60  # 6 months
 
@@ -22,15 +23,15 @@ def experiment_session_view(allowed_states=None):
         """
 
         @wraps(view_func)
-        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str):
-            request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-            request.experiment_session = get_object_or_404(
-                ExperimentSession, experiment=request.experiment, external_id=session_id, team=request.team
-            )
+        def decorated_view(request, team_slug: str, *args, **kwargs):
+            session_id = kwargs["session_id"]
+            id_match = Q(id=session_id) if isinstance(session_id, int) else Q(external_id=session_id)
+            request.experiment_session = get_object_or_404(ExperimentSession, id_match, team=request.team)
+            request.experiment = request.experiment_session.experiment
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, request.experiment_session, team_slug)
-            return view_func(request, team_slug, experiment_id, session_id)
+            return view_func(request, team_slug, *args, **kwargs)
 
         return decorated_view
 
