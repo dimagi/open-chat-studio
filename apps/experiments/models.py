@@ -456,7 +456,7 @@ class ExperimentVersion(BaseTeamModel):
         return f"{self.experiment.name} - Version {self.version_number}"
 
     def save(self, *args, **kwargs):
-        version_data_dict = self.version_data.model_dump(exclude_unset=True, exclude_none=True)
+        version_data_dict = self.version_data
         self.name = version_data_dict.get("name")
         self.is_active = version_data_dict.get("is_active")
         self.version_data = version_data_dict
