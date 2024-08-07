@@ -137,8 +137,8 @@ class ConsentFormTable(tables.Table):
 
 class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
-    started = columns.Column(accessor="created_at", verbose_name="Started")
-    last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message")
+    started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
+    last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
         template_name="experiments/components/experiment_sessions_list_tags.html",
@@ -191,6 +191,24 @@ class ChildExperimentRoutesTable(tables.Table):
         orderable = False
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         empty_text = "No routes yet!"
+
+
+class TerminalBotsTable(ChildExperimentRoutesTable):
+    child = columns.Column(
+        verbose_name="Bot",
+        linkify=True,
+        attrs={
+            "a": {"class": "link"},
+        },
+        orderable=True,
+    )
+
+    class Meta:
+        model = ExperimentRoute
+        fields = ["child", "is_default", "actions"]
+        orderable = False
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        empty_text = "No terminal bots yet!"
 
 
 class ParentExperimentRoutesTable(tables.Table):

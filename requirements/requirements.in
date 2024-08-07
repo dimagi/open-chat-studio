@@ -12,6 +12,7 @@ django-anymail
 django-cryptography
 django-environ
 django-field-audit>=1.2.7
+django-health-check
 django-hijack
 django-redis
 django-storages[s3]
@@ -48,3 +49,4 @@ turn-python>=0.2.0
 twilio
 whitenoise[brotli]
 phonenumberslite
+emoji

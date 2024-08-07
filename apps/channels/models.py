@@ -33,11 +33,26 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
 
     @classmethod
-    def for_dropdown(cls):
-        available = [cls.TELEGRAM, cls.WHATSAPP, cls.FACEBOOK, cls.SUREADHERE]
-        if settings.SLACK_ENABLED:
-            available.append(cls.SLACK)
-        return available
+    def for_dropdown(cls, used_platforms, team) -> dict:
+        """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
+        from apps.service_providers.models import MessagingProvider
+
+        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB])
+        platform_availability = {platform: False for platform in all_platforms}
+        platform_availability[cls.TELEGRAM] = True
+
+        for provider in MessagingProvider.objects.filter(team=team):
+            for platform in provider.get_messaging_service().supported_platforms:
+                platform_availability[platform] = True
+
+        if not settings.SLACK_ENABLED:
+            platform_availability.pop(cls.SLACK)
+
+        # Platforms already used should not be displayed
+        for platform in used_platforms:
+            platform_availability.pop(platform)
+
+        return platform_availability
 
     def form(self, team: Team):
         from apps.channels.forms import ChannelForm
@@ -74,6 +89,10 @@ class ChannelPlatform(models.TextChoices):
                 return "sureadhere_tenant_id"
             case self.SLACK:
                 return "slack_channel_id"
+
+    @staticmethod
+    def as_list(exclude: list["ChannelPlatform"]) -> list["ChannelPlatform"]:
+        return [ChannelPlatform(value) for value in ChannelPlatform.values if value not in exclude]
 
 
 class ExperimentChannelObjectManager(AuditingManager):

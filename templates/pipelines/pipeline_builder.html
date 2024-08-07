@@ -2,6 +2,23 @@
 {% load static %}
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
+  <style>
+    .react-flow__handle {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+    }
+    .react-flow__handle-right {
+      right: -7px;
+      top: 50%;
+      transform: translate(0, -50%);
+    }
+    .react-flow__handle-left {
+      left: -7px;
+      top: 50%;
+      transform: translate(0, -50%);
+    }
+  </style>
 {% endblock page_head %}
 {% block breadcrumbs %}
 {% endblock %}
@@ -10,6 +27,8 @@
   </div>
 {% endblock %}
 {% block page_js %}
+  {{ parameter_values|json_script:"parameter-values" }}
+  {{ default_values|json_script:"default-values" }}
   {{ input_types|json_script:"node-input-types" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">

@@ -1,10 +1,12 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 
+import emoji
 import requests
 from django.db import transaction
 from telebot import TeleBot
@@ -34,6 +36,21 @@ UNSUPPORTED_MESSAGE_BOT_PROMPT = """
 Tell the user (in the language being spoken) that they sent an unsupported message.
 You only support {supported_types} messages types. Respond only with the message for the user
 """
+
+# The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
+URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
+
+
+def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
+    """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
+    text = emoji.replace_emoji(text, replace="")
+
+    url_pattern = re.compile(URL_REGEX)
+    urls = set(url_pattern.findall(text))
+    for url in urls:
+        text = text.replace(url, "")
+
+    return text, urls
 
 
 class MESSAGE_TYPES(Enum):
@@ -143,6 +160,10 @@ class ChannelBase(ABC):
 
     def get_message_audio(self) -> BytesIO:
         return self.messaging_service.get_message_audio(message=self.message)
+
+    def echo_transcript(self, transcript: str):
+        """Sends a text message to the user with a transcript of what the user said"""
+        pass
 
     def transcription_started(self):
         """Callback indicating that the transcription process started"""
@@ -337,6 +358,8 @@ class ChannelBase(ABC):
         return self.send_text_to_user(self._unsupported_message_type_response())
 
     def _reply_voice_message(self, text: str):
+        text, extracted_urls = strip_urls_and_emojis(text)
+
         voice_provider = self.experiment.voice_provider
         speech_service = voice_provider.get_speech_service()
         try:
@@ -346,12 +369,18 @@ class ChannelBase(ABC):
             logging.exception(e)
             self.send_text_to_user(text)
 
+        if extracted_urls:
+            urls_text = "\n".join(extracted_urls)
+            self.send_text_to_user(urls_text)
+
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
         self.transcription_started()
 
         audio_file = self.get_message_audio()
         transcript = self._transcribe_audio(audio_file)
+        if self.experiment.echo_transcript:
+            self.echo_transcript(transcript)
         self.transcription_finished(transcript)
         return transcript
 
@@ -548,7 +577,7 @@ class TelegramChannel(ChannelBase):
     def transcription_started(self):
         self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.telegram_bot.send_message(
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
@@ -574,7 +603,7 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -627,7 +656,7 @@ class FacebookMessengerChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
-    def transcription_finished(self, transcript: str):
+    def echo_transcript(self, transcript: str):
         self.send_text_to_user(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -746,7 +775,7 @@ def _start_experiment_session(
 
         # Record the participant's timezone
         if timezone:
-            participant.update_memory(data={"timezone": timezone})
+            participant.update_memory(data={"timezone": timezone}, experiment=experiment)
 
     if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)

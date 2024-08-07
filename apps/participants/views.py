@@ -1,13 +1,10 @@
 import json
 
-from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views import View
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, Participant, ParticipantData
@@ -25,7 +22,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         return {
             "active_tab": "participants",
             "title": "Participants",
-            "new_object_url": reverse("participants:participant_new", args=[team_slug]),
+            "allow_new": False,
             "table_url": reverse("participants:participant_table", args=[team_slug]),
             "enable_search": True,
         }
@@ -51,32 +48,6 @@ class CreateParticipant(CreateView, PermissionRequiredMixin):
         return super().form_valid(form)
 
 
-class EditParticipant(UpdateView, PermissionRequiredMixin):
-    permission_required = "experiments.change_participant"
-    model = Participant
-    form_class = ParticipantForm
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Update Participant",
-        "button_text": "Update",
-        "active_tab": "participants",
-    }
-
-    def get_queryset(self):
-        return Participant.objects.filter(team=self.request.team)
-
-    def get_success_url(self):
-        return reverse("participants:participant_home", args=[self.request.team.slug])
-
-
-class DeleteParticipant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = "experiments.delete_participant"
-
-    def delete(self, request, team_slug: str, pk: int):
-        messages.error(request, "Cannot delete a Participant")
-        return HttpResponse()
-
-
 class ParticipantTableView(SingleTableView):
     model = Participant
     paginate_by = 25
@@ -98,19 +69,10 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
-        participant = Participant.objects.prefetch_related("experimentsession_set").get(
-            id=self.kwargs["participant_id"]
-        )
+        participant = Participant.objects.get(id=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
-        experiment_data = {}
-        for experiment in participant.get_experiments_for_display():
-            sessions = participant.experimentsession_set.filter(experiment=experiment).all()
-            experiment_data[experiment] = {
-                "sessions": sessions,
-                "participant_data": json.dumps(sessions.first().participant_data_from_experiment, indent=4),
-            }
-        context["experiment_data"] = experiment_data
+        context["experiments"] = participant.get_experiments_for_display()
         return context
 
 
@@ -129,3 +91,18 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
             defaults={"team": experiment.team, "data": new_data, "content_object": experiment},
         )
         return redirect(reverse("participants:single-participant-home", args=[self.request.team.slug, participant_id]))
+
+
+class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "experiments.view_participant"
+    template_name = "participants/partials/experiment_data.html"
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        experiment = get_object_or_404(Experiment, id=self.kwargs["experiment_id"])
+        participant = Participant.objects.get(id=self.kwargs["participant_id"])
+        context["participant"] = participant
+        context["experiment"] = experiment
+        context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
+        context["participant_data"] = json.dumps(participant.get_data_for_experiment(experiment), indent=4)
+        return context

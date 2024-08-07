@@ -1,12 +1,18 @@
 from datetime import datetime
+from unittest import mock
 
 import pytest
 import pytz
 from freezegun import freeze_time
 
 from apps.chat.agent.schemas import WeekdaysEnum
-from apps.chat.agent.tools import UpdateScheduledMessageTool, _move_datetime_to_new_weekday_and_time
+from apps.chat.agent.tools import (
+    UpdateScheduledMessageTool,
+    _move_datetime_to_new_weekday_and_time,
+    create_schedule_message,
+)
 from apps.events.models import ScheduledMessage
+from apps.experiments.models import Experiment
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import pretty_date
@@ -67,3 +73,76 @@ def test_user_cannot_set_custom_date():
         name="A test schedule", weekday=WeekdaysEnum.MONDAY, hour=8, minute=0, user_specified_custom_date=True
     )
     assert response == "The user cannot do that. Only weekdays and time of day can be changed"
+
+
+@pytest.mark.django_db()
+def test_create_schedule_message_success():
+    experiment_session = ExperimentSessionFactory()
+    message = "Test message"
+    kwargs = {
+        "frequency": 1,
+        "time_period": "days",
+        "repetitions": 2,
+    }
+
+    response = create_schedule_message(experiment_session, message, **kwargs)
+    assert response == "Success: scheduled message created"
+
+    scheduled_message = ScheduledMessage.objects.filter(
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        team=experiment_session.team,
+    ).first()
+
+    assert scheduled_message is not None
+    assert scheduled_message.custom_schedule_params["name"].startswith("schedule_message_")
+    assert scheduled_message.custom_schedule_params["prompt_text"] == message
+    assert scheduled_message.custom_schedule_params["frequency"] == kwargs["frequency"]
+    assert scheduled_message.custom_schedule_params["time_period"] == kwargs["time_period"]
+    assert scheduled_message.custom_schedule_params["repetitions"] == kwargs["repetitions"]
+    assert scheduled_message.action is None
+
+
+@pytest.mark.django_db()
+def test_create_schedule_message_invalid_form():
+    experiment_session = ExperimentSessionFactory()
+    message = "Test message"
+    kwargs = {
+        "frequency": "invalid_frequency",  # invalid input
+        "time_period": "days",
+        "repetitions": 2,
+    }
+
+    response = create_schedule_message(experiment_session, message, **kwargs)
+    assert response == "Could not create scheduled message"
+
+    scheduled_message_count = ScheduledMessage.objects.filter(
+        experiment=experiment_session.experiment,
+        participant=experiment_session.participant,
+        team=experiment_session.team,
+    ).count()
+
+    assert scheduled_message_count == 0
+
+
+@pytest.mark.django_db()
+def test_create_schedule_message_experiment_does_not_exist():
+    experiment_session = ExperimentSessionFactory()
+    message = "Test message"
+    kwargs = {
+        "frequency": 1,
+        "time_period": "days",
+        "repetitions": 2,
+    }
+
+    with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
+        response = create_schedule_message(experiment_session, message, **kwargs)
+        assert response == "Experiment does not exist! Could not create scheduled message"
+
+        scheduled_message_count = ScheduledMessage.objects.filter(
+            experiment=experiment_session.experiment,
+            participant=experiment_session.participant,
+            team=experiment_session.team,
+        ).count()
+
+        assert scheduled_message_count == 0
