@@ -10,7 +10,8 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
 FROM node:18-bullseye AS build-node
 RUN nodejs -v && npm -v
 WORKDIR /code
-COPY . /code
+COPY *.json *.js .babelrc /code/
+COPY assets /code/assets/
 RUN npm install
 RUN npm run build
 
