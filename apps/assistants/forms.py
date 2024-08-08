@@ -4,6 +4,7 @@ from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
 from apps.experiments.models import AgentTools
 from apps.files.forms import get_file_formset
+from apps.utils.prompt import validate_prompt_variables
 
 INSTRUCTIONS_HELP_TEXT = """
     <div class="tooltip" data-tip="
@@ -51,6 +52,15 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        validate_prompt_variables(
+            form_data=cleaned_data,
+            prompt_key="instructions",
+            known_vars={"participant_data", "current_datetime"},
+        )
+        return cleaned_data
 
     def save(self, commit=True):
         self.instance.team = self.request.team
