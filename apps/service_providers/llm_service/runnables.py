@@ -272,23 +272,26 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         config["callbacks"] = config["callbacks"] or []
         config["callbacks"].append(callback)
 
-        input_dict = {"content": input, "attachments": message_attachments}
+        input_dict = {
+            "content": input,
+            "attachments": message_attachments,
+            "instructions": self.state.get_assistant_instructions(),
+        }
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
             self.state.save_message_to_history(input, ChatMessageType.HUMAN, annotation_file_ids=list(file_ids))
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
-        if thread_id:
-            input_dict["thread_id"] = thread_id
+        current_thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
 
-        input_dict["instructions"] = self.state.get_assistant_instructions()
-        output, thread_id, run_id = self._get_response_with_retries(config, input_dict, thread_id)
+        if current_thread_id:
+            input_dict["thread_id"] = current_thread_id
 
+        output, thread_id, run_id = self._get_response_with_retries(config, input_dict, current_thread_id)
         output, annotation_file_ids = self._save_response_annotations(output, thread_id, run_id)
 
-        if not thread_id:
+        if not current_thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
         self.state.save_message_to_history(output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids)

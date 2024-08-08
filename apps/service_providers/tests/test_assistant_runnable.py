@@ -243,7 +243,8 @@ def test_assistant_uploads_new_file(
 @pytest.mark.parametrize("cited_file_missing", [False, True])
 @patch("openai.resources.files.Files.retrieve")
 @patch("apps.assistants.sync.get_and_store_openai_file")
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
+# @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_response_with_retries")
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_assistant_runnable")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -251,7 +252,7 @@ def test_assistant_reponse_with_annotations(
     list_messages,
     create_and_run,
     retrieve_run,
-    get_response_with_retries,
+    get_assistant_runnable,
     get_and_store_openai_file,
     retrieve_openai_file,
     cited_file_missing,
@@ -313,7 +314,9 @@ def test_assistant_reponse_with_annotations(
         "Hi there human. The generated file can be [downloaded here](sandbox:/mnt/data/file.txt)."
         " Also, leaves are tree stuff【6:0†source】."
     )
-    get_response_with_retries.return_value = OpenAIAssistantFinish(
+    assistant_mock = Mock()
+    get_assistant_runnable.return_value = assistant_mock
+    assistant_mock.invoke.return_value = OpenAIAssistantFinish(
         run_id=run.id, thread_id=thread_id, return_values={"output": ai_message}, log=""
     )
 

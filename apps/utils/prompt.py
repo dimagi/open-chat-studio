@@ -13,7 +13,7 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: dict):
     if form_data.get("source_material"):
         available_variables.add("source_material")
 
-    if form_data["tools"]:
+    if form_data.get("tools"):
         if "current_datetime" not in prompt_variables:
             available_variables.remove("current_datetime")
         # if there are "tools" then current_datetime is always required
