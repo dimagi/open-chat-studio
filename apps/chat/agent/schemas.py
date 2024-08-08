@@ -17,11 +17,12 @@ class WeekdaysEnum(int, Enum):
 
 
 class RecurringReminderSchema(BaseModel):
-    datetime_due: datetime = Field(description="the first (or only) reminder due date in ISO 8601 format")
+    datetime_due: datetime | None = Field(description="the first (or only) reminder start date in ISO 8601 format")
     every: int = Field(description="Number of periods to wait between reminders")
     period: TimePeriod = Field(description="The time period between reminders")
-    datetime_end: datetime = Field(description="the date of the last reminder in ISO 8601 format")
+    datetime_end: datetime | None = Field(description="the date of the last reminder in ISO 8601 format", default=None)
     message: str = Field(description="The reminder message")
+    repetitions: str | None = Field(description="The number of repetitions", default=None)
 
 
 class OneOffReminderSchema(BaseModel):

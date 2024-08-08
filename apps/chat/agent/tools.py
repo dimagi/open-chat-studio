@@ -45,18 +45,18 @@ class RecurringReminderTool(CustomBaseTool):
     def action(
         self,
         datetime_due: datetime,
-        datetime_end: datetime,
         every: int,
         period: TimePeriod,
         message: str,
+        datetime_end: int = None,
+        repetitions: int = None,
     ):
-        # TODO: Support optional `repetitions` and `datetime_due` params
         return create_schedule_message(
             self.experiment_session,
             message=message,
             start_date=datetime_due,
             end_date=datetime_end,
-            repetitions=0,
+            repetitions=repetitions,
             frequency=every,
             time_period=period,
         )
@@ -137,7 +137,11 @@ def create_schedule_message(
     kwargs["name"] = f"schedule_message_{name_id}"
     kwargs["prompt_text"] = message
     kwargs["experiment_id"] = experiment_session.experiment.id
-    form = ScheduledMessageConfigForm(data=kwargs, experiment_id=experiment_session.experiment.id)
+    repetitions_required = kwargs["repetitions"] or 0 > 0
+
+    form = ScheduledMessageConfigForm(
+        data=kwargs, experiment_id=experiment_session.experiment.id, repetitions_required=repetitions_required
+    )
     if form.is_valid():
         cleaned_data = form.cleaned_data
         try:
@@ -148,7 +152,7 @@ def create_schedule_message(
                         "prompt_text": cleaned_data["prompt_text"],
                         "frequency": cleaned_data["frequency"],
                         "time_period": cleaned_data["time_period"],
-                        "repetitions": cleaned_data["repetitions"],
+                        "repetitions": cleaned_data.get("repetitions", None),
                     },
                     experiment=experiment_session.experiment,
                     participant=experiment_session.participant,

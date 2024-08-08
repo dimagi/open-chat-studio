@@ -312,7 +312,8 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        if self.total_triggers >= self.params["repetitions"] or (self.end_date and self.end_date >= timezone.now()):
+        repetitions = self.params["repetitions"]
+        if (repetitions and self.total_triggers >= repetitions) or (self.end_date and self.end_date >= timezone.now()):
             self.is_complete = True
         else:
             delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})

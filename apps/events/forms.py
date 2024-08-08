@@ -82,6 +82,7 @@ class ScheduledMessageConfigForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
+        repetitions_required = kwargs.pop("repetitions_required", True)
         super().__init__(*args, **kwargs)
 
         field = self.fields["experiment_id"]
@@ -95,6 +96,8 @@ class ScheduledMessageConfigForm(forms.Form):
         if not kwargs.get("initial") and len(experiments) == 1:
             field.initial = experiment_id
             field.widget = field.hidden_widget()
+
+        self.fields["repetitions"].required = repetitions_required
 
 
 class EventActionForm(forms.ModelForm):

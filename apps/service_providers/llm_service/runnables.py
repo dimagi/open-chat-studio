@@ -427,8 +427,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             except ValueError as e:
                 if re.search(r"cancelling|cancelled", str(e)):
                     raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
-            else:
-                return response
         raise GenerationError("Failed to get response after 3 retries")
 
     def _handle_api_error(self, thread_id, assistant, exc):
