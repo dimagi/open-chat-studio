@@ -3,6 +3,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from apps.events.models import TimePeriod
+
 
 class WeekdaysEnum(int, Enum):
     MONDAY = 1
@@ -14,17 +16,10 @@ class WeekdaysEnum(int, Enum):
     SUNDAY = 7
 
 
-class PeriodEnum(str, Enum):
-    SECOND = "seconds"
-    MINUTE = "minutes"
-    HOUR = "hours"
-    DAY = "days"
-
-
 class RecurringReminderSchema(BaseModel):
     datetime_due: datetime = Field(description="the first (or only) reminder due date in ISO 8601 format")
-    every: int = Field(description="Number of interval periods to wait before the next reminder")
-    period: PeriodEnum = Field(description="The type of period between reminders")
+    every: int = Field(description="Number of periods to wait between reminders")
+    period: TimePeriod = Field(description="The time period between reminders")
     datetime_end: datetime = Field(description="the date of the last reminder in ISO 8601 format")
     message: str = Field(description="The reminder message")
 
