@@ -260,17 +260,18 @@ class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
     action = models.ForeignKey(
-        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, default=None
+        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
-    next_trigger_date = models.DateTimeField(null=True)
-    last_triggered_at = models.DateTimeField(null=True)
+    next_trigger_date = models.DateTimeField(null=True, blank=True)
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
     custom_schedule_params = models.JSONField(blank=True, default=dict)
+    end_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
@@ -311,7 +312,7 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        if self.total_triggers >= self.params["repetitions"]:
+        if self.total_triggers >= self.params["repetitions"] or (self.end_date and self.end_date >= timezone.now()):
             self.is_complete = True
         else:
             delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
