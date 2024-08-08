@@ -31,6 +31,7 @@ from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.state import (
+    AssistantAgentState,
     AssistantExperimentState,
     ChatExperimentState,
     ChatRunnableState,
@@ -54,7 +55,8 @@ class GenerationCancelled(Exception):
 def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
-        return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
+        state_cls = AssistantAgentState if experiment.assistant.tools_enabled else AssistantExperimentState
+        return AssistantExperimentRunnable(state=state_cls(experiment=experiment, session=session))
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
@@ -282,18 +284,18 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             input_dict["thread_id"] = thread_id
 
         input_dict["instructions"] = self.state.get_assistant_instructions()
-        response = self._get_response_with_retries(config, input_dict, thread_id)
+        output, thread_id, run_id = self._get_response_with_retries(config, input_dict, thread_id)
 
-        output, annotation_file_ids = self._save_response_annotations(response)
+        output, annotation_file_ids = self._save_response_annotations(output, thread_id, run_id)
 
         if not thread_id:
-            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
         self.state.save_message_to_history(output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids)
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     @transaction.atomic()
-    def _save_response_annotations(self, response: OpenAIAssistantFinish) -> tuple[str, dict]:
+    def _save_response_annotations(self, output, thread_id, run_id) -> tuple[str, dict]:
         """
         This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
         message, specifically regarding annotations.
@@ -308,7 +310,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         generated_files = []
 
         # This output is a concatanation of all messages in this run
-        output_message = response.return_values["output"]
+        output_message = output
         team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
@@ -318,7 +320,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         ).values_list("external_id", flat=True)
 
         file_ids = set()
-        for message in client.beta.threads.messages.list(response.thread_id, run_id=response.run_id):
+        for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
                 annotations = message_content.text.annotations
                 for idx, annotation in enumerate(annotations):
@@ -411,11 +413,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
     def _get_response_with_retries(self, config, input_dict, thread_id):
         assistant = self.state.get_openai_assistant()
-        format_input = functools.partial(self.state.format_input, self.input_key)
-        assistant_runnable = RunnableLambda(format_input) | assistant
+        assistant_runnable = self.state.get_assistant_runnable(assistant=assistant, input_key=self.input_key)
+
         for i in range(3):
             try:
                 response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
+                return self.state.parse_response(response)
             except openai.BadRequestError as e:
                 self._handle_api_error(thread_id, assistant, e)
             except ValueError as e:

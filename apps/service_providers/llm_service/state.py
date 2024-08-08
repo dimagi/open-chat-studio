@@ -1,8 +1,11 @@
+import functools
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
 from django.utils import timezone
+from langchain.agents import AgentExecutor
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables import RunnableLambda
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
@@ -218,3 +221,33 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             content=message,
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
+
+    def get_assistant_runnable(self, assistant, input_key):
+        format_input = functools.partial(self.format_input, input_key)
+        return RunnableLambda(format_input) | assistant
+
+    def parse_response(self, response):
+        return response.return_values["output"], response.thread_id, response.run_id
+
+
+class AssistantAgentState(AssistantExperimentState):
+    def get_assistant_runnable(self, assistant, input_key):
+        assistant_runnable = super().get_assistant_runnable(assistant, input_key)
+        return AgentExecutor.from_agent_and_tools(
+            agent=assistant_runnable,
+            tools=self.get_tools(),
+            max_execution_time=120,
+        )
+
+    def parse_response(
+        self,
+        response: dict,
+    ):
+        return response["output"], response["thread_id"], response["run_id"]
+
+    def get_tools(self):
+        return get_tools(self.session, for_assistant=True)
+
+    @property
+    def tools_enabled(self):
+        return self.experiment.assistant.tools_enabled

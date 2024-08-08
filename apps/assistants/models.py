@@ -71,6 +71,10 @@ class OpenAiAssistant(BaseTeamModel):
     def supports_file_search(self):
         return "file_search" in self.builtin_tools
 
+    @property
+    def tools_enabled(self):
+        return len(self.tools) > 0
+
 
 @audit_fields(
     "assistant_id",
