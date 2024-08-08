@@ -12,6 +12,7 @@ from apps.assistants.sync import (
     push_assistant_to_openai,
     sync_from_openai,
 )
+from apps.chat.agent import tools
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.openai import AssistantFactory, FileObjectFactory
@@ -57,7 +58,7 @@ def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_
 @patch("openai.resources.beta.vector_stores.files.Files.list")
 @patch("openai.resources.beta.vector_stores.VectorStores.retrieve", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.update")
-def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list, file_batches):
+def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list, file_batches, experiment):
     local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
     files[0].external_id = "test_id"
@@ -81,11 +82,20 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
     )
 
     openai_files = FileObjectFactory.create_batch(2)
+
+    internal_tools = [tool_cls(experiment_session=None) for tool_cls in tools.TOOL_CLASS_MAP.values()]
     with patch("openai.resources.Files.create", side_effect=openai_files) as mock_file_create:
-        push_assistant_to_openai(local_assistant)
+        push_assistant_to_openai(local_assistant, internal_tools=internal_tools)
     assert mock_update.called
     assert vs_retrieve.called
     assert mock_file_create.call_count == 2
+
+    # Make sure that all tools in TOOL_CLASS_MAP was speceified
+    tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
+    assert len(tool_specs) == 3
+    tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs])
+    expected_tools = set(tools.TOOL_CLASS_MAP.keys())
+    assert expected_tools - tool_names == set()
 
     assert file_batches.call_args_list == [
         call(vector_store_id="vs_123", file_ids=[openai_files[-1].id]),
