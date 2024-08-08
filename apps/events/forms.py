@@ -69,12 +69,12 @@ class ScheduledMessageConfigForm(forms.Form):
         help_text="Instructions for the bot to formulate a response",
         widget=forms.Textarea(attrs={"rows": 5}),
     )
-    frequency = forms.IntegerField(label="Every...", min_value=1)
+    frequency = forms.IntegerField(label="Every...", min_value=0)
     time_period = forms.ChoiceField(label="Time period", choices=TimePeriod.choices)
     repetitions = forms.IntegerField(
         label="Repetitions",
-        min_value=1,
-        help_text="Indicates how many times this should go on for. Specify '1' for a one time event",
+        min_value=0,
+        help_text="Indicates how many times this should go on for. Specify '0' for a one time event",
     )
     experiment_id = forms.ChoiceField(
         label="Experiment", help_text="Select the experiment to process this scheduled message"
