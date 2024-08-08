@@ -50,6 +50,7 @@ class RecurringReminderTool(CustomBaseTool):
         period: TimePeriod,
         message: str,
     ):
+        # TODO: Support optional `repetitions` and `datetime_due` params
         return create_schedule_message(
             self.experiment_session,
             message=message,
