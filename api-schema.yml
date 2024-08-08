@@ -104,6 +104,38 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ParticipantDataUpdateRequest'
+            examples:
+              CreateParticipantData:
+                value:
+                  identifier: part1
+                  platform: api
+                  data:
+                  - experiment: exp1
+                    data:
+                      name: John
+                  - experiment: exp2
+                    data:
+                      name: Doe
+                    schedules:
+                    - id: sched1
+                      name: Schedule 1
+                      date: '2022-01-01T00:00:00Z'
+                      prompt: Prompt 1
+                summary: Create participant data for multiple experiments
+              UpdateParticipantSchedules:
+                value:
+                  identifier: part1
+                  platform: api
+                  data:
+                  - experiment: exp1
+                    schedules:
+                    - id: sched1
+                      name: Schedule 1 updated
+                      date: '2022-01-01T00:00:00Z'
+                      prompt: Prompt updated
+                    - id: sched2
+                      delete: true
+                summary: Update and delete participant schedules
         required: true
       security:
       - apiKeyAuth: []
@@ -469,9 +501,33 @@ components:
           type: object
           additionalProperties: {}
           title: Participant Data
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantSchedule'
       required:
-      - data
       - experiment
+    ParticipantSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+          title: Schedule ID
+          maxLength: 32
+        name:
+          type: string
+          title: Schedule Name
+        prompt:
+          type: string
+          title: Prompt to send to bot
+        date:
+          type: string
+          format: date-time
+          title: Schedule Date
+        delete:
+          type: boolean
+          default: false
+          title: Delete Schedule
     PlatformEnum:
       enum:
       - telegram

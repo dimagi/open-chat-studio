@@ -31,7 +31,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "x-model.number.fill": "llmProvider",
         }
         self.fields["llm_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-
+        self.fields["builtin_tools"].required = False
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }

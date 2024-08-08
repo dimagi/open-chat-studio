@@ -8,6 +8,7 @@ from unittest.mock import patch
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
@@ -70,7 +71,7 @@ class FakeLlm(FakeListChatModel):
         Example:
             FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
         """
-        return RunnableLambda(lambda *args: self.responses[-1])
+        return RunnableLambda(lambda message, *args, **kwargs: self._call([message]))
 
 
 @dataclasses.dataclass
@@ -123,6 +124,14 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
         return response
 
 
+class FakeLlmSimpleTokenCount(FakeLlm):
+    def get_num_tokens(self, text: str) -> int:
+        return len(text.split())
+
+    def get_num_tokens_from_messages(self, messages: list) -> int:
+        return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
+
+
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
     service = build_fake_llm_service(responses=responses, token_counts=token_counts)
@@ -142,5 +151,6 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
         yield
 
 
-def build_fake_llm_service(responses, token_counts):
-    return FakeLlmService(llm=FakeLlm(responses=responses), token_counter=FakeTokenCounter(token_counts=token_counts))
+def build_fake_llm_service(responses, token_counts, fake_llm=None):
+    fake_llm = fake_llm or FakeLlmSimpleTokenCount(responses=responses)
+    return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
