@@ -14,6 +14,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.time import pretty_date
 
 
@@ -192,7 +193,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             participant_data=self.get_participant_data(), current_datetime=self.get_current_datetime()
         )
 
-    def get_openai_assistant(self):
+    def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.experiment.assistant.get_assistant()
 
     @cached_property
@@ -223,20 +224,18 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
 
-    def get_assistant_runnable(self, input_key):
-        assistant = self.get_openai_assistant()
+    def get_assistant_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
         format_input = functools.partial(self.format_input, input_key)
-        return RunnableLambda(format_input) | assistant
+        return RunnableLambda(format_input) | openai_assistant
 
     def parse_response(self, response: OpenAIAssistantFinish) -> tuple[str, str, str]:
         return response.return_values["output"], response.thread_id, response.run_id
 
 
 class AssistantAgentState(AssistantExperimentState):
-    def get_assistant_runnable(self, input_key):
-        assistant_runnable = super().get_assistant_runnable(input_key)
+    def get_assistant_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
         return AgentExecutor.from_agent_and_tools(
-            agent=assistant_runnable,
+            agent=super().get_assistant_runnable(openai_assistant, input_key),
             tools=self.get_tools(),
             max_execution_time=120,
         )

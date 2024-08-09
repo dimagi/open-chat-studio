@@ -30,6 +30,7 @@ from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.state import (
     AssistantAgentState,
     AssistantExperimentState,
@@ -415,11 +416,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return resource_file_ids
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
-        assistant_runnable = self.state.get_assistant_runnable(input_key=self.input_key)
+        assistant_runnable = self.state.get_openai_assistant()
+        final_assistant_runnable = self.state.get_assistant_runnable(assistant_runnable, input_key=self.input_key)
 
         for i in range(3):
             try:
-                response: OpenAIAssistantFinish | dict = assistant_runnable.invoke(input_dict, config)
+                response: OpenAIAssistantFinish | dict = final_assistant_runnable.invoke(input_dict, config)
                 return self.state.parse_response(response)
             except openai.BadRequestError as e:
                 self._handle_api_error(thread_id, assistant_runnable, e)
@@ -428,7 +430,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                     raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
         raise GenerationError("Failed to get response after 3 retries")
 
-    def _handle_api_error(self, thread_id, assistant_runnable, exc):
+    def _handle_api_error(self, thread_id: str, assistant_runnable: OpenAIAssistantRunnable, exc):
         """Handle OpenAI API errors.
         This should either raise an exception or return if the error was handled and the run should be retried.
         """
