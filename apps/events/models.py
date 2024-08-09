@@ -356,8 +356,10 @@ class ScheduledMessage(BaseTeamModel):
                 )
 
         next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
-        from_system = self.action is not None
-        return f"{schedule} with next trigger at {next_trigger}. (automatic reminder: {from_system})"
+        schedule_details = f"{schedule} with next trigger at {next_trigger}"
+        if self.action is not None:
+            schedule_details = f"{schedule_details} (System)"
+        return schedule_details
 
     def __str__(self):
         return self.as_string()
