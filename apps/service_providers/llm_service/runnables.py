@@ -251,7 +251,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantExperimentState
+    state: AssistantExperimentState | AssistantAgentState
     input_key = "content"
 
     class Config:
@@ -414,22 +414,21 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 resource_file_ids[resource_name] = openai_file_ids
         return resource_file_ids
 
-    def _get_response_with_retries(self, config, input_dict, thread_id):
-        assistant = self.state.get_openai_assistant()
-        assistant_runnable = self.state.get_assistant_runnable(assistant=assistant, input_key=self.input_key)
+    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
+        assistant_runnable = self.state.get_assistant_runnable(input_key=self.input_key)
 
         for i in range(3):
             try:
-                response: OpenAIAssistantFinish = assistant_runnable.invoke(input_dict, config)
+                response: OpenAIAssistantFinish | dict = assistant_runnable.invoke(input_dict, config)
                 return self.state.parse_response(response)
             except openai.BadRequestError as e:
-                self._handle_api_error(thread_id, assistant, e)
+                self._handle_api_error(thread_id, assistant_runnable, e)
             except ValueError as e:
                 if re.search(r"cancelling|cancelled", str(e)):
                     raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
         raise GenerationError("Failed to get response after 3 retries")
 
-    def _handle_api_error(self, thread_id, assistant, exc):
+    def _handle_api_error(self, thread_id, assistant_runnable, exc):
         """Handle OpenAI API errors.
         This should either raise an exception or return if the error was handled and the run should be retried.
         """
@@ -442,14 +441,14 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if error_thread_id != thread_id:
             raise GenerationError(f"Thread ID mismatch: {error_thread_id} != {thread_id}", exc)
 
-        self._cancel_run(assistant, thread_id, run_id)
+        self._cancel_run(assistant_runnable, thread_id, run_id)
 
-    def _cancel_run(self, assistant, thread_id, run_id):
+    def _cancel_run(self, assistant_runnable, thread_id, run_id):
         logger.info("Cancelling run %s in thread %s", run_id, thread_id)
-        run = assistant.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+        run = assistant_runnable.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
         cancelling = run.status == "cancelling"
         while cancelling:
-            run = assistant.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+            run = assistant_runnable.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             cancelling = run.status == "cancelling"
             if cancelling:
-                sleep(assistant.check_every_ms / 1000)
+                sleep(assistant_runnable.check_every_ms / 1000)

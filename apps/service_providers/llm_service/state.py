@@ -222,7 +222,8 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
 
-    def get_assistant_runnable(self, assistant, input_key):
+    def get_assistant_runnable(self, input_key):
+        assistant = self.get_openai_assistant()
         format_input = functools.partial(self.format_input, input_key)
         return RunnableLambda(format_input) | assistant
 
@@ -231,8 +232,8 @@ class AssistantExperimentState(ExperimentState, AssistantState):
 
 
 class AssistantAgentState(AssistantExperimentState):
-    def get_assistant_runnable(self, assistant, input_key):
-        assistant_runnable = super().get_assistant_runnable(assistant, input_key)
+    def get_assistant_runnable(self, input_key):
+        assistant_runnable = super().get_assistant_runnable(input_key)
         return AgentExecutor.from_agent_and_tools(
             agent=assistant_runnable,
             tools=self.get_tools(),
