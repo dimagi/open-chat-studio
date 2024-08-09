@@ -4,6 +4,7 @@ from functools import cache, cached_property
 
 from django.utils import timezone
 from langchain.agents import AgentExecutor
+from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableLambda
 
@@ -227,7 +228,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         format_input = functools.partial(self.format_input, input_key)
         return RunnableLambda(format_input) | assistant
 
-    def parse_response(self, response):
+    def parse_response(self, response: OpenAIAssistantFinish) -> tuple[str, str, str]:
         return response.return_values["output"], response.thread_id, response.run_id
 
 
@@ -243,7 +244,7 @@ class AssistantAgentState(AssistantExperimentState):
     def parse_response(
         self,
         response: dict,
-    ):
+    ) -> tuple[str, str, str]:
         return response["output"], response["thread_id"], response["run_id"]
 
     def get_tools(self):
