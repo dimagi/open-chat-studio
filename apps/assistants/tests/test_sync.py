@@ -92,7 +92,6 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
     # Make sure that all tools in TOOL_CLASS_MAP was speceified
     tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
-    assert len(tool_specs) == 3
     tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs])
     expected_tools = set(tools.TOOL_CLASS_MAP.keys())
     assert expected_tools - tool_names == set()

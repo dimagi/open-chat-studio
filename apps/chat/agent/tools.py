@@ -120,6 +120,25 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         return f"The new datetime is {pretty_date(message.next_trigger_date)}"
 
 
+class DeleteReminderTool(CustomBaseTool):
+    name = AgentTools.DELETE_REMINDER
+    description = "useful to delete reminders"
+    requires_session = True
+    args_schema: type[schemas.DeleteReminderSchema] = schemas.DeleteReminderSchema
+
+    def action(self, message_id: str):
+        try:
+            scheduled_message = self.experiment_session.participant.schduled_messages.get(external_id=message_id)
+            if scheduled_message.action_id:
+                # Participants should not be able to delete a scheduled message that was created through an action
+                return "Cannot delete this reminder"
+        except ScheduledMessage.DoesNotExist:
+            return "Could not find this reminder"
+
+        scheduled_message.delete()
+        return "Success"
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
@@ -171,6 +190,7 @@ TOOL_CLASS_MAP = {
     AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
     AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
+    AgentTools.DELETE_REMINDER: DeleteReminderTool,
 }
 
 
