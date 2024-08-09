@@ -17,7 +17,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import ExperimentForm, _validate_prompt_variables
+from apps.experiments.views.experiment import ExperimentForm, validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -113,11 +113,13 @@ def test_experiment_form_with_assistants(
 )
 def test_prompt_variable_validation(source_material, prompt_str, expectation):
     with expectation:
-        _validate_prompt_variables(
+        validate_prompt_variables(
             {
                 "source_material": source_material,
                 "prompt_text": prompt_str,
-            }
+            },
+            prompt_key="prompt_text",
+            known_vars={"source_material", "participant_data", "current_datetime"},
         )
 
 

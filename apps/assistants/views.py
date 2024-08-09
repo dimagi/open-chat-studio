@@ -8,6 +8,7 @@ from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.chat.agent.tools import get_assistant_tools
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics import actions
 from apps.service_providers.models import LlmProvider
@@ -111,7 +112,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         self.object = form.save()
         resource_formsets.save(self.request, self.object)
         try:
-            push_assistant_to_openai(self.object)
+            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form)
@@ -131,7 +132,7 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         if "file_search" in self.object.builtin_tools:
             ToolResources.objects.get_or_create(assistant=self.object, tool_type="file_search")
         try:
-            push_assistant_to_openai(self.object)
+            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))

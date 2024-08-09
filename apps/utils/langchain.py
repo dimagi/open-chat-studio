@@ -113,7 +113,9 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
         response = self._get_next_response()
         if isinstance(response, BaseException):
             raise response
-        return OpenAIAssistantFinish(return_values={"output": response}, log="", thread_id="123", run_id="456")
+        return OpenAIAssistantFinish(
+            return_values={"output": response, "run_id": "456"}, log="", thread_id="123", run_id="456"
+        )
 
     def _get_next_response(self):
         response = self.responses[self.i]

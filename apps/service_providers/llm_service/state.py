@@ -1,8 +1,12 @@
+import functools
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
 from django.utils import timezone
+from langchain.agents import AgentExecutor
+from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables import RunnableLambda
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
@@ -10,6 +14,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.time import pretty_date
 
 
@@ -188,7 +193,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             participant_data=self.get_participant_data(), current_datetime=self.get_current_datetime()
         )
 
-    def get_openai_assistant(self):
+    def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.experiment.assistant.get_assistant()
 
     @cached_property
@@ -218,3 +223,32 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             content=message,
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
+
+    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
+        format_input = functools.partial(self.format_input, input_key)
+        return RunnableLambda(format_input) | openai_assistant
+
+    def parse_response(self, response: OpenAIAssistantFinish) -> tuple[str, str, str]:
+        return response.return_values["output"], response.thread_id, response.run_id
+
+
+class AssistantAgentState(AssistantExperimentState):
+    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
+        return AgentExecutor.from_agent_and_tools(
+            agent=super().build_final_runnable(openai_assistant, input_key),
+            tools=self.get_tools(),
+            max_execution_time=120,
+        )
+
+    def parse_response(
+        self,
+        response: dict,
+    ) -> tuple[str, str, str]:
+        return response["output"], response["thread_id"], response["run_id"]
+
+    def get_tools(self):
+        return get_tools(self.session, for_assistant=True)
+
+    @property
+    def tools_enabled(self):
+        return self.experiment.assistant.tools_enabled

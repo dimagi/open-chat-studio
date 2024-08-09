@@ -3,12 +3,11 @@ import uuid
 from datetime import datetime, timedelta
 
 from django.db import transaction
-from django_celery_beat.models import IntervalSchedule
 from langchain.tools.base import BaseTool
 
 from apps.chat.agent import schemas
 from apps.events.forms import ScheduledMessageConfigForm
-from apps.events.models import ScheduledMessage
+from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.utils.time import pretty_date
 
@@ -46,19 +45,20 @@ class RecurringReminderTool(CustomBaseTool):
     def action(
         self,
         datetime_due: datetime,
-        datetime_end: datetime,
         every: int,
-        period: str,
+        period: TimePeriod,
         message: str,
-        **kwargs,
+        datetime_end: int = None,
+        repetitions: int = None,
     ):
-        interval_schedule, _created = IntervalSchedule.objects.get_or_create(every=every, period=period)
         return create_schedule_message(
             self.experiment_session,
             message=message,
-            start_time=datetime_due,
-            expires=datetime_end,
-            interval=interval_schedule,
+            start_date=datetime_due,
+            end_date=datetime_end,
+            repetitions=repetitions,
+            frequency=every,
+            time_period=period,
         )
 
 
@@ -77,8 +77,10 @@ class OneOffReminderTool(CustomBaseTool):
         return create_schedule_message(
             self.experiment_session,
             message=message,
-            start_time=datetime_due,
-            repetitions=1,
+            start_date=datetime_due,
+            repetitions=0,
+            frequency=0,
+            time_period=TimePeriod.HOURS,
         )
 
 
@@ -124,12 +126,22 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
 
-def create_schedule_message(experiment_session: ExperimentSession, message: str, **kwargs):
+def create_schedule_message(
+    experiment_session: ExperimentSession,
+    message: str,
+    start_date: datetime,
+    end_date: datetime | None = None,
+    **kwargs,
+):
     name_id = uuid.uuid4()
     kwargs["name"] = f"schedule_message_{name_id}"
     kwargs["prompt_text"] = message
     kwargs["experiment_id"] = experiment_session.experiment.id
-    form = ScheduledMessageConfigForm(data=kwargs, experiment_id=experiment_session.experiment.id)
+    repetitions_required = kwargs["repetitions"] or 0 > 0
+
+    form = ScheduledMessageConfigForm(
+        data=kwargs, experiment_id=experiment_session.experiment.id, repetitions_required=repetitions_required
+    )
     if form.is_valid():
         cleaned_data = form.cleaned_data
         try:
@@ -140,15 +152,18 @@ def create_schedule_message(experiment_session: ExperimentSession, message: str,
                         "prompt_text": cleaned_data["prompt_text"],
                         "frequency": cleaned_data["frequency"],
                         "time_period": cleaned_data["time_period"],
-                        "repetitions": cleaned_data["repetitions"],
+                        "repetitions": cleaned_data.get("repetitions", None),
                     },
                     experiment=experiment_session.experiment,
                     participant=experiment_session.participant,
                     team=experiment_session.team,
+                    next_trigger_date=start_date,
+                    end_date=end_date,
                 )
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
             return "Experiment does not exist! Could not create scheduled message"
+    logging.exception(f"Could not create one-off reminder. Form erros: {form.errors}")
     return "Could not create scheduled message"
 
 
@@ -159,9 +174,19 @@ TOOL_CLASS_MAP = {
 }
 
 
-def get_tools(experiment_session) -> list[BaseTool]:
+def get_tools(experiment_session, for_assistant=False) -> list[BaseTool]:
     tools = []
-    for tool_name in experiment_session.experiment.tools:
+    experiment = experiment_session.experiment
+    tool_names = experiment.assistant.tools if for_assistant else experiment.tools
+    for tool_name in tool_names:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
+    return tools
+
+
+def get_assistant_tools(assistant) -> list[BaseTool]:
+    tools = []
+    for tool_name in assistant.tools:
+        tool_cls = TOOL_CLASS_MAP[tool_name]
+        tools.append(tool_cls(experiment_session=None))
     return tools

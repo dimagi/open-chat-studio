@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 import pytz
+from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.chat.agent.schemas import WeekdaysEnum
@@ -84,8 +85,9 @@ def test_create_schedule_message_success():
         "time_period": "days",
         "repetitions": 2,
     }
-
-    response = create_schedule_message(experiment_session, message, **kwargs)
+    start_date = timezone.now()
+    end_date = timezone.now()
+    response = create_schedule_message(experiment_session, message, start_date=start_date, end_date=end_date, **kwargs)
     assert response == "Success: scheduled message created"
 
     scheduled_message = ScheduledMessage.objects.filter(
@@ -101,6 +103,8 @@ def test_create_schedule_message_success():
     assert scheduled_message.custom_schedule_params["time_period"] == kwargs["time_period"]
     assert scheduled_message.custom_schedule_params["repetitions"] == kwargs["repetitions"]
     assert scheduled_message.action is None
+    assert scheduled_message.next_trigger_date == start_date
+    assert scheduled_message.end_date == end_date
 
 
 @pytest.mark.django_db()
@@ -113,7 +117,7 @@ def test_create_schedule_message_invalid_form():
         "repetitions": 2,
     }
 
-    response = create_schedule_message(experiment_session, message, **kwargs)
+    response = create_schedule_message(experiment_session, message, start_date=None, **kwargs)
     assert response == "Could not create scheduled message"
 
     scheduled_message_count = ScheduledMessage.objects.filter(
@@ -136,7 +140,7 @@ def test_create_schedule_message_experiment_does_not_exist():
     }
 
     with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
-        response = create_schedule_message(experiment_session, message, **kwargs)
+        response = create_schedule_message(experiment_session, message, start_date=None, **kwargs)
         assert response == "Experiment does not exist! Could not create scheduled message"
 
         scheduled_message_count = ScheduledMessage.objects.filter(
