@@ -417,7 +417,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
         assistant_runnable = self.state.get_openai_assistant()
-        final_assistant_runnable = self.state.get_assistant_runnable(assistant_runnable, input_key=self.input_key)
+        final_assistant_runnable = self.state.build_final_runnable(assistant_runnable, input_key=self.input_key)
 
         for i in range(3):
             try:
