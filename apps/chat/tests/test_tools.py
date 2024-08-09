@@ -8,6 +8,7 @@ from freezegun import freeze_time
 
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    DeleteReminderTool,
     UpdateScheduledMessageTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
@@ -150,3 +151,39 @@ def test_create_schedule_message_experiment_does_not_exist():
         ).count()
 
         assert scheduled_message_count == 0
+
+
+@pytest.mark.django_db()
+def test_delete_schedule_tool():
+    session = ExperimentSessionFactory()
+    with freeze_time("2024-01-01"):
+        params = {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "Testy"}
+        system_scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            action=EventActionFactory(params=params),
+            experiment=session.experiment,
+        )
+        user_scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            experiment=session.experiment,
+            custom_schedule_params=params,
+        )
+
+        tool = DeleteReminderTool(experiment_session=session)
+
+        # User should not be able to delete this one
+        response = tool.action(message_id=system_scheduled_message.external_id)
+        assert response == "Cannot delete this reminder"
+        system_scheduled_message.refresh_from_db()
+
+        # User should be able to delete this one
+        response = tool.action(message_id=user_scheduled_message.external_id)
+        assert response == "Success"
+        with pytest.raises(ScheduledMessage.DoesNotExist):
+            user_scheduled_message.refresh_from_db()
+
+        # Bot cannot find the scheduled message
+        response = tool.action(message_id="gone with the wind")
+        assert response == "Could not find this reminder"

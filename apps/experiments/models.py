@@ -272,6 +272,7 @@ class VoiceResponseBehaviours(models.TextChoices):
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
+    DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
 
 
