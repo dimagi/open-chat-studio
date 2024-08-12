@@ -359,8 +359,14 @@ class ScheduledMessage(BaseTeamModel):
 
         next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
         schedule = f"{schedule} with next trigger at {next_trigger}"
+
+        if self.end_date:
+            end_date = pretty_date(self.end_date, as_timezone=as_timezone)
+            schedule = f"{schedule} (to end at {end_date})"
+
         if self.action is not None:
             schedule = f"{schedule} (System)"
+
         return schedule
 
     @property

@@ -120,11 +120,11 @@ class TestExperimentSession:
         )
         assert len(session.get_participant_scheduled_messages()) == 2
         str_version1 = (
-            f"{message1.name} (ID={message1.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            f"{message1.name} (ID={message1.external_id}): Every 1 days on Tuesday, 1 times with next trigger "
             "at Tuesday, 02 January 2024 00:00:00 UTC (System)"
         )
         str_version2 = (
-            f"{message2.name} (ID={message2.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            f"{message2.name} (ID={message2.external_id}): Every 1 days on Tuesday, 1 times with next trigger "
             "at Tuesday, 02 January 2024 00:00:00 UTC"
         )
 
@@ -220,7 +220,7 @@ class TestExperimentSession:
             "timezone": "Africa/Johannesburg",
             "scheduled_messages": [
                 (
-                    f"{message.name} (ID={message.external_id}): Every 1 days on Sunday for 1 times with next "
+                    f"{message.name} (ID={message.external_id}): Every 1 days on Sunday, 1 times with next "
                     f"trigger at Sunday, 02 January 2022 {timezone_time} (System)"
                 )
             ],
