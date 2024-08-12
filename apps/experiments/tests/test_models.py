@@ -120,12 +120,12 @@ class TestExperimentSession:
         )
         assert len(session.get_participant_scheduled_messages()) == 2
         str_version1 = (
-            f"{message1.external_id}: Every 1 days on Tuesday for 1 times with next trigger at Tuesday, 02"
-            " January 2024 00:00:00 UTC (System)"
+            f"{message1.name} (ID={message1.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            "at Tuesday, 02 January 2024 00:00:00 UTC (System)"
         )
         str_version2 = (
-            f"{message2.external_id}: Every 1 days on Tuesday for 1 times with next trigger at Tuesday, 02"
-            " January 2024 00:00:00 UTC"
+            f"{message2.name} (ID={message2.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            "at Tuesday, 02 January 2024 00:00:00 UTC"
         )
 
         scheduled_messages_str = session.get_participant_scheduled_messages()
@@ -135,6 +135,7 @@ class TestExperimentSession:
         expected_dict_version = [
             {
                 "name": "Test",
+                "external_id": message1.external_id,
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
@@ -142,6 +143,7 @@ class TestExperimentSession:
             },
             {
                 "name": "Test",
+                "external_id": message2.external_id,
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
@@ -218,8 +220,8 @@ class TestExperimentSession:
             "timezone": "Africa/Johannesburg",
             "scheduled_messages": [
                 (
-                    f"{message.external_id}: Every 1 days on Sunday for 1 times with next trigger at Sunday, 02 "
-                    f"January 2022 {timezone_time} (System)"
+                    f"{message.name} (ID={message.external_id}): Every 1 days on Sunday for 1 times with next "
+                    f"trigger at Sunday, 02 January 2022 {timezone_time} (System)"
                 )
             ],
         }
