@@ -163,15 +163,15 @@ class TestDeleteReminderTool:
     def session(self, db):
         return ExperimentSessionFactory()
 
-    @pytest.fixture()
-    def schedule_params(self):
+    @staticmethod
+    def schedule_params():
         return {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "Testy"}
 
-    def test_user_cannot_delete_system_scheduled_message(self, session, schedule_params):
+    def test_user_cannot_delete_system_scheduled_message(self, session):
         scheduled_message = ScheduledMessage.objects.create(
             participant=session.participant,
             team=session.team,
-            action=EventActionFactory(params=schedule_params),
+            action=EventActionFactory(params=self.schedule_params()),
             experiment=session.experiment,
         )
 
@@ -182,12 +182,12 @@ class TestDeleteReminderTool:
         except ScheduledMessage.DoesNotExist:
             pytest.fail(reason="Expected ScheduledMessage.DoesNotExist to not be raised")
 
-    def test_user_can_delete_their_scheduled_message(self, session, schedule_params):
+    def test_user_can_delete_their_scheduled_message(self, session):
         scheduled_message = ScheduledMessage.objects.create(
             participant=session.participant,
             team=session.team,
             experiment=session.experiment,
-            custom_schedule_params=schedule_params,
+            custom_schedule_params=self.schedule_params(),
         )
         response = self._invoke_tool(session, message_id=scheduled_message.external_id)
         assert response == "Success"
