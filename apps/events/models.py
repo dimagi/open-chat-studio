@@ -344,14 +344,15 @@ class ScheduledMessage(BaseTeamModel):
         return self.params["repetitions"]
 
     def as_string(self, as_timezone: str | None = None):
+        schedule_name_part = f"{self.name} (ID={self.external_id})"
         if self.repetitions == 0:
-            schedule = f"{self.external_id}: One-off reminder"
+            schedule = f"{schedule_name_part}: One-off reminder"
         else:
-            schedule = f"{self.external_id}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
+            schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
             if self.time_period not in ["hour", "day"]:
                 weekday = self.next_trigger_date.strftime("%A")
                 schedule = (
-                    f"{self.external_id}: Every {self.frequency} {self.time_period} on {weekday} for "
+                    f"{schedule_name_part}: Every {self.frequency} {self.time_period} on {weekday} for "
                     f"{self.repetitions} times"
                 )
 

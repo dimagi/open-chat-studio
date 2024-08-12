@@ -789,6 +789,7 @@ class ExperimentSession(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,
