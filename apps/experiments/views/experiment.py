@@ -580,8 +580,11 @@ def create_channel(request, team_slug: str, experiment_id: int):
             except ExperimentChannelException as e:
                 messages.error(request, "Error saving channel: " + str(e))
             else:
-                if message := extra_form.get_success_message(channel=form.instance):
-                    messages.info(request, message)
+                if extra_form.success_message:
+                    messages.info(request, extra_form.success_message)
+
+                if extra_form.warning_message:
+                    messages.warning(request, extra_form.warning_message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
