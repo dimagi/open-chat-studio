@@ -458,7 +458,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     def _get_response(
         self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
     ) -> tuple[str, str, str]:
-        format_input = functools.partial(self.format_input, self.input_key)
+        format_input = functools.partial(self.state.format_input, self.input_key)
         runnable = RunnableLambda(format_input) | assistant_runnable
         response: OpenAIAssistantFinish = runnable.invoke(input, config)
         return response.return_values["output"], response.thread_id, response.run_id
@@ -468,11 +468,11 @@ class AssistantAgentRunnable(AssistantExperimentRunnable):
     def _get_response(
         self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
     ) -> tuple[str, str, str]:
-        format_input = functools.partial(self.format_input, self.input_key)
+        format_input = functools.partial(self.state.format_input, self.input_key)
         runnable = RunnableLambda(format_input) | assistant_runnable
         agent = AgentExecutor.from_agent_and_tools(
             agent=runnable,
-            tools=self.get_tools(),
+            tools=self.state.get_tools(),
             max_execution_time=120,
         )
         response: dict = agent.invoke(input, config)
