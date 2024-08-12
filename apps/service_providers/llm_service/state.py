@@ -1,12 +1,8 @@
-import functools
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
 from django.utils import timezone
-from langchain.agents import AgentExecutor
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.runnables import RunnableLambda
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
@@ -224,28 +220,8 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
 
-    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
-        format_input = functools.partial(self.format_input, input_key)
-        return RunnableLambda(format_input) | openai_assistant
-
-    def parse_response(self, response: OpenAIAssistantFinish) -> tuple[str, str, str]:
-        return response.return_values["output"], response.thread_id, response.run_id
-
 
 class AssistantAgentState(AssistantExperimentState):
-    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
-        return AgentExecutor.from_agent_and_tools(
-            agent=super().build_final_runnable(openai_assistant, input_key),
-            tools=self.get_tools(),
-            max_execution_time=120,
-        )
-
-    def parse_response(
-        self,
-        response: dict,
-    ) -> tuple[str, str, str]:
-        return response["output"], response["thread_id"], response["run_id"]
-
     def get_tools(self):
         return get_tools(self.session, for_assistant=True)
 

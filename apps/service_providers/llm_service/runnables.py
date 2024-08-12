@@ -55,13 +55,15 @@ class GenerationCancelled(Exception):
 
 def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
     """Create an experiment runnable based on the experiment configuration."""
-    if experiment.assistant:
-        state_cls = AssistantAgentState if experiment.assistant.tools_enabled else AssistantExperimentState
-        return AssistantExperimentRunnable(state=state_cls(experiment=experiment, session=session))
+    state_kwargs = {"experiment": experiment, "session": session}
+    if assistant := experiment.assistant:
+        if assistant.tools_enabled:
+            return AssistantAgentRunnable(state=AssistantAgentState(**state_kwargs))
+        return AssistantExperimentRunnable(state=AssistantExperimentState(**state_kwargs))
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
-    state = ChatExperimentState(experiment=experiment, session=session)
+    state = ChatExperimentState(**state_kwargs)
     if experiment.tools_enabled:
         return AgentExperimentRunnable(state=state)
 
@@ -417,12 +419,10 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
         assistant_runnable = self.state.get_openai_assistant()
-        final_assistant_runnable = self.state.build_final_runnable(assistant_runnable, input_key=self.input_key)
 
         for i in range(3):
             try:
-                response: OpenAIAssistantFinish | dict = final_assistant_runnable.invoke(input_dict, config)
-                return self.state.parse_response(response)
+                return self._get_response(assistant_runnable, input_dict, config)
             except openai.BadRequestError as e:
                 self._handle_api_error(thread_id, assistant_runnable, e)
             except ValueError as e:
@@ -454,3 +454,26 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             cancelling = run.status == "cancelling"
             if cancelling:
                 sleep(assistant_runnable.check_every_ms / 1000)
+
+    def _get_response(
+        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
+    ) -> tuple[str, str, str]:
+        format_input = functools.partial(self.format_input, self.input_key)
+        runnable = RunnableLambda(format_input) | assistant_runnable
+        response: OpenAIAssistantFinish = runnable.invoke(input, config)
+        return response.return_values["output"], response.thread_id, response.run_id
+
+
+class AssistantAgentRunnable(AssistantExperimentRunnable):
+    def _get_response(
+        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
+    ) -> tuple[str, str, str]:
+        format_input = functools.partial(self.format_input, self.input_key)
+        runnable = RunnableLambda(format_input) | assistant_runnable
+        agent = AgentExecutor.from_agent_and_tools(
+            agent=runnable,
+            tools=self.get_tools(),
+            max_execution_time=120,
+        )
+        response: dict = agent.invoke(input, config)
+        return response["output"], response["thread_id"], response["run_id"]
