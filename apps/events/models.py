@@ -348,19 +348,24 @@ class ScheduledMessage(BaseTeamModel):
         if self.repetitions == 0:
             schedule = f"{schedule_name_part}: One-off reminder"
         else:
-            schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
             if self.time_period not in ["hour", "day"]:
                 weekday = self.next_trigger_date.strftime("%A")
-                schedule = (
-                    f"{schedule_name_part}: Every {self.frequency} {self.time_period} on {weekday} for "
-                    f"{self.repetitions} times"
-                )
+                schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period} on {weekday}"
+            else:
+                schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period}"
+
+            if self.repetitions:
+                schedule = f"{schedule}, {self.repetitions} times"
 
         next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
-        schedule_details = f"{schedule} with next trigger at {next_trigger}"
+        schedule = f"{schedule} with next trigger at {next_trigger}"
         if self.action is not None:
-            schedule_details = f"{schedule_details} (System)"
-        return schedule_details
+            schedule = f"{schedule} (System)"
+        return schedule
+
+    @property
+    def was_created_by_system(self) -> bool:
+        return self.action is not None
 
     def __str__(self):
         return self.as_string()

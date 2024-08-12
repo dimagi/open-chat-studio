@@ -26,4 +26,4 @@ class EventActionAdmin(admin.ModelAdmin):
 
 @admin.register(ScheduledMessage)
 class ScheduledMessageAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_complete"]
+    list_display = ["name", "external_id", "is_complete"]
