@@ -37,6 +37,6 @@ class DeleteReminderSchema(BaseModel):
 class ScheduledMessageSchema(BaseModel):
     message_id: str = Field(description="the id of the scheduled message")
     weekday: WeekdaysEnum = Field(description="The day of the week")
-    hour: int = Field(description="The hour of the day")
+    hour: int = Field(description="The hour of the day, in UTC")
     minute: int = Field(description="The minute of the hour")
     user_specified_custom_date: bool = Field(description="True if the user specifies a date")
