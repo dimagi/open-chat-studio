@@ -154,36 +154,46 @@ def test_create_schedule_message_experiment_does_not_exist():
 
 
 @pytest.mark.django_db()
-def test_delete_schedule_tool():
-    session = ExperimentSessionFactory()
-    with freeze_time("2024-01-01"):
-        params = {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "Testy"}
-        system_scheduled_message = ScheduledMessage.objects.create(
-            participant=session.participant,
-            team=session.team,
-            action=EventActionFactory(params=params),
-            experiment=session.experiment,
-        )
-        user_scheduled_message = ScheduledMessage.objects.create(
-            participant=session.participant,
-            team=session.team,
-            experiment=session.experiment,
-            custom_schedule_params=params,
-        )
-
+class TestDeleteReminderTool:
+    def _invoke_tool(self, session, **tool_kwargs):
         tool = DeleteReminderTool(experiment_session=session)
+        return tool.action(**tool_kwargs)
 
-        # User should not be able to delete this one
-        response = tool.action(message_id=system_scheduled_message.external_id)
+    @pytest.fixture()
+    def session(self, db):
+        return ExperimentSessionFactory()
+
+    @pytest.fixture()
+    def schedule_params(self):
+        return {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "Testy"}
+
+    def test_user_cannot_delete_system_scheduled_message(self, session, schedule_params):
+        scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            action=EventActionFactory(params=schedule_params),
+            experiment=session.experiment,
+        )
+
+        response = self._invoke_tool(session, message_id=scheduled_message.external_id)
         assert response == "Cannot delete this reminder"
-        system_scheduled_message.refresh_from_db()
+        try:
+            scheduled_message.refresh_from_db()
+        except ScheduledMessage.DoesNotExist:
+            pytest.fail(reason="Expected ScheduledMessage.DoesNotExist to not be raised")
 
-        # User should be able to delete this one
-        response = tool.action(message_id=user_scheduled_message.external_id)
+    def test_user_can_delete_their_scheduled_message(self, session, schedule_params):
+        scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            experiment=session.experiment,
+            custom_schedule_params=schedule_params,
+        )
+        response = self._invoke_tool(session, message_id=scheduled_message.external_id)
         assert response == "Success"
         with pytest.raises(ScheduledMessage.DoesNotExist):
-            user_scheduled_message.refresh_from_db()
+            scheduled_message.refresh_from_db()
 
-        # Bot cannot find the scheduled message
-        response = tool.action(message_id="gone with the wind")
+    def test_specified_message_does_not_exist(self, session):
+        response = self._invoke_tool(session, message_id="gone with the wind")
         assert response == "Could not find this reminder"
