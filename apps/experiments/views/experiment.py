@@ -357,9 +357,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
 
-    def form_valid(self, form):
-        return super().form_valid(form)
-
 
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
