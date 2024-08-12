@@ -8,6 +8,7 @@ from freezegun import freeze_time
 
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    DeleteReminderTool,
     UpdateScheduledMessageTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
@@ -150,3 +151,49 @@ def test_create_schedule_message_experiment_does_not_exist():
         ).count()
 
         assert scheduled_message_count == 0
+
+
+@pytest.mark.django_db()
+class TestDeleteReminderTool:
+    def _invoke_tool(self, session, **tool_kwargs):
+        tool = DeleteReminderTool(experiment_session=session)
+        return tool.action(**tool_kwargs)
+
+    @pytest.fixture()
+    def session(self, db):
+        return ExperimentSessionFactory()
+
+    @staticmethod
+    def schedule_params():
+        return {"time_period": "days", "frequency": 1, "repetitions": 2, "prompt_text": "", "name": "Testy"}
+
+    def test_user_cannot_delete_system_scheduled_message(self, session):
+        scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            action=EventActionFactory(params=self.schedule_params()),
+            experiment=session.experiment,
+        )
+
+        response = self._invoke_tool(session, message_id=scheduled_message.external_id)
+        assert response == "Cannot delete this reminder"
+        try:
+            scheduled_message.refresh_from_db()
+        except ScheduledMessage.DoesNotExist:
+            pytest.fail(reason="Expected ScheduledMessage.DoesNotExist to not be raised")
+
+    def test_user_can_delete_their_scheduled_message(self, session):
+        scheduled_message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            experiment=session.experiment,
+            custom_schedule_params=self.schedule_params(),
+        )
+        response = self._invoke_tool(session, message_id=scheduled_message.external_id)
+        assert response == "Success"
+        with pytest.raises(ScheduledMessage.DoesNotExist):
+            scheduled_message.refresh_from_db()
+
+    def test_specified_message_does_not_exist(self, session):
+        response = self._invoke_tool(session, message_id="gone with the wind")
+        assert response == "Could not find this reminder"

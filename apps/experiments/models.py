@@ -272,6 +272,7 @@ class VoiceResponseBehaviours(models.TextChoices):
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
+    DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
 
 
@@ -788,6 +789,7 @@ class ExperimentSession(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,

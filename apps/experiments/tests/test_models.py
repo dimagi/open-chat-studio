@@ -102,24 +102,40 @@ class TestExperimentSession:
     @freeze_time("2024-01-01")
     def test_get_participant_scheduled_messages(self):
         session = ExperimentSessionFactory()
-        event_action = event_action, params = self._construct_event_action(
+        event_action, params = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
         )
-        ScheduledMessageFactory.create_batch(
-            size=2,
+        message1 = ScheduledMessageFactory(
             experiment=session.experiment,
             team=session.team,
             participant=session.participant,
             action=event_action,
         )
+        message2 = ScheduledMessageFactory(
+            experiment=session.experiment,
+            team=session.team,
+            participant=session.participant,
+            custom_schedule_params=params,
+            action=None,
+        )
         assert len(session.get_participant_scheduled_messages()) == 2
-        expected_str_version = [
-            "Test: Every 1 days on Tuesday for 1 times (next trigger is Tuesday, 02 January 2024 00:00:00 UTC)",
-            "Test: Every 1 days on Tuesday for 1 times (next trigger is Tuesday, 02 January 2024 00:00:00 UTC)",
-        ]
+        str_version1 = (
+            f"{message1.name} (ID={message1.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            "at Tuesday, 02 January 2024 00:00:00 UTC (System)"
+        )
+        str_version2 = (
+            f"{message2.name} (ID={message2.external_id}): Every 1 days on Tuesday for 1 times with next trigger "
+            "at Tuesday, 02 January 2024 00:00:00 UTC"
+        )
+
+        scheduled_messages_str = session.get_participant_scheduled_messages()
+        assert str_version1 in scheduled_messages_str
+        assert str_version2 in scheduled_messages_str
+
         expected_dict_version = [
             {
                 "name": "Test",
+                "external_id": message1.external_id,
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
@@ -127,13 +143,13 @@ class TestExperimentSession:
             },
             {
                 "name": "Test",
+                "external_id": message2.external_id,
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
                 "next_trigger_date": "2024-01-02T00:00:00+00:00",
             },
         ]
-        assert session.get_participant_scheduled_messages() == expected_str_version
         assert session.get_participant_scheduled_messages(as_dict=True) == expected_dict_version
 
     @pytest.mark.django_db()
@@ -186,7 +202,7 @@ class TestExperimentSession:
         event_action = event_action, params = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
         )
-        ScheduledMessageFactory(
+        message = ScheduledMessageFactory(
             experiment=session.experiment,
             team=session.team,
             participant=session.participant,
@@ -203,7 +219,10 @@ class TestExperimentSession:
             "name": "Tester",
             "timezone": "Africa/Johannesburg",
             "scheduled_messages": [
-                f"Test: Every 1 days on Sunday for 1 times (next trigger is Sunday, 02 January 2022 {timezone_time})"
+                (
+                    f"{message.name} (ID={message.external_id}): Every 1 days on Sunday for 1 times with next "
+                    f"trigger at Sunday, 02 January 2022 {timezone_time} (System)"
+                )
             ],
         }
         assert session.get_participant_data(use_participant_tz=use_participant_tz) == expected_data

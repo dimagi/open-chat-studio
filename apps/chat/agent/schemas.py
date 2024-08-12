@@ -30,6 +30,10 @@ class OneOffReminderSchema(BaseModel):
     message: str = Field(description="The reminder message")
 
 
+class DeleteReminderSchema(BaseModel):
+    message_id: str = Field(description="the id of the scheduled message")
+
+
 class ScheduledMessageSchema(BaseModel):
     name: str = Field(description="the name of the scheduled message")
     weekday: WeekdaysEnum = Field(description="The day of the week")
