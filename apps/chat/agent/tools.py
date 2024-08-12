@@ -97,8 +97,7 @@ class UpdateScheduledMessageTool(CustomBaseTool):
         minute: int,
         user_specified_custom_date: bool,
     ):
-        message = ScheduledMessage.objects.get(participant=self.experiment_session.participant, external_id=message_id)
-        if message.was_created_by_system and user_specified_custom_date:
+        if user_specified_custom_date:
             # When the user specifies a new date, the bot will extract the day of the week that that day falls on
             # and pass it as a parameter to this method.
             # Since we only allow users to change the weekday of their schedules, this bahvaiour can lead to a
@@ -106,6 +105,7 @@ class UpdateScheduledMessageTool(CustomBaseTool):
             # corresponds to the same weekday as the requested day. To resolve this, we simply don't allow users
             # to specify dates, but only a weekday and the time of day.
             return "The user cannot do that. Only weekdays and time of day can be changed"
+        message = ScheduledMessage.objects.get(participant=self.experiment_session.participant, external_id=message_id)
         # the datetime object regard Monday as day 0 whereas the llm regards it as day 1
         weekday_int = weekday.value - 1
         message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
