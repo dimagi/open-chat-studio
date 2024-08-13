@@ -260,6 +260,7 @@ def test_extract_structured_data_with_chunking(provider, pipeline):
         "\n"
         "\nConversation history:"
         "\nI am bond"
+        "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
     assert inferences[1][0].text == (
@@ -268,6 +269,7 @@ def test_extract_structured_data_with_chunking(provider, pipeline):
         "\n{'name': None}"
         "\nConversation history:"
         "\njames bond"
+        "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
     assert inferences[2][0].text == (
@@ -276,6 +278,7 @@ def test_extract_structured_data_with_chunking(provider, pipeline):
         "\n{'name': 'james'}"
         "\nConversation history:"
         "\n007"
+        "The conversation history should carry more weight in the outcome. It can change the user's current data"
     )
 
     # Expected node output

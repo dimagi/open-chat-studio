@@ -55,6 +55,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentRouteType,
     ExperimentSession,
     SessionStatus,
     SyntheticVoice,
@@ -64,6 +65,7 @@ from apps.experiments.tables import (
     ExperimentSessionsTable,
     ExperimentTable,
     ParentExperimentRoutesTable,
+    TerminalBotsTable,
 )
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
@@ -256,8 +258,10 @@ class ExperimentForm(forms.ModelForm):
 
 
 def _validate_prompt_variables(form_data):
-    required_variables = set(PromptTemplate.from_template(form_data.get("prompt_text")).input_variables)
+    prompt_text = form_data.get("prompt_text")
+    required_variables = set(PromptTemplate.from_template(prompt_text).input_variables)
     available_variables = set(["participant_data", "current_datetime"])
+
     if form_data.get("source_material"):
         available_variables.add("source_material")
 
@@ -281,6 +285,11 @@ def _validate_prompt_variables(form_data):
                 "usage."
             )
         raise forms.ValidationError({"prompt_text": errors})
+
+    for prompt_var in ["{source_material}", "{participant_data}"]:
+        if prompt_text.count(prompt_var) > 1:
+            error_msg = f"Multiple {prompt_var} variables found in the prompt. You can only use it once"
+            raise forms.ValidationError({"prompt_text": error_msg})
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -446,6 +455,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         )
         .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
+    sort = request.GET.get("sort", None)
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
@@ -469,8 +479,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "filter_tags_url": reverse(
                 "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
             ),
+            "sort": sort,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
+            **_get_terminal_bots_context(experiment, team_slug),
         },
     )
 
@@ -513,11 +525,20 @@ def _get_events_context(experiment: Experiment, team_slug: str):
 
 
 def _get_routes_context(experiment: Experiment, team_slug: str):
-    parent_links = experiment.parent_links.all()
+    route_type = ExperimentRouteType.PROCESSOR
+    parent_links = experiment.parent_links.filter(type=route_type).all()
     return {
-        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.all()),
+        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
         "parent_routes_table": ParentExperimentRoutesTable(parent_links),
         "can_make_child_routes": len(parent_links) == 0,
+    }
+
+
+def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
+    return {
+        "terminal_bots_table": TerminalBotsTable(
+            experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
+        ),
     }
 
 
@@ -559,8 +580,11 @@ def create_channel(request, team_slug: str, experiment_id: int):
             except ExperimentChannelException as e:
                 messages.error(request, "Error saving channel: " + str(e))
             else:
-                if message := extra_form.get_success_message(channel=form.instance):
-                    messages.info(request, message)
+                if extra_form.success_message:
+                    messages.info(request, extra_form.success_message)
+
+                if extra_form.warning_message:
+                    messages.warning(request, extra_form.warning_message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 

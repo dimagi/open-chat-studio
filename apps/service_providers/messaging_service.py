@@ -132,14 +132,12 @@ class TwilioService(MessagingService):
         return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
 
     def is_valid_number(self, number: str) -> bool:
-        # if settings.DEBUG:
-        #     # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
-        #     # let's just always return True
-        #     return True
+        if settings.DEBUG:
+            # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
+            # let's just always return True
+            return True
 
-        # return number in self._get_account_numbers()
-        # TODO: Seems like the incoming_phone_numbers isn't a reliable way to verify phone numbers.
-        return True
+        return number in self._get_account_numbers()
 
 
 class TurnIOService(MessagingService):
@@ -179,6 +177,7 @@ class SureAdhereService(MessagingService):
 
     client_id: str
     client_secret: str
+    client_scope: str
     base_url: str
 
     def get_access_token(self):
@@ -187,7 +186,7 @@ class SureAdhereService(MessagingService):
             "grant_type": "client_credentials",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "scope": "https://sureadherelabs.onmicrosoft.com/auth_demo_api1/.default",
+            "scope": self.client_scope,
         }
         response = requests.post(auth_url, data=auth_data)
         response.raise_for_status()

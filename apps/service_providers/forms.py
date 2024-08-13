@@ -167,6 +167,9 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     client_secret = forms.CharField(
         label=_("Client Secret"), help_text=_("Secret used for authentication with Azure AD B2C.")
     )
+    client_scope = forms.CharField(
+        label=_("Client Scope"), help_text=_("Scope used for authentication with Azure AD B2C.")
+    )
     base_url = forms.URLField(
         label=_("Base URL"),
         validators=[URLValidator(schemes=["https"])],

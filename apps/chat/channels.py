@@ -775,7 +775,7 @@ def _start_experiment_session(
 
         # Record the participant's timezone
         if timezone:
-            participant.update_memory(data={"timezone": timezone})
+            participant.update_memory(data={"timezone": timezone}, experiment=experiment)
 
     if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)

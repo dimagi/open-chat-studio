@@ -108,6 +108,7 @@ def test_experiment_form_with_assistants(
         (None, "Answer questions from this source: {source_material}", pytest.raises(ValidationError)),
         (None, "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
         ("something", "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
+        ("something", "Source material: {source_material} and {source_material}", pytest.raises(ValidationError)),
     ],
 )
 def test_prompt_variable_validation(source_material, prompt_str, expectation):

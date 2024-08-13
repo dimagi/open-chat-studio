@@ -123,7 +123,7 @@ urlpatterns = [
     path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     # Experiment Routes
     path(
-        "e/<int:experiment_id>/experiment_routes/new",
+        "e/<int:experiment_id>/experiment_routes/<str:type>/new",
         CreateExperimentRoute.as_view(),
         name="experiment_route_new",
     ),

@@ -21,7 +21,12 @@ def sureadhere_provider():
     return MessagingProviderFactory(
         name="sureadhere",
         type=MessagingProviderType.sureadhere,
-        config={"client_id": "123", "client_secret": "456", "base_url": "https://example.com"},
+        config={
+            "client_id": "123",
+            "client_secret": "456",
+            "client_scope": "https://example.onmicrosoft.com/example-app-api/.default",
+            "base_url": "https://example.com",
+        },
     )
 
 
