@@ -42,6 +42,12 @@ class CreateExperimentRoute(CreateView):
     def form_valid(self, form):
         form.instance.team = self.request.team
         self.object = form.save(commit=False)
+
+        # Set parent_version and child_version
+        parent_experiment = get_object_or_404(Experiment, id=self.kwargs["experiment_id"])
+        self.object.parent_version = parent_experiment.version_number
+        self.object.child_version = Experiment.objects.get(id=self.object.child_id).version_number
+
         self.object.parent_id = self.kwargs["experiment_id"]
         self.object.type = ExperimentRouteType(self.kwargs["type"])
         self.object.save()

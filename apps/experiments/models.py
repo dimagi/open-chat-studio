@@ -455,12 +455,18 @@ class ExperimentRoute(BaseTeamModel):
     type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
     condition = models.CharField(max_length=64, blank=True)
 
+    parent_version = models.PositiveIntegerField(null=True, blank=True)
+    child_version = models.PositiveIntegerField(null=True, blank=True)
+
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
-        """Returns a list of experiments: that are not parents, and are not children of the current experiment"""
+        """Returns a list of experiments: that are not parents, and are not children of the current experiment
+        If the parent is a released version, the child must also be a released version"""
+
         parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
 
         if parent:
+            parent_is_released = parent.status == "Released"
             child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
             eligible_experiments = (
                 Experiment.objects.filter(team=team)
@@ -468,6 +474,9 @@ class ExperimentRoute(BaseTeamModel):
                 .exclude(id__in=parent_ids)
                 .exclude(id=parent.id)
             )
+            if parent_is_released:
+                # Ensure child experiments are also 'Released' if parent is
+                eligible_experiments = eligible_experiments.filter(status="Released")
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
 
