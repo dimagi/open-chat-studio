@@ -18,9 +18,14 @@ def _migrate_nodes(apps, schema_editor):
             node_object.save()
 
 
+def _delete_all_nodes(apps, schema_editor):
+    Node = apps.get_model("pipelines", "Node")
+    Node.objects.all().delete()
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("pipelines", "0004_node"),
     ]
 
-    operations = [migrations.RunPython(_migrate_nodes, reverse_code=migrations.RunPython.noop)]
+    operations = [migrations.RunPython(_migrate_nodes, reverse_code=_delete_all_nodes)]
