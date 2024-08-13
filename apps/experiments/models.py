@@ -736,8 +736,6 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
-        # We need to disable tools here
-        use_experiment.tools = []
         bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
         self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
@@ -747,7 +745,7 @@ class ExperimentSession(BaseTeamModel):
         """
         from apps.chat.bots import TopicBot
 
-        topic_bot = TopicBot(self, experiment=use_experiment)
+        topic_bot = TopicBot(self, experiment=use_experiment, disable_tools=True)
         return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):

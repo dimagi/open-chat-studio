@@ -51,8 +51,12 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
+    def __init__(
+        self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool | None = False
+    ):
         self.experiment = experiment or session.experiment
+        if disable_tools:
+            self.experiment.tools = []
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
         self.llm = self.experiment.get_chat_model()

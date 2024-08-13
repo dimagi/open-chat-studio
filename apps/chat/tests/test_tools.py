@@ -88,7 +88,9 @@ def test_create_schedule_message_success():
     }
     start_date = timezone.now()
     end_date = timezone.now()
-    response = create_schedule_message(experiment_session, message, start_date=start_date, end_date=end_date, **kwargs)
+    response = create_schedule_message(
+        experiment_session, message, start_date=start_date, end_date=end_date, is_recurring=True, **kwargs
+    )
     assert response == "Success: scheduled message created"
 
     scheduled_message = ScheduledMessage.objects.filter(
@@ -118,7 +120,7 @@ def test_create_schedule_message_invalid_form():
         "repetitions": 2,
     }
 
-    response = create_schedule_message(experiment_session, message, start_date=None, **kwargs)
+    response = create_schedule_message(experiment_session, message, start_date=None, is_recurring=True, **kwargs)
     assert response == "Could not create scheduled message"
 
     scheduled_message_count = ScheduledMessage.objects.filter(
@@ -141,7 +143,7 @@ def test_create_schedule_message_experiment_does_not_exist():
     }
 
     with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
-        response = create_schedule_message(experiment_session, message, start_date=None, **kwargs)
+        response = create_schedule_message(experiment_session, message, start_date=None, is_recurring=True, **kwargs)
         assert response == "Experiment does not exist! Could not create scheduled message"
 
         scheduled_message_count = ScheduledMessage.objects.filter(
