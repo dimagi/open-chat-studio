@@ -736,6 +736,8 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
+        # We need to disable tools here
+        use_experiment.tools = []
         bot_message = self._bot_prompt_for_user(instruction_prompt=instruction_prompt, use_experiment=use_experiment)
         self.try_send_message(message=bot_message, fail_silently=fail_silently)
 
