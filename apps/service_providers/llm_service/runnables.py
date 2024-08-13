@@ -32,7 +32,6 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.state import (
-    AssistantAgentState,
     AssistantExperimentState,
     ChatExperimentState,
     ChatRunnableState,
@@ -57,9 +56,10 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     """Create an experiment runnable based on the experiment configuration."""
     state_kwargs = {"experiment": experiment, "session": session}
     if assistant := experiment.assistant:
+        state = AssistantExperimentState(**state_kwargs)
         if assistant.tools_enabled:
-            return AssistantAgentRunnable(state=AssistantAgentState(**state_kwargs))
-        return AssistantExperimentRunnable(state=AssistantExperimentState(**state_kwargs))
+            return AssistantAgentRunnable(state=state)
+        return AssistantExperimentRunnable(state=state)
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
@@ -254,7 +254,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantExperimentState | AssistantAgentState
+    state: AssistantExperimentState
     input_key = "content"
 
     class Config:

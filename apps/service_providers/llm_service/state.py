@@ -220,8 +220,6 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
 
-
-class AssistantAgentState(AssistantExperimentState):
     def get_tools(self):
         return get_tools(self.session, for_assistant=True)
 

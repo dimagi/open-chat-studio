@@ -21,7 +21,7 @@ from apps.service_providers.llm_service.runnables import (
     GenerationError,
     create_experiment_runnable,
 )
-from apps.service_providers.llm_service.state import AssistantAgentState, AssistantExperimentState
+from apps.service_providers.llm_service.state import AssistantExperimentState
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -30,14 +30,14 @@ from apps.utils.langchain import mock_experiment_llm
 ASSISTANT_ID = "test_assistant_id"
 
 
-@pytest.fixture(params=[AssistantExperimentState, AssistantAgentState])
+@pytest.fixture(params=[True, False])
 def session(request):
-    request.param.save_message_to_history = Mock()
+    AssistantExperimentState.save_message_to_history = Mock()
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
-    if request.param == AssistantAgentState:
+    if request.param:
         local_assistant.tools = list(TOOL_CLASS_MAP.keys())
 
     session.experiment.assistant = local_assistant
@@ -46,11 +46,10 @@ def session(request):
     return session
 
 
-@pytest.fixture(params=[AssistantExperimentState, AssistantAgentState])
+@pytest.fixture(params=[True, False])
 def db_session(request):
-    has_tools = request.param == AssistantAgentState
     local_assistant = OpenAiAssistantFactory(
-        id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if has_tools else []
+        id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
     )
     session = ExperimentSessionFactory(id=1)
     session.experiment.assistant = local_assistant
