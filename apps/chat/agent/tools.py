@@ -59,6 +59,7 @@ class RecurringReminderTool(CustomBaseTool):
             repetitions=repetitions,
             frequency=every,
             time_period=period,
+            is_recurring=True,
         )
 
 
@@ -75,12 +76,7 @@ class OneOffReminderTool(CustomBaseTool):
         **kwargs,
     ):
         return create_schedule_message(
-            self.experiment_session,
-            message=message,
-            start_date=datetime_due,
-            repetitions=0,
-            frequency=0,
-            time_period=TimePeriod.HOURS,
+            self.experiment_session, message=message, start_date=datetime_due, is_recurring=False
         )
 
 
@@ -149,6 +145,7 @@ def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
     start_date: datetime,
+    is_recurring: bool,
     end_date: datetime | None = None,
     **kwargs,
 ):
@@ -156,10 +153,15 @@ def create_schedule_message(
     kwargs["name"] = f"schedule_message_{name_id}"
     kwargs["prompt_text"] = message
     kwargs["experiment_id"] = experiment_session.experiment.id
-    repetitions_required = kwargs["repetitions"] or 0 > 0
+
+    if is_recurring:
+        non_required_fields = ["repetitions"]
+    else:
+        kwargs["repetitions"] = 0
+        non_required_fields = ["frequency", "time_period"]
 
     form = ScheduledMessageConfigForm(
-        data=kwargs, experiment_id=experiment_session.experiment.id, repetitions_required=repetitions_required
+        data=kwargs, experiment_id=experiment_session.experiment.id, non_required_fields=non_required_fields
     )
     if form.is_valid():
         cleaned_data = form.cleaned_data
@@ -169,9 +171,9 @@ def create_schedule_message(
                     custom_schedule_params={
                         "name": cleaned_data["name"],
                         "prompt_text": cleaned_data["prompt_text"],
-                        "frequency": cleaned_data["frequency"],
-                        "time_period": cleaned_data["time_period"],
-                        "repetitions": cleaned_data.get("repetitions", None),
+                        "frequency": cleaned_data.get("frequency"),
+                        "time_period": cleaned_data.get("time_period"),
+                        "repetitions": cleaned_data.get("repetitions"),
                     },
                     experiment=experiment_session.experiment,
                     participant=experiment_session.participant,

@@ -69,7 +69,7 @@ class ScheduledMessageConfigForm(forms.Form):
         help_text="Instructions for the bot to formulate a response",
         widget=forms.Textarea(attrs={"rows": 5}),
     )
-    frequency = forms.IntegerField(label="Every...", min_value=0)
+    frequency = forms.IntegerField(label="Every...", min_value=1)
     time_period = forms.ChoiceField(label="Time period", choices=TimePeriod.choices)
     repetitions = forms.IntegerField(
         label="Repetitions",
@@ -82,7 +82,7 @@ class ScheduledMessageConfigForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
-        repetitions_required = kwargs.pop("repetitions_required", True)
+        non_required_fields = kwargs.pop("non_required_fields", [])
         super().__init__(*args, **kwargs)
 
         field = self.fields["experiment_id"]
@@ -97,7 +97,8 @@ class ScheduledMessageConfigForm(forms.Form):
             field.initial = experiment_id
             field.widget = field.hidden_widget()
 
-        self.fields["repetitions"].required = repetitions_required
+        for field_name in non_required_fields:
+            self.fields[field_name].required = False
 
 
 class EventActionForm(forms.ModelForm):
