@@ -275,6 +275,12 @@ class AgentTools(models.TextChoices):
     SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
 
 
+class ExperimentStatus(models.TextChoices):
+    DRAFT = "Draft", "Draft"
+    RELEASED = "Released", "Released"
+    DEPRECATED = "Deprecated", "Deprecated"
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -283,6 +289,22 @@ class Experiment(BaseTeamModel):
     """
 
     objects = ExperimentObjectManager()
+    status = models.CharField(
+        max_length=10,
+        choices=ExperimentStatus.choices,
+        default=ExperimentStatus.DRAFT,
+    )
+    parent_id = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="experiment_versions",
+    )
+    version_number = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
