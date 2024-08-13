@@ -47,11 +47,15 @@ class Pipeline(BaseTeamModel):
 
         # Set new nodes or update existing ones
         for node in nodes:
-            node_object, _ = Node.objects.get_or_create(pipeline=self, flow_id=node.id)
-            node_object.type = node.data.type
-            node_object.params = node.data.params
-            node_object.label = node.data.label
-            node_object.save()
+            Node.objects.update_or_create(
+                pipeline=self,
+                flow_id=node.id,
+                defaults={
+                    "type": node.data.type,
+                    "params": node.data.params,
+                    "label": node.data.label,
+                },
+            )
 
     @cached_property
     def flow_data(self) -> dict:
