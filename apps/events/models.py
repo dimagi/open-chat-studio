@@ -371,7 +371,7 @@ class ScheduledMessage(BaseTeamModel):
 
     @property
     def was_created_by_system(self) -> bool:
-        return self.action is not None
+        return self.action_id is not None
 
     def __str__(self):
         return self.as_string()
