@@ -57,14 +57,14 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     state_kwargs = {"experiment": experiment, "session": session}
     if assistant := experiment.assistant:
         state = AssistantExperimentState(**state_kwargs)
-        if assistant.tools_enabled:
+        if assistant.tools_enabled and not disable_tools:
             return AssistantAgentRunnable(state=state)
         return AssistantExperimentRunnable(state=state)
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     state = ChatExperimentState(**state_kwargs)
-    if disable_tools is False and experiment.tools_enabled:
+    if experiment.tools_enabled and not disable_tools:
         return AgentExperimentRunnable(state=state)
 
     return SimpleExperimentRunnable(state=state)
@@ -279,7 +279,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             "content": input,
             "attachments": message_attachments,
             "instructions": self.state.get_assistant_instructions(),
-        }
+        } | self._extra_input_configs()
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
@@ -466,8 +466,14 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         response: OpenAIAssistantFinish = runnable.invoke(input, config)
         return response.return_values["output"], response.thread_id, response.run_id
 
+    def _extra_input_configs(self) -> dict:
+        return {"tools": []}
+
 
 class AssistantAgentRunnable(AssistantExperimentRunnable):
+    def _extra_input_configs(self) -> dict:
+        return {}
+
     def _get_response(
         self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
     ) -> tuple[str, str, str]:
