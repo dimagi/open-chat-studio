@@ -1,0 +1,103 @@
+# This workflow will build and push a new container image to Amazon ECR,
+# and then will deploy a new task definition for each of the services to Amazon ECS.
+
+name: Deploy to Amazon ECS
+
+on:
+  workflow_dispatch:
+#  push:
+#    branches: [ "main" ]
+
+env:
+  AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-ecr-repo
+  ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Cluster
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: configure aws credentials
+      uses: aws-actions/configure-aws-credentials@v4.0.2
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT }}:role/github_deploy
+        role-session-name: GithubDeploy
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2.0.1
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile.web .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Update ECS task def for Django web container
+      id: django-web-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.5
+      with:
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+        container-name: web
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Update ECS task def for Django migrations container
+      id: django-migrations-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.5
+      with:
+        task-definition: ${{ steps.django-web-def.outputs.task-definition }}
+        container-name: migrate
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Update ECS task def for Celery worker container
+      id: celery-worker-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.5
+      with:
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryWorkerTask
+        container-name: celery-worker
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Update ECS task def for Celery beat container
+      id: celery-beat-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.5
+      with:
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeatTask
+        container-name: celery-beat
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Deploy Django Web
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.django-migrations-def.outputs.task-definition }}
+        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
+
+    - name: Deploy Celery Worker
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.celery-worker-def.outputs.task-definition }}
+        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Celery
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: false  # don't wait for this one but wait for the next one
+
+    - name: Deploy Celery Beat
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.celery-beat-def.outputs.task-definition }}
+        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeat
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
