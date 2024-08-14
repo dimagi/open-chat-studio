@@ -348,24 +348,20 @@ class ScheduledMessage(BaseTeamModel):
         return self.params["prompt_text"]
 
     def as_string(self, as_timezone: str | None = None):
-        schedule_name_part = f"{self.name} (ID={self.external_id})"
-        schedule = f"{schedule_name_part}. Message: {self.prompt_text}"
+        header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
         if self.repetitions == 0:
-            schedule = f"{schedule}: One-off reminder"
+            schedule_details_str = "One-off reminder"
+        elif self.time_period in ["hour", "day"]:
+            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
         else:
-            schedule = f"{schedule}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
-            if self.time_period not in ["hour", "day"]:
-                weekday = self.next_trigger_date.strftime("%A")
-                schedule = (
-                    f"{schedule}: Every {self.frequency} {self.time_period} on {weekday} for "
-                    f"{self.repetitions} times"
-                )
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
 
-        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
-        schedule_details = f"{schedule} with next trigger at {next_trigger}"
+        next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        tail_str = ""
         if self.action is not None:
-            schedule_details = f"{schedule_details} (System)"
-        return schedule_details
+            tail_str = "(System)"
+        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}. {tail_str}"
 
     def __str__(self):
         return self.as_string()

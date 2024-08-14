@@ -51,9 +51,7 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(
-        self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool | None = False
-    ):
+    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
         self.experiment = experiment or session.experiment
         self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
