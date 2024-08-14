@@ -8,15 +8,24 @@ from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
+
+
+class PipelineManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related("node_set")
 
 
 class Pipeline(BaseTeamModel):
     name = models.CharField(max_length=128)
     data = models.JSONField()
+
+    objects = PipelineManager()
 
     class Meta:
         ordering = ["-created_at"]
@@ -27,14 +36,61 @@ class Pipeline(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
+    def set_nodes(self, nodes: list[FlowNode]) -> None:
+        """Set the nodes on the pipeline from data coming from the frontend"""
+
+        # Delete old nodes
+        current_ids = set(self.node_ids)
+        new_ids = set(node.id for node in nodes)
+        to_delete = current_ids - new_ids
+        Node.objects.filter(pipeline=self, flow_id__in=to_delete).delete()
+
+        # Set new nodes or update existing ones
+        for node in nodes:
+            Node.objects.update_or_create(
+                pipeline=self,
+                flow_id=node.id,
+                defaults={
+                    "type": node.data.type,
+                    "params": node.data.params,
+                    "label": node.data.label,
+                },
+            )
+
+    @cached_property
+    def flow_data(self) -> dict:
+        from apps.pipelines.nodes import nodes as pipeline_nodes
+
+        flow = Flow(**self.data)
+        flow_nodes_by_id = {node.id: node for node in flow.nodes}
+        nodes = []
+        for node in self.node_set.all():
+            node_class = getattr(pipeline_nodes, node.type)
+            input_types = get_input_types_for_node(node_class)
+            nodes.append(
+                FlowNode(
+                    id=node.flow_id,
+                    position=flow_nodes_by_id[node.flow_id].position,
+                    data=FlowNodeData(
+                        id=node.flow_id,
+                        type=node.type,
+                        label=node.label,
+                        params=node.params,
+                        inputParams=input_types["input_params"],
+                    ),
+                )
+            )
+        flow.nodes = nodes
+        return flow.model_dump()
+
     @cached_property
     def node_ids(self):
-        return [node.get("data", {}).get("id") for node in self.data.get("nodes", [])]
+        return self.node_set.values_list("flow_id", flat=True).all()
 
     def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
-        runnable = PipelineGraph.build_runnable_from_json(self.data)
+        runnable = PipelineGraph.build_runnable_from_pipeline(self)
         # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
         # the session instead of the session object.
         pipeline_run = PipelineRun.objects.create(
@@ -59,6 +115,18 @@ class Pipeline(BaseTeamModel):
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
         return output
+
+
+class Node(BaseModel):
+    flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
+    type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
+    label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
+    params = models.JSONField(default=dict)  # Parameters for the specific node type
+
+    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.flow_id
 
 
 class PipelineRunStatus(models.TextChoices):
