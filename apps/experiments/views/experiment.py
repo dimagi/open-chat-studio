@@ -55,6 +55,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
     SessionStatus,
@@ -326,6 +327,12 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
     def form_valid(self, form):
         experiment = form.instance
+        if experiment.assistant and ExperimentRoute.objects.filter(parent=experiment):
+            messages.error(
+                request=self.request, message="Assistants cannot be routers. Please remove the routes first."
+            )
+            return render(self.request, self.template_name, self.get_context_data())
+
         if experiment.conversational_consent_enabled and not experiment.seed_message:
             messages.error(
                 request=self.request, message="A seed message is required when conversational consent is enabled!"

@@ -260,7 +260,9 @@
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Routes" id="tab-routes"/>
     <div role="tabpanel" class="tab-content" id="content-routes">
       <div class="app-card">
-        {% if can_make_child_routes %}
+        {% if experiment.assistant %}
+          Assistants cannot be router bots. Please use a normal bot
+        {% elif can_make_child_routes %}
           <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
           {% render_table child_routes_table %}
         {% else %}
