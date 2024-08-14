@@ -52,7 +52,7 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, disable_tools: bool = False):
     """Create an experiment runnable based on the experiment configuration."""
     state_kwargs = {"experiment": experiment, "session": session}
     if assistant := experiment.assistant:
@@ -64,7 +64,7 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     state = ChatExperimentState(**state_kwargs)
-    if experiment.tools_enabled:
+    if disable_tools is False and experiment.tools_enabled:
         return AgentExperimentRunnable(state=state)
 
     return SimpleExperimentRunnable(state=state)
