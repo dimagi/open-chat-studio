@@ -79,9 +79,9 @@ class OneOffReminderTool(CustomBaseTool):
         )
 
 
-class UpdateScheduledMessageTool(CustomBaseTool):
-    name = AgentTools.SCHEDULE_UPDATE
-    description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
+class MoveScheduledMessageDateTool(CustomBaseTool):
+    name = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
+    description = "useful to move the day and time that the scheduled message should trigger"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
@@ -189,7 +189,7 @@ def create_schedule_message(
 
 
 TOOL_CLASS_MAP = {
-    AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
+    AgentTools.MOVE_SCHEDULED_MESSAGE_DATE: MoveScheduledMessageDateTool,
     AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,

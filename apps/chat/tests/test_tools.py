@@ -125,8 +125,8 @@ class TestRecurringReminderTool(BaseTestAgentTool):
 
 
 @pytest.mark.django_db()
-class TestUpdateScheduledMessageTool(BaseTestAgentTool):
-    tool_cls = tools.UpdateScheduledMessageTool
+class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
+    tool_cls = tools.MoveScheduledMessageDateTool
 
     def test_user_cannot_set_custom_date_for_system_created_message(self, session):
         scheduled_message = ScheduledMessage.objects.create(

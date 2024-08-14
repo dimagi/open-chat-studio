@@ -273,7 +273,7 @@ class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
-    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+    MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
