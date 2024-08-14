@@ -128,7 +128,7 @@ class TestRecurringReminderTool(BaseTestAgentTool):
 class TestUpdateScheduledMessageTool(BaseTestAgentTool):
     tool_cls = tools.UpdateScheduledMessageTool
 
-    def test_user_cannot_set_custom_date(self, session):
+    def test_user_cannot_set_custom_date_for_system_created_message(self, session):
         scheduled_message = ScheduledMessage.objects.create(
             participant=session.participant,
             team=session.team,
@@ -142,9 +142,30 @@ class TestUpdateScheduledMessageTool(BaseTestAgentTool):
             weekday=WeekdaysEnum.MONDAY,
             hour=8,
             minute=0,
-            user_specified_custom_date=True,
+            specified_date=timezone.now(),
         )
         assert response == "The user cannot do that. Only weekdays and time of day can be changed"
+
+    def test_user_can_set_custom_date_for_their_messages(self, session):
+        with freeze_time("2024-01-01"):
+            scheduled_message = ScheduledMessage.objects.create(
+                participant=session.participant,
+                team=session.team,
+                experiment=session.experiment,
+                custom_schedule_params=self.schedule_params(),
+            )
+
+            self._invoke_tool(
+                session,
+                message_id=scheduled_message.external_id,
+                weekday=WeekdaysEnum.MONDAY,
+                hour=8,
+                minute=0,
+                specified_date=timezone.now(),
+            )
+            scheduled_message.refresh_from_db()
+            expected_date = pretty_date(scheduled_message.next_trigger_date)
+            assert expected_date == "Monday, 01 January 2024 00:00:00 UTC"
 
     def test_update_schedule_tool(self, session):
         with freeze_time("2024-01-01"):
@@ -164,7 +185,7 @@ class TestUpdateScheduledMessageTool(BaseTestAgentTool):
                 weekday=WeekdaysEnum.FRIDAY,
                 hour=8,
                 minute=0,
-                user_specified_custom_date=False,
+                specified_date=None,
             )
             message.refresh_from_db()
             expected_date = pretty_date(message.next_trigger_date)
