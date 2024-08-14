@@ -51,8 +51,9 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
+    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
         self.experiment = experiment or session.experiment
+        self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
         self.llm = self.experiment.get_chat_model()
@@ -77,12 +78,12 @@ class TopicBot:
         )
         self.terminal_chain = None
         if terminal_route:
-            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session, self.disable_tools)
         self._initialize()
 
     def _initialize(self):
         for child_route in self.child_experiment_routes:
-            child_runnable = create_experiment_runnable(child_route.child, self.session)
+            child_runnable = create_experiment_runnable(child_route.child, self.session, self.disable_tools)
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
                 self.default_child_chain = child_runnable
@@ -91,7 +92,7 @@ class TopicBot:
         if self.child_chains and not self.default_child_chain:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
-        self.chain = create_experiment_runnable(self.experiment, self.session)
+        self.chain = create_experiment_runnable(self.experiment, self.session, self.disable_tools)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [

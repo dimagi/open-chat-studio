@@ -1,12 +1,8 @@
-import functools
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
 from django.utils import timezone
-from langchain.agents import AgentExecutor
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.runnables import RunnableLambda
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
@@ -211,40 +207,34 @@ class AssistantExperimentState(ExperimentState, AssistantState):
     def set_metadata(self, key: Chat.MetadataKeys, value):
         self.chat.set_metadata(key, value)
 
-    def save_message_to_history(self, message: str, type_: ChatMessageType, annotation_file_ids: list | None = None):
+    def save_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        annotation_file_ids: list | None = None,
+        experiment_tag: str | None = None,
+    ):
         """
         Create a chat message and appends the file ids from each resource to the `openai_file_ids` array in the
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
-        return ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
 
-    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
-        format_input = functools.partial(self.format_input, input_key)
-        return RunnableLambda(format_input) | openai_assistant
-
-    def parse_response(self, response: OpenAIAssistantFinish) -> tuple[str, str, str]:
-        return response.return_values["output"], response.thread_id, response.run_id
-
-
-class AssistantAgentState(AssistantExperimentState):
-    def build_final_runnable(self, openai_assistant: OpenAIAssistantRunnable, input_key: str):
-        return AgentExecutor.from_agent_and_tools(
-            agent=super().build_final_runnable(openai_assistant, input_key),
-            tools=self.get_tools(),
-            max_execution_time=120,
-        )
-
-    def parse_response(
-        self,
-        response: dict,
-    ) -> tuple[str, str, str]:
-        return response["output"], response["thread_id"], response["run_id"]
+        if experiment_tag:
+            tag, _ = Tag.objects.get_or_create(
+                name=experiment_tag,
+                team=self.session.team,
+                is_system_tag=True,
+                category=TagCategories.BOT_RESPONSE,
+            )
+            chat_message.add_tag(tag, team=self.session.team, added_by=None)
+        return chat_message
 
     def get_tools(self):
         return get_tools(self.session, for_assistant=True)

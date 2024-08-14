@@ -314,7 +314,7 @@ class ScheduledMessage(BaseTeamModel):
         self.total_triggers += 1
         repetitions = self.params.get("repetitions", None)
         if (repetitions is not None and self.total_triggers >= repetitions) or (
-            self.end_date and self.end_date >= timezone.now()
+            self.end_date and self.end_date <= timezone.now()
         ):
             self.is_complete = True
         else:
@@ -343,35 +343,25 @@ class ScheduledMessage(BaseTeamModel):
     def repetitions(self) -> str:
         return self.params["repetitions"]
 
+    @cached_property
+    def prompt_text(self) -> str:
+        return self.params["prompt_text"]
+
     def as_string(self, as_timezone: str | None = None):
-        schedule_name_part = f"{self.name} (ID={self.external_id})"
+        header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
         if self.repetitions == 0:
-            schedule = f"{schedule_name_part}: One-off reminder"
+            schedule_details_str = "One-off reminder"
+        elif self.time_period in ["hour", "day"]:
+            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
         else:
-            if self.time_period not in ["hour", "day"]:
-                weekday = self.next_trigger_date.strftime("%A")
-                schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period} on {weekday}"
-            else:
-                schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period}"
+            weekday = self.next_trigger_date.strftime("%A")
+            schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
 
-            if self.repetitions:
-                schedule = f"{schedule}, {self.repetitions} times"
-
-        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
-        schedule = f"{schedule} with next trigger at {next_trigger}"
-
-        if self.end_date:
-            end_date = pretty_date(self.end_date, as_timezone=as_timezone)
-            schedule = f"{schedule} (to end at {end_date})"
-
+        next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        tail_str = ""
         if self.action is not None:
-            schedule = f"{schedule} (System)"
-
-        return schedule
-
-    @property
-    def was_created_by_system(self) -> bool:
-        return self.action_id is not None
+            tail_str = "(System)"
+        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}. {tail_str}"
 
     def __str__(self):
         return self.as_string()

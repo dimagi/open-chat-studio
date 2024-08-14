@@ -745,7 +745,7 @@ class ExperimentSession(BaseTeamModel):
         """
         from apps.chat.bots import TopicBot
 
-        topic_bot = TopicBot(self, experiment=use_experiment)
+        topic_bot = TopicBot(self, experiment=use_experiment, disable_tools=True)
         return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):

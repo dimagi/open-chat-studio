@@ -54,6 +54,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
     SessionStatus,
@@ -295,6 +296,12 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
     def form_valid(self, form):
         experiment = form.instance
+        if experiment.assistant and ExperimentRoute.objects.filter(parent=experiment):
+            messages.error(
+                request=self.request, message="Assistants cannot be routers. Please remove the routes first."
+            )
+            return render(self.request, self.template_name, self.get_context_data())
+
         if experiment.conversational_consent_enabled and not experiment.seed_message:
             messages.error(
                 request=self.request, message="A seed message is required when conversational consent is enabled!"
@@ -356,9 +363,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial = super().get_initial()
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
-
-    def form_valid(self, form):
-        return super().form_valid(form)
 
 
 def _get_voice_provider_alpine_context(request):
@@ -548,8 +552,11 @@ def create_channel(request, team_slug: str, experiment_id: int):
             except ExperimentChannelException as e:
                 messages.error(request, "Error saving channel: " + str(e))
             else:
-                if message := extra_form.get_success_message(channel=form.instance):
-                    messages.info(request, message)
+                if extra_form.success_message:
+                    messages.info(request, extra_form.success_message)
+
+                if extra_form.warning_message:
+                    messages.warning(request, extra_form.warning_message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
