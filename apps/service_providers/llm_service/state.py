@@ -207,18 +207,34 @@ class AssistantExperimentState(ExperimentState, AssistantState):
     def set_metadata(self, key: Chat.MetadataKeys, value):
         self.chat.set_metadata(key, value)
 
-    def save_message_to_history(self, message: str, type_: ChatMessageType, annotation_file_ids: list | None = None):
+    def save_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        annotation_file_ids: list | None = None,
+        experiment_tag: str | None = None,
+    ):
         """
         Create a chat message and appends the file ids from each resource to the `openai_file_ids` array in the
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
-        return ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
             metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
         )
+
+        if experiment_tag:
+            tag, _ = Tag.objects.get_or_create(
+                name=experiment_tag,
+                team=self.session.team,
+                is_system_tag=True,
+                category=TagCategories.BOT_RESPONSE,
+            )
+            chat_message.add_tag(tag, team=self.session.team, added_by=None)
+        return chat_message
 
     def get_tools(self):
         return get_tools(self.session, for_assistant=True)

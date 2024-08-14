@@ -48,6 +48,8 @@ class ChannelForm(forms.ModelForm):
 
 
 class ExtraFormBase(forms.Form):
+    success_message = ""
+    warning_message = ""
     form_attrs = {}
     """Additional HTML attributes to be added to the form element"""
 
@@ -58,9 +60,6 @@ class ExtraFormBase(forms.Form):
 
     def post_save(self, channel: ExperimentChannel):
         """Override this method to perform any additional actions after the channel has been saved"""
-        pass
-
-    def get_success_message(self, channel: ExperimentChannel):
         pass
 
 
@@ -85,9 +84,8 @@ class WebhookUrlFormBase(ExtraFormBase):
             # We only show the webhook URL field when there is something to show
             self.fields["webook_url"].widget = forms.HiddenInput()
 
-    def get_success_message(self, channel: ExperimentChannel):
-        """The message to be displayed when the channel is successfully linked"""
-        return f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+    def post_save(self, channel: ExperimentChannel):
+        self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
 
 
 class TelegramChannelForm(ExtraFormBase):
@@ -141,7 +139,9 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
             service = self.messaging_provider.get_messaging_service()
             if not service.is_valid_number(number):
-                raise forms.ValidationError(f"{number} was not found at the provider.")
+                self.warning_message = (
+                    f"{number} was not found at the provider. Please make sure it is there before proceeding"
+                )
             return number
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
