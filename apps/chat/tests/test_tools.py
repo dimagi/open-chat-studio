@@ -51,10 +51,10 @@ class TestOneOffReminderTool(BaseTestAgentTool):
         message = ScheduledMessage.objects.first()
         assert message.next_trigger_date == datetime_due
         message.custom_schedule_params.pop("name")  # the name is dynamic, so lets ignore that
-        assert message.custom_schedule_params["frequency"] == 0
+        assert message.custom_schedule_params["frequency"] is None
         assert message.custom_schedule_params["prompt_text"] == "Hi there"
         assert message.custom_schedule_params["repetitions"] == 0
-        assert message.custom_schedule_params["time_period"] == TimePeriod.HOURS
+        assert message.custom_schedule_params["time_period"] == ""
 
 
 @pytest.mark.django_db()

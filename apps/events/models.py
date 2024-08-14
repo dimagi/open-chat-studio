@@ -347,6 +347,10 @@ class ScheduledMessage(BaseTeamModel):
     def prompt_text(self) -> str:
         return self.params["prompt_text"]
 
+    @property
+    def was_created_by_system(self) -> bool:
+        return self.action_id is not None
+
     def as_string(self, as_timezone: str | None = None):
         header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
         if self.repetitions == 0:
