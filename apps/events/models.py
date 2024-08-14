@@ -314,7 +314,7 @@ class ScheduledMessage(BaseTeamModel):
         self.total_triggers += 1
         repetitions = self.params.get("repetitions", None)
         if (repetitions is not None and self.total_triggers >= repetitions) or (
-            self.end_date and self.end_date >= timezone.now()
+            self.end_date and self.end_date <= timezone.now()
         ):
             self.is_complete = True
         else:
