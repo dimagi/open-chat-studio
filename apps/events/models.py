@@ -343,16 +343,21 @@ class ScheduledMessage(BaseTeamModel):
     def repetitions(self) -> str:
         return self.params["repetitions"]
 
+    @cached_property
+    def prompt_text(self) -> str:
+        return self.params["prompt_text"]
+
     def as_string(self, as_timezone: str | None = None):
         schedule_name_part = f"{self.name} (ID={self.external_id})"
+        schedule = f"{schedule_name_part}. Message: {self.prompt_text}"
         if self.repetitions == 0:
-            schedule = f"{schedule_name_part}: One-off reminder"
+            schedule = f"{schedule}: One-off reminder"
         else:
-            schedule = f"{schedule_name_part}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
+            schedule = f"{schedule}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
             if self.time_period not in ["hour", "day"]:
                 weekday = self.next_trigger_date.strftime("%A")
                 schedule = (
-                    f"{schedule_name_part}: Every {self.frequency} {self.time_period} on {weekday} for "
+                    f"{schedule}: Every {self.frequency} {self.time_period} on {weekday} for "
                     f"{self.repetitions} times"
                 )
 
