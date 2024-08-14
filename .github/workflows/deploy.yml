@@ -1,6 +1,8 @@
 # This workflow will build and push a new container image to Amazon ECR,
 # and then will deploy a new task definition for each of the services to Amazon ECS.
 
+# Note: The names of repository, cluster, services match what is configured in https://github.com/dimagi/ocs-deploy
+
 name: Deploy to Amazon ECS
 
 on:
@@ -28,7 +30,7 @@ jobs:
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
       with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT }}:role/github_deploy
+        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT }}:role/github_deploy
         role-session-name: GithubDeploy
         aws-region: ${{ env.AWS_REGION }}
 
