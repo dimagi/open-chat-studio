@@ -15,6 +15,7 @@ env:
   ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-ecr-repo
   ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Cluster
 permissions:
+  id-token: write
   contents: read
 
 jobs:
