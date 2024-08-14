@@ -289,7 +289,10 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if not thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
 
-        self.state.save_message_to_history(output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids)
+        experiment_tag = config.get("configurable", {}).get("experiment_tag")
+        self.state.save_message_to_history(
+            output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids, experiment_tag=experiment_tag
+        )
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     @transaction.atomic()
