@@ -8,6 +8,7 @@ from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -87,6 +88,13 @@ class Pipeline(BaseTeamModel):
     def node_ids(self):
         return self.node_set.values_list("flow_id", flat=True).all()
 
+    def get_llm_service(self):
+        for node in self.node_set.all():
+            pipeline_node = node.get_pipeline_node()
+            if hasattr(pipeline_node, "get_llm_service"):
+                return pipeline_node.get_llm_service()
+        raise PipelineBuildError("Can't chat with a pipeline without an LLM node")
+
     def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
@@ -127,6 +135,12 @@ class Node(BaseModel):
 
     def __str__(self):
         return self.flow_id
+
+    def get_pipeline_node(self):
+        from apps.pipelines.nodes import nodes as pipeline_nodes
+
+        node_class = getattr(pipeline_nodes, self.type)
+        return node_class(**self.params)
 
 
 class PipelineRunStatus(models.TextChoices):

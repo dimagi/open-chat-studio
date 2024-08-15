@@ -54,12 +54,11 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
         return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
-
-    assert experiment.llm, "Experiment must have an LLM model"
-    assert experiment.llm_provider, "Experiment must have an LLM provider"
     state = ChatExperimentState(experiment=experiment, session=session)
     if experiment.pipeline:
         return PipelineExperimentRunnable(state=state)
+    assert experiment.llm, "Experiment must have an LLM model"
+    assert experiment.llm_provider, "Experiment must have an LLM provider"
     if experiment.tools_enabled:
         return AgentExperimentRunnable(state=state)
 

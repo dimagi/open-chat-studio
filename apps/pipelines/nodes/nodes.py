@@ -51,21 +51,23 @@ class LLMResponse(PipelineNode):
         output = llm.invoke(state["messages"][-1], config=self._config)
         return output.content
 
-    def get_chat_model(self):
+    def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
 
-        provider = LlmProvider.objects.get(id=self.llm_provider_id)
         try:
-            service = provider.get_llm_service()
-            return service.get_chat_model(self.llm_model, self.llm_temperature)
+            provider = LlmProvider.objects.get(id=self.llm_provider_id)
+            return provider.get_llm_service()
         except LlmProvider.DoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    def get_chat_model(self):
+        return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
 
-class CreateReport(LLMResponse):
-    __human_name__ = "Create a report"
+
+class LLMResponseWithPrompt(LLMResponse):
+    __human_name__ = "LLM response with prompt"
 
     prompt: str = (
         "Make a summary of the following text: {input}. "
