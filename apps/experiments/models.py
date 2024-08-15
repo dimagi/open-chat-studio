@@ -383,6 +383,7 @@ class Experiment(BaseTeamModel):
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
     )
+    use_processor_bot_voice = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]
