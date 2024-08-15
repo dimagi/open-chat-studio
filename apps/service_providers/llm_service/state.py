@@ -28,7 +28,7 @@ class RunnableState(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def format_input(self, input_key, runnable_input):
+    def format_input(self, input: str):
         pass
 
     @abstractmethod
@@ -64,10 +64,10 @@ class ExperimentState(RunnableState):
     def callback_handler(self):
         return self.get_llm_service().get_callback_handler(self.experiment.llm)
 
-    def format_input(self, input_key: str, runnable_input: dict):
+    def format_input(self, input: str) -> str:
         if self.experiment.input_formatter:
-            runnable_input[input_key] = self.experiment.input_formatter.format(input=runnable_input[input_key])
-        return runnable_input
+            input = self.experiment.input_formatter.format(input=input)
+        return input
 
     @property
     def is_unauthorized_participant(self):
