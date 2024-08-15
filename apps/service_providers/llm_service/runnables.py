@@ -25,6 +25,7 @@ from langchain_core.runnables import (
     RunnableSerializable,
     ensure_config,
 )
+from langchain_core.runnables.config import merge_configs
 
 from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
@@ -51,7 +52,7 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, trace_service=None):
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
         return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
@@ -104,8 +105,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
         callback = self.state.callback_handler
         config = ensure_config(config)
-        config["callbacks"] = config["callbacks"] or []
-        config["callbacks"].append(callback)
+        merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
         configurable = config.get("configurable", {})
         include_conversation_history = configurable.get("include_conversation_history", True)
         save_input_to_history = configurable.get("save_input_to_history", True)
@@ -117,7 +117,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         if save_input_to_history:
             self.state.save_message_to_history(input, ChatMessageType.HUMAN)
 
-        output = self._get_output_check_cancellation(input, config)
+        output = self._get_output_check_cancellation(input, merged_config)
         result = ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
         )

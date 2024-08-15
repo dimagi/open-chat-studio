@@ -341,7 +341,7 @@ class TraceProviderType(models.TextChoices):
     def get_service(self, config: dict) -> tracing.TraceService:
         match self:
             case TraceProviderType.langfuse:
-                return tracing.LangFuseTraceService(**config)
+                return tracing.LangFuseTraceService(config)
         raise Exception(f"No messaging service configured for {self}")
 
 

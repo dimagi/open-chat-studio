@@ -184,6 +184,7 @@ class ExperimentForm(forms.ModelForm):
             "voice_response_behaviour",
             "tools",
             "echo_transcript",
+            "trace_provider",
         ]
         labels = {
             "source_material": "Inline Source Material",
@@ -213,6 +214,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
+        self.fields["trace_provider"].queryset = team.traceprovider_set
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {

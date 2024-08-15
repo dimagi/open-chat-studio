@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
+from langchain_core.runnables import chain
 from pydantic import ValidationError
 
 from apps.chat.conversation import BasicConversation, Conversation
@@ -72,6 +73,10 @@ class TopicBot:
         self.default_child_chain = None
         self.default_tag = None
         self.terminal_chain = None
+
+        self.trace_service = None
+        if self.experiment.trace_provider:
+            self.trace_service = self.experiment.trace_provider.get_service()
 
         self._initialize()
 
@@ -167,22 +172,35 @@ class TopicBot:
         return input_tokens, output_tokens
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
-        # human safety layers
-        for safety_bot in self.safety_bots:
-            if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
-                enqueue_static_triggers.delay(self.session.id, StaticTriggerType.HUMAN_SAFETY_LAYER_TRIGGERED)
-                notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
-                return self._get_safe_response(safety_bot.safety_layer)
+        @chain
+        def main_bot_chain(user_input):
+            # human safety layers
+            for safety_bot in self.safety_bots:
+                if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
+                    enqueue_static_triggers.delay(self.session.id, StaticTriggerType.HUMAN_SAFETY_LAYER_TRIGGERED)
+                    notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
+                    return self._get_safe_response(safety_bot.safety_layer)
 
-        response = self._call_predict(user_input, save_input_to_history=save_input_to_history, attachments=attachments)
+            response = self._call_predict(
+                user_input, save_input_to_history=save_input_to_history, attachments=attachments
+            )
 
-        # ai safety layers
-        for safety_bot in self.safety_bots:
-            if safety_bot.filter_ai_messages() and not safety_bot.is_safe(response):
-                enqueue_static_triggers.delay(self.session.id, StaticTriggerType.BOT_SAFETY_LAYER_TRIGGERED)
-                return self._get_safe_response(safety_bot.safety_layer)
+            # ai safety layers
+            for safety_bot in self.safety_bots:
+                if safety_bot.filter_ai_messages() and not safety_bot.is_safe(response):
+                    enqueue_static_triggers.delay(self.session.id, StaticTriggerType.BOT_SAFETY_LAYER_TRIGGERED)
+                    return self._get_safe_response(safety_bot.safety_layer)
 
-        return response
+            return response
+
+        config = {}
+        if self.trace_service:
+            callback = self.trace_service.get_callback(
+                participant_id=self.session.participant.identifier,
+                session_id=self.session.external_id,
+            )
+            config = {"callbacks": [callback]}
+        return main_bot_chain.invoke(user_input, config=config)
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:

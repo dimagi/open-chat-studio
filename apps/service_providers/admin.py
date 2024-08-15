@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LlmProvider, MessagingProvider, VoiceProvider
+from .models import LlmProvider, MessagingProvider, TraceProvider, VoiceProvider
 
 
 @admin.register(LlmProvider)
@@ -17,5 +17,11 @@ class VoiceProviderAdmin(admin.ModelAdmin):
 
 @admin.register(MessagingProvider)
 class MessagingProviderAdmin(admin.ModelAdmin):
+    list_display = ("name", "team", "type")
+    list_filter = ("team", "type")
+
+
+@admin.register(TraceProvider)
+class TraceProviderAdmin(admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
