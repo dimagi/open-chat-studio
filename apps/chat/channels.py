@@ -104,7 +104,7 @@ class ChannelBase(ABC):
         experiment_session: ExperimentSession | None = None,
     ):
         if not experiment_channel and not experiment_session:
-            raise MessageHandlerException("ChannelBase expects either")
+            raise MessageHandlerException("ChannelBase expects either a channel or session")
 
         self.experiment_session = experiment_session
         self.experiment_channel = experiment_channel if experiment_channel else experiment_session.experiment_channel
