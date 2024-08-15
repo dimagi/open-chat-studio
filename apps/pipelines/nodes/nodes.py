@@ -74,7 +74,7 @@ class CreateReport(LLMResponse):
 
     def _process(self, state: PipelineState) -> PipelineState:
         chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
-        output = chain.invoke(state["messages"][-1], config=self._config)
+        output = chain.invoke({"input": state["messages"][-1]}, config=self._config)
         return output.content
 
 
