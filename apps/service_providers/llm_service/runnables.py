@@ -20,7 +20,6 @@ from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
     RunnableLambda,
-    RunnablePassthrough,
     RunnableSerializable,
     ensure_config,
 )
@@ -157,6 +156,23 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
         raise NotImplementedError
 
+    def _get_input_chain_context(self, with_history=True):
+        prompt = self.prompt
+        context = {}
+        if with_history:
+            context.update(self.memory.load_memory_variables({}))
+
+        if "source_material" in prompt.input_variables:
+            context["source_material"] = self.state.get_source_material()
+
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self.state.get_participant_data()
+
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self.state.get_current_datetime()
+
+        return context
+
     @property
     def prompt(self):
         return ChatPromptTemplate.from_messages(
@@ -180,22 +196,14 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 
 class SimpleExperimentRunnable(ExperimentRunnable):
     def get_input_messages(self, input: str):
-        chain = self._input_chain()
+        chain = self._input_chain(with_history=False)
         return chain.invoke({"input": input}).to_messages()
 
     def _build_chain(self):
         return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
 
-    def _input_chain(self) -> Runnable[str, PromptValue]:
-        prompt = self.prompt
-        context = {"history": self.memory.load_memory_variables({})["history"]}
-        if "source_material" in prompt.input_variables:
-            context["source_material"] = self.state.get_source_material()
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self.state.get_participant_data()
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self.state.get_current_datetime()
-
+    def _input_chain(self, with_history=True) -> Runnable[str, PromptValue]:
+        context = self._get_input_chain_context(with_history=with_history)
         return context | RunnableLambda(functools.partial(self.state.format_input, self.input_key)) | self.prompt
 
 
@@ -203,16 +211,8 @@ class AgentExperimentRunnable(ExperimentRunnable):
     def _parse_output(self, output):
         return output.get("output", "")
 
-    def _input_chain(self) -> Runnable[dict[str, Any], dict]:
-        prompt = self.prompt
-        context = {}
-        if "source_material" in prompt.input_variables:
-            context["source_material"] = self.state.get_source_material()
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self.state.get_participant_data()
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self.state.get_current_datetime()
-
+    def _input_chain(self, with_history=True) -> Runnable[dict[str, Any], dict]:
+        context = self._get_input_chain_context(with_history=with_history)
         return context | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
 
     def _build_chain(self):
@@ -231,15 +231,12 @@ class AgentExperimentRunnable(ExperimentRunnable):
     @property
     def prompt(self):
         prompt = super().prompt
-        return ChatPromptTemplate.from_messages(prompt.messages + [MessagesPlaceholder("agent_scratchpad")])
+        return ChatPromptTemplate.from_messages(
+            prompt.messages + [MessagesPlaceholder("agent_scratchpad", optional=True)]
+        )
 
     def get_input_messages(self, input: str):
-        chain = (
-            self._input_chain()
-            # Since it's hard to guess what the agent_scratchpad will look like, let's just assume its empty
-            | RunnablePassthrough.assign(agent_scratchpad=lambda x: [])
-            | self.prompt
-        )
+        chain = self._input_chain(with_history=False) | self.prompt
         return chain.invoke({"input": input}).to_messages()
 
 
