@@ -71,13 +71,8 @@ class TopicBot:
         self.child_chains = {}
         self.default_child_chain = None
         self.default_tag = None
-
-        terminal_route = (
-            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
-        )
         self.terminal_chain = None
-        if terminal_route:
-            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
+
         self._initialize()
 
     def _initialize(self):
@@ -92,6 +87,12 @@ class TopicBot:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
         self.chain = create_experiment_runnable(self.experiment, self.session)
+
+        terminal_route = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
+        )
+        if terminal_route:
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
