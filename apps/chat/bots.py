@@ -161,18 +161,6 @@ class TopicBot:
         except KeyError:
             return self.default_tag, self.default_child_chain
 
-    def fetch_and_clear_token_count(self):
-        safety_bot_input_tokens = sum([bot.input_tokens for bot in self.safety_bots])
-        safety_bot_output_tokens = sum([bot.output_tokens for bot in self.safety_bots])
-        input_tokens = self.input_tokens + safety_bot_input_tokens
-        output_tokens = self.output_tokens + safety_bot_output_tokens
-        self.input_tokens = 0
-        self.output_tokens = 0
-        for bot in self.safety_bots:
-            bot.input_tokens = 0
-            bot.output_tokens = 0
-        return input_tokens, output_tokens
-
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         @chain
         def main_bot_chain(user_input):
