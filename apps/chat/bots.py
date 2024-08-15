@@ -78,6 +78,8 @@ class TopicBot:
         self.terminal_chain = None
         if terminal_route:
             self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
+
+        self.processor_experiment = None
         self._initialize()
 
     def _initialize(self):
@@ -104,6 +106,7 @@ class TopicBot:
         else:
             tag, chain = None, self.chain
 
+        self.processor_experiment = chain.experiment
         result = chain.invoke(
             input_str,
             config={
