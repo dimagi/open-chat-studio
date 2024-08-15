@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 @shared_task(ignore_result=True)
 def enqueue_static_triggers(session_id, trigger_type):
     session = ExperimentSession.objects.get(id=session_id)
+    experiment_id = session.experiment_id
+    if session.experiment.version_number:
+        experiment_id = session.experiment.core_id
 
-    trigger_ids = StaticTrigger.objects.filter(experiment_id=session.experiment_id, type=trigger_type).values_list(
+    trigger_ids = StaticTrigger.objects.filter(experiment_id=experiment_id, type=trigger_type).values_list(
         "id", flat=True
     )
     for trigger_id in trigger_ids:
