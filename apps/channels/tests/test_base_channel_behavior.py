@@ -31,7 +31,7 @@ def telegram_channel(db):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 def test_incoming_message_adds_channel_info(telegram_channel):
     """When an `experiment_session` is created, channel specific info like `identifier` and
     `experiment_channel` should also be added to the `experiment_session`
@@ -50,7 +50,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 def test_channel_added_for_experiment_session(telegram_channel):
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
@@ -62,7 +62,7 @@ def test_channel_added_for_experiment_session(telegram_channel):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 def test_incoming_message_uses_existing_experiment_session(telegram_channel):
     """Approach: Simulate messages coming in after one another in order to test this behaviour"""
     chat_id = 12312331
@@ -196,7 +196,7 @@ def _simulate_user_message(channel_instance, user_message: str):
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.submit_input_to_llm", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 @patch("apps.chat.channels.TelegramChannel._generate_response_for_user")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_user):
@@ -303,7 +303,7 @@ def test_unsupported_message_type_triggers_bot_response(send_text_to_user, _unsu
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response")
+@patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_voice_response_behaviour(
     get_llm_response,
     _reply_voice_message,
@@ -365,7 +365,7 @@ def test_failed_transcription_informs_the_user(
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response")
+@patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_reply_with_text_when_synthetic_voice_not_specified(
     get_llm_response,
     _reply_voice_message,
@@ -393,7 +393,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     [(telegram_messages.audio_message, "voice"), (telegram_messages.text_message, "text")],
 )
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response", Mock())
+@patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
 @patch("apps.chat.channels.TelegramChannel._add_message_to_history", Mock())
 def test_user_query_extracted_for_pre_conversation_flow(message_func, message_type):
     """The user query need to be available during the pre-conversation flow. Simply looking at `message_text` for
@@ -489,10 +489,10 @@ def test_send_message_to_user(
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_message_to_user", Mock())
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response")
-def test_participant_reused_across_experiments(_get_experiment_response):
+@patch("apps.chat.channels.TelegramChannel._get_bot_response")
+def test_participant_reused_across_experiments(_get_bot_response):
     """A single participant should be linked to multiple sessions per team"""
-    _get_experiment_response.return_value = "Hi human"
+    _get_bot_response.return_value = "Hi human"
     chat_id = 123
 
     # User chats to experiment 1
@@ -600,7 +600,7 @@ def test_url_regex():
 @patch("apps.chat.channels.TelegramChannel._get_voice_transcript")
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
 @patch("apps.chat.channels.TelegramChannel.send_voice_to_user")
-@patch("apps.chat.channels.TelegramChannel._get_experiment_response")
+@patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_voice_response_with_urls(
     get_llm_response,
     send_voice_to_user,

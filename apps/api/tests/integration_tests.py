@@ -14,7 +14,7 @@ def experiment():
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_create_new_session_and_post_message(mock_response, experiment):
     user = experiment.team.members.first()
 
