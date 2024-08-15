@@ -297,6 +297,13 @@ class Experiment(BaseTeamModel):
         blank=True,
         verbose_name="OpenAI Assistant",
     )
+    pipeline = models.ForeignKey(
+        "pipelines.Pipeline",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Pipeline",
+    )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
     prompt_text = models.TextField(blank=True, default="")
