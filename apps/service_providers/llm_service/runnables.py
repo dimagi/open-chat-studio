@@ -49,7 +49,7 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, trace_service=None):
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
         return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
