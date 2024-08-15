@@ -22,6 +22,9 @@ class RenderTemplate(PipelineNode):
     template_string: PipelineJinjaTemplate
 
     def _process(self, state: PipelineState) -> PipelineState:
+        def all_variables(in_):
+            return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
+
         input = state["messages"][-1]
 
         env = SandboxedEnvironment()
@@ -32,9 +35,12 @@ class RenderTemplate(PipelineNode):
                 content = input
             else:
                 content = json.loads(input)
+                if not isinstance(content, dict):
+                    # e.g. it was just a string or an int
+                    content = all_variables(input)
         except json.JSONDecodeError:
             # As a last resort, just set the all the variables in the template to the input
-            content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
+            content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         return template.render(content)
 
