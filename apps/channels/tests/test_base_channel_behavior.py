@@ -11,18 +11,23 @@ import pytest
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    ExperimentRoute,
+    ExperimentSession,
+    Participant,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-from apps.utils.langchain import mock_experiment_llm
+from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
 
 from .message_examples import telegram_messages
 
 
 @pytest.fixture()
 def telegram_channel(db):
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    experiment.conversational_consent_enabled = False
+    experiment = ExperimentFactory(conversational_consent_enabled=False)
     channel = ExperimentChannelFactory(experiment=experiment)
     channel = TelegramChannel(experiment_channel=channel)
     channel.telegram_bot = Mock()
@@ -624,3 +629,70 @@ def test_voice_response_with_urls(
     text_message = send_text_to_user.mock_calls[0].args[0]
     assert "http://example.co.za?key1=1&key2=2" in text_message
     assert "https://some.com" in text_message
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("use_processor_bot_voice", "child_bot_has_voice", "router_bot_has_voice", "expected_voice"),
+    [
+        (True, True, True, "child_bot"),
+        (True, False, True, "router_bot"),
+        (False, None, True, "router_bot"),
+        (False, None, False, None),
+    ],
+)
+@patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
+@patch("apps.chat.channels.TelegramChannel.send_voice_to_user", Mock())
+@patch("apps.channels.models.ExperimentChannel.webhook_url", Mock())
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+def test_processor_bot_voice_setting(
+    send_text_to_user,
+    synthesize_voice,
+    use_processor_bot_voice,
+    child_bot_has_voice,
+    router_bot_has_voice,
+    expected_voice,
+    telegram_channel,
+):
+    session = ExperimentSessionFactory()
+    team = session.team
+    experiments = ExperimentFactory.create_batch(2, team=team)
+    router_exp, child_exp = experiments
+
+    ExperimentChannelFactory(experiment=router_exp)
+    ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
+
+    router_exp.use_processor_bot_voice = use_processor_bot_voice
+    router_exp.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
+    router_exp.save()
+    session.experiment = router_exp
+    session.save()
+
+    if not child_bot_has_voice:
+        child_exp.voice_provider = child_exp.synthetic_voice = None
+        child_exp.save()
+
+    if not router_bot_has_voice:
+        router_exp.voice_provider = router_exp.synthetic_voice = None
+        router_exp.save()
+
+    fake_service = build_fake_llm_service(responses=["keyword1", "How can I help today?"], token_counts=[0])
+
+    with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
+        telegram_channel = TelegramChannel(experiment_session=session)
+        telegram_channel.telegram_bot = Mock()
+        telegram_channel.new_user_message(telegram_messages.text_message("Hi"))
+
+    assert telegram_channel.bot.processor_experiment == child_exp
+
+    if router_bot_has_voice:
+        synthesize_voice_args = synthesize_voice.call_args_list[0].args
+        if expected_voice == "child_bot":
+            expected_synthetic_voice = child_exp.synthetic_voice
+        elif expected_voice == "router_bot":
+            expected_synthetic_voice = router_exp.synthetic_voice
+
+        assert synthesize_voice_args[1] == expected_synthetic_voice
+    else:
+        send_text_to_user.assert_called()
+        synthesize_voice.assert_not_called()

@@ -111,6 +111,7 @@ class ChannelBase(ABC):
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
+        self.bot = TopicBot(experiment_session) if experiment_session else None
 
     @classmethod
     def start_new_session(
@@ -216,6 +217,7 @@ class ChannelBase(ABC):
         self._user_query = None
         self.message = message
         self._ensure_sessions_exists()
+        self.bot = TopicBot(self.experiment_session)
 
     def new_user_message(self, message) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -361,9 +363,14 @@ class ChannelBase(ABC):
         text, extracted_urls = strip_urls_and_emojis(text)
 
         voice_provider = self.experiment.voice_provider
+        synthetic_voice = self.experiment.synthetic_voice
+        if self.experiment.use_processor_bot_voice and self.bot.processor_experiment.voice_provider:
+            voice_provider = self.bot.processor_experiment.voice_provider
+            synthetic_voice = self.bot.processor_experiment.synthetic_voice
+
         speech_service = voice_provider.get_speech_service()
         try:
-            synthetic_voice_audio = speech_service.synthesize_voice(text, self.experiment.synthetic_voice)
+            synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
             self.send_voice_to_user(synthetic_voice_audio)
         except AudioSynthesizeException as e:
             logging.exception(e)
@@ -394,8 +401,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
-        experiment_bot = TopicBot(self.experiment_session)
-        answer = experiment_bot.process_input(message, attachments=self.message.attachments)
+        answer = self.bot.process_input(message, attachments=self.message.attachments)
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
