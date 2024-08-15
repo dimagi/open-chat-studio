@@ -130,7 +130,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         return {self.input_key: self.state.format_input(input)}
 
     def _get_output_check_cancellation(self, input, config):
-        chain = self._build_chain().with_config({"run_name": "get_llm_response"})
+        chain = self._build_chain().with_config(run_name="get_llm_response")
 
         output = ""
         for token in chain.stream(self._get_input(input), config):
@@ -198,7 +198,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 
 class SimpleExperimentRunnable(ExperimentRunnable):
     def get_input_messages(self, input: str):
-        chain = self._input_chain(with_history=False).with_config({"run_name": "compute_input_for_compression"})
+        chain = self._input_chain(with_history=False).with_config(run_name="compute_input_for_compression")
         return chain.invoke(self._get_input(input)).to_messages()
 
     def _build_chain(self):
@@ -238,7 +238,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
     def get_input_messages(self, input: str):
         chain = self._input_chain(with_history=False) | self.prompt
-        chain = chain.with_config({"run_name": "compute_input_for_compression"})
+        chain = chain.with_config(run_name="compute_input_for_compression")
         return chain.invoke(self._get_input(input)).to_messages()
 
 

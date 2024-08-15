@@ -126,11 +126,12 @@ class TopicBot:
             result = self.terminal_chain.invoke(
                 result.output,
                 config={
+                    "run_name": "terminal_chain",
                     "configurable": {
                         "save_input_to_history": False,
                         "experiment_tag": tag,
                         "include_conversation_history": False,
-                    }
+                    },
                 },
             )
 
@@ -143,10 +144,11 @@ class TopicBot:
         result = self.chain.invoke(
             input_str,
             config={
+                "run_name": "get_child_chain",
                 "configurable": {
                     "save_input_to_history": False,
                     "save_output_to_history": False,
-                }
+                },
             },
             attachments=attachments,
         )
