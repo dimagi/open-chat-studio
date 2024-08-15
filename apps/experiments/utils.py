@@ -11,7 +11,7 @@ def create_experiment_version(original_experiment_id):
     with transaction.atomic():
         new_experiment = original_experiment
         new_experiment.pk = None
-        new_experiment.core_id = original_experiment
+        new_experiment.working_experiment = original_experiment
         new_experiment.status = "Released"
         new_experiment.is_active = False
         new_experiment.version_number = calculate_version_number(original_experiment_id)

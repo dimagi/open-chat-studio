@@ -294,7 +294,7 @@ class Experiment(BaseTeamModel):
         choices=ExperimentStatus.choices,
         default=ExperimentStatus.DRAFT,
     )
-    core_id = models.ForeignKey(
+    working_experiment = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
         null=True,

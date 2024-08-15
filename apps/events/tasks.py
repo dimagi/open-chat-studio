@@ -14,7 +14,7 @@ def enqueue_static_triggers(session_id, trigger_type):
     session = ExperimentSession.objects.get(id=session_id)
     experiment_id = session.experiment_id
     if session.experiment.version_number:
-        experiment_id = session.experiment.core_id
+        experiment_id = session.experiment.working_experiment
 
     trigger_ids = StaticTrigger.objects.filter(experiment_id=experiment_id, type=trigger_type).values_list(
         "id", flat=True
