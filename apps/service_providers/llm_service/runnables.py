@@ -2,7 +2,6 @@ import functools
 import logging
 import re
 import time
-from operator import itemgetter
 from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -133,7 +132,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         chain = self._build_chain()
 
         output = ""
-        for token in chain.stream(input, config):
+        for token in chain.stream({"input": input}, config):
             output += self._parse_output(token)
             if self._chat_is_cancelled():
                 return output
@@ -182,26 +181,22 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 class SimpleExperimentRunnable(ExperimentRunnable):
     def get_input_messages(self, input: str):
         chain = self._input_chain()
-        return chain.invoke(input).to_messages()
+        return chain.invoke({"input": input}).to_messages()
 
     def _build_chain(self):
         return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
 
     def _input_chain(self) -> Runnable[str, PromptValue]:
-        source_material = RunnableLambda(lambda x: self.state.get_source_material())
-        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
-        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
-        return (
-            {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(source_material=source_material)
-            | RunnablePassthrough.assign(participant_data=participant_data)
-            | RunnablePassthrough.assign(current_datetime=current_datetime)
-            | RunnablePassthrough.assign(
-                history=RunnableLambda(self.memory.load_memory_variables) | itemgetter("history")
-            )
-            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
-            | self.prompt
-        )
+        prompt = self.prompt
+        context = {"history": self.memory.load_memory_variables({})["history"]}
+        if "source_material" in prompt.input_variables:
+            context["source_material"] = self.state.get_source_material()
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self.state.get_participant_data()
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self.state.get_current_datetime()
+
+        return context | RunnableLambda(functools.partial(self.state.format_input, self.input_key)) | self.prompt
 
 
 class AgentExperimentRunnable(ExperimentRunnable):
@@ -209,15 +204,16 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return output.get("output", "")
 
     def _input_chain(self) -> Runnable[dict[str, Any], dict]:
-        source_material = RunnableLambda(lambda x: self.state.get_source_material())
-        participant_data = RunnableLambda(lambda x: self.state.get_participant_data())
-        current_datetime = RunnableLambda(lambda x: self.state.get_current_datetime())
-        return (
-            RunnablePassthrough.assign(source_material=source_material)
-            | RunnablePassthrough.assign(participant_data=participant_data)
-            | RunnablePassthrough.assign(current_datetime=current_datetime)
-            | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
-        )
+        prompt = self.prompt
+        context = {}
+        if "source_material" in prompt.input_variables:
+            context["source_material"] = self.state.get_source_material()
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self.state.get_participant_data()
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self.state.get_current_datetime()
+
+        return context | RunnableLambda(functools.partial(self.state.format_input, self.input_key))
 
     def _build_chain(self):
         tools = self.state.get_tools()
@@ -230,7 +226,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
             memory=self.memory,
             max_execution_time=120,
         )
-        return {"input": RunnablePassthrough()} | executor
+        return executor
 
     @property
     def prompt(self):
@@ -244,8 +240,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
             | RunnablePassthrough.assign(agent_scratchpad=lambda x: [])
             | self.prompt
         )
-        chain = {"input": RunnablePassthrough()} | chain
-        return chain.invoke(input).to_messages()
+        return chain.invoke({"input": input}).to_messages()
 
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
@@ -267,8 +262,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         callback = self.state.callback_handler
         config = ensure_config(config)
-        config["callbacks"] = config["callbacks"] or []
-        config["callbacks"].append(callback)
+        merged_config = merge_configs(config, {"callbacks": [callback]})
 
         input_dict = {"content": input, "attachments": message_attachments}
 
@@ -282,7 +276,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             input_dict["thread_id"] = thread_id
 
         input_dict["instructions"] = self.state.get_assistant_instructions()
-        response = self._get_response_with_retries(config, input_dict, thread_id)
+        response = self._get_response_with_retries(merged_config, input_dict, thread_id)
 
         output, annotation_file_ids = self._save_response_annotations(response)
 
