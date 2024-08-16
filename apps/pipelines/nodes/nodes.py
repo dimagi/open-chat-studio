@@ -9,10 +9,10 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
+from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 
@@ -75,15 +75,25 @@ class LLMResponse(PipelineNode):
 class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
+    source_material_id: SourceMaterialId | None = None
     prompt: str = (
         "Make a summary of the following text: {input}. "
         "Output it as JSON with a single key called 'summary' with the summary."
     )
 
     def _process(self, state: PipelineState) -> PipelineState:
+        context = {"input": state["messages"][-1]}
+        if self.source_material_id:
+            context["source_material"] = self._get_source_material().material
         chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
-        output = chain.invoke({"input": state["messages"][-1]}, config=self._config)
+        output = chain.invoke(context, config=self._config)
         return output.content
+
+    def _get_source_material(self):
+        try:
+            return SourceMaterial.objects.get(id=self.source_material_id)
+        except SourceMaterial.DoesNotExist:
+            raise PipelineNodeBuildError(f"Source material with id {self.source_material_id} does not exist")
 
 
 class SendEmail(PipelineNode):
