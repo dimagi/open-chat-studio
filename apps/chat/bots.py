@@ -100,6 +100,12 @@ class TopicBot:
         if terminal_route:
             self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
 
+        terminal_route = (
+            ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
+        )
+        if terminal_route:
+            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
+
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
