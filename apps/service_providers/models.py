@@ -342,7 +342,7 @@ class TraceProviderType(models.TextChoices):
         match self:
             case TraceProviderType.langfuse:
                 return tracing.LangFuseTraceService(config)
-        raise Exception(f"No messaging service configured for {self}")
+        raise Exception(f"No tracing service configured for {self}")
 
 
 @audit_fields("team", "type", "name", "config", audit_special_queryset_writes=True)
