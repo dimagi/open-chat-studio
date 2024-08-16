@@ -48,8 +48,8 @@ class RecurringReminderTool(CustomBaseTool):
         every: int,
         period: TimePeriod,
         message: str,
-        datetime_end: int = None,
-        repetitions: int = None,
+        datetime_end: datetime | None = None,
+        repetitions: int | None = None,
     ):
         return create_schedule_message(
             self.experiment_session,
@@ -73,28 +73,28 @@ class OneOffReminderTool(CustomBaseTool):
         self,
         datetime_due: datetime,
         message: str,
-        **kwargs,
     ):
         return create_schedule_message(
             self.experiment_session, message=message, start_date=datetime_due, is_recurring=False
         )
 
 
-class UpdateScheduledMessageTool(CustomBaseTool):
-    name = AgentTools.SCHEDULE_UPDATE
-    description = "useful to update the schedule of a scheduled message. Use only to update existing schedules"
+class MoveScheduledMessageDateTool(CustomBaseTool):
+    name = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
+    description = "useful to move the day and time that the scheduled message should trigger"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
     def action(
         self,
-        name: str,
+        message_id: str,
         weekday: schemas.WeekdaysEnum,
         hour: int,
         minute: int,
-        user_specified_custom_date: bool,
+        specified_date: datetime | None = None,
     ):
-        if user_specified_custom_date:
+        message = ScheduledMessage.objects.get(participant=self.experiment_session.participant, external_id=message_id)
+        if specified_date and message.was_created_by_system:
             # When the user specifies a new date, the bot will extract the day of the week that that day falls on
             # and pass it as a parameter to this method.
             # Since we only allow users to change the weekday of their schedules, this bahvaiour can lead to a
@@ -102,15 +102,15 @@ class UpdateScheduledMessageTool(CustomBaseTool):
             # corresponds to the same weekday as the requested day. To resolve this, we simply don't allow users
             # to specify dates, but only a weekday and the time of day.
             return "The user cannot do that. Only weekdays and time of day can be changed"
-        message = ScheduledMessage.objects.get(
-            participant=self.experiment_session.participant, action__params__name=name
-        )
+
         # the datetime object regard Monday as day 0 whereas the llm regards it as day 1
-        weekday_int = weekday.value - 1
-        message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
-            message.next_trigger_date, weekday_int, hour, minute
-        )
-        message.custom_schedule_params = {"weekday": weekday_int, "hour": hour, "minute": minute}
+        if specified_date:
+            message.next_trigger_date = specified_date
+        else:
+            weekday_int = weekday.value - 1
+            message.next_trigger_date = _move_datetime_to_new_weekday_and_time(
+                message.next_trigger_date, weekday_int, hour, minute
+            )
         message.save()
 
         return f"The new datetime is {pretty_date(message.next_trigger_date)}"
@@ -125,7 +125,7 @@ class DeleteReminderTool(CustomBaseTool):
     def action(self, message_id: str):
         try:
             scheduled_message = self.experiment_session.participant.schduled_messages.get(external_id=message_id)
-            if scheduled_message.action_id:
+            if scheduled_message.was_created_by_system:
                 # Participants should not be able to delete a scheduled message that was created through an action
                 return "Cannot delete this reminder"
         except ScheduledMessage.DoesNotExist:
@@ -189,7 +189,7 @@ def create_schedule_message(
 
 
 TOOL_CLASS_MAP = {
-    AgentTools.SCHEDULE_UPDATE: UpdateScheduledMessageTool,
+    AgentTools.MOVE_SCHEDULED_MESSAGE_DATE: MoveScheduledMessageDateTool,
     AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
