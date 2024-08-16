@@ -184,6 +184,8 @@ class ExperimentForm(forms.ModelForm):
             "voice_response_behaviour",
             "tools",
             "echo_transcript",
+            "use_processor_bot_voice",
+            "trace_provider",
         ]
         labels = {
             "source_material": "Inline Source Material",
@@ -191,6 +193,10 @@ class ExperimentForm(forms.ModelForm):
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
+            "use_processor_bot_voice": (
+                "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
+                "have one, the router bot's voice will be used."
+            ),
         }
 
     def __init__(self, request, *args, **kwargs):
@@ -213,6 +219,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
+        self.fields["trace_provider"].queryset = team.traceprovider_set
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {

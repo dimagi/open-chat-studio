@@ -64,7 +64,7 @@ class TestTwilio:
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_experiment_response")
+    @patch("apps.chat.channels.WhatsappChannel._get_bot_response")
     def test_twilio_uses_whatsapp_channel_implementation(
         self,
         get_llm_response_mock,
@@ -116,10 +116,10 @@ class TestTurnio:
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
-    @patch("apps.chat.channels.WhatsappChannel._get_experiment_response")
+    @patch("apps.chat.channels.WhatsappChannel._get_bot_response")
     def test_turnio_whatsapp_channel_implementation(
         self,
-        _get_experiment_response,
+        _get_bot_response,
         send_text_message,
         send_voice_message,
         get_voice_transcript_mock,
@@ -130,7 +130,7 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        _get_experiment_response.return_value = "Hi"
+        _get_bot_response.return_value = "Hi"
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":

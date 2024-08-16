@@ -23,3 +23,13 @@ class AuditEventAdmin(admin.ModelAdmin):
 
     def username(self, obj):
         return obj.change_context.get("username", "")
+
+    def get_search_results(self, request, queryset, search_term):
+        try:
+            search_term_as_int = int(search_term)
+        except ValueError:
+            pass
+        else:
+            return queryset.filter(object_pk=search_term_as_int), False
+
+        return super().get_search_results(request, queryset, search_term)

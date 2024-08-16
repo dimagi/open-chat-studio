@@ -384,6 +384,10 @@ class Experiment(BaseTeamModel):
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
     )
+    trace_provider = models.ForeignKey(
+        "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    use_processor_bot_voice = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]
@@ -412,6 +416,9 @@ class Experiment(BaseTeamModel):
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+
+    def get_api_url(self):
+        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])

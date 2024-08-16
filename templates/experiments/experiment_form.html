@@ -55,7 +55,7 @@
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" %}
+        {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" "use_processor_bot_voice" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Source Material" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
@@ -83,7 +83,7 @@
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "seed_message" %}
+        {% render_form_fields form "seed_message" "trace_provider" %}
         <label class="label font-bold" for="id_seed_message">{% translate 'No Actity Pings' %}</label>
         {% translate 'No activity configs have been moved to Events' %}
       </div>

@@ -1,6 +1,7 @@
 {% extends 'web/app/app_base.html' %}
 {% load waffle_tags %}
 {% load team_tags %}
+{% load static %}
 {% load form_tags %}
 {% load render_table from django_tables2 %}
 {% block breadcrumbs %}
@@ -76,6 +77,10 @@
     <h2 class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
     <div class="my-4">
       <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
+      <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
+      <button class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
+        <i class="fa-solid fa-link"></i> <span>API</span>
+      </button>
       <div class="btn btn-ghost btn-sm no-animation !normal-case"><i class="fa-regular fa-window-maximize"></i> Web</div>
     {#  Commented elements included for Tailwind processing #}
     {#  <i class="fa-brands fa-telegram"></i> #}
@@ -281,6 +286,7 @@
       </div>
     </div>
   </div>
+  <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
     let url = "{{ filter_tags_url|escapejs }}"
     function filterSessions(tags) {

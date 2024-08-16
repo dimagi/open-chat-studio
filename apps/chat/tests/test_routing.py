@@ -31,6 +31,7 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
         bot = TopicBot(session)
         response = bot.process_input("Hi")
     assert response == "How can I help today?"
+    assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
     assert fake_service.llm.get_call_messages() == [
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
@@ -68,6 +69,8 @@ def test_experiment_routing_with_assistant(
         bot = TopicBot(session)
         response = bot.process_input("Hi")
     assert response == "How can I help today?"
+
+    assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
 
     message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
     assert list(message.tags.values_list("name", flat=True)) == [expected_tag]
