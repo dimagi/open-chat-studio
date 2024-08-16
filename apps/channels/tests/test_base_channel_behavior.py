@@ -460,39 +460,6 @@ def test_missing_channel_raises_error(twilio_provider):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("expected_message_type", "response_behaviour"),
-    [
-        ("text", VoiceResponseBehaviours.NEVER),
-        ("text", VoiceResponseBehaviours.RECIPROCAL),
-        ("voice", VoiceResponseBehaviours.ALWAYS),
-    ],
-)
-@patch("apps.chat.channels.TelegramChannel._reply_voice_message")
-@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-def test_send_message_to_user(
-    send_text_to_user, _reply_voice_messagem, expected_message_type, response_behaviour, telegram_channel
-):
-    """A simple test to make sure that when we call `channel_instance.send_message_to_user`, the correct message format
-    will be used
-    """
-
-    experiment = telegram_channel.experiment
-    experiment.voice_response_behaviour = response_behaviour
-    experiment.save()
-    bot_message = "Hi user"
-
-    telegram_channel.send_message_to_user(bot_message)
-
-    if expected_message_type == "text":
-        send_text_to_user.assert_called()
-        assert send_text_to_user.call_args[0][0] == bot_message
-    else:
-        _reply_voice_messagem.assert_called()
-        assert _reply_voice_messagem.call_args[0][0] == bot_message
-
-
-@pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_message_to_user", Mock())
 @patch("apps.chat.channels.TelegramChannel._get_bot_response")
 def test_participant_reused_across_experiments(_get_bot_response):
@@ -696,3 +663,85 @@ def test_processor_bot_voice_setting(
     else:
         send_text_to_user.assert_called()
         synthesize_voice.assert_not_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
+    [
+        ("text", VoiceResponseBehaviours.NEVER, True),
+        ("text", VoiceResponseBehaviours.RECIPROCAL, True),
+        ("voice", VoiceResponseBehaviours.ALWAYS, True),
+        ("text", VoiceResponseBehaviours.NEVER, False),
+        ("text", VoiceResponseBehaviours.RECIPROCAL, False),
+        ("voice", VoiceResponseBehaviours.ALWAYS, False),
+    ],
+)
+@patch("apps.chat.channels.TelegramChannel.send_voice_to_user")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.service_providers.speech_service.SpeechService.synthesize_voice", Mock())
+def test_send_message_to_user_with_single_bot(
+    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour, use_processor_bot_voice
+):
+    """A simple test to make sure that when we call `channel_instance.send_message_to_user`, the correct message format
+    will be used
+    """
+
+    session = ExperimentSessionFactory(
+        experiment__use_processor_bot_voice=use_processor_bot_voice,
+        experiment__voice_response_behaviour=response_behaviour,
+    )
+    session.experiment_channel = ExperimentChannelFactory(experiment=session.experiment)
+
+    channel = TelegramChannel(experiment_session=session)
+    channel.telegram_bot = Mock()
+
+    bot_message = "Hi user"
+
+    channel.send_message_to_user(bot_message)
+
+    if expected_message_type == "text":
+        send_text_to_user.assert_called()
+        assert send_text_to_user.call_args[0][0] == bot_message
+    else:
+        send_voice_to_user.assert_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
+    [
+        ("text", VoiceResponseBehaviours.NEVER, True),
+        ("text", VoiceResponseBehaviours.RECIPROCAL, True),
+        ("voice", VoiceResponseBehaviours.ALWAYS, True),
+        ("text", VoiceResponseBehaviours.NEVER, False),
+        ("text", VoiceResponseBehaviours.RECIPROCAL, False),
+        ("voice", VoiceResponseBehaviours.ALWAYS, False),
+    ],
+)
+@patch("apps.chat.channels.TelegramChannel.send_voice_to_user")
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+@patch("apps.service_providers.speech_service.SpeechService.synthesize_voice", Mock())
+def test_send_message_to_user_with_multibot(
+    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour, use_processor_bot_voice
+):
+    session = ExperimentSessionFactory()
+    team = session.team
+    experiments = ExperimentFactory.create_batch(2, team=team)
+    router_exp, child_exp = experiments
+    router_exp.use_processor_bot_voice = use_processor_bot_voice
+    router_exp.voice_response_behaviour = response_behaviour
+    session.experiment = router_exp
+    ExperimentChannelFactory(experiment=router_exp)
+    ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
+
+    channel = TelegramChannel(experiment_session=session)
+    channel.telegram_bot = Mock()
+
+    bot_message = "Hi user"
+    channel.send_message_to_user(bot_message)
+
+    if expected_message_type == "text":
+        send_text_to_user.assert_called()
+    else:
+        send_voice_to_user.assert_called()

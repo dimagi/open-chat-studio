@@ -364,7 +364,9 @@ class ChannelBase(ABC):
 
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
-        if self.experiment.use_processor_bot_voice and self.bot.processor_experiment.voice_provider:
+        if self.experiment.use_processor_bot_voice and (
+            self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
+        ):
             voice_provider = self.bot.processor_experiment.voice_provider
             synthetic_voice = self.bot.processor_experiment.synthetic_voice
 
@@ -401,6 +403,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
+        self.bot = self.bot or TopicBot(self.experiment_session)
         answer = self.bot.process_input(message, attachments=self.message.attachments)
         return answer
 
@@ -499,7 +502,7 @@ class ChannelBase(ABC):
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
-        topic_bot = TopicBot(self.experiment_session)
+        topic_bot = self.bot or TopicBot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
 
