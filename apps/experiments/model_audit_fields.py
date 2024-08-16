@@ -33,7 +33,6 @@ CONSENT_FORM_FIELDS = [
 ]
 
 EXPERIMENT_CHANNEL_FIELDS = [
-    "team",
     "name",
     "experiment",
     "deleted",

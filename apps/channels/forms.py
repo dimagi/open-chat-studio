@@ -42,7 +42,6 @@ class ChannelForm(forms.ModelForm):
             self.fields["messaging_provider"].widget = forms.HiddenInput()
 
     def save(self, experiment, config_data: dict):
-        self.instance.team = experiment.team
         self.instance.experiment = experiment
         self.instance.extra_data = config_data
         return super().save()
