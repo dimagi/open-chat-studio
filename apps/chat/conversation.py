@@ -2,7 +2,8 @@ import logging
 from abc import ABC, abstractmethod
 
 from langchain.chains import ConversationChain
-from langchain.memory.summary import SummarizerMixin
+from langchain.chains.llm import LLMChain
+from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -13,7 +14,7 @@ from langchain.schema import BaseMemory
 from langchain_anthropic import ChatAnthropic
 from langchain_community.callbacks import get_openai_callback
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
@@ -172,7 +173,7 @@ def compress_chat_history_from_messages(
             pruned_memory.append(history.pop(0))
             history_tokens = llm.get_num_tokens_from_messages(history)
 
-        summary = SummarizerMixin(llm=llm).predict_new_summary(pruned_memory, summary)
+        summary = _get_new_summary(llm, pruned_memory, summary)
         summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
 
     log.info(
@@ -185,3 +186,10 @@ def compress_chat_history_from_messages(
 
     last_message = history[0] if history else pruned_memory[-1]
     return history, last_message, summary
+
+
+def _get_new_summary(llm, pruned_memory, summary):
+    new_lines = get_buffer_string(pruned_memory)
+    chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
+    summary = chain.invoke({"summary": summary, "new_lines": new_lines})["text"]
+    return summary

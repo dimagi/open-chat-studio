@@ -71,7 +71,7 @@ CONTENT_TYPES = {
     ],
     "files": ["file"],
     "pipelines": ["pipeline", "pipelinerun", "node"],
-    "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider"],
+    "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider", "traceprovider"],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],

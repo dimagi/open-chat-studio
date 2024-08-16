@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers import auth_service, const, model_audit_fields
+from apps.service_providers import auth_service, const, model_audit_fields, tracing
 from apps.teams.models import BaseTeamModel
 
 from . import forms, llm_service, messaging_service, speech_service
@@ -333,3 +333,41 @@ class AuthProvider(BaseTeamModel):
 
     def get_auth_service(self) -> auth_service.AuthService:
         return self.type_enum.get_auth_service(self.config)
+
+
+class TraceProviderType(models.TextChoices):
+    langfuse = "langfuse", _("Langfuse")
+
+    @property
+    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+        match self:
+            case TraceProviderType.langfuse:
+                return forms.LangfuseTraceProviderForm
+        raise Exception(f"No config form configured for {self}")
+
+    def get_service(self, config: dict) -> tracing.TraceService:
+        match self:
+            case TraceProviderType.langfuse:
+                return tracing.LangFuseTraceService(config)
+        raise Exception(f"No tracing service configured for {self}")
+
+
+@audit_fields("team", "type", "name", "config", audit_special_queryset_writes=True)
+class TraceProvider(BaseTeamModel):
+    objects = AuditingManager()
+    type = models.CharField(max_length=255, choices=TraceProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return TraceProviderType(self.type)
+
+    def get_service(self) -> tracing.TraceService:
+        return self.type_enum.get_service(self.config)
