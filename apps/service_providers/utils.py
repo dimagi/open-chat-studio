@@ -18,6 +18,8 @@ from .models import (
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
+    TraceProvider,
+    TraceProviderType,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -45,6 +47,7 @@ class ServiceProvider(ServiceProviderType, Enum):
     voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
     auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
+    tracing = const.TRACING, "Tracing Provider", TraceProvider, TraceProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:

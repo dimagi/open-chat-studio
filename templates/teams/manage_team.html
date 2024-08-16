@@ -36,6 +36,8 @@
     {% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
     {% translate "Authentication credentials for integrations" as auth_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
+    {% translate "Record trace details of bot activity" as trace_subtitle %}
+    {% include 'service_providers/service_provider_home.html' with provider_type="tracing" title="Tracing Providers" subtitle=trace_subtitle perm="add_traceprovider" %}
     <section class="app-card">
       <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
       <div class='table-responsive'>
