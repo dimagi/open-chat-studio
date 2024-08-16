@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
@@ -82,6 +83,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         model = ExperimentSession
         fields = ["url", "experiment", "participant", "messages"]
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
         experiment = validated_data["experiment"]
