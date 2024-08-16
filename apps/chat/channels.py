@@ -100,13 +100,15 @@ class ChannelBase(ABC):
 
     def __init__(
         self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
+        experiment_channel: ExperimentChannel | None = None,
         experiment_session: ExperimentSession | None = None,
     ):
-        self.experiment = experiment
-        self.experiment_channel = experiment_channel
+        if not experiment_channel and not experiment_session:
+            raise MessageHandlerException("ChannelBase expects either")
+
         self.experiment_session = experiment_session
+        self.experiment_channel = experiment_channel if experiment_channel else experiment_session.experiment_channel
+        self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
 
@@ -197,9 +199,7 @@ class ChannelBase(ABC):
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls(
-            experiment_session.experiment,
-            experiment_channel=experiment_session.experiment_channel,
-            experiment_session=experiment_session,
+            experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
         )
 
     @property
@@ -546,12 +546,9 @@ class TelegramChannel(ChannelBase):
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
+        self, experiment_channel: ExperimentChannel | None = None, experiment_session: ExperimentSession | None = None
     ):
-        super().__init__(experiment, experiment_channel, experiment_session)
+        super().__init__(experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -677,12 +674,11 @@ class ApiChannel(ChannelBase):
 
     def __init__(
         self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
+        experiment_channel: ExperimentChannel | None = None,
         experiment_session: ExperimentSession | None = None,
         user=None,
     ):
-        super().__init__(experiment, experiment_channel, experiment_session)
+        super().__init__(experiment_channel, experiment_session)
         self.user = user
         if not self.user and not self.experiment_session:
             raise MessageHandlerException("ApiChannel requires either an existing session or a user")
@@ -702,9 +698,8 @@ class SlackChannel(ChannelBase):
 
     def __init__(
         self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession,
+        experiment_channel: ExperimentChannel | None = None,
+        experiment_session: ExperimentSession | None = None,
         send_response_to_user: bool = True,
     ):
         """
@@ -713,7 +708,7 @@ class SlackChannel(ChannelBase):
                 This is useful when the message sending happens as part of the slack event handler
                 (e.g., in a slack event listener)
         """
-        super().__init__(experiment, experiment_channel, experiment_session)
+        super().__init__(experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
 
     def send_text_to_user(self, text: str):
