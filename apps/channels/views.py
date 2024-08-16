@@ -96,7 +96,7 @@ def new_api_message(request, experiment_id: uuid):
     session = None
     if session_id := message_data.get("session"):
         try:
-            session = ExperimentSession.objects.select_related("experiment_channel").get(
+            session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
                 experiment__public_id=experiment_id,
                 team=request.team,
@@ -108,6 +108,7 @@ def new_api_message(request, experiment_id: uuid):
 
         participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
+        experiment = session.experiment
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel, _ = ExperimentChannel.objects.get_or_create(
@@ -118,6 +119,7 @@ def new_api_message(request, experiment_id: uuid):
 
     response = tasks.handle_api_message(
         request.user,
+        experiment,
         experiment_channel,
         message_data["message"],
         participant_id,
