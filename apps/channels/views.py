@@ -111,11 +111,7 @@ def new_api_message(request, experiment_id: uuid):
         experiment = session.experiment
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-        experiment_channel, _ = ExperimentChannel.objects.get_or_create(
-            name=f"{experiment.id}-api",
-            experiment=experiment,
-            platform=ChannelPlatform.API,
-        )
+        experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
 
     response = tasks.handle_api_message(
         request.user,

@@ -93,11 +93,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             identifier=participant_identifier, team=request.team, user=request.user, platform=ChannelPlatform.API
         )
         validated_data["participant"] = participant
-        channel, _ = ExperimentChannel.objects.get_or_create(
-            experiment=experiment,
-            platform=ChannelPlatform.API,
-            name=f"{experiment.id}-api",
-        )
+        channel = ExperimentChannel.objects.get_team_api_channel(request.team)
         validated_data["experiment_channel"] = channel
         messages = validated_data.pop("messages", [])
         instance = super().create(validated_data)

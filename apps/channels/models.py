@@ -105,6 +105,10 @@ class ExperimentChannelObjectManager(AuditingManager):
     def get_unfiltered_queryset(self):
         return super().get_queryset()
 
+    def get_team_api_channel(self, team):
+        channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.API, name=f"{team.slug}-api-channel")
+        return channel
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
 class ExperimentChannel(BaseTeamModel):
@@ -154,6 +158,7 @@ class ExperimentChannel(BaseTeamModel):
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
         channel = ExperimentChannel.objects.filter(**filter_params).first()
         if channel and channel.experiment != new_experiment:
+            # TODO: check if it's in a different team and if the user has access to that team
             url = reverse(
                 "experiments:single_experiment_home",
                 kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
