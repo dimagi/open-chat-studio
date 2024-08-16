@@ -51,8 +51,8 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
             {
                 "data": {
                     "id": "report",
-                    "label": "Create the report",
-                    "type": "CreateReport",
+                    "label": "LLM Response with prompt",
+                    "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
