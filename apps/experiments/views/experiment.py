@@ -257,7 +257,7 @@ class ExperimentForm(forms.ModelForm):
                 errors["assistant"] = "Assistant is required when creating an assistant experiment"
         elif bot_type == "pipeline":
             if not cleaned_data.get("pipeline"):
-                errors["assistant"] = "Pipeline is required when creating a pipeline  experiment"
+                errors["assistant"] = "Pipeline is required when creating a pipeline experiment"
 
         if errors:
             raise forms.ValidationError(errors)

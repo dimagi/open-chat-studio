@@ -261,7 +261,7 @@ def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_use
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
-@patch("apps.chat.channels.TopicBot", Mock())
+@patch("apps.chat.bots.TopicBot", Mock())
 def test_unsupported_message_type_creates_system_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
     channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))

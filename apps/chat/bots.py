@@ -10,6 +10,7 @@ from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 if TYPE_CHECKING:
@@ -36,6 +37,12 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
     from apps.chat.tasks import notify_users_of_safety_violations_task
 
     notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
+
+
+def get_bot(session: ExperimentSession, experiment: Experiment | None = None):
+    if session.experiment.pipeline_id:
+        return PipelineBot(session)
+    return TopicBot(session, experiment)
 
 
 class TopicBot:
@@ -236,3 +243,13 @@ class SafetyBot:
 
     def filter_ai_messages(self) -> bool:
         return self.safety_layer.messages_to_review == "ai"
+
+
+class PipelineBot:
+    def __init__(self, session: ExperimentSession):
+        self.experiment = session.experiment
+        self.session = session
+
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+        output = self.experiment.pipeline.invoke(PipelineState(messages=[user_input]), self.session)
+        return output["messages"][-1]

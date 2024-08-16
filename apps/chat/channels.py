@@ -14,7 +14,7 @@ from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import TopicBot
+from apps.chat.bots import get_bot
 from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
@@ -111,7 +111,7 @@ class ChannelBase(ABC):
         self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
-        self.bot = TopicBot(experiment_session) if experiment_session else None
+        self.bot = get_bot(experiment_session) if experiment_session else None
 
     @classmethod
     def start_new_session(
@@ -217,7 +217,7 @@ class ChannelBase(ABC):
         self._user_query = None
         self.message = message
         self._ensure_sessions_exists()
-        self.bot = TopicBot(self.experiment_session)
+        self.bot = get_bot(self.experiment_session)
 
     def new_user_message(self, message) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -403,7 +403,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or TopicBot(self.experiment_session)
+        self.bot = self.bot or get_bot(self.experiment_session)
         answer = self.bot.process_input(message, attachments=self.message.attachments)
         return answer
 
@@ -502,7 +502,7 @@ class ChannelBase(ABC):
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
-        topic_bot = self.bot or TopicBot(self.experiment_session)
+        topic_bot = self.bot or get_bot(self.experiment_session)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
 
