@@ -12,8 +12,7 @@ from field_audit.models import AuditingManager
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
-from apps.teams.models import Team
-from apps.utils.models import BaseModel
+from apps.teams.models import BaseTeamModel, Team
 from apps.web.meta import absolute_url
 
 WEB = "web"
@@ -108,7 +107,7 @@ class ExperimentChannelObjectManager(AuditingManager):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
-class ExperimentChannel(BaseModel):
+class ExperimentChannel(BaseTeamModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
 
