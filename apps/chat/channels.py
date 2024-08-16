@@ -618,6 +618,9 @@ class WhatsappChannel(ChannelBase):
 
 
 class SureAdhereChannel(ChannelBase):
+    def initialize(self):
+        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+
     def send_text_to_user(self, text: str):
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
