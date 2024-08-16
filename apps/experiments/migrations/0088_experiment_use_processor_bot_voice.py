@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0086_alter_experimentroute_unique_together_and_more'),
+        ('experiments', '0087_experiment_trace_provider'),
     ]
 
     operations = [

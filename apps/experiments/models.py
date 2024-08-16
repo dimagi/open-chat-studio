@@ -383,6 +383,9 @@ class Experiment(BaseTeamModel):
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
     )
+    trace_provider = models.ForeignKey(
+        "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
+    )
     use_processor_bot_voice = models.BooleanField(default=False)
 
     class Meta:

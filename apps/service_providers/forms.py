@@ -185,7 +185,6 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
-    obfuscate_fields = ["bot_token"]
     custom_template = "service_providers/slack_config_form.html"
 
     slack_team_id = forms.CharField(widget=forms.HiddenInput())
@@ -196,3 +195,11 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
 
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
+
+
+class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["secret_key"]
+
+    public_key = forms.CharField(label=_("Public Key"))
+    secret_key = forms.CharField(label=_("Secret Key"))
+    host = forms.URLField(label=_("Host"))

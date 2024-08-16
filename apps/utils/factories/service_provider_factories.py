@@ -6,6 +6,7 @@ from apps.service_providers.models import (
     LlmProvider,
     LlmProviderTypes,
     MessagingProvider,
+    TraceProvider,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -49,3 +50,13 @@ class AuthProviderFactory(factory.django.DjangoModelFactory):
     name = factory.Faker("name")
     type = AuthProviderType.commcare
     config = {"username": "user", "api_key": "key"}
+
+
+class TraceProviderFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TraceProvider
+
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Faker("name")
+    type = AuthProviderType.commcare
+    config = {"public_key": "123", "secret_key": "***", "host": "https://example.com"}

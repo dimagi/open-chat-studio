@@ -185,6 +185,7 @@ class ExperimentForm(forms.ModelForm):
             "tools",
             "echo_transcript",
             "use_processor_bot_voice",
+            "trace_provider",
         ]
         labels = {
             "source_material": "Inline Source Material",
@@ -218,6 +219,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["post_survey"].queryset = team.survey_set
         self.fields["consent_form"].queryset = team.consentform_set
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
+        self.fields["trace_provider"].queryset = team.traceprovider_set
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
@@ -602,9 +604,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
 @login_and_team_required
 def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
-    channel = get_object_or_404(
-        ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
-    )
+    channel = get_object_or_404(ExperimentChannel, id=channel_id, experiment_id=experiment_id, team__slug=team_slug)
     if request.POST.get("action") == "delete":
         if not request.user.has_perm("channels.delete_experimentchannel"):
             raise PermissionDenied
