@@ -195,6 +195,10 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         """
         raise NotImplementedError
 
+    @property
+    def experiment(self) -> Experiment:
+        return self.state.experiment
+
 
 class SimpleExperimentRunnable(ExperimentRunnable):
     def get_input_messages(self, input: str):
@@ -443,3 +447,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             cancelling = run.status == "cancelling"
             if cancelling:
                 sleep(assistant.check_every_ms / 1000)
+
+    @property
+    def experiment(self) -> Experiment:
+        return self.state.experiment

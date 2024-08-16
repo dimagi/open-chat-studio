@@ -73,7 +73,7 @@ class TopicBot:
         self.default_child_chain = None
         self.default_tag = None
         self.terminal_chain = None
-
+        self.processor_experiment = None
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
@@ -110,6 +110,8 @@ class TopicBot:
         else:
             tag, chain = None, self.chain
 
+        # The processor_experiment is the experiment that generated the output
+        self.processor_experiment = chain.experiment
         result = chain.invoke(
             input_str,
             config={

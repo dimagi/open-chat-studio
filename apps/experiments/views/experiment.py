@@ -184,6 +184,7 @@ class ExperimentForm(forms.ModelForm):
             "voice_response_behaviour",
             "tools",
             "echo_transcript",
+            "use_processor_bot_voice",
             "trace_provider",
         ]
         labels = {
@@ -192,6 +193,10 @@ class ExperimentForm(forms.ModelForm):
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
+            "use_processor_bot_voice": (
+                "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
+                "have one, the router bot's voice will be used."
+            ),
         }
 
     def __init__(self, request, *args, **kwargs):

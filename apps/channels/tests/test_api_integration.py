@@ -19,7 +19,7 @@ def experiment(db):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
@@ -46,7 +46,7 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.ApiChannel._get_latest_session")
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_with_existing_session(get_llm_response_mock, _get_latest_session, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
