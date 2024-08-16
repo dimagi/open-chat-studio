@@ -520,7 +520,9 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        experiment_channel, _ = ExperimentChannel.objects.get_or_create(
+            team=experiment.team, experiment=experiment, platform=ChannelPlatform.WEB, name=f"{experiment.id}-web"
+        )
         session = super().start_new_session(
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
