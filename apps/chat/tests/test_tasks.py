@@ -40,11 +40,7 @@ class TasksTest(TestCase):
             llm="gpt-4",
         )
         self.experiment_channel = ExperimentChannel.objects.create(
-            name="TestChannel",
-            team=self.team,
-            experiment=self.experiment,
-            extra_data={"bot_token": "123123123"},
-            platform="telegram",
+            name="TestChannel", experiment=self.experiment, extra_data={"bot_token": "123123123"}, platform="telegram"
         )
         self.experiment_session = self._add_session(self.experiment)
 
