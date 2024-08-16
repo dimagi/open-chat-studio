@@ -20,7 +20,9 @@ log = logging.getLogger(__name__)
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     experiment_channel = (
-        ExperimentChannel.objects.filter(external_id=channel_external_id).select_related("experiment", "team").first()
+        ExperimentChannel.objects.filter(external_id=channel_external_id)
+        .select_related("experiment", "experiment__team")
+        .first()
     )
     if not experiment_channel:
         log.info(f"No experiment channel found for external_id: {channel_external_id}")
@@ -36,7 +38,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     message_handler = TelegramChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
-    with current_team(experiment_channel.team):
+    with current_team(experiment_channel.experiment.team):
         message_handler.new_user_message(message)
 
 
@@ -59,7 +61,7 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
         ExperimentChannel.objects.filter(
             extra_data__contains={channel_id_key: message.to}, messaging_provider__type=MessagingProviderType.twilio
         )
-        .select_related("experiment", "team")
+        .select_related("experiment", "experiment__team")
         .first()
     )
     if not experiment_channel:
@@ -71,7 +73,7 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
     message_handler = ChannelClass(experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
-    with current_team(experiment_channel.team):
+    with current_team(experiment_channel.experiment.team):
         message_handler.new_user_message(message)
 
 
@@ -94,22 +96,17 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dict):
     message = SureAdhereMessage.parse(message_data)
-    experiment_channel = (
-        ExperimentChannel.objects.filter(
-            extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
-            platform=ChannelPlatform.SUREADHERE,
-            messaging_provider__type=MessagingProviderType.sureadhere,
-        )
-        .select_related("experiment", "team")
-        .first()
-    )
+    experiment_channel = ExperimentChannel.objects.filter(
+        extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
+        platform=ChannelPlatform.SUREADHERE,
+        messaging_provider__type=MessagingProviderType.sureadhere,
+    ).first()
     if not experiment_channel:
         log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
         return
     channel = SureAdhereChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
-    with current_team(experiment_channel.team):
-        channel.new_user_message(message)
+    channel.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -121,7 +118,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
             platform=ChannelPlatform.WHATSAPP,
             messaging_provider__type=MessagingProviderType.turnio,
         )
-        .select_related("experiment", "team")
+        .select_related("experiment", "experiment__team")
         .first()
     )
     if not experiment_channel:
@@ -130,7 +127,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     channel = WhatsappChannel(experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
 
-    with current_team(experiment_channel.team):
+    with current_team(experiment_channel.experiment.team):
         channel.new_user_message(message)
 
 
