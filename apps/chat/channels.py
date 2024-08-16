@@ -71,11 +71,10 @@ class ChannelBase(ABC):
         voice_replies_supported: Indicates whether the channel supports voice messages
 
     Args:
-        experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
+        experiment: An Experiment object representing the experiment associated with the handler.
+        experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
         experiment_session: An optional ExperimentSession object representing the experiment session associated
             with the handler.
-
-        Either one of these arguments must to be provided
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
