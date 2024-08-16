@@ -23,6 +23,7 @@ class TestExperimentChannelObjectManager(TestCase):
         self.bot_token = "123123123"
         self.bot_token_key = "bot_token"
         self.experiment_channel = ExperimentChannel.objects.create(
+            team=self.team,
             name="TestChannel",
             experiment=self.experiment,
             extra_data={self.bot_token_key: self.bot_token},
