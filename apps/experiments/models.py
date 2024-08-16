@@ -415,6 +415,9 @@ class Experiment(BaseTeamModel):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
+    def get_api_url(self):
+        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
