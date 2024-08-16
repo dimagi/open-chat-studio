@@ -28,7 +28,6 @@ from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
-from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.state import (
     AssistantExperimentState,
     ChatExperimentState,
@@ -54,11 +53,9 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
     """Create an experiment runnable based on the experiment configuration."""
     if experiment.assistant:
         return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
-    state = ChatExperimentState(experiment=experiment, session=session)
-    if experiment.pipeline:
-        return PipelineExperimentRunnable(state=state)
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
+    state = ChatExperimentState(experiment=experiment, session=session)
     if experiment.tools_enabled:
         return AgentExperimentRunnable(state=state)
 
@@ -453,11 +450,3 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     @property
     def experiment(self) -> Experiment:
         return self.state.experiment
-
-class PipelineExperimentRunnable(SimpleExperimentRunnable):
-    state: ChatExperimentState
-
-    def _get_output_check_cancellation(self, input, config):
-        # TODO check cancellation
-        output = self.state.experiment.pipeline.invoke(PipelineState(messages=[input]), self.state.session)
-        return output["messages"][-1]
