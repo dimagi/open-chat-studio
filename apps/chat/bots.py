@@ -110,6 +110,7 @@ class TopicBot:
         else:
             tag, chain = None, self.chain
 
+        # The processor_experiment is the experiment that generated the output
         self.processor_experiment = chain.experiment
         result = chain.invoke(
             input_str,
