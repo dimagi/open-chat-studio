@@ -75,7 +75,7 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
     # it here using the already authenticated client.
-    ocs_channel = SlackChannel(experiment_channel, session, send_response_to_user=False)
+    ocs_channel = SlackChannel(experiment_channel.experiment, experiment_channel, session, send_response_to_user=False)
     response = ocs_channel.new_user_message(message)
     context.say(response, thread_ts=thread_ts)
 

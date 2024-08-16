@@ -23,7 +23,7 @@ def experiment(db):
 def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
-    channels_queryset = ExperimentChannel.objects.filter(experiment=experiment, platform=ChannelPlatform.API)
+    channels_queryset = ExperimentChannel.objects.filter(team=experiment.team, platform=ChannelPlatform.API)
     assert not channels_queryset.exists()
 
     user = experiment.team.members.first()
