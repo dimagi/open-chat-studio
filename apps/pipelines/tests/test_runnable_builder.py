@@ -188,7 +188,8 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
                         "source_material_id": source_material.id,
-                        "prompt": "Use this {source_material} to answer questions about {participant_data}",
+                        "prompt": "Use this {source_material} to answer questions about {participant_data}."
+                        " Today's date is {current_datetime}",
                     },
                 },
                 "id": "llm-GUk0C",

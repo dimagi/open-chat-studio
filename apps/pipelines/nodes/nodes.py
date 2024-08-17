@@ -1,6 +1,7 @@
 import json
 
 import tiktoken
+from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -16,6 +17,7 @@ from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.utils.time import pretty_date
 
 
 class RenderTemplate(PipelineNode):
@@ -84,6 +86,13 @@ class LLMResponseWithPrompt(LLMResponse):
 
     def _process(self, state: PipelineState) -> PipelineState:
         prompt = PromptTemplate.from_template(template=self.prompt)
+        context = self._get_context(state, prompt)
+        chain = prompt | super().get_chat_model()
+        output = chain.invoke(context, config=self._config)
+        return output.content
+
+    def _get_context(self, state: PipelineState, prompt: PromptTemplate):
+        session = state["experiment_session"]
         context = {"input": state["messages"][-1]}
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
@@ -92,11 +101,12 @@ class LLMResponseWithPrompt(LLMResponse):
             context["source_material"] = self._get_source_material().material
 
         if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self._get_participant_data(state["experiment_session"])
+            context["participant_data"] = self._get_participant_data(session)
 
-        chain = prompt | super().get_chat_model()
-        output = chain.invoke(context, config=self._config)
-        return output.content
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self._get_current_datetime(session)
+
+        return context
 
     def _get_participant_data(self, session):
         if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
@@ -108,6 +118,9 @@ class LLMResponseWithPrompt(LLMResponse):
             return SourceMaterial.objects.get(id=self.source_material_id)
         except SourceMaterial.DoesNotExist:
             raise PipelineNodeBuildError(f"Source material with id {self.source_material_id} does not exist")
+
+    def _get_current_datetime(self, session):
+        return pretty_date(timezone.now(), session.get_participant_timezone())
 
 
 class SendEmail(PipelineNode):
