@@ -13,7 +13,7 @@ def get_input_types_for_node(node_class):
 
     inputs = []
     for field_name, info in node_class.model_fields.items():
-        if hasattr(info.annotation, "_name") and info.annotation._name == "Optional":
+        if getattr(info.annotation, "_name", None) == "Optional":
             type_ = info.annotation.__args__[0]
         else:
             type_ = info.annotation
