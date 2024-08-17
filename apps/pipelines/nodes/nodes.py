@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -82,12 +83,25 @@ class LLMResponseWithPrompt(LLMResponse):
     )
 
     def _process(self, state: PipelineState) -> PipelineState:
+        prompt = PromptTemplate.from_template(template=self.prompt)
         context = {"input": state["messages"][-1]}
-        if self.source_material_id:
+
+        if "source_material" in prompt.input_variables and self.source_material_id is None:
+            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
+        if "source_material" in prompt.input_variables and self.source_material_id:
             context["source_material"] = self._get_source_material().material
-        chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
+
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self._get_participant_data(state["experiment_session"])
+
+        chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         return output.content
+
+    def _get_participant_data(self, session):
+        if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
+            return ""
+        return session.get_participant_data(use_participant_tz=True) or ""
 
     def _get_source_material(self):
         try:

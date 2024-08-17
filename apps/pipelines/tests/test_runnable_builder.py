@@ -9,7 +9,7 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, SourceMaterialFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.langchain import FakeLlmSimpleTokenCount, build_fake_llm_service
@@ -24,6 +24,16 @@ def provider():
 @pytest.fixture()
 def pipeline():
     return PipelineFactory()
+
+
+@pytest.fixture()
+def source_material():
+    return SourceMaterialFactory()
+
+
+@pytest.fixture()
+def experiment_session():
+    return ExperimentSessionFactory()
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -158,6 +168,42 @@ def test_llm_response(get_llm_service, provider, pipeline):
     pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
     assert runnable.invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1] == "123"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_material, experiment_session):
+    service = build_fake_llm_service(responses=["123"], token_counts=[0])
+    get_llm_service.return_value = service
+    data = {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-GUk0C",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "source_material_id": source_material.id,
+                        "prompt": "Use this {source_material} to answer questions about {participant_data}",
+                    },
+                },
+                "id": "llm-GUk0C",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    assert (
+        runnable.invoke(PipelineState(messages=["Repeat exactly: 123"], experiment_session=experiment_session))[
+            "messages"
+        ][-1]
+        == "123"
+    )
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
