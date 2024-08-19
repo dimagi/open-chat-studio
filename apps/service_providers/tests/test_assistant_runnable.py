@@ -139,7 +139,7 @@ def test_assistant_includes_file_type_information(
     run = _create_run(ASSISTANT_ID, thread_id)
     create_and_run.return_value = run
     retrieve_run.return_value = run
-    get_file_type_info.return_value = [{"file-12345": "a-file.pdf"}, {"file-54321": "b-file.docx"}]
+    get_file_type_info.return_value = [{"file-12345": "application/fmt"}]
     list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
     assistant = session.experiment.assistant
     assistant.instructions = "Help the user"
@@ -147,9 +147,7 @@ def test_assistant_includes_file_type_information(
     assistant = _get_assistant_mocked_history_recording(session)
     result = assistant.invoke("test")
     assert result.output == ai_response
-    expected_instructions = (
-        "Help the user\n\nFile type information:\n[{'file-12345': 'a-file.pdf'}, {'file-54321': 'b-file.docx'}]"
-    )
+    expected_instructions = "Help the user\n\nFile type information:\n[{'file-12345': 'application/fmt'}]"
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 

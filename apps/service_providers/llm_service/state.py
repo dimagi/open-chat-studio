@@ -201,7 +201,8 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         attachments = self.session.chat.attachments.filter(tool_type__in=["code_interpreter"])
         file_type_info = []
         for att in attachments:
-            file_type_info.extend([{file.external_id: file.name} for file in att.files.all()])
+            file_type_info.extend([{file.external_id: file.content_type} for file in att.files.all()])
+        return file_type_info
 
     def get_openai_assistant(self):
         return self.experiment.assistant.get_assistant()
