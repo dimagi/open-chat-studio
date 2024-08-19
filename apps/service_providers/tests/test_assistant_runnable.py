@@ -124,6 +124,35 @@ def test_assistant_conversation_input_formatting(
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+def test_assistant_includes_file_type_information(
+    create_and_run, retrieve_run, list_messages, save_response_annotations, get_file_type_info, session
+):
+    ai_response = "ai response"
+    save_response_annotations.return_value = (ai_response, {})
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    get_file_type_info.return_value = [{"file-12345": "a-file.pdf"}, {"file-54321": "b-file.docx"}]
+    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
+    assistant = session.experiment.assistant
+    assistant.instructions = "Help the user"
+    assistant.include_file_info = True
+    assistant = _get_assistant_mocked_history_recording(session)
+    result = assistant.invoke("test")
+    assert result.output == ai_response
+    expected_instructions = (
+        "Help the user\n\nFile type information:\n[{'file-12345': 'a-file.pdf'}, {'file-54321': 'b-file.docx'}]"
+    )
+    assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
+
+
 def test_assistant_runnable_raises_error(session):
     experiment = session.experiment
 

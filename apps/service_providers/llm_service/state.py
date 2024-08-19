@@ -184,9 +184,24 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        return self.experiment.assistant.instructions.format(
-            participant_data=self.get_participant_data(), current_datetime=self.get_current_datetime()
+        instruction_prompt = self.experiment.assistant.instructions
+        if self.experiment.assistant.include_file_info:
+            instruction_prompt += "\n\nFile type information:\n{file_type_info}"
+
+        instructions = instruction_prompt.format(
+            participant_data=self.get_participant_data(),
+            current_datetime=self.get_current_datetime(),
+            file_type_info=self.get_file_type_info(),
         )
+        return instructions
+
+    def get_file_type_info(self):
+        if not self.experiment.assistant.include_file_info:
+            return ""
+        attachments = self.session.chat.attachments.filter(tool_type__in=["code_interpreter"])
+        file_type_info = []
+        for att in attachments:
+            file_type_info.extend([{file.external_id: file.name} for file in att.files.all()])
 
     def get_openai_assistant(self):
         return self.experiment.assistant.get_assistant()
