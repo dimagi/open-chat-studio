@@ -23,7 +23,9 @@ def get_response_for_webchat_task(
         id=experiment_session_id
     )
     web_channel = WebChannel(
-        experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
+        experiment_session.experiment,
+        experiment_session.experiment_channel,
+        experiment_session=experiment_session,
     )
     message_attachments = []
     for file_entry in attachments:

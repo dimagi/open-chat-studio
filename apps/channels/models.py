@@ -12,8 +12,7 @@ from field_audit.models import AuditingManager
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
-from apps.teams.models import Team
-from apps.utils.models import BaseModel
+from apps.teams.models import BaseTeamModel, Team
 from apps.web.meta import absolute_url
 
 WEB = "web"
@@ -106,9 +105,17 @@ class ExperimentChannelObjectManager(AuditingManager):
     def get_unfiltered_queryset(self):
         return super().get_queryset()
 
+    def get_team_api_channel(self, team):
+        channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.API, name=f"{team.slug}-api-channel")
+        return channel
+
+    def get_team_web_channel(self, team):
+        channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.WEB, name=f"{team.slug}-web-channel")
+        return channel
+
 
 @audit_fields(*model_audit_fields.EXPERIMENT_CHANNEL_FIELDS, audit_special_queryset_writes=True)
-class ExperimentChannel(BaseModel):
+class ExperimentChannel(BaseTeamModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
 
@@ -155,6 +162,7 @@ class ExperimentChannel(BaseModel):
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
         channel = ExperimentChannel.objects.filter(**filter_params).first()
         if channel and channel.experiment != new_experiment:
+            # TODO: check if it's in a different team and if the user has access to that team
             url = reverse(
                 "experiments:single_experiment_home",
                 kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
