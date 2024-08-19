@@ -43,10 +43,11 @@ class CreateExperimentRoute(CreateView):
         form.instance.team = self.request.team
         self.object = form.save(commit=False)
 
-        # Set parent_version and child_version
-        parent_experiment = get_object_or_404(Experiment, id=self.kwargs["experiment_id"])
-        self.object.parent_version = parent_experiment.version_number
-        self.object.child_version = Experiment.objects.get(id=self.object.child_id).version_number
+        # Set parent_version and child_version if experiment is versioned
+        experiment = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        if experiment.status == "Released":
+            self.object.parent_version = experiment.version_number
+            self.object.child_version = Experiment.objects.get(id=self.object.child_id).version_number
 
         self.object.parent_id = self.kwargs["experiment_id"]
         self.object.type = ExperimentRouteType(self.kwargs["type"])
