@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
@@ -82,6 +83,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         model = ExperimentSession
         fields = ["url", "experiment", "participant", "messages"]
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
         experiment = validated_data["experiment"]
@@ -93,11 +95,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             identifier=participant_identifier, team=request.team, user=request.user, platform=ChannelPlatform.API
         )
         validated_data["participant"] = participant
-        channel, _ = ExperimentChannel.objects.get_or_create(
-            experiment=experiment,
-            platform=ChannelPlatform.API,
-            name=f"{experiment.id}-api",
-        )
+        channel = ExperimentChannel.objects.get_team_api_channel(request.team)
         validated_data["experiment_channel"] = channel
         messages = validated_data.pop("messages", [])
         instance = super().create(validated_data)
