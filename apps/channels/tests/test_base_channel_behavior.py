@@ -646,7 +646,7 @@ def test_processor_bot_voice_setting(
     fake_service = build_fake_llm_service(responses=["keyword1", "How can I help today?"], token_counts=[0])
 
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        telegram_channel = TelegramChannel(experiment_session=session)
+        telegram_channel = TelegramChannel.from_experiment_session(session)
         telegram_channel.telegram_bot = Mock()
         telegram_channel.new_user_message(telegram_messages.text_message("Hi"))
 
@@ -693,7 +693,7 @@ def test_send_message_to_user_with_single_bot(
     )
     session.experiment_channel = ExperimentChannelFactory(experiment=session.experiment)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"
@@ -735,7 +735,7 @@ def test_send_message_to_user_with_multibot(
     ExperimentChannelFactory(experiment=router_exp)
     ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"
