@@ -80,7 +80,7 @@
       {% endif %}
     </li>
   {% endflag %}
-  {% flag "pipelines-v2" %}
+  {% flag "events_and_pipelines_v2" %}
     <li>
       {% if perms.pipelines.view_pipeline %}
         <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
