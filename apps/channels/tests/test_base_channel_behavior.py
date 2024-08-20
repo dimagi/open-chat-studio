@@ -29,7 +29,7 @@ from .message_examples import telegram_messages
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=False)
     channel = ExperimentChannelFactory(experiment=experiment)
-    channel = TelegramChannel(experiment, channel)
+    channel = TelegramChannel(experiment=experiment, experiment_channel=channel)
     channel.telegram_bot = Mock()
     return channel
 
@@ -646,7 +646,7 @@ def test_processor_bot_voice_setting(
     fake_service = build_fake_llm_service(responses=["keyword1", "How can I help today?"], token_counts=[0])
 
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        telegram_channel = TelegramChannel(experiment_session=session)
+        telegram_channel = TelegramChannel.from_experiment_session(session)
         telegram_channel.telegram_bot = Mock()
         telegram_channel.new_user_message(telegram_messages.text_message("Hi"))
 
