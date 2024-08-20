@@ -65,8 +65,8 @@ def get_whatsapp_numbers():
 def get_whatsapp_number_data():
     channels = ExperimentChannel.objects.filter(deleted=False, platform=ChannelPlatform.WHATSAPP).values(
         "extra_data",
+        "team__name",
         "experiment__name",
-        "experiment__team__name",
         "messaging_provider__name",
         "messaging_provider__type",
         "messaging_provider__config",
@@ -89,7 +89,7 @@ def get_whatsapp_number_data():
             provider_name = "---"
 
         yield (
-            channel["experiment__team__name"],
+            channel["team__name"],
             channel["experiment__name"],
             provider_name,
             account,

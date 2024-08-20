@@ -71,11 +71,10 @@ class ChannelBase(ABC):
         voice_replies_supported: Indicates whether the channel supports voice messages
 
     Args:
-        experiment_channel: An optional ExperimentChannel object representing the channel associated with the handler.
+        experiment: An Experiment object representing the experiment associated with the handler.
+        experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
         experiment_session: An optional ExperimentSession object representing the experiment session associated
             with the handler.
-
-        Either one of these arguments must to be provided
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
@@ -100,15 +99,13 @@ class ChannelBase(ABC):
 
     def __init__(
         self,
-        experiment_channel: ExperimentChannel | None = None,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession | None = None,
     ):
-        if not experiment_channel and not experiment_session:
-            raise MessageHandlerException("ChannelBase expects either")
-
+        self.experiment = experiment
+        self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
-        self.experiment_channel = experiment_channel if experiment_channel else experiment_session.experiment_channel
-        self.experiment = experiment_channel.experiment if experiment_channel else experiment_session.experiment
         self.message = None
         self._user_query = None
         self.bot = get_bot(experiment_session) if experiment_session else None
@@ -200,7 +197,9 @@ class ChannelBase(ABC):
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls(
-            experiment_channel=experiment_session.experiment_channel, experiment_session=experiment_session
+            experiment_session.experiment,
+            experiment_channel=experiment_session.experiment_channel,
+            experiment_session=experiment_session,
         )
 
     @property
@@ -529,9 +528,7 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel, _ = ExperimentChannel.objects.get_or_create(
-            experiment=experiment, platform=ChannelPlatform.WEB, name=f"{experiment.id}-web"
-        )
+        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
         session = super().start_new_session(
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
@@ -555,9 +552,12 @@ class TelegramChannel(ChannelBase):
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     def __init__(
-        self, experiment_channel: ExperimentChannel | None = None, experiment_session: ExperimentSession | None = None
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession | None = None,
     ):
-        super().__init__(experiment_channel, experiment_session)
+        super().__init__(experiment, experiment_channel, experiment_session)
         self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -627,9 +627,6 @@ class WhatsappChannel(ChannelBase):
 
 
 class SureAdhereChannel(ChannelBase):
-    def initialize(self):
-        self.messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-
     def send_text_to_user(self, text: str):
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
@@ -686,11 +683,12 @@ class ApiChannel(ChannelBase):
 
     def __init__(
         self,
-        experiment_channel: ExperimentChannel | None = None,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession | None = None,
         user=None,
     ):
-        super().__init__(experiment_channel, experiment_session)
+        super().__init__(experiment, experiment_channel, experiment_session)
         self.user = user
         if not self.user and not self.experiment_session:
             raise MessageHandlerException("ApiChannel requires either an existing session or a user")
@@ -710,8 +708,9 @@ class SlackChannel(ChannelBase):
 
     def __init__(
         self,
-        experiment_channel: ExperimentChannel | None = None,
-        experiment_session: ExperimentSession | None = None,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession,
         send_response_to_user: bool = True,
     ):
         """
@@ -720,7 +719,7 @@ class SlackChannel(ChannelBase):
                 This is useful when the message sending happens as part of the slack event handler
                 (e.g., in a slack event listener)
         """
-        super().__init__(experiment_channel, experiment_session)
+        super().__init__(experiment, experiment_channel, experiment_session)
         self.send_response_to_user = send_response_to_user
 
     def send_text_to_user(self, text: str):

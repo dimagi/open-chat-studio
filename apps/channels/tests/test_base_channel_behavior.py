@@ -29,7 +29,7 @@ from .message_examples import telegram_messages
 def telegram_channel(db):
     experiment = ExperimentFactory(conversational_consent_enabled=False)
     channel = ExperimentChannelFactory(experiment=experiment)
-    channel = TelegramChannel(experiment_channel=channel)
+    channel = TelegramChannel(experiment=experiment, experiment_channel=channel)
     channel.telegram_bot = Mock()
     return channel
 
@@ -130,12 +130,12 @@ def test_different_participants_created_for_same_user_in_different_teams():
 
     experiment1 = ExperimentFactory()
     exp_channel1 = ExperimentChannelFactory(experiment=experiment1)
-    channel1 = TelegramChannel(experiment_channel=exp_channel1)
+    channel1 = TelegramChannel(experiment1, exp_channel1)
     channel1.telegram_bot = Mock()
 
     experiment2 = ExperimentFactory()
     exp_channel2 = ExperimentChannelFactory(experiment=experiment2)
-    channel2 = TelegramChannel(experiment_channel=exp_channel2)
+    channel2 = TelegramChannel(experiment2, exp_channel2)
     channel2.telegram_bot = Mock()
 
     assert experiment1.team != experiment2.team
@@ -213,7 +213,7 @@ def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_use
     bot_response_to_seed_message = "Hi user"
     generate_response_for_user.return_value = bot_response_to_seed_message
     experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     pre_survey = experiment.pre_survey
     assert pre_survey
 
@@ -264,7 +264,7 @@ def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_use
 @patch("apps.chat.bots.TopicBot", Mock())
 def test_unsupported_message_type_creates_system_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
     telegram_chat_id = "123"
 
@@ -284,7 +284,7 @@ def test_unsupported_message_type_triggers_bot_response(send_text_to_user, _unsu
     bot_response = "Nope, not suppoerted laddy"
     _unsupported_message_type_response.return_value = bot_response
     experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
     telegram_chat_id = "123"
 
@@ -409,7 +409,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
     experiment = ExperimentFactory(conversational_consent_enabled=True, seed_message="Hi human")
     experiment_session = ExperimentSessionFactory(experiment=experiment)
 
-    channel = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment))
+    channel = TelegramChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     channel.experiment_session = experiment_session
     pre_survey = experiment.pre_survey
     telegram_chat_id = "123"
@@ -470,20 +470,20 @@ def test_participant_reused_across_experiments(_get_bot_response):
     # User chats to experiment 1
     experiment1 = ExperimentFactory()
     team1 = experiment1.team
-    tele_channel1 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment1))
+    tele_channel1 = TelegramChannel(experiment1, ExperimentChannelFactory(experiment=experiment1))
     tele_channel1.telegram_bot = Mock()
     tele_channel1.new_user_message(telegram_messages.text_message(chat_id=chat_id))
 
     # User chats to experiment 2 that is in the same team
     experiment2 = ExperimentFactory(team=team1)
-    tele_channel2 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment2))
+    tele_channel2 = TelegramChannel(experiment2, ExperimentChannelFactory(experiment=experiment2))
     tele_channel2.telegram_bot = Mock()
     tele_channel2.new_user_message(telegram_messages.text_message(chat_id=chat_id))
 
     # User chats to experiment 3 that is in a different team
     experiment3 = ExperimentFactory()
     team2 = experiment3.team
-    tele_channel3 = TelegramChannel(experiment_channel=ExperimentChannelFactory(experiment=experiment3))
+    tele_channel3 = TelegramChannel(experiment3, ExperimentChannelFactory(experiment=experiment3))
     tele_channel3.telegram_bot = Mock()
     tele_channel3.new_user_message(telegram_messages.text_message(chat_id=chat_id))
 
@@ -646,7 +646,7 @@ def test_processor_bot_voice_setting(
     fake_service = build_fake_llm_service(responses=["keyword1", "How can I help today?"], token_counts=[0])
 
     with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        telegram_channel = TelegramChannel(experiment_session=session)
+        telegram_channel = TelegramChannel.from_experiment_session(session)
         telegram_channel.telegram_bot = Mock()
         telegram_channel.new_user_message(telegram_messages.text_message("Hi"))
 
@@ -693,7 +693,7 @@ def test_send_message_to_user_with_single_bot(
     )
     session.experiment_channel = ExperimentChannelFactory(experiment=session.experiment)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"
@@ -735,7 +735,7 @@ def test_send_message_to_user_with_multibot(
     ExperimentChannelFactory(experiment=router_exp)
     ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"

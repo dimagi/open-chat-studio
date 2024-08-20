@@ -619,9 +619,7 @@ def create_channel(request, team_slug: str, experiment_id: int):
 
 @login_and_team_required
 def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
-    channel = get_object_or_404(
-        ExperimentChannel, id=channel_id, experiment_id=experiment_id, experiment__team__slug=team_slug
-    )
+    channel = get_object_or_404(ExperimentChannel, id=channel_id, experiment_id=experiment_id, team__slug=team_slug)
     if request.POST.get("action") == "delete":
         if not request.user.has_perm("channels.delete_experimentchannel"):
             raise PermissionDenied

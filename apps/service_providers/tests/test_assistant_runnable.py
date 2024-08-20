@@ -15,7 +15,7 @@ from openai.types.beta.threads.text_content_block import TextContentBlock
 from openai.types.file_object import FileObject
 
 from apps.channels.datamodels import Attachment
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatAttachment
 from apps.service_providers.llm_service.runnables import (
     AssistantExperimentRunnable,
     GenerationCancelled,
@@ -35,7 +35,7 @@ def session():
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
-    local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID)
+    local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID, include_file_info=False)
     session.experiment.assistant = local_assistant
     session.get_participant_data = lambda *args, **kwargs: None
     session.get_participant_timezone = lambda *args, **kwargs: ""
@@ -122,6 +122,37 @@ def test_assistant_conversation_input_formatting(
     result = assistant.invoke("test")
     assert result.output == "ai response"
     assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+def test_assistant_includes_file_type_information(
+    create_and_run, retrieve_run, list_messages, save_response_annotations, get_file_type_info, session
+):
+    ai_response = "ai response"
+    save_response_annotations.return_value = (ai_response, {})
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    get_file_type_info.return_value = [{"file-12345": "application/fmt"}]
+    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}])
+    assistant = session.experiment.assistant
+    assistant.instructions = "Help the user"
+    assistant.include_file_info = True
+
+    assistant = _get_assistant_mocked_history_recording(
+        session, get_attachments_return_value=[ChatAttachment(chat=session.chat, tool_type="code_interpreter")]
+    )
+    result = assistant.invoke("test")
+    assert result.output == ai_response
+    expected_instructions = "Help the user\n\nFile type information:\n[{'file-12345': 'application/fmt'}]"
+    assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
 def test_assistant_runnable_raises_error(session):
@@ -352,10 +383,11 @@ def test_assistant_reponse_with_annotations(
     assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
-def _get_assistant_mocked_history_recording(session):
+def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
     state = AssistantExperimentState(session.experiment, session)
     assistant = AssistantExperimentRunnable(state=state)
     state.save_message_to_history = Mock()
+    state.get_attachments = lambda _type: get_attachments_return_value or []
     return assistant
 
 
