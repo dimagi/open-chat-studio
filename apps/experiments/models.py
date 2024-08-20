@@ -272,7 +272,8 @@ class VoiceResponseBehaviours(models.TextChoices):
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
-    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+    DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
+    MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -751,7 +752,7 @@ class ExperimentSession(BaseTeamModel):
         """
         from apps.chat.bots import TopicBot
 
-        topic_bot = TopicBot(self, experiment=use_experiment)
+        topic_bot = TopicBot(self, experiment=use_experiment, disable_tools=True)
         return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
@@ -795,6 +796,7 @@ class ExperimentSession(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,

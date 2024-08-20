@@ -63,6 +63,7 @@ from tempfile import TemporaryFile
 
 import openai
 from django.core.files import File as DjangoFile
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
 
@@ -96,11 +97,15 @@ def wrap_openai_errors(fn):
 
 
 @wrap_openai_errors
-def push_assistant_to_openai(assistant: OpenAiAssistant):
+def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | None = None):
     """Pushes the assistant to OpenAI. If the assistant already exists, it will be updated."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     data = _ocs_assistant_to_openai_kwargs(assistant)
     data["tool_resources"] = _sync_tool_resources(assistant)
+
+    if internal_tools:
+        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
+
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
     else:
