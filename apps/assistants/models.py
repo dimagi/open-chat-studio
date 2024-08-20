@@ -31,7 +31,7 @@ class OpenAiAssistant(BaseTeamModel):
     temperature = models.FloatField(default=1.0, validators=[MinValueValidator(0.0), MaxValueValidator(2.0)])
     top_p = models.FloatField(default=1.0, validators=[MinValueValidator(0.0), MaxValueValidator(1.0)])
     builtin_tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
-    include_file_info = models.BooleanField(default=False)
+    include_file_info = models.BooleanField(default=True)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
         on_delete=models.SET_NULL,
