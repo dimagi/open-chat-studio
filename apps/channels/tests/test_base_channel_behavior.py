@@ -693,7 +693,7 @@ def test_send_message_to_user_with_single_bot(
     )
     session.experiment_channel = ExperimentChannelFactory(experiment=session.experiment)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"
@@ -735,7 +735,7 @@ def test_send_message_to_user_with_multibot(
     ExperimentChannelFactory(experiment=router_exp)
     ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
 
-    channel = TelegramChannel(experiment_session=session)
+    channel = TelegramChannel.from_experiment_session(experiment_session=session)
     channel.telegram_bot = Mock()
 
     bot_message = "Hi user"
