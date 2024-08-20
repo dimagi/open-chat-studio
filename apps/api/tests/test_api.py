@@ -53,8 +53,8 @@ def test_retrieve_experiments(experiment):
 
 @pytest.mark.django_db()
 def test_only_experiments_from_the_scoped_team_is_returned():
-    experiment_team_1 = ExperimentFactory(team=TeamWithUsersFactory())
-    experiment_team_2 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment_team_1 = ExperimentFactory(team=TeamWithUsersFactory(member__user__username="uname1"))
+    experiment_team_2 = ExperimentFactory(team=TeamWithUsersFactory(member__user__username="uname2"))
     team1 = experiment_team_1.team
     team2 = experiment_team_2.team
 
