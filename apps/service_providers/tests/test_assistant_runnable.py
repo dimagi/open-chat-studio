@@ -33,7 +33,6 @@ ASSISTANT_ID = "test_assistant_id"
 
 @pytest.fixture(params=[True, False])
 def session(request):
-    AssistantExperimentState.save_message_to_history = Mock()
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
@@ -58,6 +57,7 @@ def db_session(request):
     return session
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -86,6 +86,7 @@ def test_assistant_conversation_new_chat(
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -114,6 +115,7 @@ def test_assistant_conversation_existing_chat(
     assert result.output == "ai response"
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -175,6 +177,7 @@ def test_assistant_includes_file_type_information(
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
     experiment = session.experiment
@@ -186,6 +189,7 @@ def test_assistant_runnable_raises_error(session):
             assistant_runnable.invoke("test")
 
 
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
     experiment = session.experiment
@@ -231,6 +235,7 @@ def test_assistant_runnable_handles_cancellation_status(session):
         ),
     ],
 )
+@patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
@@ -260,7 +265,6 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
     session = db_session
     create_files_remote.return_value = ["openai-file-1", "openai-file-2"]
     files = FileFactory.create_batch(2)
-
     chat = session.chat
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
@@ -383,6 +387,7 @@ def test_assistant_reponse_with_annotations(
             " tree stuff [existing.txt](file:dimagi-test:1:9)."
         )
     assert result.output == expected_output_message
+
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
