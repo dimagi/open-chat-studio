@@ -186,16 +186,19 @@ class ExperimentForm(forms.ModelForm):
             "echo_transcript",
             "use_processor_bot_voice",
             "trace_provider",
+            "participant_whitelist",
         ]
-        labels = {
-            "source_material": "Inline Source Material",
-        }
+        labels = {"source_material": "Inline Source Material", "participant_whitelist": "Participant Whitelist"}
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
             "use_processor_bot_voice": (
                 "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
                 "have one, the router bot's voice will be used."
+            ),
+            "participant_whitelist": (
+                "Add participant identifiers to whitelist for this experiment. Separate identifiers with a comma. "
+                "Phone numbers should be in E164 format e.g. +27123456789"
             ),
         }
 
@@ -231,6 +234,12 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def clean_participant_whitelist(self):
+        cleaned_identifiers = []
+        for identifier in self.cleaned_data["participant_whitelist"]:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        return cleaned_identifiers
 
     def clean(self):
         cleaned_data = super().clean()

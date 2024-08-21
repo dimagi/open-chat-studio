@@ -81,6 +81,18 @@
         {% render_form_fields form "tools" %}
       </div>
 
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Whitelist">
+      <div role="tabpanel" class="tab-content">
+        <h3 class="text-md font-bold">{% translate "Please note" %}</h3>
+        <p class="py-4 text-sm">
+          {% blocktranslate %}
+            To whitelist particiapants, simply add their identifier in this list. When the list is empty, the bot will
+            be public.
+          {% endblocktranslate %}
+          {% render_form_fields form "participant_whitelist" %}
+        </p>
+      </div>
+
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "trace_provider" %}
