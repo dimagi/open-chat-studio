@@ -20,6 +20,7 @@ from apps.experiments.models import (
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
 
 from .message_examples import telegram_messages
@@ -745,3 +746,33 @@ def test_send_message_to_user_with_multibot(
         send_text_to_user.assert_called()
     else:
         send_voice_to_user.assert_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("whitelist", "is_external_user", "identifier", "is_allowed"),
+    [
+        (["11111"], True, "11111", True),
+        ([], True, "11111", True),
+        (["11111"], True, "22222", False),
+        (["11111"], False, "someone@test.com", True),
+    ],
+)
+@patch("apps.chat.channels.TelegramChannel.send_text_to_user")
+def test_participant_authorization(
+    send_text_to_user, whitelist, is_external_user, identifier, is_allowed, telegram_channel
+):
+    message = telegram_messages.text_message(chat_id=identifier)
+    experiment = telegram_channel.experiment
+    if not is_external_user:
+        MembershipFactory(team=experiment.team, user__email=identifier)
+
+    experiment.participant_whitelist = whitelist
+    experiment.get_whitelisted_participant_identifiers() == [identifier]
+    telegram_channel.message = message
+    assert telegram_channel._participant_is_allowed() == is_allowed
+
+    if not is_allowed:
+        telegram_channel.new_user_message(message)
+        send_text_to_user.assert_called()
+        assert send_text_to_user.call_args[0][0] == "Sorry, you are not allowed to chat to this bot"

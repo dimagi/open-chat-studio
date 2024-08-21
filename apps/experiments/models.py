@@ -423,6 +423,13 @@ class Experiment(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
+    @property
+    def only_whitelisted_participants_allowed(self):
+        """
+        Whether or not a bot should be limited to whitelisted participants is inferred by the presence of a whitelist
+        """
+        return len(self.participant_whitelist) > 0
+
     def get_whitelisted_participant_identifiers(self):
         whitelist = []
         team_user_emails = self.team.members.all().values_list("email", flat=True)
