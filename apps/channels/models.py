@@ -32,6 +32,11 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
 
     @classmethod
+    def team_global_platforms(cls):
+        """These platforms should only ever have one channel per team"""
+        return [cls.API, cls.WEB]
+
+    @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
@@ -135,6 +140,13 @@ class ExperimentChannel(BaseTeamModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("team", "platform"),
+                name="unique_global_channel_per_team",
+                condition=Q(platform__in=ChannelPlatform.team_global_platforms(), deleted=False),
+            ),
+        ]
 
     def __str__(self):
         return f"Channel: {self.name} ({self.platform})"
