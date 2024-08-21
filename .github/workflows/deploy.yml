@@ -62,8 +62,8 @@ jobs:
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile.web
-        cache-from: type=registry,ref=${{ steps.image-name.outputs.image_latest }}
-        cache-to: type=inline
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Update ECS task def for Django web container
       id: django-web-def
