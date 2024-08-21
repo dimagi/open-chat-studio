@@ -73,7 +73,7 @@ class TopicBot:
         self.default_child_chain = None
         self.default_tag = None
         self.terminal_chain = None
-
+        self.processor_experiment = None
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
@@ -110,6 +110,8 @@ class TopicBot:
         else:
             tag, chain = None, self.chain
 
+        # The processor_experiment is the experiment that generated the output
+        self.processor_experiment = chain.experiment
         result = chain.invoke(
             input_str,
             config={
@@ -186,8 +188,8 @@ class TopicBot:
         config = {}
         if self.trace_service:
             callback = self.trace_service.get_callback(
-                participant_id=self.session.participant.identifier,
-                session_id=self.session.external_id,
+                participant_id=str(self.session.participant.identifier),
+                session_id=str(self.session.external_id),
             )
             config = {"callbacks": [callback]}
         return main_bot_chain.invoke(user_input, config=config)

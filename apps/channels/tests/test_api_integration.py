@@ -9,7 +9,6 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
-from ...utils.factories.channels import ExperimentChannelFactory
 from .message_examples import api_messages
 
 
@@ -19,11 +18,11 @@ def experiment(db):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
-    channels_queryset = ExperimentChannel.objects.filter(experiment=experiment, platform=ChannelPlatform.API)
+    channels_queryset = ExperimentChannel.objects.filter(team=experiment.team, platform=ChannelPlatform.API)
     assert not channels_queryset.exists()
 
     user = experiment.team.members.first()
@@ -46,7 +45,7 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.ApiChannel._get_latest_session")
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_new_message_with_existing_session(get_llm_response_mock, _get_latest_session, experiment, client):
     get_llm_response_mock.return_value = "Hi user"
 
@@ -54,7 +53,7 @@ def test_new_message_with_existing_session(get_llm_response_mock, _get_latest_se
     participant, _ = Participant.objects.get_or_create(
         identifier=user.email, team=experiment.team, user=user, platform="api"
     )
-    channel = ExperimentChannelFactory(platform=ChannelPlatform.API, experiment=experiment)
+    channel = ExperimentChannel.objects.get_team_api_channel(experiment.team)
     session = ExperimentSessionFactory(experiment=experiment, participant=participant, experiment_channel=channel)
 
     client = ApiTestClient(user, experiment.team)

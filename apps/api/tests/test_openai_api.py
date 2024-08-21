@@ -48,7 +48,7 @@ def api_key(team_with_users):
     available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users"],
     serialized_rollback=True,
 )
-@patch("apps.chat.channels.ApiChannel._get_experiment_response")
+@patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
     mock_experiment_response.return_value = "I am fine, thank you."
 

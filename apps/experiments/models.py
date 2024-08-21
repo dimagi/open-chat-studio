@@ -386,6 +386,7 @@ class Experiment(BaseTeamModel):
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
+    use_processor_bot_voice = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]

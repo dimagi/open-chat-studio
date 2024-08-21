@@ -26,7 +26,9 @@ def test_handle_user_message(process_input, slack_channel):
         thread_ts="thread_ts",
         message_text="Hello",
     )
-    response = SlackChannel(slack_channel, session, send_response_to_user=False).new_user_message(message)
+    response = SlackChannel(
+        slack_channel.experiment, slack_channel, session, send_response_to_user=False
+    ).new_user_message(message)
     assert response == "Hi"
 
 
