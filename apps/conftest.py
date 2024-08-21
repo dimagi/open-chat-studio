@@ -4,12 +4,7 @@ import pytest
 from django.db import connections
 
 from apps.utils.factories.experiment import ExperimentFactory
-from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
-
-
-@pytest.fixture()
-def team():
-    return TeamFactory.create()
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
