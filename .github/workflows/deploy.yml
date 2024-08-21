@@ -14,6 +14,9 @@ env:
   AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
   ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-ecr-repo
   ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Cluster
+  ECS_SERVICE_DJANGO: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+  ECS_SERVICE_CELERY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Celery
+  ECS_SERVICE_CELERY_BEAT: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeat
 permissions:
   id-token: write
   contents: read
@@ -96,22 +99,26 @@ jobs:
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
         task-definition: ${{ steps.django-migrations-def.outputs.task-definition }}
-        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+        service: ${{ env.ECS_SERVICE_DJANGO }}
         cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+        wait-for-service-stability: false
 
     - name: Deploy Celery Worker
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
         task-definition: ${{ steps.celery-worker-def.outputs.task-definition }}
-        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Celery
+        service: ${{ env.ECS_SERVICE_CELERY }}
         cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: false  # don't wait for this one but wait for the next one
+        wait-for-service-stability: false
 
     - name: Deploy Celery Beat
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
         task-definition: ${{ steps.celery-beat-def.outputs.task-definition }}
-        service: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeat
+        service: ${{ env.ECS_SERVICE_CELERY_BEAT }}
         cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+        wait-for-service-stability: false
+
+    - name: Wait for service stability
+      run: |
+          aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE_DJANGO $ECS_SERVICE_CELERY $ECS_SERVICE_CELERY_BEAT
