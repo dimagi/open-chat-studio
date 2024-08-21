@@ -387,6 +387,7 @@ class Experiment(BaseTeamModel):
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
     use_processor_bot_voice = models.BooleanField(default=False)
+    participant_whitelist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -421,6 +422,13 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+    def get_whitelisted_participant_identifiers(self):
+        whitelist = []
+        team_user_emails = self.team.members.all().values_list("email", flat=True)
+        whitelist.extend(list(team_user_emails))
+        whitelist.extend(self.participant_whitelist)
+        return whitelist
 
 
 class ExperimentRouteType(models.TextChoices):
