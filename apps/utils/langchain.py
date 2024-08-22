@@ -134,6 +134,16 @@ class FakeLlmSimpleTokenCount(FakeLlm):
         return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
 
 
+class FakeLlmEcho(FakeLlmSimpleTokenCount):
+    """Echos the input"""
+
+    responses: list = []
+
+    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
+        self.calls.append(mock.call(messages, *args, **kwargs))
+        return messages[-1]
+
+
 @contextmanager
 def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int] = None):
     service = build_fake_llm_service(responses=responses, token_counts=token_counts)
@@ -156,3 +166,9 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
 def build_fake_llm_service(responses, token_counts, fake_llm=None):
     fake_llm = fake_llm or FakeLlmSimpleTokenCount(responses=responses)
     return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
+
+
+def build_fake_llm_echo_service(token_counts=None):
+    if token_counts is None:
+        token_counts = [0]
+    return FakeLlmService(llm=FakeLlmEcho(), token_counter=FakeTokenCounter(token_counts=token_counts))
