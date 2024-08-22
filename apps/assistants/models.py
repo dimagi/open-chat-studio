@@ -44,6 +44,7 @@ class OpenAiAssistant(BaseTeamModel):
         help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
+    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     files = models.ManyToManyField("files.File", blank=True)
 
@@ -70,6 +71,10 @@ class OpenAiAssistant(BaseTeamModel):
 
     def supports_file_search(self):
         return "file_search" in self.builtin_tools
+
+    @property
+    def tools_enabled(self):
+        return len(self.tools) > 0
 
 
 @audit_fields(

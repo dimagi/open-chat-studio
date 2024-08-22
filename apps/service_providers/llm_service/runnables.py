@@ -28,6 +28,7 @@ from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.state import (
     AssistantExperimentState,
     ChatExperimentState,
@@ -49,15 +50,19 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession):
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, disable_tools: bool = False):
     """Create an experiment runnable based on the experiment configuration."""
-    if experiment.assistant:
-        return AssistantExperimentRunnable(state=AssistantExperimentState(experiment=experiment, session=session))
+    state_kwargs = {"experiment": experiment, "session": session}
+    if assistant := experiment.assistant:
+        state = AssistantExperimentState(**state_kwargs)
+        if assistant.tools_enabled and not disable_tools:
+            return AssistantAgentRunnable(state=state)
+        return AssistantExperimentRunnable(state=state)
 
     assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
-    state = ChatExperimentState(experiment=experiment, session=session)
-    if experiment.tools_enabled:
+    state = ChatExperimentState(**state_kwargs)
+    if experiment.tools_enabled and not disable_tools:
         return AgentExperimentRunnable(state=state)
 
     return SimpleExperimentRunnable(state=state)
@@ -267,24 +272,26 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         config = ensure_config(config)
         merged_config = merge_configs(config, {"callbacks": [callback]})
 
-        input_dict = {"content": self.state.format_input(input), "attachments": message_attachments}
+        input_dict = {
+            "content": self.state.format_input(input),
+            "attachments": message_attachments,
+        } | self._extra_input_configs()
 
         if config.get("configurable", {}).get("save_input_to_history", True):
             file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
             self.state.save_message_to_history(input, ChatMessageType.HUMAN, annotation_file_ids=list(file_ids))
 
         # Note: if this is not a new chat then the history won't be persisted to the thread
-        thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
-        if thread_id:
-            input_dict["thread_id"] = thread_id
+        current_thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
 
+        if current_thread_id:
+            input_dict["thread_id"] = current_thread_id
         input_dict["instructions"] = self.state.get_assistant_instructions()
-        response = self._get_response_with_retries(merged_config, input_dict, thread_id)
+        output, thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
+        output, annotation_file_ids = self._save_response_annotations(output, thread_id, run_id)
 
-        output, annotation_file_ids = self._save_response_annotations(response)
-
-        if not thread_id:
-            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, response.thread_id)
+        if not current_thread_id:
+            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
         self.state.save_message_to_history(
@@ -293,7 +300,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     @transaction.atomic()
-    def _save_response_annotations(self, response: OpenAIAssistantFinish) -> tuple[str, dict]:
+    def _save_response_annotations(self, output, thread_id, run_id) -> tuple[str, dict]:
         """
         This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
         message, specifically regarding annotations.
@@ -308,7 +315,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         generated_files = []
 
         # This output is a concatanation of all messages in this run
-        output_message = response.return_values["output"]
+        output_message = output
         team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
@@ -318,7 +325,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         ).values_list("external_id", flat=True)
 
         file_ids = set()
-        for message in client.beta.threads.messages.list(response.thread_id, run_id=response.run_id):
+        for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
                 annotations = message_content.text.annotations
                 for idx, annotation in enumerate(annotations):
@@ -409,21 +416,20 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 resource_file_ids[resource_name] = openai_file_ids
         return resource_file_ids
 
-    def _get_response_with_retries(self, config, input_dict, thread_id):
-        assistant = self.state.get_openai_assistant()
+    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
+        assistant_runnable = self.state.get_openai_assistant()
+
         for i in range(3):
             try:
-                response: OpenAIAssistantFinish = assistant.invoke(input_dict, config)
+                return self._get_response(assistant_runnable, input_dict, config)
             except openai.BadRequestError as e:
-                self._handle_api_error(thread_id, assistant, e)
+                self._handle_api_error(thread_id, assistant_runnable, e)
             except ValueError as e:
                 if re.search(r"cancelling|cancelled", str(e)):
                     raise GenerationCancelled(ChainOutput(output="", prompt_tokens=0, completion_tokens=0))
-            else:
-                return response
         raise GenerationError("Failed to get response after 3 retries")
 
-    def _handle_api_error(self, thread_id, assistant, exc):
+    def _handle_api_error(self, thread_id: str, assistant_runnable: OpenAIAssistantRunnable, exc):
         """Handle OpenAI API errors.
         This should either raise an exception or return if the error was handled and the run should be retried.
         """
@@ -436,18 +442,43 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if error_thread_id != thread_id:
             raise GenerationError(f"Thread ID mismatch: {error_thread_id} != {thread_id}", exc)
 
-        self._cancel_run(assistant, thread_id, run_id)
+        self._cancel_run(assistant_runnable, thread_id, run_id)
 
-    def _cancel_run(self, assistant, thread_id, run_id):
+    def _cancel_run(self, assistant_runnable, thread_id, run_id):
         logger.info("Cancelling run %s in thread %s", run_id, thread_id)
-        run = assistant.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+        run = assistant_runnable.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
         cancelling = run.status == "cancelling"
         while cancelling:
-            run = assistant.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+            run = assistant_runnable.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             cancelling = run.status == "cancelling"
             if cancelling:
-                sleep(assistant.check_every_ms / 1000)
+                sleep(assistant_runnable.check_every_ms / 1000)
 
     @property
     def experiment(self) -> Experiment:
         return self.state.experiment
+
+    def _get_response(
+        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
+    ) -> tuple[str, str, str]:
+        response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
+        return response.return_values["output"], response.thread_id, response.run_id
+
+    def _extra_input_configs(self) -> dict:
+        return {"tools": []}
+
+
+class AssistantAgentRunnable(AssistantExperimentRunnable):
+    def _extra_input_configs(self) -> dict:
+        return {}
+
+    def _get_response(
+        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
+    ) -> tuple[str, str, str]:
+        agent = AgentExecutor.from_agent_and_tools(
+            agent=assistant_runnable,
+            tools=self.state.get_tools(),
+            max_execution_time=120,
+        )
+        response: dict = agent.invoke(input, config)
+        return response["output"], response["thread_id"], response["run_id"]

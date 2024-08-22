@@ -73,8 +73,8 @@ class ScheduledMessageConfigForm(forms.Form):
     time_period = forms.ChoiceField(label="Time period", choices=TimePeriod.choices)
     repetitions = forms.IntegerField(
         label="Repetitions",
-        min_value=1,
-        help_text="Indicates how many times this should go on for. Specify '1' for a one time event",
+        min_value=0,
+        help_text="Indicates how many times this should go on for. Specify '0' for a one time event",
     )
     experiment_id = forms.ChoiceField(
         label="Experiment", help_text="Select the experiment to process this scheduled message"
@@ -82,6 +82,7 @@ class ScheduledMessageConfigForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
+        non_required_fields = kwargs.pop("non_required_fields", [])
         super().__init__(*args, **kwargs)
 
         field = self.fields["experiment_id"]
@@ -95,6 +96,9 @@ class ScheduledMessageConfigForm(forms.Form):
         if not kwargs.get("initial") and len(experiments) == 1:
             field.initial = experiment_id
             field.widget = field.hidden_widget()
+
+        for field_name in non_required_fields:
+            self.fields[field_name].required = False
 
 
 class EventActionForm(forms.ModelForm):

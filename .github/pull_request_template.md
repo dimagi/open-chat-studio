@@ -1,6 +1,6 @@
 ## Description
 <!-- A summary of the change, the reason for its implementation, and relevent links. 
-Include technical details required to to understand the change. -->
+Include technical details required to understand the change. -->
 
 ## User Impact
 <!-- Describe the impact of this change on the end-users. -->
