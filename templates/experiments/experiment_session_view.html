@@ -51,7 +51,7 @@
           <div role="tablist" class="tabs tabs-bordered">
             <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Formatted" checked/>
             <div role="tabpanel" class="tab-content p-10">
-              <div class="grid grid-cols-3">
+              <div class="grid grid-cols-3 max-h-80 overflow-y-auto">
                 {% for k, v in experiment_session.get_participant_data.items %}
                   <div class="p-4 col-span-1">
                     <div class="font-semibold text-sm">{{ k }}</div>
@@ -63,7 +63,9 @@
             <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Raw" />
             <div role="tabpanel" class="tab-content p-10">
             <pre class="overflow-x-auto">
-              {{ experiment_session.get_participant_data_json }}
+              <div class="max-h-80 overflow-y-auto">
+                {{ experiment_session.get_participant_data_json }}
+              </div>
             </pre>
             </div>
           </div>

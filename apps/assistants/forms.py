@@ -2,11 +2,26 @@ from django import forms
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
+from apps.experiments.models import AgentTools
 from apps.files.forms import get_file_formset
+from apps.utils.prompt import validate_prompt_variables
+
+INSTRUCTIONS_HELP_TEXT = """
+    <div class="tooltip" data-tip="
+        Available variables to include in your prompt: {participant_data} and
+        {current_datetime}.
+        {participant_data} is optional.
+        {current_datetime} is only required when the bot is using a tool.
+    ">
+        <i class="text-xs fa fa-circle-question">
+        </i>
+    </div>
+"""
 
 
 class OpenAiAssistantForm(forms.ModelForm):
     builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
+    tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
 
     class Meta:
         model = OpenAiAssistant
@@ -15,6 +30,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "instructions",
             "include_file_info",
             "builtin_tools",
+            "tools",
             "llm_provider",
             "llm_model",
             "temperature",
@@ -23,6 +39,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         labels = {
             "builtin_tools": "Enable Built-in Tools",
         }
+        help_texts = {"instructions": INSTRUCTIONS_HELP_TEXT}
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -38,6 +55,15 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        validate_prompt_variables(
+            form_data=cleaned_data,
+            prompt_key="instructions",
+            known_vars={"participant_data", "current_datetime"},
+        )
+        return cleaned_data
 
     def save(self, commit=True):
         self.instance.team = self.request.team
