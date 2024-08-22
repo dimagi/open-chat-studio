@@ -188,7 +188,7 @@ class ExperimentForm(forms.ModelForm):
             "trace_provider",
             "participant_allowlist",
         ]
-        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant Whitelist"}
+        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
@@ -197,8 +197,7 @@ class ExperimentForm(forms.ModelForm):
                 "have one, the router bot's voice will be used."
             ),
             "participant_allowlist": (
-                "Add participant identifiers to whitelist for this experiment. Separate identifiers with a comma. "
-                "Phone numbers should be in E164 format e.g. +27123456789"
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
             ),
         }
 
@@ -786,6 +785,9 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
     except ValidationError:
         # old links dont have uuids
+        raise Http404
+
+    if not experiment.is_public:
         raise Http404
 
     consent = experiment.consent_form
