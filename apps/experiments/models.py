@@ -424,7 +424,7 @@ class Experiment(BaseTeamModel):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     @property
-    def is_public(self):
+    def is_public(self) -> bool:
         """
         Whether or not a bot is public depends on the `participant_allowlist`. If it's empty, the bot is public.
         """

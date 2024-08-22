@@ -89,7 +89,14 @@
             To limit the set of particiapants that can chat with this bot, simply add their identifiers in this list.
             When the list is empty, the bot will accessible via its public link.
           {% endblocktranslate %}
-          {% render_form_fields form "participant_allowlist" %}
+          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist }}}">
+            <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist"></input>
+            <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
+              {% for identifier in team_participant_identifiers %}
+                <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
+              {% endfor %}
+            </select>
+          </div>
         </p>
       </div>
 
@@ -106,6 +113,20 @@
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
+
+    let element = document.getElementById('allowlist-multiselect');
+    new TomSelect(element, {
+      maxItems: null,
+      create: true,
+      plugins: {
+        'checkbox_options': {
+          'checkedClassNames':   ['ts-checked'],
+          'uncheckedClassNames': ['ts-unchecked'],
+        }
+      },
+    });
+
+
     const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
     const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
     const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
