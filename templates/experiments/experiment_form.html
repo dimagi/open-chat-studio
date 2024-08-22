@@ -92,14 +92,14 @@
           {% endblocktranslate %}
           <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist }}}">
             <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist"></input>
-            <button type="button" class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'id_participant_allowlist')" title="Copy to clipboard">
-              <i class="fa-solid fa-copy"></i> <span>Copy participant list</span>
-            </button>
             <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
               {% for identifier in team_participant_identifiers %}
                 <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
               {% endfor %}
             </select>
+            <button type="button" class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'id_participant_allowlist')" title="Copy to clipboard">
+              <i class="fa-solid fa-copy"></i> <span>Copy participant list</span>
+            </button>
           </div>
         </p>
       </div>
