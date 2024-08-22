@@ -275,12 +275,6 @@ class AgentTools(models.TextChoices):
     SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
 
 
-class ExperimentStatus(models.TextChoices):
-    DRAFT = "Draft", "Draft"
-    RELEASED = "Released", "Released"
-    DEPRECATED = "Deprecated", "Deprecated"
-
-
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel):
     """
@@ -289,11 +283,6 @@ class Experiment(BaseTeamModel):
     """
 
     objects = ExperimentObjectManager()
-    status = models.CharField(
-        max_length=10,
-        choices=ExperimentStatus.choices,
-        default=ExperimentStatus.DRAFT,
-    )
     working_experiment = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -305,6 +294,7 @@ class Experiment(BaseTeamModel):
         null=True,
         blank=True,
     )
+    is_default = models.BooleanField(default=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -332,7 +322,7 @@ class Experiment(BaseTeamModel):
     is_active = models.BooleanField(
         default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
     )
-
+    is_archived = models.BooleanField(default=False)
     source_material = models.ForeignKey(
         SourceMaterial,
         on_delete=models.SET_NULL,
@@ -466,7 +456,7 @@ class ExperimentRoute(BaseTeamModel):
         parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
 
         if parent:
-            parent_is_released = parent.status == "Released"
+            parent_is_released = parent.working_experiment and not parent.is_archived
             child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
             eligible_experiments = (
                 Experiment.objects.filter(team=team)
@@ -475,8 +465,7 @@ class ExperimentRoute(BaseTeamModel):
                 .exclude(id=parent.id)
             )
             if parent_is_released:
-                # Ensure child experiments are also 'Released' if parent is
-                eligible_experiments = eligible_experiments.filter(status="Released")
+                eligible_experiments = eligible_experiments.filter(is_archived=False)
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
 

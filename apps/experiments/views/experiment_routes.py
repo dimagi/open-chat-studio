@@ -45,7 +45,7 @@ class CreateExperimentRoute(CreateView):
 
         # Set parent_version and child_version if experiment is versioned
         experiment = Experiment.objects.get(id=self.kwargs["experiment_id"])
-        if experiment.status == "Released":
+        if experiment.working_experiment and not experiment.is_archived:
             self.object.parent_version = experiment.version_number
             self.object.child_version = Experiment.objects.get(id=self.object.child_id).version_number
 
