@@ -19,5 +19,5 @@ class MessageHandlerException(ChatException):
         super().__init__(message)
 
 
-class ParticipantNotWhitelistedException(Exception):
+class ParticipantNotAllowedException(Exception):
     pass

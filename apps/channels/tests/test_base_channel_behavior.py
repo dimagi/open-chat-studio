@@ -767,8 +767,7 @@ def test_participant_authorization(
     if not is_external_user:
         MembershipFactory(team=experiment.team, user__email=identifier)
 
-    experiment.participant_whitelist = whitelist
-    experiment.get_whitelisted_participant_identifiers() == [identifier]
+    experiment.participant_allowlist = whitelist
     telegram_channel.message = message
     assert telegram_channel._participant_is_allowed() == is_allowed
 
