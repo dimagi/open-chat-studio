@@ -79,10 +79,7 @@ class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: str = (
-        "Make a summary of the following text: {input}. "
-        "Output it as JSON with a single key called 'summary' with the summary."
-    )
+    prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
     def _process(self, state: PipelineState) -> PipelineState:
         prompt = PromptTemplate.from_template(template=self.prompt)
@@ -93,7 +90,10 @@ class LLMResponseWithPrompt(LLMResponse):
 
     def _get_context(self, state: PipelineState, prompt: PromptTemplate):
         session = state["experiment_session"]
-        context = {"input": state["messages"][-1]}
+        context = {}
+
+        if "input" in prompt.input_variables:
+            context["input"] = state["messages"][-1]
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")

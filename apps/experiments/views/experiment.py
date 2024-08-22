@@ -253,9 +253,11 @@ class ExperimentForm(forms.ModelForm):
             if not cleaned_data.get("llm"):
                 errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
         elif bot_type == "assistant":
+            cleaned_data["pipeline"] = None
             if not cleaned_data.get("assistant"):
                 errors["assistant"] = "Assistant is required when creating an assistant experiment"
         elif bot_type == "pipeline":
+            cleaned_data["assistant"] = None
             if not cleaned_data.get("pipeline"):
                 errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
 

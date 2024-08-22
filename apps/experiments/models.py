@@ -423,8 +423,6 @@ class Experiment(BaseTeamModel):
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
-        elif self.pipeline:
-            return self.pipeline.get_llm_service()
 
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
