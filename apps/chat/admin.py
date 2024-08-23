@@ -1,6 +1,24 @@
 from django.contrib import admin
 
+from ..experiments.models import ExperimentSession
 from .models import Chat, ChatAttachment, ChatMessage
+
+
+class ExperimentSessionInline(admin.TabularInline):
+    model = ExperimentSession
+    fields = (
+        "created_at",
+        "experiment",
+        "participant",
+    )
+    readonly_fields = (
+        "created_at",
+        "experiment",
+        "participant",
+    )
+    can_delete = False
+    extra = 0
+    show_change_link = True
 
 
 class ChatMessageInline(admin.TabularInline):
@@ -32,6 +50,7 @@ class ChatAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "created_at"
     inlines = [
+        ExperimentSessionInline,
         ChatAttachmentInline,
         ChatMessageInline,
     ]
