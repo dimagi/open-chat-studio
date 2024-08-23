@@ -173,7 +173,10 @@ def test_assistant_includes_file_type_information(
     )
     result = assistant.invoke("test")
     assert result.output == ai_response
-    expected_instructions = "Help the user\n\nFile type information:\n[{'file-12345': 'application/fmt'}]"
+    expected_instructions = (
+        "Help the user\n\nFile type information:\n\n| File Path | Mime Type |\n"
+        "| /mnt/data/file-12345 | application/fmt |\n"
+    )
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
