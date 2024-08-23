@@ -13,7 +13,6 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
@@ -90,10 +89,11 @@ class FakeTokenCounter(TokenCounter):
 
 
 class FakeLlmService(LlmService):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     llm: Any
     token_counter: TokenCounter
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def get_chat_model(self, llm_model: str, temperature: float):
         return self.llm
