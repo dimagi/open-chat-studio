@@ -300,8 +300,10 @@ phonenumberslite==8.13.40
     # via -r requirements.in
 prompt-toolkit==3.0.41
     # via click-repl
-psycopg2-binary==2.9.9
+psycopg[binary]==3.2.1
     # via -r requirements.in
+psycopg-binary==3.2.1
+    # via psycopg
 pycparser==2.21
     # via cffi
 pydantic==2.5.0
@@ -450,6 +452,7 @@ typing-extensions==4.8.0
     #   emoji
     #   huggingface-hub
     #   openai
+    #   psycopg
     #   pydantic
     #   pydantic-core
     #   qrcode

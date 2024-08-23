@@ -51,9 +51,16 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     _compile("requirements/dev-requirements")
     _compile("requirements/prod-requirements")
 
-    if _confirm("\nInstall requirements ?", _exit=False):
-        cmd = "uv pip" if has_uv.ok else "pip"
-        c.run(f"{cmd} install -r dev-requirements.txt", echo=True, pty=True)
+    if _confirm("\nDo you want to sync your venv with the new requirements?", _exit=False):
+        if has_uv.ok:
+            result = c.run("uv pip sync --dry-run dev-requirements.txt", echo=True, pty=True)
+            if "no changes" in result.stdout:
+                return
+
+            if _confirm("Do you want to apply the changes?", _exit=False):
+                c.run("uv pip sync dev-requirements.txt", echo=True, pty=True)
+        else:
+            c.run("pip-sync -a dev-requirements.txt", echo=True, pty=True)
 
 
 @task
