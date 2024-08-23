@@ -161,6 +161,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "gpt_playground.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
+FORMS_URLFIELD_ASSUME_HTTPS = True
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
