@@ -9,10 +9,17 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import (
+    ExperimentSessionFactory,
+    SourceMaterialFactory,
+)
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.langchain import FakeLlmSimpleTokenCount, build_fake_llm_service
+from apps.utils.langchain import (
+    FakeLlmSimpleTokenCount,
+    build_fake_llm_echo_service,
+    build_fake_llm_service,
+)
 from apps.utils.pytest import django_db_with_data
 
 
@@ -24,6 +31,16 @@ def provider():
 @pytest.fixture()
 def pipeline():
     return PipelineFactory()
+
+
+@pytest.fixture()
+def source_material():
+    return SourceMaterialFactory()
+
+
+@pytest.fixture()
+def experiment_session():
+    return ExperimentSessionFactory()
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -51,8 +68,8 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
             {
                 "data": {
                     "id": "report",
-                    "label": "Create the report",
-                    "type": "CreateReport",
+                    "label": "LLM Response with prompt",
+                    "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
@@ -95,7 +112,8 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
 
     state = PipelineState(
-        messages=["Ice is not a liquid. When it is melted it turns into water."], experiment_session_id=1
+        messages=["Ice is not a liquid. When it is melted it turns into water."],
+        experiment_session_id=1,
     )
     runnable.invoke(state)
     assert len(mail.outbox) == 1
@@ -148,7 +166,10 @@ def test_llm_response(get_llm_service, provider, pipeline):
                     "id": "llm-GUk0C",
                     "label": "Get the robot to respond",
                     "type": "LLMResponse",
-                    "params": {"llm_provider_id": provider.id, "llm_model": "fake-model"},
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                    },
                 },
                 "id": "llm-GUk0C",
             },
@@ -158,6 +179,75 @@ def test_llm_response(get_llm_service, provider, pipeline):
     pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
     assert runnable.invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1] == "123"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_material, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+
+    user_input = "The User Input"
+    participant_data = ParticipantData.objects.create(
+        team=experiment_session.team,
+        content_object=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"name": "A"},
+    )
+    data = {
+        "edges": [
+            {
+                "id": "llm-1->llm-2",
+                "source": "llm-1",
+                "target": "llm-2",
+            }
+        ],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "source_material_id": source_material.id,
+                        "prompt": (
+                            "Node 1: Use this {source_material} to answer questions about {participant_data}."
+                            " {input}"
+                        ),
+                    },
+                },
+                "id": "llm-1",
+            },
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond again",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "source_material_id": source_material.id,
+                        "prompt": "Node 2: ({input})",
+                    },
+                },
+                "id": "llm-2",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    output = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
+        -1
+    ]
+    expected_output = (
+        f"Node 2: (Node 1: Use this {source_material.material} to answer questions "
+        f"about {participant_data.data}. {user_input})"
+    )
+    assert output == expected_output
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -191,7 +281,10 @@ def extract_structured_data_pipeline(provider, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
 
     with (
-        mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
+        mock.patch(
+            "apps.service_providers.models.LlmProvider.get_llm_service",
+            return_value=service,
+        ),
     ):
         data = {
             "edges": [],
@@ -223,7 +316,10 @@ def test_extract_structured_data_no_chunking(provider, pipeline):
     session = ExperimentSessionFactory()
 
     with extract_structured_data_pipeline(provider, pipeline) as graph:
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        state = PipelineState(
+            messages=["ai: hi user\nhuman: hi there I am John"],
+            experiment_session=session,
+        )
         assert graph.invoke(state)["messages"][-1] == '{"name": "John"}'
 
 
@@ -232,7 +328,10 @@ def test_extract_structured_data_no_chunking(provider, pipeline):
 def test_extract_structured_data_with_chunking(provider, pipeline):
     session = ExperimentSessionFactory()
     ParticipantData.objects.create(
-        team=session.team, content_object=session.experiment, data={"drink": "martini"}, participant=session.participant
+        team=session.team,
+        content_object=session.experiment,
+        data={"drink": "martini"},
+        participant=session.participant,
     )
     llm = FakeLlmSimpleTokenCount(
         responses=[
@@ -249,7 +348,10 @@ def test_extract_structured_data_with_chunking(provider, pipeline):
             return_value=["I am bond", "james bond", "007"],
         ),
     ):
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+        state = PipelineState(
+            messages=["ai: hi user\nhuman: hi there I am John"],
+            experiment_session=session,
+        )
         extracted_data = graph.invoke(state)["messages"][-1]
 
     # This is what the LLM sees.
@@ -303,7 +405,11 @@ def test_extract_participant_data(provider, pipeline):
 
     # New data should be created
     _run_data_extract_and_update_pipeline(
-        session, provider=provider, pipeline=pipeline, extracted_data={"name": "Johnny"}, key_name="profile"
+        session,
+        provider=provider,
+        pipeline=pipeline,
+        extracted_data={"name": "Johnny"},
+        key_name="profile",
     )
 
     participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
@@ -322,17 +428,27 @@ def test_extract_participant_data(provider, pipeline):
 
     # New data should be inserted at the toplevel
     _run_data_extract_and_update_pipeline(
-        session, provider=provider, pipeline=pipeline, extracted_data={"has_pets": False}, key_name=None
+        session,
+        provider=provider,
+        pipeline=pipeline,
+        extracted_data={"has_pets": False},
+        key_name=None,
     )
     participant_data.refresh_from_db()
-    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}, "has_pets": False}
+    assert participant_data.data == {
+        "profile": {"name": "John", "last_name": "Wick"},
+        "has_pets": False,
+    }
 
 
 def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted_data: dict, key_name: str):
     service = build_fake_llm_service(responses=[extracted_data], token_counts=[0])
 
     with (
-        mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service),
+        mock.patch(
+            "apps.service_providers.models.LlmProvider.get_llm_service",
+            return_value=service,
+        ),
     ):
         data = {
             "edges": [],

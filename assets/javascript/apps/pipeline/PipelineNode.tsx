@@ -4,7 +4,11 @@ import { classNames } from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import { InputParam } from "./types/nodeInputTypes";
 import { NodeParams } from "./types/nodeParams";
-import { LlmModelWidget, LlmProviderIdWidget } from "./widgets";
+import {
+  LlmModelWidget,
+  LlmProviderIdWidget,
+  SourceMaterialIdWidget,
+} from "./widgets";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 
 type NodeData = {
@@ -81,6 +85,18 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
               value={params[inputParam.name]}
               setParams={setParams}
               id={id}
+            />
+          </>
+        );
+      case "SourceMaterialId":
+        return (
+          <>
+            <div className="m-1 font-medium text-center">Source Material</div>
+            <SourceMaterialIdWidget
+              parameterValues={parameterValues}
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={params[inputParam.name]}
             />
           </>
         );

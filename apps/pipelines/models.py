@@ -7,6 +7,7 @@ from django.db import models
 from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -87,26 +88,25 @@ class Pipeline(BaseTeamModel):
     def node_ids(self):
         return self.node_set.values_list("flow_id", flat=True).all()
 
-    def invoke(self, input: PipelineState, session: ExperimentSession | None = None) -> PipelineState:
+    def invoke(
+        self, input: PipelineState, session: ExperimentSession, save_run_to_history: bool = True
+    ) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
 
         runnable = PipelineGraph.build_runnable_from_pipeline(self)
-        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
-        # the session instead of the session object.
-        pipeline_run = PipelineRun.objects.create(
-            pipeline=self,
-            input=input.json_safe(),
-            status=PipelineRunStatus.RUNNING,
-            log={"entries": []},
-            session=session,
-        )
-
+        pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
+
+        if save_run_to_history and session is not None:
+            self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
+
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
+            if save_run_to_history and session is not None:
+                self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
@@ -115,6 +115,26 @@ class Pipeline(BaseTeamModel):
                 logging_callback.logger.debug("Pipeline run finished", output=output["messages"][-1])
             pipeline_run.save()
         return output
+
+    def _create_pipeline_run(self, input: PipelineState, session: ExperimentSession) -> "PipelineRun":
+        # Django doesn't auto-serialize objects for JSON fields, so we need to copy the input and save the ID of
+        # the session instead of the session object.
+
+        return PipelineRun.objects.create(
+            pipeline=self,
+            input=input.json_safe(),
+            status=PipelineRunStatus.RUNNING,
+            log={"entries": []},
+            session=session,
+        )
+
+    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType):
+        ChatMessage.objects.create(
+            chat=session.chat,
+            message_type=type_.value,
+            content=message,
+        )
+        # TODO: Add tags here?
 
 
 class Node(BaseModel):

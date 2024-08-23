@@ -11,9 +11,14 @@ def get_input_types_for_node(node_class):
         human_name: str
         input_params: list[InputParam]
 
-    inputs = [
-        InputParam(name=field_name, type=str(info.annotation)) for field_name, info in node_class.model_fields.items()
-    ]
+    inputs = []
+    for field_name, info in node_class.model_fields.items():
+        if getattr(info.annotation, "_name", None) == "Optional":
+            type_ = info.annotation.__args__[0]
+        else:
+            type_ = info.annotation
+        new_input = InputParam(name=field_name, type=str(type_))
+        inputs.append(new_input)
 
     return NodeInputType(
         name=node_class.__name__,

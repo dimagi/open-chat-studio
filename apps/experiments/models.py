@@ -298,6 +298,13 @@ class Experiment(BaseTeamModel):
         blank=True,
         verbose_name="OpenAI Assistant",
     )
+    pipeline = models.ForeignKey(
+        "pipelines.Pipeline",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Pipeline",
+    )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
     prompt_text = models.TextField(blank=True, default="")
@@ -750,10 +757,10 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import TopicBot
+        from apps.chat.bots import get_bot
 
-        topic_bot = TopicBot(self, experiment=use_experiment, disable_tools=True)
-        return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
+        bot = get_bot(self, experiment=use_experiment, disable_tools=True)
+        return bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user

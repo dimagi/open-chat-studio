@@ -41,19 +41,25 @@
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "assistant" %}
       </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety">
+      {% flag "pipelines-v2" %}
+        <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
+        <div role="tabpanel" class="tab-content">
+          {% render_form_fields form "pipeline" %}
+        </div>
+      {% endflag %}
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
       </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "conversational_consent_enabled" %}
       </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Surveys" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "pre_survey" "post_survey" %}
       </div>
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Voice" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" "use_processor_bot_voice" %}
       </div>
@@ -81,11 +87,9 @@
         {% render_form_fields form "tools" %}
       </div>
 
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "trace_provider" %}
-        <label class="label font-bold" for="id_seed_message">{% translate 'No Actity Pings' %}</label>
-        {% translate 'No activity configs have been moved to Events' %}
       </div>
     </div>
 {% endblock form %}
