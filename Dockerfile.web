@@ -35,6 +35,8 @@ RUN apt-get update && apt-get install -y \
   build-essential libssl-dev ca-certificates libasound2 wget \
   # curl for heroku log shipping
   curl \
+  # mimetype detection (creates /etc/mime.types)
+  mailcap \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*
