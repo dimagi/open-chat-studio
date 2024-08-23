@@ -465,7 +465,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return response.return_values["output"], response.thread_id, response.run_id
 
     def _extra_input_configs(self) -> dict:
-        # don't allow custom tools to be used when not an agent
+        # Allow builtin tools but not custom tools when not running as an agent
+        # This is to prevent using tools when using the assistant to generate responses
+        # for automated messages e.g. reminders
         builtin_tools = self.state.experiment.assistant.builtin_tools
         return {"tools": [{"type": tool} for tool in builtin_tools]}
 
