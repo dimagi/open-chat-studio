@@ -195,7 +195,10 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.experiment.assistant.include_file_info and code_interpreter_attachments:
             file_type_info = self.get_file_type_info(code_interpreter_attachments)
-            instructions += f"\n\nFile type information:\n{file_type_info}"
+            instructions += "\n\nFile type information:\n\n| File Path | Mime Type |\n"
+            for file_info in file_type_info:
+                for file_name, mime_type in file_info.items():
+                    instructions += f"| /mnt/data/{file_name} | {mime_type} |\n"
 
         return instructions
 
