@@ -128,7 +128,7 @@ def _build_provider(provider_type: MessagingProviderType, team):
         case MessagingProviderType.turnio:
             config = {"auth_token": "test_key"}
         case MessagingProviderType.sureadhere:
-            config = {"client_id": "", "client_secret": "", "client_scope": "", "base_url": ""}
+            config = {"client_id": "", "client_secret": "", "client_scope": "", "base_url": "", "auth_url": ""}
         case MessagingProviderType.slack:
             config = {"slack_team_id": "", "slack_installation_id": 123}
     MessagingProviderFactory(type=provider_type, team=team, config=config)
