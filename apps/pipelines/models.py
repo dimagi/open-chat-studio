@@ -6,6 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
+from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
@@ -168,14 +169,13 @@ class PipelineRun(BaseModel):
 
 
 class LogEntry(pydantic.BaseModel):
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")})
+
     time: datetime
     level: str
     message: str
     output: str | None = None
     input: str | None = None
-
-    class Config:
-        json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f")}
 
 
 class PipelineEventInputs(models.TextChoices):
