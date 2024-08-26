@@ -179,16 +179,16 @@ class SureAdhereService(MessagingService):
     client_secret: str
     client_scope: str
     base_url: str
+    auth_url: str
 
     def get_access_token(self):
-        auth_url = "https://sureadherelabs.b2clogin.com/sureadherelabs.onmicrosoft.com/B2C_1_Patients/oauth2/v2.0/token"
         auth_data = {
             "grant_type": "client_credentials",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "scope": self.client_scope,
         }
-        response = requests.post(auth_url, data=auth_data)
+        response = requests.post(self.auth_url, data=auth_data)
         response.raise_for_status()
         return response.json()["access_token"]
 
