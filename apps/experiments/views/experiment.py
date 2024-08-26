@@ -64,6 +64,7 @@ from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
     ExperimentTable,
+    ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
@@ -134,6 +135,17 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
+
+
+class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = Experiment
+    paginate_by = 25
+    table_class = ExperimentVersionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experiment"
+
+    def get_queryset(self):
+        return Experiment.objects.filter(working_experiment=self.kwargs["experiment_id"]).all()
 
 
 class ExperimentForm(forms.ModelForm):

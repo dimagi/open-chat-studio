@@ -249,6 +249,18 @@
       </div>
     </div>
 
+    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+    <div role="tabpanel" class="tab-content" id="content-versions">
+      <div class="app-card">
+        <div id="versions-table"
+             hx-trigger="load"
+             hx-target="this"
+             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+             hx-swap="innerHTML">
+        </div>
+      </div>
+    </div>
+
     {% flag "events" %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <div role="tabpanel" class="tab-content" id="content-events">

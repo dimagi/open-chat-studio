@@ -14,6 +14,7 @@ from .experiment import (  # noqa: F401
     EditExperiment,
     ExperimentSessionsTableView,
     ExperimentTableView,
+    ExperimentVersionsTableView,
     create_channel,
     delete_experiment,
     download_experiment_chats,
