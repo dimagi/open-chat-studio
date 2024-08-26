@@ -451,6 +451,39 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
+# TODO: complete form
+class ExperimentVersionForm(forms.ModelForm):
+    class Meta:
+        model = Experiment
+        fields = ["description"]
+
+
+class CreateExperimentVersion(CreateView):
+    model = Experiment
+    form_class = ExperimentVersionForm
+    template_name = "experiments/create_version_form.html"
+    title = "Create Experiment Version"
+    button_title = "Create"
+    permission_required = "experiments.add_experiment"
+
+    # TODO: add logic
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        form.instance.parent_id = self.kwargs["experiment_id"]
+        return self.create_verion(form)
+
+    # TODO: add logic
+    def create_verion(self, form):
+        return None
+
+    def get_success_url(self):
+        return redirect(
+            "experiments:experiment_versions",
+            team_slug=self.request.team.slug,
+            experiment_id=self.kwargs["experiment_id"],
+        )
+
+
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
