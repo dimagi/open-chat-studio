@@ -182,7 +182,6 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
-
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
 

@@ -26,7 +26,7 @@ def sureadhere_provider():
             "client_secret": "456",
             "client_scope": "https://example.onmicrosoft.com/example-app-api/.default",
             "base_url": "https://example.com",
-            "auth_url": "https://sa.b2clogin.com/sa.onmicrosoft.com/test_Patients/oauth2/v2.0/token"
+            "auth_url": "https://sa.b2clogin.com/sa.onmicrosoft.com/test_Patients/oauth2/v2.0/token",
         },
     )
 
