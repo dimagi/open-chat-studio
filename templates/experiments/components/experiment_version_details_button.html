@@ -7,6 +7,10 @@
     <div class="modal-box">
         <h3 class="font-bold text-lg">Details for {{ record.version_number }}</h3>
         <p>{{ record.description }}</p>
+        <form method="post" action="{% url 'set_default_experiment' record.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">Set as Default</button>
+        </form>
         <div class="modal-action">
             <button class="btn" onclick="document.getElementById('modal-{{ record.id }}').close()">Close</button>
         </div>
