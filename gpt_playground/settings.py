@@ -515,6 +515,7 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
+    "teams:signup_after_invite",
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Request-ID",  # Heroku
