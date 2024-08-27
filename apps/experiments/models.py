@@ -20,6 +20,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
@@ -703,6 +704,8 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
+        if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
+            return False
         return self.experiment_channel.experiment != self.experiment
 
     def is_complete(self):
