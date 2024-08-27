@@ -35,7 +35,7 @@ def enqueue_timed_out_events():
         for session in trigger.timed_out_sessions():
             if session.is_stale():
                 logger.warning(
-                    f"ExperimentChannel is pointing to experiment '{session.experiment_channel.experiment.name}'"
+                    f"ExperimentChannel is pointing to experiment '{session.experiment.name}'"
                     "whereas the current experiment session points to experiment"
                     f"'{session.experiment.name}'"
                 )
