@@ -7,7 +7,8 @@
     <div class="modal-box">
         <h3 class="font-bold text-lg">Details for {{ record.version_number }}</h3>
         <p>{{ record.description }}</p>
-        <form method="post" action="{% url 'set_default_experiment' record.id %}">
+        {% url 'experiments:set-default-experiment' record.id as form_action_url %}
+        <form method="post" action="{{ form_action_url }}">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">Set as Default</button>
         </form>
