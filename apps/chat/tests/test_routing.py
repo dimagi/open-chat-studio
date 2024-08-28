@@ -58,7 +58,7 @@ def test_experiment_routing_with_assistant(
 ):
     response = Mock()
     response.thread_id = "thread_id"
-    get_response_with_retries.return_value = response
+    get_response_with_retries.return_value = response, "tread_id", "run_id"
     save_response_annotations.return_value = ("How can I help today?", [])
 
     experiment = _make_experiment_with_routing(with_default=with_default, assistant_children=True)

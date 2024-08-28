@@ -4,7 +4,7 @@ from functools import cached_property
 from typing import Annotated, Any
 
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -50,10 +50,9 @@ class PipelineNode(BaseModel, ABC):
 
     """
 
-    _config: RunnableConfig | None = None
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    class Config:
-        arbitrary_types_allowed = True
+    _config: RunnableConfig | None = None
 
     def process(self, state: PipelineState, config) -> PipelineState:
         self._config = config

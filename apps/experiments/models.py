@@ -272,7 +272,8 @@ class VoiceResponseBehaviours(models.TextChoices):
 class AgentTools(models.TextChoices):
     RECURRING_REMINDER = "recurring-reminder", gettext("Recurring Reminder")
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
-    SCHEDULE_UPDATE = "schedule-update", gettext("Schedule Update")
+    DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
+    MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -296,6 +297,13 @@ class Experiment(BaseTeamModel):
         null=True,
         blank=True,
         verbose_name="OpenAI Assistant",
+    )
+    pipeline = models.ForeignKey(
+        "pipelines.Pipeline",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Pipeline",
     )
     temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
@@ -706,6 +714,10 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
+        from apps.channels.models import ChannelPlatform
+
+        if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
+            return False
         return self.experiment_channel.experiment != self.experiment
 
     def is_complete(self):
@@ -760,10 +772,10 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import TopicBot
+        from apps.chat.bots import get_bot
 
-        topic_bot = TopicBot(self, experiment=use_experiment)
-        return topic_bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
+        bot = get_bot(self, experiment=use_experiment, disable_tools=True)
+        return bot.process_input(user_input=instruction_prompt, save_input_to_history=False)
 
     def try_send_message(self, message: str, fail_silently=True):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
@@ -806,6 +818,7 @@ class ExperimentSession(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,

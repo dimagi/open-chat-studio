@@ -1,6 +1,7 @@
 import json
 
 import tiktoken
+from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -9,12 +10,14 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
-from apps.experiments.models import ParticipantData
+from apps.channels.models import ChannelPlatform
+from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate
+from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.utils.time import pretty_date
 
 
 class RenderTemplate(PipelineNode):
@@ -22,6 +25,9 @@ class RenderTemplate(PipelineNode):
     template_string: PipelineJinjaTemplate
 
     def _process(self, state: PipelineState) -> PipelineState:
+        def all_variables(in_):
+            return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
+
         input = state["messages"][-1]
 
         env = SandboxedEnvironment()
@@ -32,9 +38,12 @@ class RenderTemplate(PipelineNode):
                 content = input
             else:
                 content = json.loads(input)
+                if not isinstance(content, dict):
+                    # e.g. it was just a string or an int
+                    content = all_variables(input)
         except json.JSONDecodeError:
             # As a last resort, just set the all the variables in the template to the input
-            content = {var: input for var in meta.find_undeclared_variables(env.parse(self.template_string))}
+            content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         return template.render(content)
 
@@ -51,31 +60,67 @@ class LLMResponse(PipelineNode):
         output = llm.invoke(state["messages"][-1], config=self._config)
         return output.content
 
-    def get_chat_model(self):
+    def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
 
-        provider = LlmProvider.objects.get(id=self.llm_provider_id)
         try:
-            service = provider.get_llm_service()
-            return service.get_chat_model(self.llm_model, self.llm_temperature)
+            provider = LlmProvider.objects.get(id=self.llm_provider_id)
+            return provider.get_llm_service()
         except LlmProvider.DoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist")
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    def get_chat_model(self):
+        return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
 
-class CreateReport(LLMResponse):
-    __human_name__ = "Create a report"
 
-    prompt: str = (
-        "Make a summary of the following text: {input}. "
-        "Output it as JSON with a single key called 'summary' with the summary."
-    )
+class LLMResponseWithPrompt(LLMResponse):
+    __human_name__ = "LLM response with prompt"
+
+    source_material_id: SourceMaterialId | None = None
+    prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
     def _process(self, state: PipelineState) -> PipelineState:
-        chain = PromptTemplate.from_template(template=self.prompt) | super().get_chat_model()
-        output = chain.invoke(state["messages"][-1], config=self._config)
+        prompt = PromptTemplate.from_template(template=self.prompt)
+        context = self._get_context(state, prompt)
+        chain = prompt | super().get_chat_model()
+        output = chain.invoke(context, config=self._config)
         return output.content
+
+    def _get_context(self, state: PipelineState, prompt: PromptTemplate):
+        session = state["experiment_session"]
+        context = {}
+
+        if "input" in prompt.input_variables:
+            context["input"] = state["messages"][-1]
+
+        if "source_material" in prompt.input_variables and self.source_material_id is None:
+            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
+        if "source_material" in prompt.input_variables and self.source_material_id:
+            context["source_material"] = self._get_source_material().material
+
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self._get_participant_data(session)
+
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self._get_current_datetime(session)
+
+        return context
+
+    def _get_participant_data(self, session):
+        if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
+            return ""
+        return session.get_participant_data(use_participant_tz=True) or ""
+
+    def _get_source_material(self):
+        try:
+            return SourceMaterial.objects.get(id=self.source_material_id)
+        except SourceMaterial.DoesNotExist:
+            raise PipelineNodeBuildError(f"Source material with id {self.source_material_id} does not exist")
+
+    def _get_current_datetime(self, session):
+        return pretty_date(timezone.now(), session.get_participant_timezone())
 
 
 class SendEmail(PipelineNode):

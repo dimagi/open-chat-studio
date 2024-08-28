@@ -10,6 +10,7 @@ from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.utils.time import pretty_date
 
 
@@ -194,7 +195,10 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.experiment.assistant.include_file_info and code_interpreter_attachments:
             file_type_info = self.get_file_type_info(code_interpreter_attachments)
-            instructions += f"\n\nFile type information:\n{file_type_info}"
+            instructions += "\n\nFile type information:\n\n| File Path | Mime Type |\n"
+            for file_info in file_type_info:
+                for file_name, mime_type in file_info.items():
+                    instructions += f"| /mnt/data/{file_name} | {mime_type} |\n"
 
         return instructions
 
@@ -209,7 +213,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             file_type_info.extend([{file.external_id: file.content_type} for file in att.files.all()])
         return file_type_info
 
-    def get_openai_assistant(self):
+    def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.experiment.assistant.get_assistant()
 
     @cached_property
@@ -255,3 +259,10 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
         return chat_message
+
+    def get_tools(self):
+        return get_tools(self.session, for_assistant=True)
+
+    @property
+    def tools_enabled(self):
+        return self.experiment.assistant.tools_enabled

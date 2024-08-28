@@ -22,9 +22,9 @@ def session():
 
 
 @django_db_transactional()
-def test_running_pipeline_creates_run(pipeline: Pipeline):
+def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSession):
     input = "foo"
-    pipeline.invoke(PipelineState(messages=[input]))
+    pipeline.invoke(PipelineState(messages=[input]), session)
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
     assert run.status == PipelineRunStatus.SUCCESS
@@ -94,7 +94,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline):
 
 
 @django_db_transactional()
-def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
+def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: ExperimentSession):
     input = "What's up"
     error_message = "Bad things are afoot"
 
@@ -106,7 +106,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline):
 
     with patch.object(nodes, "Passthrough", FailingPassthrough):
         with pytest.raises(Exception, match=error_message):
-            pipeline.invoke(PipelineState(messages=[input]))
+            pipeline.invoke(PipelineState(messages=[input]), session)
 
     assert pipeline.runs.count() == 1
     run = pipeline.runs.first()
@@ -135,7 +135,3 @@ def test_running_pipeline_stores_session(pipeline: Pipeline, session: Experiment
     pipeline.invoke(PipelineState(messages=[input]), session)
     assert pipeline.runs.count() == 1
     assert pipeline.runs.first().session_id == session.id
-
-    pipeline.invoke(PipelineState(messages=[input]))
-    assert pipeline.runs.count() == 2
-    assert pipeline.runs.last().session_id is None

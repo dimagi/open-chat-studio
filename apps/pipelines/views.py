@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
+from apps.experiments.models import SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.utils import get_input_types_for_node
@@ -68,7 +69,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             **data,
             "pipeline_id": kwargs["pk"],
             "input_types": _pipeline_node_input_types(),
-            "parameter_values": _pipeline_node_parameter_values(llm_providers),
+            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers),
             "default_values": _pipeline_node_default_values(llm_providers),
         }
 
@@ -83,11 +84,14 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
-def _pipeline_node_parameter_values(llm_providers):
+def _pipeline_node_parameter_values(team, llm_providers):
     """Returns the possible values for each input type"""
+    source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
+
     return {
         "LlmProviderId": [{"id": provider["id"], "name": provider["name"]} for provider in llm_providers],
         "LlmModel": {provider["id"]: provider["llm_models"] for provider in llm_providers},
+        "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
     }
 
 

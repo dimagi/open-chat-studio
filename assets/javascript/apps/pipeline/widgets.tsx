@@ -93,3 +93,31 @@ export function LlmModelWidget({
     </select>
   );
 }
+
+export function SourceMaterialIdWidget({
+  parameterValues,
+  inputParam,
+  value,
+  onChange,
+}: {
+  parameterValues: NodeParameterValues;
+  inputParam: InputParam;
+  value: string;
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <select
+      className="select select-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+    >
+      <option value="">Select a topic</option>
+      {parameterValues.SourceMaterialId.map((material) => (
+        <option key={material["id"]} value={material["id"]}>
+          {material["topic"]}
+        </option>
+      ))}
+    </select>
+  );
+}

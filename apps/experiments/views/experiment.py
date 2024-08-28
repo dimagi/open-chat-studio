@@ -25,7 +25,6 @@ from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
-from langchain_core.prompts import PromptTemplate
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -76,6 +75,7 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.prompt import validate_prompt_variables
 
 
 @login_and_team_required
@@ -150,7 +150,11 @@ class ExperimentForm(forms.ModelForm):
         </div>
     """
     type = forms.ChoiceField(
-        choices=[("llm", gettext("Base Language Model")), ("assistant", gettext("OpenAI Assistant"))],
+        choices=[
+            ("llm", gettext("Base Language Model")),
+            ("assistant", gettext("OpenAI Assistant")),
+            ("pipeline", gettext("Pipeline")),
+        ],
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
@@ -167,6 +171,7 @@ class ExperimentForm(forms.ModelForm):
             "llm_provider",
             "llm",
             "assistant",
+            "pipeline",
             "max_token_limit",
             "temperature",
             "prompt_text",
@@ -212,6 +217,7 @@ class ExperimentForm(forms.ModelForm):
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
         self.fields["assistant"].queryset = team.openaiassistant_set
+        self.fields["pipeline"].queryset = team.pipeline_set
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
@@ -247,20 +253,30 @@ class ExperimentForm(forms.ModelForm):
         bot_type = cleaned_data["type"]
         if bot_type == "llm":
             cleaned_data["assistant"] = None
+            cleaned_data["pipeline"] = None
             if not cleaned_data.get("prompt_text"):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm"):
                 errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
-        else:
+        elif bot_type == "assistant":
+            cleaned_data["pipeline"] = None
             if not cleaned_data.get("assistant"):
                 errors["assistant"] = "Assistant is required when creating an assistant experiment"
+        elif bot_type == "pipeline":
+            cleaned_data["assistant"] = None
+            if not cleaned_data.get("pipeline"):
+                errors["pipeline"] = "Pipeline is required when creating a pipeline experiment"
 
         if errors:
             raise forms.ValidationError(errors)
 
-        _validate_prompt_variables(cleaned_data)
+        validate_prompt_variables(
+            form_data=cleaned_data,
+            prompt_key="prompt_text",
+            known_vars={"source_material", "participant_data", "current_datetime"},
+        )
         return cleaned_data
 
     def save(self, commit=True):
@@ -273,41 +289,6 @@ class ExperimentForm(forms.ModelForm):
         return experiment
 
 
-def _validate_prompt_variables(form_data):
-    prompt_text = form_data.get("prompt_text")
-    required_variables = set(PromptTemplate.from_template(prompt_text).input_variables)
-    available_variables = set(["participant_data", "current_datetime"])
-
-    if form_data.get("source_material"):
-        available_variables.add("source_material")
-
-    if form_data.get("tools"):
-        if "current_datetime" not in required_variables:
-            available_variables.remove("current_datetime")
-        # if there are "tools" then current_datetime is always required
-        required_variables.add("current_datetime")
-
-    missing_vars = required_variables - available_variables
-    known_vars = {"source_material", "participant_data", "current_datetime"}
-    if missing_vars:
-        errors = []
-        unknown_vars = missing_vars - known_vars
-        if unknown_vars:
-            errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
-            missing_vars -= unknown_vars
-        if missing_vars:
-            errors.append(
-                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
-                "usage."
-            )
-        raise forms.ValidationError({"prompt_text": errors})
-
-    for prompt_var in ["{source_material}", "{participant_data}"]:
-        if prompt_text.count(prompt_var) > 1:
-            error_msg = f"Multiple {prompt_var} variables found in the prompt. You can only use it once"
-            raise forms.ValidationError({"prompt_text": error_msg})
-
-
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
     model = Experiment
     template_name = "experiments/experiment_form.html"
@@ -315,7 +296,12 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
     @property
     def extra_context(self):
-        experiment_type = "assistant" if self.object and self.object.assistant_id else "llm"
+        if self.object and self.object.assistant_id:
+            experiment_type = "assistant"
+        elif self.object and self.object.pipeline_id:
+            experiment_type = "pipeline"
+        else:
+            experiment_type = "llm"
         if self.request.POST.get("type"):
             experiment_type = self.request.POST.get("type")
 
@@ -418,10 +404,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial = super().get_initial()
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
-
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        return response
 
 
 def _get_voice_provider_alpine_context(request):

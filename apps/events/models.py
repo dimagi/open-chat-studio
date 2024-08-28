@@ -260,17 +260,18 @@ class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
     action = models.ForeignKey(
-        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, default=None
+        EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="scheduled_messages")
     participant = models.ForeignKey(
         "experiments.Participant", on_delete=models.CASCADE, related_name="schduled_messages"
     )
-    next_trigger_date = models.DateTimeField(null=True)
-    last_triggered_at = models.DateTimeField(null=True)
+    next_trigger_date = models.DateTimeField(null=True, blank=True)
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
     total_triggers = models.IntegerField(default=0)
     is_complete = models.BooleanField(default=False)
     custom_schedule_params = models.JSONField(blank=True, default=dict)
+    end_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
@@ -311,7 +312,10 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        if self.total_triggers >= self.params["repetitions"]:
+        repetitions = self.params.get("repetitions", None)
+        if (repetitions is not None and self.total_triggers >= repetitions) or (
+            self.end_date and self.end_date <= timezone.now()
+        ):
             self.is_complete = True
         else:
             delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
@@ -339,15 +343,29 @@ class ScheduledMessage(BaseTeamModel):
     def repetitions(self) -> str:
         return self.params["repetitions"]
 
+    @cached_property
+    def prompt_text(self) -> str:
+        return self.params["prompt_text"]
+
+    @property
+    def was_created_by_system(self) -> bool:
+        return self.action_id is not None
+
     def as_string(self, as_timezone: str | None = None):
-        schedule = f"{self.name}: Every {self.frequency} {self.time_period}, {self.repetitions} times"
-        if self.time_period not in ["hour", "day"]:
+        header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
+        if self.repetitions == 0:
+            schedule_details_str = "One-off reminder"
+        elif self.time_period in ["hour", "day"]:
+            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
+        else:
             weekday = self.next_trigger_date.strftime("%A")
-            schedule = (
-                f"{self.name}: Every {self.frequency} {self.time_period} on {weekday} for {self.repetitions} times"
-            )
-        next_trigger = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
-        return f"{schedule} (next trigger is {next_trigger})"
+            schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
+
+        next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        tail_str = ""
+        if self.action is not None:
+            tail_str = "(System)"
+        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}. {tail_str}"
 
     def __str__(self):
         return self.as_string()

@@ -10,6 +10,7 @@ from apps.chat.exceptions import ChatException
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 
 if TYPE_CHECKING:
@@ -38,6 +39,12 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
     notify_users_of_safety_violations_task.delay(session_id, safety_layer_id)
 
 
+def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
+    if session.experiment.pipeline_id:
+        return PipelineBot(session)
+    return TopicBot(session, experiment, disable_tools=disable_tools)
+
+
 class TopicBot:
     """
     Parameters
@@ -52,8 +59,9 @@ class TopicBot:
         conversation history of the participant's chat with the router / main bot.
     """
 
-    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None):
+    def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
         self.experiment = experiment or session.experiment
+        self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
         self.llm = self.experiment.get_chat_model()
@@ -82,7 +90,7 @@ class TopicBot:
 
     def _initialize(self):
         for child_route in self.child_experiment_routes:
-            child_runnable = create_experiment_runnable(child_route.child, self.session)
+            child_runnable = create_experiment_runnable(child_route.child, self.session, self.disable_tools)
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
                 self.default_child_chain = child_runnable
@@ -91,7 +99,7 @@ class TopicBot:
         if self.child_chains and not self.default_child_chain:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
-        self.chain = create_experiment_runnable(self.experiment, self.session)
+        self.chain = create_experiment_runnable(self.experiment, self.session, self.disable_tools)
 
         terminal_route = (
             ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
@@ -236,3 +244,13 @@ class SafetyBot:
 
     def filter_ai_messages(self) -> bool:
         return self.safety_layer.messages_to_review == "ai"
+
+
+class PipelineBot:
+    def __init__(self, session: ExperimentSession):
+        self.experiment = session.experiment
+        self.session = session
+
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+        output = self.experiment.pipeline.invoke(PipelineState(messages=[user_input]), self.session)
+        return output["messages"][-1]
