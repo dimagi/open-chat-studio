@@ -7,7 +7,6 @@ EXPERIMENT_FIELDS = [
     "prompt_text",
     "input_formatter",
     "safety_layers",
-    "is_active",
     "source_material",
     "seed_message",
     "pre_survey",

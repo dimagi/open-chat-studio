@@ -315,9 +315,6 @@ class Experiment(BaseTeamModel):
         "E.g. 'Safe or unsafe? {input}'",
     )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
-    is_active = models.BooleanField(
-        default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
-    )
 
     source_material = models.ForeignKey(
         SourceMaterial,

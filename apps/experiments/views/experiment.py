@@ -773,7 +773,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 def start_session_public(request, team_slug: str, experiment_id: str):
     try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
         # old links dont have uuids
         raise Http404
