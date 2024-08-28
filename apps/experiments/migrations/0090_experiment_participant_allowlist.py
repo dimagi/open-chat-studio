@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0088_experiment_use_processor_bot_voice'),
+        ('experiments', '0089_experiment_pipeline'),
     ]
 
     operations = [
