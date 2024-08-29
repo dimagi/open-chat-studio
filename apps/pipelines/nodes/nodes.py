@@ -140,6 +140,14 @@ class Passthrough(PipelineNode):
         return input
 
 
+class Start(Passthrough):
+    __human_name__ = "Start"
+
+
+class End(Passthrough):
+    __human_name__ = "End"
+
+
 class ExtractStructuredDataNodeMixin:
     def _prompt_chain(self, reference_data):
         template = (

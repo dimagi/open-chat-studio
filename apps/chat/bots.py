@@ -253,4 +253,7 @@ class PipelineBot:
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         output = self.experiment.pipeline.invoke(PipelineState(messages=[user_input]), self.session)
+        for key, value in output["outputs"].items():
+            if key.startswith("End"):
+                return "\n".join(value)
         return output["messages"][-1]
