@@ -1,3 +1,4 @@
+import operator
 from abc import ABC
 from collections.abc import Sequence
 from functools import cached_property
@@ -10,13 +11,14 @@ from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 
 
-def add_messages(left: list, right: list):
-    # Could probably log here
-    return left + right
+def add_messages(left: dict, right: dict):
+    return {**left, **right}
+    # return left + right
 
 
 class PipelineState(dict):
-    messages: Annotated[Sequence[Any], add_messages]
+    messages: Annotated[Sequence[Any], operator.add]
+    outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
 
     def json_safe(self):
@@ -54,13 +56,21 @@ class PipelineNode(BaseModel, ABC):
 
     _config: RunnableConfig | None = None
 
-    def process(self, state: PipelineState, config) -> PipelineState:
+    def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config
-        output = self._process(state)
+        if incoming_edges:
+            # TODO: what to do if the node is a "combination"?
+            # Wait for all inputs? I don't think we can do that...
+            # Assume there is only a single path that we care about? (e.g. in a router)
+            previous_node_id = incoming_edges[0]
+            input = state["outputs"][previous_node_id]
+        else:  # This is the input node
+            input = state["messages"][-1]
+        output = self._process(input, state)
         # Append the output to the state, otherwise do not change the state
-        return PipelineState(messages=[output]) if output else PipelineState()
+        return PipelineState(messages=[output], outputs={node_id: output}) if output else PipelineState()
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 

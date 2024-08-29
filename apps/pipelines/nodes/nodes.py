@@ -24,11 +24,9 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
-        input = state["messages"][-1]
 
         env = SandboxedEnvironment()
         try:
@@ -137,8 +135,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        input = state["messages"][-1]
+    def _process(self, input, state: PipelineState) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return input
 

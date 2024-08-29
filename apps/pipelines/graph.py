@@ -1,3 +1,5 @@
+from functools import partial
+
 import pydantic
 from langchain_core.runnables import RunnableSequence
 from langgraph.graph import StateGraph
@@ -66,6 +68,7 @@ class PipelineGraph(pydantic.BaseModel):
             for node in self.nodes:
                 node_class = getattr(nodes, node.type)
                 node_instance = node_class(**node.params)
-                state_graph.add_node(node.id, node_instance.process)
+                incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
+                state_graph.add_node(node.id, partial(node_instance.process, node.id, incoming_edges))
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)

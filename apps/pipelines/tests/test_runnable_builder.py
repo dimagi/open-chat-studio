@@ -276,6 +276,115 @@ def test_render_template(pipeline):
     assert runnable.invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1] == "Cycling is cool"
 
 
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_branching_pipeline(provider, pipeline, source_material, experiment_session):
+    data = {
+        "edges": [
+            {
+                "id": "START -> RenderTemplate-A",
+                "source": "Passthrough-1",
+                "target": "RenderTemplate-A",
+            },
+            {
+                "id": "Passthrough -> RenderTemplate-B",
+                "source": "Passthrough-1",
+                "target": "RenderTemplate-B",
+            },
+            {
+                "id": "RenderTemplate-A -> END",
+                "source": "RenderTemplate-A",
+                "target": "Passthrough-2",
+            },
+            {
+                "id": "RenderTemplate-B -> RenderTemplate-C",
+                "source": "RenderTemplate-B",
+                "target": "RenderTemplate-C",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RenderTemplate-C -> END",
+                "source": "RenderTemplate-C",
+                "target": "Passthrough-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "Passthrough-1",
+                "data": {
+                    "id": "Passthrough-1",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                    "inputParams": [],
+                },
+                "type": "pipelineNode",
+                "position": {"x": 76.27754748414293, "y": 280.32562971844055},
+            },
+            {
+                "id": "RenderTemplate-B",
+                "data": {
+                    "id": "RenderTemplate-B",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "B ({{ input}})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "Passthrough-2",
+                "data": {
+                    "id": "Passthrough-2",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                    "inputParams": [],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-C",
+                "data": {
+                    "id": "RenderTemplate-C",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "C ({{input }})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-A",
+                "data": {
+                    "id": "RenderTemplate-A",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "A ({{ input }})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    user_input = "The Input"
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    output = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["outputs"]
+    expected_output = {
+        "Passthrough-1": user_input,
+        "RenderTemplate-A": f"A ({user_input})",
+        "RenderTemplate-B": f"B ({user_input})",
+        "RenderTemplate-C": f"C (B ({user_input}))",
+        "Passthrough-2": f"A ({user_input})",  # TODO: really?
+    }
+    assert output == expected_output
+
+
 @contextmanager
 def extract_structured_data_pipeline(provider, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
