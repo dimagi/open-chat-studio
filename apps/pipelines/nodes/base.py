@@ -67,20 +67,17 @@ class PipelineNode(BaseModel, ABC):
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config
-        if incoming_edges:
-            # TODO: what to do if the node is a "combination"?
-            # Wait for all inputs? I don't think we can do that...
-            # Assume there is only a single path that we care about? (e.g. in a router)
-            for incoming_edge in reversed(incoming_edges):
-                # TODO: This finds the last incoming edge that was processed.
-                # I'm not convinced it is necessarily the one we care about
-                # every time.
-                if incoming_edge in state["outputs"]:
-                    input = str(state["outputs"][incoming_edge])
-                    break
-            else:
-                input = state["messages"][-1]  # Should never happen...
-        else:  # This is the input node
+
+        for incoming_edge in reversed(incoming_edges):
+            # We assume there is only a single path that would be valid through
+            # the graph.
+            # If we wanted to have multiple parallel paths that end
+            # in a single node, we should give that node multiple inputs, and
+            # read the input from that particular input
+            if incoming_edge in state["outputs"]:
+                input = str(state["outputs"][incoming_edge])
+                break
+        else:  # This is the first node in the graph
             input = state["messages"][-1]
         output = self._process(input, state)
         # Append the output to the state, otherwise do not change the state

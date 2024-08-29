@@ -278,7 +278,7 @@ def test_render_template(pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_branching_pipeline(provider, pipeline, source_material, experiment_session):
+def test_branching_pipeline(pipeline, experiment_session):
     data = {
         "edges": [
             {
@@ -383,6 +383,92 @@ def test_branching_pipeline(provider, pipeline, source_material, experiment_sess
         "Passthrough-2": [f"A ({user_input})", f"C (B ({user_input}))"],
     }
     assert output == expected_output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_conditional_node(pipeline, experiment_session):
+    data = {
+        "edges": [
+            {
+                "id": "Boolean -> True",
+                "source": "BooleanNode",
+                "target": "RenderTemplate-true",
+                "sourceHandle": "output_true",
+                "targetHandle": "input",
+            },
+            {
+                "id": "Boolean -> False",
+                "source": "BooleanNode",
+                "target": "RenderTemplate-false",
+                "sourceHandle": "output_false",
+                "targetHandle": "input",
+            },
+            {
+                "id": "False -> End",
+                "source": "RenderTemplate-false",
+                "target": "End",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "True -> End",
+                "source": "RenderTemplate-true",
+                "target": "End",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "BooleanNode",
+                "data": {
+                    "id": "BooleanNode",
+                    "type": "BooleanNode",
+                    "label": "Boolean Node",
+                    "params": {"input_equals": "hello"},
+                    "inputParams": [{"name": "input_equals", "type": "<class 'str'>"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-true",
+                "data": {
+                    "id": "RenderTemplate-true",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "said hello"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-false",
+                "data": {
+                    "id": "RenderTemplate-false",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "didn't say hello, said {{ input }}"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "End",
+                "data": {"id": "End", "type": "End", "label": "End", "params": {}, "inputParams": []},
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))["messages"][-1]
+    assert output == "said hello"
+
+    output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))["messages"][-1]
+    assert output == "didn't say hello, said bad"
 
 
 @contextmanager

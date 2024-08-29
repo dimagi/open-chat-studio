@@ -1,3 +1,4 @@
+from collections import defaultdict
 from functools import partial
 
 import pydantic
@@ -5,6 +6,7 @@ from langchain_core.runnables import RunnableSequence
 from langgraph.graph import StateGraph
 from pydantic_core import ValidationError
 
+from apps.pipelines.const import FALSE_NODE, TRUE_NODE
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 
@@ -20,6 +22,7 @@ class Edge(pydantic.BaseModel):
     id: str
     source: str
     target: str
+    sourceHandle: str
 
 
 class PipelineGraph(pydantic.BaseModel):
@@ -43,8 +46,7 @@ class PipelineGraph(pydantic.BaseModel):
         state_graph = StateGraph(PipelineState)
 
         self._add_nodes_to_graph(state_graph)
-        for edge in self.edges:
-            state_graph.add_edge(edge.source, edge.target)
+        self._add_edges_to_graph(state_graph)
 
         node_ids = {n.id for n in self.nodes}
         incoming = {e.source for e in self.edges}
@@ -59,6 +61,7 @@ class PipelineGraph(pydantic.BaseModel):
         state_graph.set_finish_point(end[0])
 
         compiled_graph = state_graph.compile()
+        # compiled_graph.get_graph().print_ascii()
         return compiled_graph
 
     def _add_nodes_to_graph(self, state_graph):
@@ -72,3 +75,29 @@ class PipelineGraph(pydantic.BaseModel):
                 state_graph.add_node(node.id, partial(node_instance.process, node.id, incoming_edges))
         except ValidationError as ex:
             raise PipelineNodeBuildError(ex)
+
+    def _add_edges_to_graph(self, state_graph):
+        from apps.pipelines.nodes import nodes
+
+        nodes_by_id = {node.id: node for node in self.nodes}
+        seen_edges = set()
+        conditional_edge_map = defaultdict(dict)
+        for edge in self.edges:
+            if edge.sourceHandle == "output_true":
+                conditional_edge_map[edge.source][TRUE_NODE] = edge.target
+            if edge.sourceHandle == "output_false":
+                conditional_edge_map[edge.source][FALSE_NODE] = edge.target
+
+        for edge in self.edges:
+            if edge.sourceHandle in ["output_true", "output_false"] and edge.source not in seen_edges:
+                node = nodes_by_id[edge.source]
+                node_class = getattr(nodes, node.type)
+                node_instance = node_class(**node.params)
+                if not hasattr(node_instance, "_process_conditional"):
+                    raise PipelineNodeBuildError("A conditional node needs a _process_conditional method")
+                state_graph.add_conditional_edges(
+                    edge.source, node_instance._process_conditional, path_map=conditional_edge_map[edge.source]
+                )
+            else:
+                state_graph.add_edge(edge.source, edge.target)
+            seen_edges.add(edge.source)

@@ -14,6 +14,7 @@ import { NodeParameterValues } from "./types/nodeParameterValues";
 type NodeData = {
   label: string;
   value: number;
+  type: string;
   inputParams: InputParam[];
   params: NodeParams;
 };
@@ -130,6 +131,30 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
     }
   };
 
+  const getOuputHandles = (type) => {
+    console.log(type);
+    if (type === "BooleanNode") {
+      /* TODO: use output params */
+      return (
+        <>
+          <Handle
+            type="source"
+            position={Position.Right}
+            style={{ top: 10 }}
+            id="output_true"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            style={{ bottom: 10, top: "auto" }}
+            id="output_false"
+          />
+        </>
+      );
+    }
+    return <Handle type="source" position={Position.Right} id="output" />;
+  };
+
   return (
     <>
       <NodeToolbar position={Position.Top}>
@@ -157,7 +182,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             </React.Fragment>
           ))}
         </div>
-        <Handle type="source" position={Position.Right} id="output" />
+        {getOuputHandles(data.type)}
       </div>
     </>
   );

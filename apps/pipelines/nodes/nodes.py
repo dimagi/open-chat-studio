@@ -12,6 +12,7 @@ from pydantic import Field, create_model
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
+from apps.pipelines.const import FALSE_NODE, TRUE_NODE
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
@@ -146,6 +147,16 @@ class Start(Passthrough):
 
 class End(Passthrough):
     __human_name__ = "End"
+
+
+class BooleanNode(Passthrough):
+    __human_name__ = "Boolean Node"
+    input_equals: str
+
+    def _process_conditional(self, state: PipelineState) -> str:
+        if self.input_equals == state["messages"][-1]:
+            return TRUE_NODE
+        return FALSE_NODE
 
 
 class ExtractStructuredDataNodeMixin:
