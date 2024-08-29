@@ -464,11 +464,13 @@ def test_conditional_node(pipeline, experiment_session):
     pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
 
-    output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))["messages"][-1]
-    assert output == "said hello"
+    output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "said hello"
+    assert "RenderTemplate-false" not in output["outputs"]
 
-    output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))["messages"][-1]
-    assert output == "didn't say hello, said bad"
+    output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "didn't say hello, said bad"
+    assert "RenderTemplate-true" not in output["outputs"]
 
 
 @contextmanager
