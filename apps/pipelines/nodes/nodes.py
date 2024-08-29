@@ -53,9 +53,9 @@ class LLMResponse(PipelineNode):
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
-        output = llm.invoke(state["messages"][-1], config=self._config)
+        output = llm.invoke(input, config=self._config)
         return output.content
 
     def get_llm_service(self):
@@ -79,19 +79,19 @@ class LLMResponseWithPrompt(LLMResponse):
     source_material_id: SourceMaterialId | None = None
     prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         prompt = PromptTemplate.from_template(template=self.prompt)
-        context = self._get_context(state, prompt)
+        context = self._get_context(input, state, prompt)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         return output.content
 
-    def _get_context(self, state: PipelineState, prompt: PromptTemplate):
+    def _get_context(self, input, state: PipelineState, prompt: PromptTemplate):
         session = state["experiment_session"]
         context = {}
 
         if "input" in prompt.input_variables:
-            context["input"] = state["messages"][-1]
+            context["input"] = input
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")
@@ -126,9 +126,9 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=state["messages"][-1]
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
 
 
@@ -160,9 +160,8 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, state: PipelineState) -> RunnableLambda:
+    def _process(self, input, state: PipelineState) -> RunnableLambda:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
-        input: str = state["messages"][-1]
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
