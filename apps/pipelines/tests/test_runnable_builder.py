@@ -380,7 +380,7 @@ def test_branching_pipeline(provider, pipeline, source_material, experiment_sess
         "RenderTemplate-A": f"A ({user_input})",
         "RenderTemplate-B": f"B ({user_input})",
         "RenderTemplate-C": f"C (B ({user_input}))",
-        "Passthrough-2": f"A ({user_input})",  # TODO: really?
+        "Passthrough-2": [f"A ({user_input})", f"C (B ({user_input}))"],
     }
     assert output == expected_output
 

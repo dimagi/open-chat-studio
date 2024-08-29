@@ -12,8 +12,17 @@ from apps.pipelines.logging import PipelineLoggingCallbackHandler
 
 
 def add_messages(left: dict, right: dict):
-    return {**left, **right}
-    # return left + right
+    # If the node already has an output, create a list and append the value to it
+    output = {**left}
+    for key, value in right.items():
+        if key in output:
+            if isinstance(output[key], list):
+                output[key] = [*output[key], value]
+            else:
+                output[key] = [output[key], value]
+        else:
+            output[key] = value
+    return output
 
 
 class PipelineState(dict):
@@ -62,15 +71,22 @@ class PipelineNode(BaseModel, ABC):
             # TODO: what to do if the node is a "combination"?
             # Wait for all inputs? I don't think we can do that...
             # Assume there is only a single path that we care about? (e.g. in a router)
-            previous_node_id = incoming_edges[0]
-            input = state["outputs"][previous_node_id]
+            for incoming_edge in reversed(incoming_edges):
+                # TODO: This finds the last incoming edge that was processed.
+                # I'm not convinced it is necessarily the one we care about
+                # every time.
+                if incoming_edge in state["outputs"]:
+                    input = str(state["outputs"][incoming_edge])
+                    break
+            else:
+                input = state["messages"][-1]  # Should never happen...
         else:  # This is the input node
             input = state["messages"][-1]
         output = self._process(input, state)
         # Append the output to the state, otherwise do not change the state
         return PipelineState(messages=[output], outputs={node_id: output}) if output else PipelineState()
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
