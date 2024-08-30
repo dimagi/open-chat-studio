@@ -39,13 +39,18 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
         messages = []
-        for message in self.messages.order_by("-created_at").iterator(100):
+        for message in self.message_iterator():
             messages.append(message.to_langchain_dict())
-            if message.summary:
-                messages.append(message.summary_to_langchain_dict())
+            if message.is_summary:
                 break
 
         return messages_from_dict(list(reversed(messages)))
+
+    def message_iterator(self):
+        for message in self.messages.order_by("-created_at").iterator(100):
+            yield message
+            if message.summary:
+                yield message.get_summary_message()
 
 
 class ChatMessageType(models.TextChoices):
@@ -95,6 +100,22 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     class Meta:
         ordering = ["created_at"]
 
+    @classmethod
+    def make_summary_message(cls, content):
+        """A 'summary message' is a special message only ever exists in memory. It is
+        not saved to the database. It is used to represent the summary of a chat up to a certain point."""
+        return ChatMessage(message_type=ChatMessageType.SYSTEM, content=content, metadata={"summary": True})
+
+    def save(self, *args, **kwargs):
+        if self.is_summary:
+            raise ValueError("Cannot save a summary message")
+        super().save(*args, **kwargs)
+
+    def get_summary_message(self):
+        if not self.summary:
+            raise ValueError("Message does not have a summary")
+        return ChatMessage.make_summary_message(self.summary)
+
     @property
     def is_ai_message(self):
         return self.message_type == ChatMessageType.AI
@@ -102,6 +123,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def is_human_message(self):
         return self.message_type == ChatMessageType.HUMAN
+
+    @property
+    def is_summary(self):
+        return self.metadata.get("summary", False)
 
     @property
     def created_at_datetime(self):
@@ -112,9 +137,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     def to_langchain_message(self) -> BaseMessage:
         return messages_from_dict([self.to_langchain_dict()])[0]
-
-    def summary_to_langchain_dict(self) -> dict:
-        return self._get_langchain_dict(self.summary, ChatMessageType.SYSTEM)
 
     def _get_langchain_dict(self, content, message_type):
         return {
