@@ -57,8 +57,8 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         fields = ["role", "content", "metadata", "tags", "attachments"]
 
     def to_representation(self, instance):
-        if instance.is_summary:
-            # summary isn't saved to the DB, so you can query for tags
+        if not instance.pk:
+            # don't try and load tags if it isn't saved to the DB e.g. summary messages
             instance.tags = []
         data = super().to_representation(instance)
         data["role"] = ChatMessageType(data["role"]).role

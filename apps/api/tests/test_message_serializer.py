@@ -16,4 +16,4 @@ def test_message_serializer_api_to_internal(type_, role):
 @pytest.mark.parametrize(("type_", "role"), CASES)
 def test_message_serializer_internal_to_api(type_, role):
     serializer = MessageSerializer(instance=ChatMessage(message_type=type_, content="hello"))
-    assert serializer.data == {"role": role, "content": "hello"}
+    assert serializer.data == {"role": role, "content": "hello", "metadata": {}, "tags": [], "attachments": []}
