@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from django.db.utils import IntegrityError
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
@@ -274,3 +275,25 @@ class TestParticipant:
                 assert p_data.data == {"first_name": "Elizabeth", "last_name": "Turner"}
             else:
                 assert p_data.data == {"first_name": "Elizabeth"}
+
+
+@pytest.mark.django_db()
+class TestExperimentVersioning:
+    def test_working_experiment_cannot_be_the_default_version(self):
+        with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
+            ExperimentFactory(is_default_version=True, working_experiment=None)
+
+    def test_single_default_version_per_experiment(self):
+        working_exp = ExperimentFactory()
+        team = working_exp.team
+        ExperimentFactory(is_default_version=True, working_experiment=working_exp, team=team)
+        with pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
+            ExperimentFactory(is_default_version=True, working_experiment=working_exp, team=team, version_number=2)
+        ExperimentFactory(is_default_version=False, working_experiment=working_exp, team=team, version_number=3)
+
+    def test_unique_version_number_per_experiment(self):
+        working_exp = ExperimentFactory()
+        team = working_exp.team
+        ExperimentFactory(working_experiment=working_exp, team=team, version_number=2)
+        with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
+            ExperimentFactory(working_experiment=working_exp, team=team, version_number=2)
