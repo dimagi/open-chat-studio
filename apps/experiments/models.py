@@ -396,15 +396,44 @@ class Experiment(BaseTeamModel):
     )
     use_processor_bot_voice = models.BooleanField(default=False)
 
+    # Versioning fields
+    working_experiment = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="experiment_versions",
+    )
+    version_number = models.PositiveIntegerField(default=1)
+    is_default_version = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+
     class Meta:
         ordering = ["name"]
         permissions = [
             ("invite_participants", "Invite experiment participants"),
             ("download_chats", "Download experiment chats"),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_default_version", "working_experiment"],
+                condition=Q(is_default_version=True),
+                name="unique_default_version_per_experiment",
+            ),
+            models.UniqueConstraint(
+                fields=["version_number", "working_experiment"],
+                condition=Q(working_experiment__isnull=False),
+                name="unique_version_number_per_experiment",
+            ),
+        ]
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.working_experiment is None and self.is_default_version is True:
+            raise ValueError("A working experiment cannot be a default version")
+        return super().save(*args, **kwargs)
 
     @property
     def tools_enabled(self):
