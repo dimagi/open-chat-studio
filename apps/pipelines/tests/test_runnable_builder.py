@@ -467,7 +467,7 @@ def test_conditional_node(pipeline, experiment_session):
             },
             {
                 "id": "End",
-                "data": {"id": "End", "type": "End", "label": "End", "params": {}, "inputParams": []},
+                "data": {"id": "End", "type": "Passthrough", "label": "End", "params": {}, "inputParams": []},
                 "type": "pipelineNode",
             },
         ],

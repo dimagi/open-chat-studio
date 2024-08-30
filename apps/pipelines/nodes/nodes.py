@@ -141,14 +141,6 @@ class Passthrough(PipelineNode):
         return input
 
 
-class Start(Passthrough):
-    __human_name__ = "Start"
-
-
-class End(Passthrough):
-    __human_name__ = "End"
-
-
 class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
     input_equals: str
