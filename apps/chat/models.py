@@ -1,5 +1,6 @@
 import logging
 from enum import StrEnum
+from functools import cache
 from urllib.parse import quote
 
 from django.db import models
@@ -51,6 +52,10 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             yield message
             if message.summary:
                 yield message.get_summary_message()
+
+    @cache
+    def get_attached_files(self):
+        return list(File.objects.filter(chatattachment__chat=self))
 
 
 class ChatMessageType(models.TextChoices):
@@ -166,10 +171,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if file_ids := self.metadata.get("openai_file_ids", []):
             # We should not show files that are on the assistant level. Users should only be able to download
             # those on the thread (chat) level, since they uploaded them
-            chat_file_ids = ChatAttachment.objects.filter(chat=self.chat).values_list("files")
-            return File.objects.filter(
-                team=self.chat.team, external_id__in=file_ids, id__in=models.Subquery(chat_file_ids)
-            )
+            return [file for file in self.chat.get_attached_files() if file.external_id in file_ids]
         return []
 
 

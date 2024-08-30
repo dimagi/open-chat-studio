@@ -3,8 +3,10 @@ from django.urls import reverse
 from rest_framework.fields import DateTimeField
 
 from apps.annotations.models import Tag
+from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -67,8 +69,9 @@ def test_retrieve_session(session):
     )
 
     session.chat.messages.create(message_type="ai", content="hi")
-    session.chat.messages.create(message_type="human", content="hello")
-    session.chat.messages.create(message_type="ai", content="magic")
+    message1 = session.chat.messages.create(message_type="human", content="hello")
+    _create_attachments(session.chat, message1)
+
     message = session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
     message.add_tag(tags[0], session.team, user)
     message.add_tag(tags[1], session.team, user)
@@ -79,13 +82,40 @@ def test_retrieve_session(session):
     assert response.json() == get_session_json(
         session,
         expected_messages=[
-            {"role": "assistant", "content": "hi", "metadata": {}, "tags": []},
-            {"role": "user", "content": "hello", "metadata": {}, "tags": []},
-            {"role": "assistant", "content": "magic", "metadata": {}, "tags": []},
-            {"role": "system", "content": "Abracadabra", "metadata": {"is_summary": True}, "tags": []},
-            {"role": "user", "content": "rabbit in a hat", "metadata": {}, "tags": ["tag1", "tag2"]},
+            {"role": "assistant", "content": "hi", "metadata": {}, "tags": [], "attachments": []},
+            {
+                "role": "user",
+                "content": "hello",
+                "metadata": {},
+                "tags": [],
+                "attachments": [
+                    {"name": "file_1", "content_type": "text/plain", "size": 0},
+                    {"name": "file_2", "content_type": "text/plain", "size": 0},
+                ],
+            },
+            {
+                "role": "system",
+                "content": "Abracadabra",
+                "metadata": {"is_summary": True},
+                "tags": [],
+                "attachments": [],
+            },
+            {"role": "user", "content": "rabbit in a hat", "metadata": {}, "tags": ["tag1", "tag2"], "attachments": []},
         ],
     )
+
+
+def _create_attachments(chat, message):
+    tool_resource, _created = ChatAttachment.objects.get_or_create(
+        chat_id=chat.id,
+        tool_type="file_search",
+    )
+    file_ids = ["file_1", "file_2"]
+    for external_id in file_ids:
+        file = FileFactory(name=external_id, external_id=external_id)
+        tool_resource.files.add(file)
+    message.metadata = {"openai_file_ids": file_ids}
+    message.save()
 
 
 @pytest.mark.django_db()

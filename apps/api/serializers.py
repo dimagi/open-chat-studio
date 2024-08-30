@@ -7,6 +7,7 @@ from taggit.serializers import TaggitSerializer, TagListSerializerField
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.files.models import File
 from apps.teams.models import Team
 
 
@@ -33,20 +34,24 @@ class TeamSerializer(serializers.ModelSerializer):
         fields = ["name", "slug"]
 
 
-MESSAGE_METADATA_KEYS_TO_HIDE = {
-    "openai_file_ids",
-}
+class FileSerializer(serializers.ModelSerializer):
+    size = serializers.IntegerField(source="content_size")
+
+    class Meta:
+        model = File
+        fields = ("name", "content_type", "size")
 
 
 class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
     role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
     content = serializers.CharField()
-    metadata = serializers.JSONField(required=False)
-    tags = TagListSerializerField()
+    metadata = serializers.JSONField(required=False, read_only=True)
+    tags = TagListSerializerField(read_only=True)
+    attachments = serializers.ListField(source="get_attached_files", child=FileSerializer(), read_only=True)
 
     class Meta:
         model = ChatMessage
-        fields = ["role", "content", "metadata", "tags"]
+        fields = ["role", "content", "metadata", "tags", "attachments"]
 
     def to_representation(self, instance):
         if instance.is_summary:
@@ -55,7 +60,7 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         data = super().to_representation(instance)
         data["role"] = ChatMessageType(data["role"]).role
         for key in ChatMessage.INTERNAL_METADATA_KEYS:
-            data.pop(key, None)
+            data["metadata"].pop(key, None)
         return data
 
     def to_internal_value(self, data):
