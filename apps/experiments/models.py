@@ -3,6 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 from functools import cached_property
+from uuid import uuid4
 
 import markdown
 import pytz
@@ -89,7 +90,6 @@ class SourceMaterial(BaseTeamModel):
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel):
-    objects = SafetyLayerObjectManager()
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
@@ -108,12 +108,32 @@ class SafetyLayer(BaseTeamModel):
         default="",
         help_text="If specified, the message that will be sent to the bot instead of the filtered message.",
     )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    objects = SafetyLayerObjectManager()
 
     def __str__(self):
         return self.name
 
     def get_absolute_url(self):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def create_new_version(self, save=True):
+        working_version_id = self.id
+        new_instance = SafetyLayer.objects.get(id=self.id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        new_instance.working_version_id = working_version_id
+        if save:
+            new_instance.save()
+        return new_instance
 
 
 class Survey(BaseTeamModel):
@@ -283,7 +303,6 @@ class Experiment(BaseTeamModel):
     Each experiment can be run as a chatbot.
     """
 
-    objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -397,16 +416,17 @@ class Experiment(BaseTeamModel):
     use_processor_bot_voice = models.BooleanField(default=False)
 
     # Versioning fields
-    working_experiment = models.ForeignKey(
+    working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="experiment_versions",
+        related_name="versions",
     )
     version_number = models.PositiveIntegerField(default=1)
     is_default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
+    objects = ExperimentObjectManager()
 
     class Meta:
         ordering = ["name"]
@@ -416,13 +436,13 @@ class Experiment(BaseTeamModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["is_default_version", "working_experiment"],
+                fields=["is_default_version", "working_version"],
                 condition=Q(is_default_version=True),
                 name="unique_default_version_per_experiment",
             ),
             models.UniqueConstraint(
-                fields=["version_number", "working_experiment"],
-                condition=Q(working_experiment__isnull=False),
+                fields=["version_number", "working_version"],
+                condition=Q(working_version__isnull=False),
                 name="unique_version_number_per_experiment",
             ),
         ]
@@ -431,9 +451,12 @@ class Experiment(BaseTeamModel):
         return self.name
 
     def save(self, *args, **kwargs):
-        if self.working_experiment is None and self.is_default_version is True:
+        if self.working_version is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
         return super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     @property
     def tools_enabled(self):
@@ -456,13 +479,34 @@ class Experiment(BaseTeamModel):
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
-    def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
-
+    @transaction.atomic()
     def create_new_version(self):
-        from apps.experiments.utils import create_experiment_version
+        """
+        Creates a copy of an experiment as a new version of the original experiment.
+        """
+        version_number = self.version_number
+        self.version_number = version_number + 1
+        self.save()
+        working_version_id = self.id
 
-        return create_experiment_version(self)
+        # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
+        # why simply chaing the pk, id and _state.adding wasn't enough.
+        new_version = Experiment.objects.get(id=working_version_id)
+        new_version._state.adding = True
+        new_version.pk = None
+        new_version.id = None
+        new_version.working_version_id = working_version_id
+        new_version.public_id = uuid4()
+        new_version.version_number = version_number
+        new_version.save()
+
+        duplicated_layers = []
+        for layer in self.safety_layers.all():
+            duplicated_layers.append(layer.create_new_version())
+
+        new_version.safety_layers.set(duplicated_layers)
+        # new_experiment.files.set(original_experiment.files.all()) # TODO
+        return new_version
 
 
 class ExperimentRouteType(models.TextChoices):

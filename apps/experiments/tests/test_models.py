@@ -6,7 +6,7 @@ from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.experiments.models import ExperimentRoute, ParticipantData, SyntheticVoice
+from apps.experiments.models import ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
@@ -278,22 +278,69 @@ class TestParticipant:
 
 
 @pytest.mark.django_db()
+class TestSafetyLayerVersioning:
+    def test_create_new_version(self):
+        original = SafetyLayer.objects.create(
+            prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
+        )
+        new_version = original.create_new_version()
+        original.refresh_from_db()
+        assert original.working_version is None
+        assert new_version != original
+        assert new_version.working_version == original
+        assert new_version.prompt_text == original.prompt_text
+        assert new_version.prompt_to_bot == original.prompt_to_bot
+        assert new_version.team == original.team
+
+
+@pytest.mark.django_db()
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
-            ExperimentFactory(is_default_version=True, working_experiment=None)
+            ExperimentFactory(is_default_version=True, working_version=None)
 
     def test_single_default_version_per_experiment(self):
         working_exp = ExperimentFactory()
         team = working_exp.team
-        ExperimentFactory(is_default_version=True, working_experiment=working_exp, team=team)
+        ExperimentFactory(is_default_version=True, working_version=working_exp, team=team)
         with pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
-            ExperimentFactory(is_default_version=True, working_experiment=working_exp, team=team, version_number=2)
-        ExperimentFactory(is_default_version=False, working_experiment=working_exp, team=team, version_number=3)
+            ExperimentFactory(is_default_version=True, working_version=working_exp, team=team, version_number=2)
+        ExperimentFactory(is_default_version=False, working_version=working_exp, team=team, version_number=3)
 
     def test_unique_version_number_per_experiment(self):
         working_exp = ExperimentFactory()
         team = working_exp.team
-        ExperimentFactory(working_experiment=working_exp, team=team, version_number=2)
+        ExperimentFactory(working_version=working_exp, team=team, version_number=2)
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
-            ExperimentFactory(working_experiment=working_exp, team=team, version_number=2)
+            ExperimentFactory(working_version=working_exp, team=team, version_number=2)
+
+    def _setup_original_experiment(self):
+        experiment = ExperimentFactory()
+
+        layer1 = SafetyLayer.objects.create(
+            prompt_text="Is this message safe?", team=experiment.team, prompt_to_bot="Unsafe reply"
+        )
+        layer2 = SafetyLayer.objects.create(
+            prompt_text="What about this one?", team=experiment.team, prompt_to_bot="Unsafe reply"
+        )
+        experiment.safety_layers.set([layer1, layer2])
+        return experiment
+
+    @pytest.mark.django_db()
+    def test_create_experiment_version(self):
+        original_experiment = self._setup_original_experiment()
+
+        assert original_experiment.version_number == 1
+
+        new_version = original_experiment.create_new_version()
+        assert new_version != original_experiment
+        assert original_experiment.version_number == 2
+        assert original_experiment.working_version is None
+        assert new_version.version_number == 1
+        assert new_version.working_version == original_experiment
+        self._assert_duplicated_safety_layers(original_experiment, new_version)
+
+    def _assert_duplicated_safety_layers(self, original_experiment, new_version):
+        for layer in original_experiment.safety_layers.all():
+            assert layer.working_version is None
+            assert new_version.safety_layers.filter(working_version=layer).exists()
