@@ -114,9 +114,9 @@ class PipelineGraph(pydantic.BaseModel):
             if edge.source not in seen_sources:  # We only add edges from the same source once
                 node_instance = self.nodes_by_id[edge.source].pipeline_node_instance
                 state_graph.add_conditional_edges(
-                    source=edge.source,
-                    path=node_instance.process_conditional,
-                    path_map=self.conditional_edge_map[edge.source],
+                    edge.source,
+                    node_instance.process_conditional,
+                    self.conditional_edge_map[edge.source],
                 )
             seen_sources.add(edge.source)
 
