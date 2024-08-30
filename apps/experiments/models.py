@@ -459,6 +459,11 @@ class Experiment(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
+    def create_new_version(self):
+        from apps.experiments.utils import create_experiment_version
+
+        return create_experiment_version(self)
+
 
 class ExperimentRouteType(models.TextChoices):
     PROCESSOR = "processor"
