@@ -57,11 +57,15 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
                 "id": "report->template",
                 "source": "report",
                 "target": "template",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
             {
                 "id": "template->email",
                 "source": "template",
                 "target": "email",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
         ],
         "nodes": [
@@ -201,6 +205,8 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                 "id": "llm-1->llm-2",
                 "source": "llm-1",
                 "target": "llm-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             }
         ],
         "nodes": [
@@ -285,16 +291,22 @@ def test_branching_pipeline(pipeline, experiment_session):
                 "id": "START -> RenderTemplate-A",
                 "source": "Passthrough-1",
                 "target": "RenderTemplate-A",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
             {
                 "id": "Passthrough -> RenderTemplate-B",
                 "source": "Passthrough-1",
                 "target": "RenderTemplate-B",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
             {
                 "id": "RenderTemplate-A -> END",
                 "source": "RenderTemplate-A",
                 "target": "Passthrough-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
             {
                 "id": "RenderTemplate-B -> RenderTemplate-C",

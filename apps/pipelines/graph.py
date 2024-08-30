@@ -22,7 +22,10 @@ class Edge(pydantic.BaseModel):
     id: str
     source: str
     target: str
-    sourceHandle: str
+    sourceHandle: str | None = None
+
+    def is_conditional_edge(self):
+        return self.sourceHandle not in ["input", "output"]
 
 
 class PipelineGraph(pydantic.BaseModel):
@@ -89,7 +92,7 @@ class PipelineGraph(pydantic.BaseModel):
                 conditional_edge_map[edge.source][FALSE_NODE] = edge.target
 
         for edge in self.edges:
-            if edge.sourceHandle in ["output_true", "output_false"] and edge.source not in seen_edges:
+            if edge.is_conditional_edge() and edge.source not in seen_edges:
                 node = nodes_by_id[edge.source]
                 node_class = getattr(nodes, node.type)
                 node_instance = node_class(**node.params)
@@ -98,6 +101,6 @@ class PipelineGraph(pydantic.BaseModel):
                 state_graph.add_conditional_edges(
                     edge.source, node_instance._process_conditional, path_map=conditional_edge_map[edge.source]
                 )
-            else:
+            elif not edge.is_conditional_edge():
                 state_graph.add_edge(edge.source, edge.target)
             seen_edges.add(edge.source)

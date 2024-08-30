@@ -81,7 +81,11 @@ class PipelineNode(BaseModel, ABC):
             input = state["messages"][-1]
         output = self._process(input, state)
         # Append the output to the state, otherwise do not change the state
-        return PipelineState(messages=[output], outputs={node_id: output}) if output else PipelineState()
+        return (
+            PipelineState(messages=[output], outputs={node_id: output})
+            if output
+            else PipelineState(outputs={node_id: output})
+        )
 
     def _process(self, input: str, state: PipelineState) -> PipelineState:
         """The method that executes node specific functionality"""
