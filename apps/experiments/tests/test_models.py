@@ -12,6 +12,7 @@ from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantFactory,
+    SourceMaterialFactory,
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
@@ -294,6 +295,19 @@ class TestSafetyLayerVersioning:
 
 
 @pytest.mark.django_db()
+class TestSourceMaterialVersioning:
+    def test_create_new_version(self):
+        original = SourceMaterialFactory()
+        new_version = original.create_new_version()
+        original.refresh_from_db()
+        assert original.working_version is None
+        assert new_version != original
+        assert new_version.description == original.description
+        assert new_version.material == original.material
+        assert new_version.team == original.team
+
+
+@pytest.mark.django_db()
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
@@ -324,6 +338,9 @@ class TestExperimentVersioning:
             prompt_text="What about this one?", team=experiment.team, prompt_to_bot="Unsafe reply"
         )
         experiment.safety_layers.set([layer1, layer2])
+
+        experiment.source_material = SourceMaterialFactory(material="material science is interesting")
+        experiment.save()
         return experiment
 
     @pytest.mark.django_db()
@@ -339,8 +356,14 @@ class TestExperimentVersioning:
         assert new_version.version_number == 1
         assert new_version.working_version == original_experiment
         self._assert_duplicated_safety_layers(original_experiment, new_version)
+        self._assert_duplicated_source_material(original_experiment, new_version)
 
     def _assert_duplicated_safety_layers(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
             assert layer.working_version is None
             assert new_version.safety_layers.filter(working_version=layer).exists()
+
+    def _assert_duplicated_source_material(self, original_experiment, new_version):
+        assert new_version.source_material != original_experiment.source_material
+        assert new_version.source_material.working_version == original_experiment.source_material
+        assert new_version.source_material.material == original_experiment.source_material.material

@@ -72,11 +72,18 @@ class SourceMaterial(BaseTeamModel):
     Some Source Material on a particular topic.
     """
 
-    objects = SourceMaterialObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    objects = SourceMaterialObjectManager()
 
     class Meta:
         ordering = ["topic"]
@@ -86,6 +93,18 @@ class SourceMaterial(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def create_new_version(self, save=True):
+        working_version_id = self.id
+        new_instance = SourceMaterial.objects.get(id=self.id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        new_instance.working_version_id = working_version_id
+        if save:
+            new_instance.save()
+        return new_instance
 
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
@@ -498,6 +517,7 @@ class Experiment(BaseTeamModel):
         new_version.working_version_id = working_version_id
         new_version.public_id = uuid4()
         new_version.version_number = version_number
+        new_version.source_material = self.source_material.create_new_version()
         new_version.save()
 
         duplicated_layers = []
