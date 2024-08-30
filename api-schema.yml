@@ -214,7 +214,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExperimentSession'
+                $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
@@ -383,6 +383,50 @@ components:
             $ref: '#/components/schemas/Message'
       required:
       - experiment
+      - url
+    ExperimentSessionWithMessages:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: string
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        experiment:
+          allOf:
+          - $ref: '#/components/schemas/Experiment'
+          readOnly: true
+        participant:
+          allOf:
+          - $ref: '#/components/schemas/Participant'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          readOnly: true
+      required:
+      - created_at
+      - experiment
+      - id
+      - messages
+      - participant
+      - team
+      - updated_at
       - url
     Message:
       type: object

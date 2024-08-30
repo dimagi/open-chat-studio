@@ -1,9 +1,10 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
 
@@ -31,6 +32,25 @@ class TeamSerializer(serializers.ModelSerializer):
         fields = ["name", "slug"]
 
 
+class MessageSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
+    content = serializers.CharField()
+
+    class Meta:
+        model = ChatMessage
+        fields = ["role", "content"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["role"] = ChatMessageType(data["role"]).role
+        return data
+
+    def to_internal_value(self, data):
+        data = super().to_internal_value(data)
+        data["message_type"] = ChatMessageType.from_role(data["message_type"])
+        return data
+
+
 class ExperimentSessionSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
@@ -50,40 +70,13 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         if not self._include_messages:
             self.fields.pop("messages")
+        else:
+            # hack to change the component name for the schema to include messages
+            self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
 
+    @extend_schema_field(MessageSerializer(many=True))
     def get_messages(self, instance):
-        return [
-            {
-                "role": message.message_type,
-                "content": message.content,
-            }
-            for message in instance.chat.messages.all()
-        ]
-
-
-class MessageSerializer(serializers.Serializer):
-    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="type")
-    content = serializers.CharField(source="message")
-
-    def to_representation(self, instance):
-        output = super().to_representation(instance)
-        # map internal names to external names
-        output["role"] = {
-            "human": "user",
-            "ai": "assistant",
-            "system": "system",
-        }[output["role"]]
-        return output
-
-    def to_internal_value(self, data):
-        # map external names to internal names
-        data = super().to_internal_value(data)
-        data["type"] = {
-            "user": "human",
-            "assistant": "ai",
-            "system": "system",
-        }[data["type"]]
-        return data
+        return MessageSerializer(instance.chat.messages.all(), many=True).data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
@@ -116,12 +109,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         messages = validated_data.pop("messages", [])
         instance = super().create(validated_data)
         if messages:
-            ChatMessage.objects.bulk_create(
-                [
-                    ChatMessage(chat=instance.chat, message_type=message["type"], content=message["message"])
-                    for message in messages
-                ]
-            )
+            ChatMessage.objects.bulk_create([ChatMessage(chat=instance.chat, **message) for message in messages])
         return instance
 
 
