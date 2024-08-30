@@ -89,6 +89,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
 
+    # Metadata keys that should be excluded from the API response
+    INTERNAL_METADATA_KEYS = {
+        "openai_file_ids",
+    }
+
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
     content = models.TextField()
@@ -104,7 +109,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def make_summary_message(cls, content):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
-        return ChatMessage(message_type=ChatMessageType.SYSTEM, content=content, metadata={"summary": True})
+        return ChatMessage(message_type=ChatMessageType.SYSTEM, content=content, metadata={"is_summary": True})
 
     def save(self, *args, **kwargs):
         if self.is_summary:
@@ -126,7 +131,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary(self):
-        return self.metadata.get("summary", False)
+        return self.metadata.get("is_summary", False)
 
     @property
     def created_at_datetime(self):

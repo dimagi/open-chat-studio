@@ -32,17 +32,25 @@ class TeamSerializer(serializers.ModelSerializer):
         fields = ["name", "slug"]
 
 
+MESSAGE_METADATA_KEYS_TO_HIDE = {
+    "openai_file_ids",
+}
+
+
 class MessageSerializer(serializers.ModelSerializer):
     role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
     content = serializers.CharField()
+    metadata = serializers.JSONField(required=False)
 
     class Meta:
         model = ChatMessage
-        fields = ["role", "content"]
+        fields = ["role", "content", "metadata"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data["role"] = ChatMessageType(data["role"]).role
+        for key in ChatMessage.INTERNAL_METADATA_KEYS:
+            data.pop(key, None)
         return data
 
     def to_internal_value(self, data):

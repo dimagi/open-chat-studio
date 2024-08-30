@@ -69,11 +69,11 @@ def test_retrieve_session(session):
     assert response.json() == get_session_json(
         session,
         expected_messages=[
-            {"role": "assistant", "content": "hi"},
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "magic"},
-            {"role": "system", "content": "Abracadabra"},
-            {"role": "user", "content": "rabbit in a hat"},
+            {"role": "assistant", "content": "hi", "metadata": {}},
+            {"role": "user", "content": "hello", "metadata": {}},
+            {"role": "assistant", "content": "magic", "metadata": {}},
+            {"role": "system", "content": "Abracadabra", "metadata": {"is_summary": True}},
+            {"role": "user", "content": "rabbit in a hat", "metadata": {}},
         ],
     )
 
