@@ -31,7 +31,7 @@ def test_list_sessions(session):
     }
 
 
-def get_session_json(session, include_messages=False):
+def get_session_json(session, expected_messages=None):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -49,24 +49,33 @@ def get_session_json(session, include_messages=False):
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
     }
-    if include_messages:
-        data["messages"] = [
-            {
-                "role": message.role,
-                "content": message.content,
-            }
-            for message in session.chat.messages.all()
-        ]
+    if expected_messages is not None:
+        data["messages"] = expected_messages
     return data
 
 
 @pytest.mark.django_db()
 def test_retrieve_session(session):
     user = session.team.members.first()
+
+    session.chat.messages.create(message_type="ai", content="hi")
+    session.chat.messages.create(message_type="human", content="hello")
+    session.chat.messages.create(message_type="ai", content="magic")
+    session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
+
     client = ApiTestClient(user, session.team)
     response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
-    assert response.json() == get_session_json(session, include_messages=True)
+    assert response.json() == get_session_json(
+        session,
+        expected_messages=[
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "magic"},
+            {"role": "system", "content": "Abracadabra"},
+            {"role": "user", "content": "rabbit in a hat"},
+        ],
+    )
 
 
 @pytest.mark.django_db()

@@ -76,7 +76,8 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(MessageSerializer(many=True))
     def get_messages(self, instance):
-        return MessageSerializer(instance.chat.messages.all(), many=True).data
+        messages = list(instance.chat.message_iterator())
+        return MessageSerializer(reversed(messages), many=True).data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
