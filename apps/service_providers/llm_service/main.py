@@ -7,6 +7,7 @@ from langchain.chat_models.base import BaseChatModel
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
 from langchain_core.load import dumpd
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
@@ -122,8 +123,6 @@ class OpenAILlmService(LlmService):
             openai_organization=self.openai_organization,
         )
         try:
-            from langchain_core.messages import HumanMessage
-
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
             # fallback if the model is not available for encoding
