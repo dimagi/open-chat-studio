@@ -70,7 +70,7 @@ def test_retrieve_session(session):
 
     session.chat.messages.create(message_type="ai", content="hi")
     message1 = session.chat.messages.create(message_type="human", content="hello")
-    _create_attachments(session.chat, message1)
+    files = _create_attachments(session.chat, message1)
 
     message = session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
     message.add_tag(tags[0], session.team, user)
@@ -89,8 +89,18 @@ def test_retrieve_session(session):
                 "metadata": {},
                 "tags": [],
                 "attachments": [
-                    {"name": "file_1", "content_type": "text/plain", "size": 0},
-                    {"name": "file_2", "content_type": "text/plain", "size": 0},
+                    {
+                        "name": "file_1",
+                        "content_type": "text/plain",
+                        "size": 0,
+                        "content_url": f"http://testserver/api/files/{files[0].id}/content",
+                    },
+                    {
+                        "name": "file_2",
+                        "content_type": "text/plain",
+                        "size": 0,
+                        "content_url": f"http://testserver/api/files/{files[1].id}/content",
+                    },
                 ],
             },
             {
@@ -100,7 +110,13 @@ def test_retrieve_session(session):
                 "tags": [],
                 "attachments": [],
             },
-            {"role": "user", "content": "rabbit in a hat", "metadata": {}, "tags": ["tag1", "tag2"], "attachments": []},
+            {
+                "role": "user",
+                "content": "rabbit in a hat",
+                "metadata": {},
+                "tags": ["tag1", "tag2"],
+                "attachments": [],
+            },
         ],
     )
 
@@ -111,11 +127,13 @@ def _create_attachments(chat, message):
         tool_type="file_search",
     )
     file_ids = ["file_1", "file_2"]
+    files = []
     for external_id in file_ids:
-        file = FileFactory(name=external_id, external_id=external_id)
-        tool_resource.files.add(file)
+        files.append(FileFactory(name=external_id, external_id=external_id))
+    tool_resource.files.add(*files)
     message.metadata = {"openai_file_ids": file_ids}
     message.save()
+    return files
 
 
 @pytest.mark.django_db()

@@ -1,7 +1,8 @@
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
@@ -19,6 +20,7 @@ from apps.api.serializers import (
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.files.models import File
 
 
 @extend_schema_view(
@@ -258,3 +260,17 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
+
+
+@extend_schema(responses=bytes)
+@api_view(["GET"])
+@permission_required("files.view_file")
+def file_content_view(request, pk: int):
+    file = get_object_or_404(File, id=pk, team=request.team)
+    if not file.file:
+        raise Http404()
+
+    try:
+        return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
+    except FileNotFoundError:
+        raise Http404()

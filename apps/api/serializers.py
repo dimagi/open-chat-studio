@@ -36,10 +36,13 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     size = serializers.IntegerField(source="content_size")
+    content_url = serializers.HyperlinkedIdentityField(
+        view_name="api:file-content", lookup_field="id", lookup_url_kwarg="pk"
+    )
 
     class Meta:
         model = File
-        fields = ("name", "content_type", "size")
+        fields = ("name", "content_type", "size", "content_url")
 
 
 class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
@@ -95,7 +98,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     @extend_schema_field(MessageSerializer(many=True))
     def get_messages(self, instance):
         messages = list(instance.chat.message_iterator())
-        return MessageSerializer(reversed(messages), many=True).data
+        return MessageSerializer(reversed(messages), many=True, context=self.context).data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
