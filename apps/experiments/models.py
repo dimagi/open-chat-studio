@@ -315,9 +315,6 @@ class Experiment(BaseTeamModel):
         "E.g. 'Safe or unsafe? {input}'",
     )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
-    is_active = models.BooleanField(
-        default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
-    )
 
     source_material = models.ForeignKey(
         SourceMaterial,
@@ -395,6 +392,7 @@ class Experiment(BaseTeamModel):
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
     use_processor_bot_voice = models.BooleanField(default=False)
+    participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -429,6 +427,16 @@ class Experiment(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+    @property
+    def is_public(self) -> bool:
+        """
+        Whether or not a bot is public depends on the `participant_allowlist`. If it's empty, the bot is public.
+        """
+        return len(self.participant_allowlist) == 0
+
+    def is_participant_allowed(self, identifier: str):
+        return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
 
 class ExperimentRouteType(models.TextChoices):

@@ -191,16 +191,18 @@ class ExperimentForm(forms.ModelForm):
             "echo_transcript",
             "use_processor_bot_voice",
             "trace_provider",
+            "participant_allowlist",
         ]
-        labels = {
-            "source_material": "Inline Source Material",
-        }
+        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
             "use_processor_bot_voice": (
                 "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
                 "have one, the router bot's voice will be used."
+            ),
+            "participant_allowlist": (
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
             ),
         }
 
@@ -237,6 +239,12 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def clean_participant_allowlist(self):
+        cleaned_identifiers = []
+        for identifier in self.cleaned_data["participant_allowlist"]:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        return cleaned_identifiers
 
     def clean(self):
         cleaned_data = super().clean()
@@ -296,6 +304,14 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
             experiment_type = "llm"
         if self.request.POST.get("type"):
             experiment_type = self.request.POST.get("type")
+
+        team_participant_identifiers = list(
+            self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
+        )
+        if self.object:
+            team_participant_identifiers.extend(self.object.participant_allowlist)
+            team_participant_identifiers = set(team_participant_identifiers)
+
         return {
             **{
                 "title": self.title,
@@ -303,6 +319,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
+                "team_participant_identifiers": team_participant_identifiers,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -756,9 +773,12 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 def start_session_public(request, team_slug: str, experiment_id: str):
     try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
         # old links dont have uuids
+        raise Http404
+
+    if not experiment.is_public:
         raise Http404
 
     consent = experiment.consent_form

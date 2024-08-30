@@ -22,7 +22,7 @@
       </div>
       <div class="justify-self-end">
         <div class="join">
-          {% if experiment.is_active %}
+          {% if experiment.is_public %}
             <div class="tooltip" data-tip="Public Link">
               <a class="btn btn-primary join-item rounded-l-full"
                  href="{% url 'experiments:start_session_public' team.slug experiment.public_id %}" target="_blank">

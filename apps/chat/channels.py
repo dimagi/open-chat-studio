@@ -15,7 +15,7 @@ from telebot.util import antiflood, smart_split
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
-from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException
+from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException, ParticipantNotAllowedException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -215,6 +215,10 @@ class ChannelBase(ABC):
         """Adds the message to the handler in order to extract session information"""
         self._user_query = None
         self.message = message
+
+        if not self._participant_is_allowed():
+            raise ParticipantNotAllowedException()
+
         self._ensure_sessions_exists()
         self.bot = get_bot(self.experiment_session)
 
@@ -227,8 +231,16 @@ class ChannelBase(ABC):
         except GenerationCancelled:
             return ""
 
+    def _participant_is_allowed(self):
+        if self.experiment.is_public:
+            return True
+        return self.experiment.is_participant_allowed(self.participant_identifier)
+
     def _new_user_message(self, message) -> str:
-        self._add_message(message)
+        try:
+            self._add_message(message)
+        except ParticipantNotAllowedException:
+            return self.send_message_to_user("Sorry, you are not allowed to chat to this bot")
 
         if not self.is_message_type_supported():
             return self._handle_unsupported_message()
