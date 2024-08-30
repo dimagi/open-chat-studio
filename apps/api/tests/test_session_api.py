@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.fields import DateTimeField
 
+from apps.annotations.models import Tag
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -58,10 +59,19 @@ def get_session_json(session, expected_messages=None):
 def test_retrieve_session(session):
     user = session.team.members.first()
 
+    tags = Tag.objects.bulk_create(
+        [
+            Tag(name="tag1", slug="tag1", team=session.team, created_by=user),
+            Tag(name="tag2", slug="tag2", team=session.team, created_by=user),
+        ]
+    )
+
     session.chat.messages.create(message_type="ai", content="hi")
     session.chat.messages.create(message_type="human", content="hello")
     session.chat.messages.create(message_type="ai", content="magic")
-    session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
+    message = session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
+    message.add_tag(tags[0], session.team, user)
+    message.add_tag(tags[1], session.team, user)
 
     client = ApiTestClient(user, session.team)
     response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
@@ -69,11 +79,11 @@ def test_retrieve_session(session):
     assert response.json() == get_session_json(
         session,
         expected_messages=[
-            {"role": "assistant", "content": "hi", "metadata": {}},
-            {"role": "user", "content": "hello", "metadata": {}},
-            {"role": "assistant", "content": "magic", "metadata": {}},
-            {"role": "system", "content": "Abracadabra", "metadata": {"is_summary": True}},
-            {"role": "user", "content": "rabbit in a hat", "metadata": {}},
+            {"role": "assistant", "content": "hi", "metadata": {}, "tags": []},
+            {"role": "user", "content": "hello", "metadata": {}, "tags": []},
+            {"role": "assistant", "content": "magic", "metadata": {}, "tags": []},
+            {"role": "system", "content": "Abracadabra", "metadata": {"is_summary": True}, "tags": []},
+            {"role": "user", "content": "rabbit in a hat", "metadata": {}, "tags": ["tag1", "tag2"]},
         ],
     )
 

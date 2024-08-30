@@ -2,6 +2,7 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
+from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -37,16 +38,20 @@ MESSAGE_METADATA_KEYS_TO_HIDE = {
 }
 
 
-class MessageSerializer(serializers.ModelSerializer):
+class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
     role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
     content = serializers.CharField()
     metadata = serializers.JSONField(required=False)
+    tags = TagListSerializerField()
 
     class Meta:
         model = ChatMessage
-        fields = ["role", "content", "metadata"]
+        fields = ["role", "content", "metadata", "tags"]
 
     def to_representation(self, instance):
+        if instance.is_summary:
+            # summary isn't saved to the DB, so you can query for tags
+            instance.tags = []
         data = super().to_representation(instance)
         data["role"] = ChatMessageType(data["role"]).role
         for key in ChatMessage.INTERNAL_METADATA_KEYS:
