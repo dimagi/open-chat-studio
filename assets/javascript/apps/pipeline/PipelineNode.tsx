@@ -131,8 +131,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
     }
   };
 
-  const getOuputHandles = (type) => {
-    console.log(type);
+  const getOuputHandles = (type: string) => {
     if (type === "BooleanNode") {
       /* TODO: use output params */
       return (
