@@ -121,9 +121,19 @@ class OpenAILlmService(LlmService):
             openai_api_base=self.openai_api_base,
             openai_organization=self.openai_organization,
         )
-        if model._get_encoding_model()[0] == "cl100k_base":
-            # fallback to gpt-4 if the model is not available for encoding
-            model.tiktoken_model_name = "gpt-4"
+        try:
+            from langchain_core.messages import HumanMessage
+
+            model.get_num_tokens_from_messages([HumanMessage("Hello")])
+        except Exception:
+            # fallback if the model is not available for encoding
+            match llm_model:
+                case True if "gpt-4o" in llm_model:
+                    model.tiktoken_model_name = "gpt-4o"
+                case True if "gpt-3.5" in llm_model:
+                    model.tiktoken_model_name = "gpt-3.5-turbo"
+                case _:
+                    model.tiktoken_model_name = "gpt-4"
         return model
 
     def transcribe_audio(self, audio: BytesIO) -> str:
