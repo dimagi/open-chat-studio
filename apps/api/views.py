@@ -240,6 +240,8 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
 
     def create(self, request, *args, **kwargs):
+        # Custom create method because we use a different serializer processing the request than for
+        # generating the response
         serializer = ExperimentSessionCreateSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         serializer.save()
