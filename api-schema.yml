@@ -50,6 +50,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Experiment'
           description: ''
+  /api/files/{id}/content:
+    get:
+      operationId: file_content
+      summary: Download File Content
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Files
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/openai/{experiment_id}/chat/completions:
     post:
       operationId: openai_chat_completions
@@ -428,6 +451,24 @@ components:
       - team
       - updated_at
       - url
+    File:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        size:
+          type: integer
+        content_url:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - content_url
+      - name
+      - size
     Message:
       type: object
       properties:
@@ -435,9 +476,26 @@ components:
           $ref: '#/components/schemas/MessageRoleEnum'
         content:
           type: string
+        metadata:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+          readOnly: true
       required:
+      - attachments
       - content
+      - metadata
       - role
+      - tags
     MessageRoleEnum:
       enum:
       - system

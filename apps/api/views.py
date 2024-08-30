@@ -6,8 +6,9 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.exceptions import NotFound
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -262,8 +263,14 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
 
 
-@extend_schema(responses=bytes)
+class BinaryRenderer(BaseRenderer):
+    media_type = "application/octet-stream"
+    format = "bin"
+
+
+@extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
 @api_view(["GET"])
+@renderer_classes([BinaryRenderer])
 @permission_required("files.view_file")
 def file_content_view(request, pk: int):
     file = get_object_or_404(File, id=pk, team=request.team)
