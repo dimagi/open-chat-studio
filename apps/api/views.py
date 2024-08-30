@@ -1,3 +1,5 @@
+import textwrap
+
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -223,6 +225,12 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
                 description="ID of the session",
             ),
         ],
+        description=textwrap.dedent(
+            """
+            Retrieve the details of an session. This includes the messages exchanged during the session ordered
+            by the creation date.
+            """
+        ),
     ),
     create=extend_schema(
         operation_id="session_create",

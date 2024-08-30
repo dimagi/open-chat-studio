@@ -1,3 +1,4 @@
+import textwrap
 import time
 
 from drf_spectacular.types import OpenApiTypes
@@ -14,15 +15,17 @@ from apps.channels.tasks import handle_api_message
 @extend_schema(
     operation_id="openai_chat_completions",
     summary="Chat Completions API for Experiments",
-    description="""
-    Use OpenAI's client to send messages to the experiment and get responses. This will
-    create a new session in the experiment with all the provided messages
-    and return the response from the experiment.
-    
-    The last message must be a 'user' message.
-    
-    Example (Python):
-    
+    description=textwrap.dedent(
+        """
+        Use OpenAI's client to send messages to the experiment and get responses. This will
+        create a new session in the experiment with all the provided messages
+        and return the response from the experiment.
+        
+        The last message must be a 'user' message.
+        
+        Example (Python):
+        
+        ```python
         experiment_id = "your experiment ID"
         
         client = OpenAI(
@@ -39,7 +42,9 @@ from apps.channels.tasks import handle_api_message
         )
         
         reply = completion.choices[0].message
-    """,
+        ```
+        """
+    ),
     tags=["OpenAI"],
     request=inline_serializer(
         "CreateChatCompletionRequest",

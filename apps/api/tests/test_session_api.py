@@ -79,11 +79,24 @@ def test_retrieve_session(session):
     client = ApiTestClient(user, session.team)
     response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
-    assert response.json() == get_session_json(
+    response_json = response.json()
+
+    for message in response_json.get("messages", []):
+        message["created_at"] = "fake date"
+
+    assert response_json == get_session_json(
         session,
         expected_messages=[
-            {"role": "assistant", "content": "hi", "metadata": {}, "tags": [], "attachments": []},
             {
+                "created_at": "fake date",
+                "role": "assistant",
+                "content": "hi",
+                "metadata": {},
+                "tags": [],
+                "attachments": [],
+            },
+            {
+                "created_at": "fake date",
                 "role": "user",
                 "content": "hello",
                 "metadata": {},
@@ -104,6 +117,7 @@ def test_retrieve_session(session):
                 ],
             },
             {
+                "created_at": "fake date",
                 "role": "system",
                 "content": "Abracadabra",
                 "metadata": {"is_summary": True},
@@ -111,6 +125,7 @@ def test_retrieve_session(session):
                 "attachments": [],
             },
             {
+                "created_at": "fake date",
                 "role": "user",
                 "content": "rabbit in a hat",
                 "metadata": {},

@@ -111,10 +111,15 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         ordering = ["created_at"]
 
     @classmethod
-    def make_summary_message(cls, content):
+    def make_summary_message(cls, message):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
-        return ChatMessage(message_type=ChatMessageType.SYSTEM, content=content, metadata={"is_summary": True})
+        return ChatMessage(
+            created_at=message.created_at,
+            message_type=ChatMessageType.SYSTEM,
+            content=message.content,
+            metadata={"is_summary": True},
+        )
 
     def save(self, *args, **kwargs):
         if self.is_summary:
@@ -124,7 +129,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def get_summary_message(self):
         if not self.summary:
             raise ValueError("Message does not have a summary")
-        return ChatMessage.make_summary_message(self.summary)
+        return ChatMessage.make_summary_message(self)
 
     @property
     def is_ai_message(self):

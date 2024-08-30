@@ -1,3 +1,5 @@
+import textwrap
+
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -46,15 +48,28 @@ class FileSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(read_only=True)
     role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
     content = serializers.CharField()
-    metadata = serializers.JSONField(required=False, read_only=True)
+    metadata = serializers.JSONField(
+        required=False,
+        read_only=True,
+        help_text=textwrap.dedent(
+            """
+            Metadata for the message. Currently documented keys:
+              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
+                is true, the message will not be displayed in the chat interface but it will be used when
+                generating the chat history for the LLM. The history will include all messages up to the last
+                summary message (starting from the most recent message).
+            """
+        ),
+    )
     tags = TagListSerializerField(read_only=True)
     attachments = serializers.ListField(source="get_attached_files", child=FileSerializer(), read_only=True)
 
     class Meta:
         model = ChatMessage
-        fields = ["role", "content", "metadata", "tags", "attachments"]
+        fields = ["created_at", "role", "content", "metadata", "tags", "attachments"]
 
     def to_representation(self, instance):
         if not instance.pk:
