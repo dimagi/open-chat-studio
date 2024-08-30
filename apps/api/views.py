@@ -211,6 +211,7 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         operation_id="session_retrieve",
         summary="Retrieve Experiment Session",
         tags=["Experiment Sessions"],
+        responses=ExperimentSessionSerializer(include_messages=True),
         parameters=[
             OpenApiParameter(
                 name="id",
@@ -235,6 +236,15 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     ordering = ["-created_at"]
     lookup_field = "external_id"
     lookup_url_kwarg = "id"
+
+    def get_serializer(self, *args, **kwargs):
+        action = getattr(self, "action")
+        if action == "retrieve":
+            kwargs["include_messages"] = True
+
+        serializer_class = self.get_serializer_class()
+        kwargs.setdefault("context", self.get_serializer_context())
+        return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
         return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()

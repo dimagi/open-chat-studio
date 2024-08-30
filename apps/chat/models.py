@@ -62,6 +62,14 @@ class ChatMessageType(models.TextChoices):
             if choice[0] != ChatMessageType.SYSTEM
         )
 
+    @property
+    def role(self):
+        return {
+            ChatMessageType.HUMAN: "user",
+            ChatMessageType.AI: "assistant",
+            ChatMessageType.SYSTEM: "system",
+        }[self]
+
 
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
@@ -90,6 +98,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def created_at_datetime(self):
         return quote(self.created_at.isoformat())
+
+    @property
+    def role(self):
+        return ChatMessageType(self.message_type).role
 
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)

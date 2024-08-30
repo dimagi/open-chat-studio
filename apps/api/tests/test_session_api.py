@@ -31,9 +31,9 @@ def test_list_sessions(session):
     }
 
 
-def get_session_json(session):
+def get_session_json(session, include_messages=False):
     experiment = session.experiment
-    return {
+    data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
         "experiment": {
             "id": str(experiment.public_id),
@@ -49,6 +49,15 @@ def get_session_json(session):
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
     }
+    if include_messages:
+        data["messages"] = [
+            {
+                "role": message.role,
+                "content": message.content,
+            }
+            for message in session.chat.messages.all()
+        ]
+    return data
 
 
 @pytest.mark.django_db()
@@ -57,7 +66,7 @@ def test_retrieve_session(session):
     client = ApiTestClient(user, session.team)
     response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
-    assert response.json() == get_session_json(session)
+    assert response.json() == get_session_json(session, include_messages=True)
 
 
 @pytest.mark.django_db()

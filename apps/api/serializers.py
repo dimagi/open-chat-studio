@@ -39,10 +39,26 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     team = TeamSerializer(read_only=True)
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
+    messages = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages"]
+
+    def __init__(self, *args, **kwargs):
+        self._include_messages = kwargs.pop("include_messages", False)
+        super().__init__(*args, **kwargs)
+        if not self._include_messages:
+            self.fields.pop("messages")
+
+    def get_messages(self, instance):
+        return [
+            {
+                "role": message.message_type,
+                "content": message.content,
+            }
+            for message in instance.chat.messages.all()
+        ]
 
 
 class MessageSerializer(serializers.Serializer):
