@@ -26,6 +26,7 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     topic = columns.Column(accessor="source_material__topic", verbose_name="Topic", orderable=True)
+    is_public = columns.Column(verbose_name="Publically accessible", orderable=True)
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
