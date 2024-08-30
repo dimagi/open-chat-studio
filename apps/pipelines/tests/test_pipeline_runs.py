@@ -35,7 +35,11 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             input,  # the input to the graph
             input,  # The output of the first Passthrough
             input,  # the output of the last Passthrough
-        ]
+        ],
+        outputs={
+            "first": "foo",
+            "second": "foo",
+        },
     )
 
     assert len(run.log["entries"]) == 8
@@ -99,7 +103,7 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
     error_message = "Bad things are afoot"
 
     class FailingPassthrough(PipelineNode):
-        def process(self, state) -> RunnableLambda:
+        def process(self, *args, **kwargs) -> RunnableLambda:
             raise Exception(error_message)
 
     from apps.pipelines.nodes import nodes

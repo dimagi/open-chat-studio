@@ -60,6 +60,10 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 output_message,  # output of first node / input to the second node
                 output_message,  # input to pipeline
             ],
+            "outputs": {
+                "first": f"human: {input}",
+                "second": f"human: {input}",
+            },
             "experiment_session": session.id,
         }
     )
