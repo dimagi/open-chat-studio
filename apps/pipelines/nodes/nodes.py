@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 import tiktoken
 from django.utils import timezone
@@ -12,7 +13,6 @@ from pydantic import Field, create_model
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
-from apps.pipelines.const import FALSE_NODE, TRUE_NODE
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
@@ -153,10 +153,15 @@ class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
     input_equals: str
 
-    def _process_conditional(self, state: PipelineState) -> str:
+    def process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
-            return TRUE_NODE
-        return FALSE_NODE
+            return "true"
+        return "false"
+
+    @classmethod
+    def get_output_map(cls):
+        """A mapping from the output handles on the frontent to the return values of process_conditional"""
+        return {"output_true": "true", "output_false": "false"}
 
 
 class ExtractStructuredDataNodeMixin:
