@@ -483,6 +483,11 @@ class Experiment(BaseTeamModel):
     def event_triggers(self):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
+    @property
+    def is_versioned(self):
+        """Return whether or not this experiment is a versioned experiment"""
+        return self.working_version is not None
+
     def get_chat_model(self):
         service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)
@@ -518,6 +523,8 @@ class Experiment(BaseTeamModel):
         new_version.source_material = self.source_material.create_new_version()
         new_version.save()
 
+        self.copy_routes_to_new_version(new_version)
+
         duplicated_layers = []
         for layer in self.safety_layers.all():
             duplicated_layers.append(layer.create_new_version())
@@ -525,6 +532,19 @@ class Experiment(BaseTeamModel):
         new_version.safety_layers.set(duplicated_layers)
         # new_experiment.files.set(original_experiment.files.all()) # TODO
         return new_version
+
+    def copy_routes_to_new_version(self, new_version: "Experiment"):
+        """
+        This copies the experiment routes where this experiment is the parent and sets the new parent to the new
+        version.
+        """
+        for route in self.child_links.all():
+            child_experiment = route.child
+            if not route.child.is_versioned:
+                # TODO: The user must be notified and give consent to us doing this. Ignore for now
+                child_experiment = route.child.create_new_version()
+
+            route.create_new_version(new_parent=new_version, child=child_experiment)
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -561,6 +581,16 @@ class ExperimentRoute(BaseTeamModel):
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
 
         return eligible_experiments
+
+    @transaction.atomic()
+    def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
+        new_instance = ExperimentRoute.objects.get(id=self.id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        new_instance.parent = new_parent
+        new_instance.save()
+        return new_instance
 
     class Meta:
         unique_together = (

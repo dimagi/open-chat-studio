@@ -308,6 +308,20 @@ class TestSourceMaterialVersioning:
 
 
 @pytest.mark.django_db()
+class TestExperimentRouteVersioning:
+    def test_create_new_route_version(self):
+        original_parent = ExperimentFactory()
+        team = original_parent.team
+        new_parent = ExperimentFactory(team=team)
+        original = ExperimentRoute.objects.create(
+            team=team, parent=ExperimentFactory(), child=ExperimentFactory(team=team), keyword="testing"
+        )
+
+        new_version = original.create_new_version(new_parent)
+        assert new_version != original
+
+
+@pytest.mark.django_db()
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
@@ -330,21 +344,30 @@ class TestExperimentVersioning:
 
     def _setup_original_experiment(self):
         experiment = ExperimentFactory()
+        team = experiment.team
 
+        # Safety Layers
         layer1 = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=experiment.team, prompt_to_bot="Unsafe reply"
+            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
         )
-        layer2 = SafetyLayer.objects.create(
-            prompt_text="What about this one?", team=experiment.team, prompt_to_bot="Unsafe reply"
-        )
+        layer2 = SafetyLayer.objects.create(prompt_text="What about this one?", team=team, prompt_to_bot="Unsafe reply")
         experiment.safety_layers.set([layer1, layer2])
 
-        experiment.source_material = SourceMaterialFactory(material="material science is interesting")
+        # Source material
+        experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
+
+        # Routes - There will be versioned and working children
+        versioned_child = ExperimentFactory(
+            team=team, version_number=1, working_version=ExperimentFactory(version_number=2)
+        )
+        ExperimentRoute(team=team, parent=experiment, child=versioned_child, keyword="versioned")
+        working_child = ExperimentFactory(team=team)
+        ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
         return experiment
 
     @pytest.mark.django_db()
-    def test_create_experiment_version(self):
+    def original_experiment(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -358,12 +381,17 @@ class TestExperimentVersioning:
         self._assert_duplicated_safety_layers(original_experiment, new_version)
         self._assert_duplicated_source_material(original_experiment, new_version)
 
-    def _assert_duplicated_safety_layers(self, original_experiment, new_version):
+    def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
             assert layer.working_version is None
             assert new_version.safety_layers.filter(working_version=layer).exists()
 
-    def _assert_duplicated_source_material(self, original_experiment, new_version):
+    def _assert_source_material_is_duplicated(self, original_experiment, new_version):
         assert new_version.source_material != original_experiment.source_material
         assert new_version.source_material.working_version == original_experiment.source_material
         assert new_version.source_material.material == original_experiment.source_material.material
+
+    def _assert_routes_are_duplicated(self, original_experiment, new_version):
+        for route in new_version.child_links.all():
+            assert route.parent.working_version == original_experiment
+            assert route.child.is_versioned is True
