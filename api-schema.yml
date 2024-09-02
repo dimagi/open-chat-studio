@@ -50,22 +50,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/Experiment'
           description: ''
+  /api/files/{id}/content:
+    get:
+      operationId: file_content
+      summary: Download File Content
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Files
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/openai/{experiment_id}/chat/completions:
     post:
       operationId: openai_chat_completions
-      description: "\n    Use OpenAI's client to send messages to the experiment and\
-        \ get responses. This will\n    create a new session in the experiment with\
-        \ all the provided messages\n    and return the response from the experiment.\n\
-        \    \n    The last message must be a 'user' message.\n    \n    Example (Python):\n\
-        \    \n        experiment_id = \"your experiment ID\"\n        \n        client\
-        \ = OpenAI(\n            api_key=\"your API key\",\n            base_url=f\"\
-        https://chatbots.dimagi.com/api/openai/{experiment_id}\",\n        )\n   \
-        \     \n        completion = client.chat.completions.create(\n           \
-        \ model=\"anything\",\n            messages=[\n                {\"role\":\
-        \ \"assistant\", \"content\": \"How can I help you today?\"},\n          \
-        \      {\"role\": \"user\", \"content\": \"I need help with something.\"},\n\
-        \            ],\n        )\n        \n        reply = completion.choices[0].message\n\
-        \    "
+      description: |2
+
+        Use OpenAI's client to send messages to the experiment and get responses. This will
+        create a new session in the experiment with all the provided messages
+        and return the response from the experiment.
+
+        The last message must be a 'user' message.
+
+        Example (Python):
+
+        ```python
+        experiment_id = "your experiment ID"
+
+        client = OpenAI(
+            api_key="your API key",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+        )
+
+        completion = client.chat.completions.create(
+            model="anything",
+            messages=[
+                {"role": "assistant", "content": "How can I help you today?"},
+                {"role": "user", "content": "I need help with something."},
+            ],
+        )
+
+        reply = completion.choices[0].message
+        ```
       summary: Chat Completions API for Experiments
       parameters:
       - in: path
@@ -196,6 +234,10 @@ paths:
   /api/sessions/{id}/:
     get:
       operationId: session_retrieve
+      description: |2
+
+        Retrieve the details of an session. This includes the messages exchanged during the session ordered
+        by the creation date.
       summary: Retrieve Experiment Session
       parameters:
       - in: path
@@ -214,7 +256,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExperimentSession'
+                $ref: '#/components/schemas/ExperimentSessionWithMessages'
           description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
@@ -384,16 +426,107 @@ components:
       required:
       - experiment
       - url
+    ExperimentSessionWithMessages:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: string
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        experiment:
+          allOf:
+          - $ref: '#/components/schemas/Experiment'
+          readOnly: true
+        participant:
+          allOf:
+          - $ref: '#/components/schemas/Participant'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          readOnly: true
+      required:
+      - created_at
+      - experiment
+      - id
+      - messages
+      - participant
+      - team
+      - updated_at
+      - url
+    File:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        size:
+          type: integer
+        content_url:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - content_url
+      - name
+      - size
     Message:
       type: object
       properties:
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
         role:
           $ref: '#/components/schemas/MessageRoleEnum'
         content:
           type: string
+        metadata:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          description: |2
+
+            Metadata for the message. Currently documented keys:
+              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
+                is true, the message will not be displayed in the chat interface but it will be used when
+                generating the chat history for the LLM. The history will include all messages up to the last
+                summary message (starting from the most recent message).
+        tags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+          readOnly: true
       required:
+      - attachments
       - content
+      - created_at
+      - metadata
       - role
+      - tags
     MessageRoleEnum:
       enum:
       - system

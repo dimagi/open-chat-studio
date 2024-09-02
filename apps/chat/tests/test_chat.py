@@ -48,6 +48,9 @@ def test_chat_message_to_langchain_dict():
 def test_chat_message_summary_to_langchain_dict():
     chat = Chat()
     message = ChatMessage(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN, summary="Summary")
+    summary_message = message.get_summary_message()
+    assert summary_message.is_summary
+
     expected_dict = {
         "type": ChatMessageType.SYSTEM,
         "data": {
@@ -57,4 +60,4 @@ def test_chat_message_summary_to_langchain_dict():
             },
         },
     }
-    assert message.summary_to_langchain_dict() == expected_dict
+    assert summary_message.to_langchain_dict() == expected_dict

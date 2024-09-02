@@ -1,12 +1,16 @@
+import textwrap
+
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.exceptions import NotFound
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -19,6 +23,7 @@ from apps.api.serializers import (
 )
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.files.models import File
 
 
 @extend_schema_view(
@@ -211,6 +216,7 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         operation_id="session_retrieve",
         summary="Retrieve Experiment Session",
         tags=["Experiment Sessions"],
+        responses=ExperimentSessionSerializer(include_messages=True),
         parameters=[
             OpenApiParameter(
                 name="id",
@@ -219,6 +225,12 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
                 description="ID of the session",
             ),
         ],
+        description=textwrap.dedent(
+            """
+            Retrieve the details of an session. This includes the messages exchanged during the session ordered
+            by the creation date.
+            """
+        ),
     ),
     create=extend_schema(
         operation_id="session_create",
@@ -236,13 +248,44 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     lookup_field = "external_id"
     lookup_url_kwarg = "id"
 
+    def get_serializer(self, *args, **kwargs):
+        action = getattr(self, "action")
+        if action == "retrieve":
+            kwargs["include_messages"] = True
+
+        serializer_class = self.get_serializer_class()
+        kwargs.setdefault("context", self.get_serializer_context())
+        return serializer_class(*args, **kwargs)
+
     def get_queryset(self):
         return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
 
     def create(self, request, *args, **kwargs):
+        # Custom create method because we use a different serializer processing the request than for
+        # generating the response
         serializer = ExperimentSessionCreateSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         serializer.save()
         output = ExperimentSessionSerializer(instance=serializer.instance, context=self.get_serializer_context()).data
         headers = {"Location": str(output["url"])}
         return Response(output, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class BinaryRenderer(BaseRenderer):
+    media_type = "application/octet-stream"
+    format = "bin"
+
+
+@extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
+@api_view(["GET"])
+@renderer_classes([BinaryRenderer])
+@permission_required("files.view_file")
+def file_content_view(request, pk: int):
+    file = get_object_or_404(File, id=pk, team=request.team)
+    if not file.file:
+        raise Http404()
+
+    try:
+        return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
+    except FileNotFoundError:
+        raise Http404()
