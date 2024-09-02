@@ -523,15 +523,17 @@ class Experiment(BaseTeamModel):
         new_version.source_material = self.source_material.create_new_version()
         new_version.save()
 
+        self.copy_safety_layers_to_new_version(new_version)
         self.copy_routes_to_new_version(new_version)
 
+        # new_experiment.files.set(original_experiment.files.all()) # TODO
+        return new_version
+
+    def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
         for layer in self.safety_layers.all():
             duplicated_layers.append(layer.create_new_version())
-
         new_version.safety_layers.set(duplicated_layers)
-        # new_experiment.files.set(original_experiment.files.all()) # TODO
-        return new_version
 
     def copy_routes_to_new_version(self, new_version: "Experiment"):
         """
