@@ -7,7 +7,12 @@ from freezegun import freeze_time
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
-from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory, StaticTriggerFactory
+from apps.utils.factories.events import (
+    EventActionFactory,
+    ScheduledMessageFactory,
+    StaticTriggerFactory,
+    TimeoutTriggerFactory,
+)
 from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
@@ -375,6 +380,9 @@ class TestExperimentVersioning:
 
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
+
+        # Setup Timeout Trigger
+        TimeoutTriggerFactory(experiment=experiment)
         return experiment
 
     @pytest.mark.django_db()
@@ -399,7 +407,8 @@ class TestExperimentVersioning:
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
-        self._assert_static_triggers_are_duplicated(original_experiment, new_version)
+        self._assert_triggers_are_duplicated("static", original_experiment, new_version)
+        self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
@@ -421,14 +430,21 @@ class TestExperimentVersioning:
         original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
         assert new_version_file_ids - original_experiment == set()
 
-    def _assert_static_triggers_are_duplicated(self, original_experiment, new_version):
-        original_static_triggers = original_experiment.static_triggers.all()
-        for copied_static_trigger in new_version.static_triggers.all():
-            assert copied_static_trigger.working_version is not None
-            assert copied_static_trigger.working_version in original_static_triggers
+    def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
+        assert trigger_type in ["static", "timeout"], "Unknown trigger type"
+        if trigger_type == "static":
+            original_triggers = original_experiment.static_triggers.all()
+            copied_triggers = new_version.static_triggers.all()
+        elif trigger_type == "timeout":
+            original_triggers = original_experiment.timeout_triggers.all()
+            copied_triggers = new_version.timeout_triggers.all()
+
+        for copied_trigger in copied_triggers:
+            assert copied_trigger.working_version is not None
+            assert copied_trigger.working_version in original_triggers
             _compare_models(
-                original=copied_static_trigger.working_version,
-                new=copied_static_trigger,
+                original=copied_trigger.working_version,
+                new=copied_trigger,
                 expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
             )
 

@@ -132,7 +132,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         return new_instance
 
 
-class TimeoutTrigger(BaseModel):
+class TimeoutTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
@@ -143,6 +143,22 @@ class TimeoutTrigger(BaseModel):
         help_text="The number of times to trigger the action",
     )
     event_logs = GenericRelation(EventLog)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+
+    @transaction.atomic()
+    def create_new_version(self, new_experiment: Experiment):
+        """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
+        new_instance = super().create_new_version(new_version=new_experiment, save=False)
+        new_instance.experiment = new_experiment
+        new_instance.action = new_instance.action.create_new_version()
+        new_instance.save()
+        return new_instance
 
     @property
     def trigger_type(self):
