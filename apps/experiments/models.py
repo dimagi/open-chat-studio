@@ -66,8 +66,28 @@ class PromptBuilderHistory(BaseTeamModel):
         return str(self.history)
 
 
+class VersionsMixin:
+    @transaction.atomic()
+    def create_new_version(self, new_version=None, save=True):
+        """
+        Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
+        original instance ID
+        """
+        working_version_id = self.id
+        new_instance = self._meta.model.objects.get(id=working_version_id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        if hasattr(new_instance, "working_version_id"):
+            new_instance.working_version_id = working_version_id
+
+        if save:
+            new_instance.save()
+        return new_instance
+
+
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
-class SourceMaterial(BaseTeamModel):
+class SourceMaterial(BaseTeamModel, VersionsMixin):
     """
     Some Source Material on a particular topic.
     """
@@ -94,20 +114,9 @@ class SourceMaterial(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
 
-    @transaction.atomic()
-    def create_new_version(self):
-        working_version_id = self.id
-        new_instance = SourceMaterial.objects.get(id=working_version_id)
-        new_instance.pk = None
-        new_instance.id = None
-        new_instance._state.adding = True
-        new_instance.working_version_id = working_version_id
-        new_instance.save()
-        return new_instance
-
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
-class SafetyLayer(BaseTeamModel):
+class SafetyLayer(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
@@ -140,17 +149,6 @@ class SafetyLayer(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
-
-    @transaction.atomic()
-    def create_new_version(self):
-        working_version_id = self.id
-        new_instance = SafetyLayer.objects.get(id=self.id)
-        new_instance.pk = None
-        new_instance.id = None
-        new_instance._state.adding = True
-        new_instance.working_version_id = working_version_id
-        new_instance.save()
-        return new_instance
 
 
 class Survey(BaseTeamModel):
@@ -555,7 +553,7 @@ class ExperimentRouteType(models.TextChoices):
     TERMINAL = "terminal"
 
 
-class ExperimentRoute(BaseTeamModel):
+class ExperimentRoute(BaseTeamModel, VersionsMixin):
     """
     Through model for Experiment.children routes.
     """
@@ -587,10 +585,7 @@ class ExperimentRoute(BaseTeamModel):
 
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
-        new_instance = ExperimentRoute.objects.get(id=self.id)
-        new_instance.pk = None
-        new_instance.id = None
-        new_instance._state.adding = True
+        new_instance = super().create_new_version(new_version=new_parent, save=False)
         new_instance.parent = new_parent
 
         if not new_instance.child.is_versioned:

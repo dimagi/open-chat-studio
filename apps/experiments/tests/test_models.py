@@ -282,7 +282,7 @@ class TestParticipant:
 
 @pytest.mark.django_db()
 class TestSafetyLayerVersioning:
-    def test_create_new_version(self):
+    def test_create_new_safety_layer_version(self):
         original = SafetyLayer.objects.create(
             prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
         )
@@ -298,15 +298,12 @@ class TestSafetyLayerVersioning:
 
 @pytest.mark.django_db()
 class TestSourceMaterialVersioning:
-    def test_create_new_version(self):
+    def test_create_new_source_material_version(self):
         original = SourceMaterialFactory()
         new_version = original.create_new_version()
         original.refresh_from_db()
         assert original.working_version is None
-        assert new_version != original
-        assert new_version.description == original.description
-        assert new_version.material == original.material
-        assert new_version.team == original.team
+        _compare_models(original, new_version, expected_changed_fields=["id", "working_version_id"])
 
 
 @pytest.mark.django_db()
@@ -354,18 +351,18 @@ class TestExperimentVersioning:
         experiment = ExperimentFactory()
         team = experiment.team
 
-        # Safety Layers
+        # Setup Safety Layers
         layer1 = SafetyLayer.objects.create(
             prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
         )
         layer2 = SafetyLayer.objects.create(prompt_text="What about this one?", team=team, prompt_to_bot="Unsafe reply")
         experiment.safety_layers.set([layer1, layer2])
 
-        # Source material
+        # Setup Source material
         experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
 
-        # Routes - There will be versioned and working children
+        # Setup Routes - There will be versioned and working children
         versioned_child = ExperimentFactory(
             team=team, version_number=1, working_version=ExperimentFactory(version_number=2)
         )
@@ -373,10 +370,10 @@ class TestExperimentVersioning:
         working_child = ExperimentFactory(team=team)
         ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
-        # Files
+        # Setup Files
         experiment.files.set(FileFactory.create_batch(3))
 
-        # Static Trigger
+        # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
         return experiment
 
