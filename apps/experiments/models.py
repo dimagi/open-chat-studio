@@ -95,15 +95,14 @@ class SourceMaterial(BaseTeamModel):
         return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self):
         working_version_id = self.id
-        new_instance = SourceMaterial.objects.get(id=self.id)
+        new_instance = SourceMaterial.objects.get(id=working_version_id)
         new_instance.pk = None
         new_instance.id = None
         new_instance._state.adding = True
         new_instance.working_version_id = working_version_id
-        if save:
-            new_instance.save()
+        new_instance.save()
         return new_instance
 
 
@@ -143,15 +142,14 @@ class SafetyLayer(BaseTeamModel):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self):
         working_version_id = self.id
         new_instance = SafetyLayer.objects.get(id=self.id)
         new_instance.pk = None
         new_instance.id = None
         new_instance._state.adding = True
         new_instance.working_version_id = working_version_id
-        if save:
-            new_instance.save()
+        new_instance.save()
         return new_instance
 
 
