@@ -14,6 +14,7 @@ from apps.utils.factories.experiment import (
     ParticipantFactory,
     SourceMaterialFactory,
     SyntheticVoiceFactory,
+    VersionedExperimentFactory,
 )
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
@@ -310,16 +311,21 @@ class TestSourceMaterialVersioning:
 
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
-    def test_create_new_route_version(self):
-        original_parent = ExperimentFactory()
-        team = original_parent.team
+    @pytest.mark.parametrize("versioned", [True, False])
+    def test_create_new_route_version(self, versioned):
+        parent_exp = ExperimentFactory()
+        team = parent_exp.team
+        child_exp = VersionedExperimentFactory(team=team) if versioned else ExperimentFactory(team=team)
         new_parent = ExperimentFactory(team=team)
-        original = ExperimentRoute.objects.create(
-            team=team, parent=ExperimentFactory(), child=ExperimentFactory(team=team), keyword="testing"
-        )
+        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
 
-        new_version = original.create_new_version(new_parent)
-        assert new_version != original
+        versioned_route = working_route.create_new_version(new_parent)
+        assert versioned_route != working_route
+        changed_fields = _compare_models(working_route, versioned_route, excluded_keys=["created_at", "updated_at"])
+        if versioned:
+            assert changed_fields.difference(set(["id", "parent_id"])) == set()
+        else:
+            assert changed_fields.difference(set(["id", "parent_id", "child_id"])) == set()
 
 
 @pytest.mark.django_db()
@@ -377,13 +383,21 @@ class TestExperimentVersioning:
         assert original_experiment.version_number == 1
 
         new_version = original_experiment.create_new_version()
+        original_experiment.refresh_from_db()
+
         assert new_version != original_experiment
         assert original_experiment.version_number == 2
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
         assert new_version.working_version == original_experiment
+        changed_fields = _compare_models(
+            original=original_experiment, new=new_version, excluded_keys=["created_at", "updated_at"]
+        )
+        expected_changed_fields = set(["id", "source_material_id", "public_id", "working_version_id", "version_number"])
+        assert expected_changed_fields.difference(changed_fields) == set()
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
+        self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_duplicated_files(original_experiment, new_version)
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
@@ -405,3 +419,23 @@ class TestExperimentVersioning:
         new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
         original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
         assert new_version_file_ids - original_experiment == set()
+
+    def _assert_static_triggers_are_duplicated(self, original_experiment, new_version):
+        # for static_trigger_copy in new_version.static_triggers.all():
+        #     new_version.field
+        pass
+
+
+def _compare_models(original, new, excluded_keys) -> set:
+    model_fields = [field.attname for field in original._meta.fields]
+    original_dict, new_dict = original.__dict__, new.__dict__
+    changed_fields = set([])
+    for field_name, field_value in original_dict.items():
+        if field_name not in model_fields:
+            continue
+
+        if field_name in excluded_keys:
+            continue
+        if field_value != new_dict[field_name]:
+            changed_fields.add(field_name)
+    return changed_fields

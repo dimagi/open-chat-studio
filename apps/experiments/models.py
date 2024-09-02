@@ -520,7 +520,8 @@ class Experiment(BaseTeamModel):
         new_version.working_version_id = working_version_id
         new_version.public_id = uuid4()
         new_version.version_number = version_number
-        new_version.source_material = self.source_material.create_new_version()
+        if self.source_material:
+            new_version.source_material = self.source_material.create_new_version()
         new_version.save()
 
         self.copy_safety_layers_to_new_version(new_version)
@@ -541,12 +542,7 @@ class Experiment(BaseTeamModel):
         version.
         """
         for route in self.child_links.all():
-            child_experiment = route.child
-            if not route.child.is_versioned:
-                # TODO: The user must be notified and give consent to us doing this. Ignore for now
-                child_experiment = route.child.create_new_version()
-
-            route.create_new_version(new_parent=new_version, child=child_experiment)
+            route.create_new_version(new_version)
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -591,6 +587,11 @@ class ExperimentRoute(BaseTeamModel):
         new_instance.id = None
         new_instance._state.adding = True
         new_instance.parent = new_parent
+
+        if not new_instance.child.is_versioned:
+            # TODO: The user must be notified and give consent to us doing this. Ignore for now
+            new_instance.child = new_instance.child.create_new_version()
+
         new_instance.save()
         return new_instance
 

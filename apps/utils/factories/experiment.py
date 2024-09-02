@@ -66,6 +66,11 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     voice_provider = factory.SubFactory(VoiceProviderFactory)
 
 
+class VersionedExperimentFactory(ExperimentFactory):
+    working_version = factory.SubFactory(ExperimentFactory, version_number=2, team=factory.SelfAttribute("..team"))
+    version_number = 1
+
+
 class ChatFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Chat
