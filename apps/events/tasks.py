@@ -1,7 +1,7 @@
 import logging
 
 from celery.app import shared_task
-from django.db.models import functions
+from django.db.models import Q, functions
 
 from apps.events.models import ScheduledMessage, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
@@ -30,7 +30,9 @@ def fire_static_trigger(trigger_id, session_id):
 
 @shared_task(ignore_result=True)
 def enqueue_timed_out_events():
-    active_triggers = TimeoutTrigger.objects.all()
+    active_triggers = TimeoutTrigger.objects.filter(
+        Q(experiment__default_version=True) | Q(experiment__working_version__isnull=True)
+    )
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
             if session.is_stale():
