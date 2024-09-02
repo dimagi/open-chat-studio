@@ -304,6 +304,9 @@ class ScheduledMessage(BaseTeamModel):
     def _trigger(self):
         experiment_id = self.params.get("experiment_id", self.experiment.id)
         experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        if not experiment_session:
+            # Schedules probably created by the API
+            return
         experiment_to_use = Experiment.objects.get(id=experiment_id)
         experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
