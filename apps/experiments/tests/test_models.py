@@ -15,6 +15,7 @@ from apps.utils.factories.experiment import (
     SourceMaterialFactory,
     SyntheticVoiceFactory,
 )
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
@@ -364,10 +365,13 @@ class TestExperimentVersioning:
         ExperimentRoute(team=team, parent=experiment, child=versioned_child, keyword="versioned")
         working_child = ExperimentFactory(team=team)
         ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
+
+        # Files
+        experiment.files.set(FileFactory.create_batch(3))
         return experiment
 
     @pytest.mark.django_db()
-    def original_experiment(self):
+    def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -378,8 +382,9 @@ class TestExperimentVersioning:
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
         assert new_version.working_version == original_experiment
-        self._assert_duplicated_safety_layers(original_experiment, new_version)
-        self._assert_duplicated_source_material(original_experiment, new_version)
+        self._assert_safety_layers_are_duplicated(original_experiment, new_version)
+        self._assert_source_material_is_duplicated(original_experiment, new_version)
+        self._assert_duplicated_files(original_experiment, new_version)
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
@@ -395,3 +400,8 @@ class TestExperimentVersioning:
         for route in new_version.child_links.all():
             assert route.parent.working_version == original_experiment
             assert route.child.is_versioned is True
+
+    def _assert_duplicated_files(self, original_experiment, new_version):
+        new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
+        original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
+        assert new_version_file_ids - original_experiment == set()

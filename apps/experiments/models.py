@@ -526,7 +526,7 @@ class Experiment(BaseTeamModel):
         self.copy_safety_layers_to_new_version(new_version)
         self.copy_routes_to_new_version(new_version)
 
-        # new_experiment.files.set(original_experiment.files.all()) # TODO
+        new_version.files.set(self.files.all())
         return new_version
 
     def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
