@@ -54,6 +54,15 @@ class EventAction(BaseModel):
             handler.event_action_updated(self)
             return res
 
+    @transaction.atomic()
+    def create_new_version(self):
+        # TODO: Duplicate Pipelines
+        new_instance = EventAction.objects.get(id=self.id)
+        new_instance.pk = None
+        new_instance._state.adding = True
+        new_instance.save()
+        return new_instance
+
 
 class EventLogStatusChoices(models.TextChoices):
     SUCCESS = "success"
@@ -95,6 +104,13 @@ class StaticTrigger(BaseModel):
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
     event_logs = GenericRelation(EventLog)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
 
     @property
     def trigger_type(self):
@@ -114,6 +130,21 @@ class StaticTrigger(BaseModel):
         result = super().delete(*args, **kwargs)
         self.action.delete(*args, **kwargs)
         return result
+
+    @transaction.atomic()
+    def create_new_version(self, new_experiment: Experiment):
+        """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
+        # TODO: Use a VersionsMixin class for the version specific operations
+        working_version_id = self.id
+        new_instance = StaticTrigger.objects.get(id=self.id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        new_instance.working_version_id = working_version_id
+        new_instance.experiment = new_experiment
+        new_instance.action = new_instance.action.create_new_version()
+        new_instance.save()
+        return new_instance
 
 
 class TimeoutTrigger(BaseModel):

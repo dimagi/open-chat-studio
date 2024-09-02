@@ -526,6 +526,7 @@ class Experiment(BaseTeamModel):
 
         self.copy_safety_layers_to_new_version(new_version)
         self.copy_routes_to_new_version(new_version)
+        self.copy_static_triggers_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
@@ -543,6 +544,10 @@ class Experiment(BaseTeamModel):
         """
         for route in self.child_links.all():
             route.create_new_version(new_version)
+
+    def copy_static_triggers_to_new_version(self, new_version: "Experiment"):
+        for static_trigger in self.static_triggers.all():
+            static_trigger.create_new_version(new_experiment=new_version)
 
 
 class ExperimentRouteType(models.TextChoices):

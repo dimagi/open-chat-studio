@@ -7,7 +7,7 @@ from freezegun import freeze_time
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
-from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
+from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
@@ -321,11 +321,12 @@ class TestExperimentRouteVersioning:
 
         versioned_route = working_route.create_new_version(new_parent)
         assert versioned_route != working_route
-        changed_fields = _compare_models(working_route, versioned_route, excluded_keys=["created_at", "updated_at"])
         if versioned:
-            assert changed_fields.difference(set(["id", "parent_id"])) == set()
+            expected_difference = set(["id", "parent_id"])
         else:
-            assert changed_fields.difference(set(["id", "parent_id", "child_id"])) == set()
+            expected_difference = set(["id", "parent_id", "child_id"])
+
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
 
 
 @pytest.mark.django_db()
@@ -374,6 +375,9 @@ class TestExperimentVersioning:
 
         # Files
         experiment.files.set(FileFactory.create_batch(3))
+
+        # Static Trigger
+        StaticTriggerFactory(experiment=experiment)
         return experiment
 
     @pytest.mark.django_db()
@@ -390,15 +394,15 @@ class TestExperimentVersioning:
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
         assert new_version.working_version == original_experiment
-        changed_fields = _compare_models(
-            original=original_experiment, new=new_version, excluded_keys=["created_at", "updated_at"]
+        _compare_models(
+            original=original_experiment,
+            new=new_version,
+            expected_changed_fields=["id", "source_material_id", "public_id", "working_version_id", "version_number"],
         )
-        expected_changed_fields = set(["id", "source_material_id", "public_id", "working_version_id", "version_number"])
-        assert expected_changed_fields.difference(changed_fields) == set()
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
-        self._assert_duplicated_files(original_experiment, new_version)
+        self._assert_static_triggers_are_duplicated(original_experiment, new_version)
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
@@ -415,18 +419,29 @@ class TestExperimentVersioning:
             assert route.parent.working_version == original_experiment
             assert route.child.is_versioned is True
 
-    def _assert_duplicated_files(self, original_experiment, new_version):
+    def _assert_files_are_duplicated(self, original_experiment, new_version):
         new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
         original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
         assert new_version_file_ids - original_experiment == set()
 
     def _assert_static_triggers_are_duplicated(self, original_experiment, new_version):
-        # for static_trigger_copy in new_version.static_triggers.all():
-        #     new_version.field
-        pass
+        original_static_triggers = original_experiment.static_triggers.all()
+        for copied_static_trigger in new_version.static_triggers.all():
+            assert copied_static_trigger.working_version is not None
+            assert copied_static_trigger.working_version in original_static_triggers
+            _compare_models(
+                original=copied_static_trigger.working_version,
+                new=copied_static_trigger,
+                expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
+            )
 
 
-def _compare_models(original, new, excluded_keys) -> set:
+def _compare_models(original, new, expected_changed_fields: list) -> set:
+    """
+    Compares the field values of between `original` and `new`, excluding those in `excluded_keys`.
+    `expected_changed_fields` specifies what fields we expect there to be differences in
+    """
+    excluded_keys = ["created_at", "updated_at"]
     model_fields = [field.attname for field in original._meta.fields]
     original_dict, new_dict = original.__dict__, new.__dict__
     changed_fields = set([])
@@ -438,4 +453,5 @@ def _compare_models(original, new, excluded_keys) -> set:
             continue
         if field_value != new_dict[field_name]:
             changed_fields.add(field_name)
-    return changed_fields
+
+    assert changed_fields.difference(set(expected_changed_fields)) == set()
