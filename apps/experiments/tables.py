@@ -161,9 +161,6 @@ class ExperimentVersionsTable(tables.Table):
     version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
     description = columns.Column(verbose_name="Description", accessor="description")
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
-    details = columns.TemplateColumn(
-        template_name="experiments/components/experiment_version_details_button.html",
-    )
 
     class Meta:
         model = Experiment
