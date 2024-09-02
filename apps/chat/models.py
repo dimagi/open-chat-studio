@@ -117,7 +117,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return ChatMessage(
             created_at=message.created_at,
             message_type=ChatMessageType.SYSTEM,
-            content=message.content,
+            content=message.summary,
             metadata={"is_summary": True},
         )
 
