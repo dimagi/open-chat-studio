@@ -161,6 +161,12 @@ class ExperimentVersionsTable(tables.Table):
     version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
     description = columns.Column(verbose_name="Description", accessor="description")
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
+    is_default = columns.TemplateColumn(
+        template_code="""{% if record.is_default %}
+        <span aria-label="true">✓</span>
+        {% endif %}""",
+        verbose_name="Default Version",
+    )
 
     class Meta:
         model = Experiment
