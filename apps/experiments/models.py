@@ -439,7 +439,7 @@ class Experiment(BaseTeamModel):
         related_name="versions",
     )
     version_number = models.PositiveIntegerField(default=1)
-    is_default_version = models.BooleanField(default=False)
+    default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     objects = ExperimentObjectManager()
 
@@ -451,8 +451,8 @@ class Experiment(BaseTeamModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["is_default_version", "working_version"],
-                condition=Q(is_default_version=True),
+                fields=["default_version", "working_version"],
+                condition=Q(default_version=True),
                 name="unique_default_version_per_experiment",
             ),
             models.UniqueConstraint(
@@ -466,7 +466,7 @@ class Experiment(BaseTeamModel):
         return self.name
 
     def save(self, *args, **kwargs):
-        if self.working_version is None and self.is_default_version is True:
+        if self.working_version is None and self.default_version is True:
             raise ValueError("A working experiment cannot be a default version")
         return super().save(*args, **kwargs)
 

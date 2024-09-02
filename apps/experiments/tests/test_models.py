@@ -335,15 +335,15 @@ class TestExperimentRouteVersioning:
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
-            ExperimentFactory(is_default_version=True, working_version=None)
+            ExperimentFactory(default_version=True, working_version=None)
 
     def test_single_default_version_per_experiment(self):
         working_exp = ExperimentFactory()
         team = working_exp.team
-        ExperimentFactory(is_default_version=True, working_version=working_exp, team=team)
+        ExperimentFactory(default_version=True, working_version=working_exp, team=team)
         with pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
-            ExperimentFactory(is_default_version=True, working_version=working_exp, team=team, version_number=2)
-        ExperimentFactory(is_default_version=False, working_version=working_exp, team=team, version_number=3)
+            ExperimentFactory(default_version=True, working_version=working_exp, team=team, version_number=2)
+        ExperimentFactory(default_version=False, working_version=working_exp, team=team, version_number=3)
 
     def test_unique_version_number_per_experiment(self):
         working_exp = ExperimentFactory()
