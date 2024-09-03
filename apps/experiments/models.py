@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -852,10 +851,3 @@ class ExperimentSession(BaseTeamModel):
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return participant_data
-
-    def get_participant_data_json(self):
-        participant_data = self.participant_data_from_experiment
-        scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return json.dumps(participant_data, indent=2)
