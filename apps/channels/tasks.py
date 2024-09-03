@@ -10,6 +10,7 @@ from twilio.request_validator import RequestValidator
 from apps.channels.datamodels import BaseMessage, SureAdhereMessage, TelegramMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel, FacebookMessengerChannel, SureAdhereChannel, TelegramChannel, WhatsappChannel
+from apps.experiments.models import Experiment
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -33,7 +34,8 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         return
 
     message = TelegramMessage.parse(update)
-    message_handler = TelegramChannel(experiment_channel.experiment, experiment_channel)
+    experiment = Experiment.objects.get_default_or_working(family_member=experiment_channel.experiment)
+    message_handler = TelegramChannel(experiment=experiment, experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
     with current_team(experiment_channel.team):
@@ -68,7 +70,8 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
 
     validate_twillio_request(experiment_channel, raw_data, request_uri, signature)
 
-    message_handler = ChannelClass(experiment_channel.experiment, experiment_channel=experiment_channel)
+    experiment = Experiment.objects.get_default_or_working(family_member=experiment_channel.experiment)
+    message_handler = ChannelClass(experiment=experiment, experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
     with current_team(experiment_channel.team):
@@ -106,7 +109,9 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
     if not experiment_channel:
         log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
         return
-    channel = SureAdhereChannel(experiment_channel.experiment, experiment_channel)
+
+    experiment = Experiment.objects.get_default_or_working(family_member=experiment_channel.experiment)
+    channel = SureAdhereChannel(experiment=experiment, experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
     with current_team(experiment_channel.team):
         channel.new_user_message(message)
@@ -127,7 +132,9 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     if not experiment_channel:
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
-    channel = WhatsappChannel(experiment_channel.experiment, experiment_channel)
+
+    experiment = Experiment.objects.get_default_or_working(family_member=experiment_channel.experiment)
+    channel = WhatsappChannel(experiment, experiment_channel=experiment_channel)
     update_taskbadger_data(self, channel, message)
 
     with current_team(experiment_channel.team):
@@ -137,6 +144,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
 def handle_api_message(user, experiment, experiment_channel, message_text: str, participant_id: str, session=None):
     """Synchronously handles the message coming from the API"""
     message = BaseMessage(participant_id=participant_id, message_text=message_text)
+    experiment = Experiment.objects.get_default_or_working(family_member=experiment)
     channel = ApiChannel(
         experiment,
         experiment_channel,

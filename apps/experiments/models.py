@@ -35,7 +35,26 @@ class PromptObjectManager(AuditingManager):
 
 
 class ExperimentObjectManager(AuditingManager):
-    pass
+    def get_default_or_working(self, family_member: "Experiment"):
+        """
+        Returns the default version of the family of experiments relating to `family_member` or if there is no default,
+        the working experiment.
+        """
+        if family_member.default_version:
+            return family_member
+        elif working_experiment := family_member.working_version:
+            # family_member is some other version of working_version
+            working_version = working_experiment
+        else:
+            # family_member is the working_version
+            working_version = family_member
+
+        experiment = (
+            self.get_queryset()
+            .filter(working_version=working_version, default_version=True, team=family_member.team)
+            .first()
+        )
+        return experiment if experiment else family_member
 
 
 class SourceMaterialObjectManager(AuditingManager):

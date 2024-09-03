@@ -6,7 +6,7 @@ from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.experiments.models import ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
+from apps.experiments.models import Experiment, ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -447,6 +447,23 @@ class TestExperimentVersioning:
                 new=copied_trigger,
                 expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
             )
+
+
+@pytest.mark.django_db()
+class TestExperimentObjectManager:
+    def test_get_default_or_working(self):
+        working_exp = ExperimentFactory(version_number=3)
+        # With no versions, working_exp should be returned
+        assert Experiment.objects.get_default_or_working(family_member=working_exp) == working_exp
+
+        # With versions, the default version should be returned
+        team = working_exp.team
+        exp_v1 = ExperimentFactory(team=team, version_number=2, working_version=working_exp)
+        exp_v2 = ExperimentFactory(team=team, version_number=3, working_version=working_exp, default_version=True)
+
+        assert Experiment.objects.get_default_or_working(family_member=working_exp) == exp_v2
+        assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
+        assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
