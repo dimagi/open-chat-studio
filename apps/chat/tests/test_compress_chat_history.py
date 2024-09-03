@@ -30,19 +30,17 @@ def chat(team_with_users):
     return chat
 
 
-@pytest.fixture()
-def llm():
+def test_compress_history_no_need_for_compression(chat):
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
-    return llm
-
-
-def test_compress_history_no_need_for_compression(chat, llm):
+    ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
     history = compress_chat_history(chat, llm, max_token_limit=30, keep_history_len=10, input_messages=[])
     assert len(history) == 1
     assert len(llm.get_calls()) == 0
 
 
-def test_compress_history(chat, llm):
+def test_compress_history(chat):
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
     result = compress_chat_history(chat, llm, 20, keep_history_len=5, input_messages=[])
@@ -69,11 +67,13 @@ def test_compress_history_due_to_large_input(chat, llm):
     assert len(llm.get_calls()) == 1
 
 
-def test_compress_chat_history_with_need_for_compression_after_truncate(chat, llm):
+def test_compress_chat_history_with_need_for_compression_after_truncate(chat):
     """History is still over token limit after truncating to keep_history_len so more
     messages are removed"""
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
+
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     result = compress_chat_history(chat, llm, 17, input_messages=[])
     # 5 messages * 3 tokens + 2 tokens for summary
     assert len(result) == 6
@@ -82,10 +82,12 @@ def test_compress_chat_history_with_need_for_compression_after_truncate(chat, ll
     assert len(llm.get_calls()) == 1
 
 
-def test_compress_chat_history_not_needed_with_existing_summary(chat, llm):
+def test_compress_chat_history_not_needed_with_existing_summary(chat):
     for i in range(15):
         summary = "Summary old" if i == 10 else None
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN, summary=summary)
+
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 6
     assert result[0].content == "Summary old"
@@ -93,10 +95,11 @@ def test_compress_chat_history_not_needed_with_existing_summary(chat, llm):
     assert len(llm.get_calls()) == 0
 
 
-def test_compression_with_large_summary(chat, llm):
+def test_compression_with_large_summary(chat):
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
 
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     summary_content = "Summary " * 20
     llm.responses = [summary_content]
     result = compress_chat_history(chat, llm, 26, input_messages=[])
@@ -107,11 +110,12 @@ def test_compression_with_large_summary(chat, llm):
     assert len(llm.get_calls()) == 2
 
 
-def test_compression_exhausts_history(chat, llm):
+def test_compression_exhausts_history(chat):
     messages = ChatMessage.objects.bulk_create(
         [ChatMessage(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN) for i in range(15)]
     )
 
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     summary_content = "Summary " * 20
     llm.responses = [summary_content]
     result = compress_chat_history(chat, llm, 20, input_messages=[])
