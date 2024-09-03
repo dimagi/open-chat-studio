@@ -1,11 +1,11 @@
+import re
 from unittest import mock
 
 import pytest
-from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from apps.chat.conversation import _get_new_summary, compress_chat_history
+from apps.chat.conversation import _get_new_summary, _get_summary_tokens_with_context, compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.utils.langchain import FakeLlm
 
@@ -23,7 +23,6 @@ class FakeLlmSimpleTokenCount(FakeLlm):
         if self.max_token_limit is not None:
             token_count = self.get_num_tokens_from_messages(messages)
             if token_count > self.max_token_limit:
-                print(messages)
                 raise Exception(f"Token limit exceeded: {token_count} > {self.max_token_limit}")
         return super()._call(messages, *args, **kwargs)
 
@@ -140,13 +139,23 @@ def test_get_new_summary_with_large_history():
     for the LLM. This isn't usually an issue since we generate summaries incrementally but when sessions
     are populated via the API we need to be able to compress the history in one go."""
     llm = FakeLlmSimpleTokenCount(responses=["Summary"])
-    prompt_tokens = llm.get_num_tokens_from_messages([HumanMessage(SUMMARY_PROMPT.format(summary="", new_lines=""))])
 
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(20)]
 
+    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
     # token limit below what we expect when generating the summary (20 * 3 = 60 + prompt_tokens)
-    llm.max_token_limit = prompt_tokens + 30 - 5  # set low enough to force 2 recursive iterations
+    llm.max_token_limit = prompt_tokens + 30 - 5  # set low enough to force 2 iterations
 
     new_summary = _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
     assert new_summary is not None
-    assert len(llm.get_calls()) == 4  # 2 recursive calls
+    assert len(llm.get_calls()) == 3
+
+    # check that message ordering is correct
+    messages_in_call = []
+    for messages in llm.get_call_messages():
+        messages_in_call.append(re.findall(r"Hello (\d+)", messages[0].content))
+    assert messages_in_call == [
+        ["0", "1", "2", "3", "4", "5", "6", "7"],
+        ["8", "9", "10", "11", "12", "13", "14", "15"],
+        ["16", "17", "18", "19"],
+    ]

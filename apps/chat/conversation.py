@@ -189,18 +189,23 @@ def compress_chat_history_from_messages(
 
 
 def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
-    new_lines = get_buffer_string(pruned_memory)
-    context = {"summary": summary or "", "new_lines": new_lines}
-    tokens = llm.get_num_tokens(SUMMARY_PROMPT.format(**context))
-    if tokens > max_token_limit:
-        # divide the pruned memory in half and try again
-        # do this recursively until we are below the token limit
-        half_index = len(pruned_memory) // 2
-        first_batch, second_batch = pruned_memory[:half_index], pruned_memory[half_index:]
-        summary = _get_new_summary(llm, first_batch, summary, max_token_limit)
-        summary = _get_new_summary(llm, second_batch, summary, max_token_limit)
-        return summary
+    tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
+    next_batch = []
+    while tokens > max_token_limit:
+        next_batch.insert(0, pruned_memory.pop())
+        tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
 
     chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
     summary = chain.invoke(context)["text"]
+
+    if next_batch:
+        return _get_new_summary(llm, next_batch, summary, max_token_limit)
+
     return summary
+
+
+def _get_summary_tokens_with_context(llm, summary, pruned_memory):
+    new_lines = get_buffer_string(pruned_memory)
+    context = {"summary": summary or "", "new_lines": new_lines}
+    tokens = llm.get_num_tokens_from_messages(SUMMARY_PROMPT.format_prompt(**context).to_messages())
+    return tokens, context
