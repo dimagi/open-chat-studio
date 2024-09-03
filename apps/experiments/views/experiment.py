@@ -104,7 +104,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team)
+        query_set = Experiment.objects.working_versions_queryset().filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")

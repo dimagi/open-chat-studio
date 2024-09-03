@@ -56,6 +56,10 @@ class ExperimentObjectManager(AuditingManager):
         )
         return experiment if experiment else family_member
 
+    def working_versions_queryset(self):
+        """Returns a queryset for all working experiments"""
+        return self.get_queryset().filter(working_version=None)
+
 
 class SourceMaterialObjectManager(AuditingManager):
     pass

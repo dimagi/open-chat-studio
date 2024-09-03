@@ -480,6 +480,17 @@ class TestExperimentObjectManager:
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
 
+    def test_working_versions_queryset(self):
+        experiments = ExperimentFactory.create_batch(3)
+        for working_exp in experiments:
+            working_exp.create_new_version()
+
+        working_versions_queryset = Experiment.objects.working_versions_queryset()
+        assert working_versions_queryset.count() == 3
+        for working_version in working_versions_queryset.all():
+            # All experiments in this queryset should have versions
+            assert working_version.has_versions is True
+
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
     """
