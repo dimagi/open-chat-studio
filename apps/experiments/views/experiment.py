@@ -145,7 +145,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        return Experiment.objects.filter(working_experiment=self.kwargs["experiment_id"]).all()
+        return Experiment.objects.filter(working_version=self.kwargs["experiment_id"]).all()
 
 
 class ExperimentForm(forms.ModelForm):
@@ -472,20 +472,16 @@ class CreateExperimentVersion(CreateView):
 
     # TODO: add logic
     def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.parent_id = self.kwargs["experiment_id"]
-        return self.create_verion(form)
-
-    # TODO: add logic
-    def create_verion(self, form):
-        return None
+        working_experiment = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        working_experiment.create_new_version()
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
-        return redirect(
-            "experiments:experiment_versions",
-            team_slug=self.request.team.slug,
-            experiment_id=self.kwargs["experiment_id"],
+        url = reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": self.request.team.slug, "experiment_id": self.kwargs["experiment_id"]},
         )
+        return f"{url}#versions"
 
 
 @login_and_team_required
