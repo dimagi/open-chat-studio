@@ -332,6 +332,25 @@ class TestExperimentRouteVersioning:
 
 
 @pytest.mark.django_db()
+class TestExperimentRoute:
+    def test_eligible_children(self):
+        parent = ExperimentFactory()
+        versioned = parent.create_new_version()
+        experiment1 = ExperimentFactory(team=parent.team)
+        experiment2 = ExperimentFactory(team=parent.team)
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team, parent=parent)
+        assert parent not in queryset
+        assert versioned not in queryset
+        assert experiment1 in queryset
+        assert experiment2 in queryset
+        assert len(queryset) == 2
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team)
+        assert len(queryset) == 4
+
+
+@pytest.mark.django_db()
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
