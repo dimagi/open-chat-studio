@@ -10,7 +10,16 @@
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
+      {% if experiment.has_versions %}
+        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
+      {% else %}
+        <li>
+          <a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.working_version.id %}">
+            {{ experiment.name }}
+          </a>
+        </li>
+        <li class="pg-breadcrumb-active" aria-current="page">v{{ experiment.version_number }}</li>
+      {% endif %}
     </ul>
   </div>
 {% endblock %}

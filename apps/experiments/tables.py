@@ -167,6 +167,15 @@ class ExperimentVersionsTable(tables.Table):
         {% endif %}""",
         verbose_name="Default Version",
     )
+    version_link = columns.TemplateColumn(
+        template_code="""
+        <a href="{% url 'experiments:single_experiment_home' team_slug=record.team.slug experiment_id=record.id %}"
+            class="btn btn-sm btn-primary">
+            View version
+        </a>
+        """,
+        verbose_name="",
+    )
 
     class Meta:
         model = Experiment

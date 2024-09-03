@@ -486,7 +486,9 @@ class Experiment(BaseTeamModel):
         ]
 
     def __str__(self):
-        return self.name
+        if self.working_version is None:
+            return self.name
+        return f"{self.name} ({self.version_number})"
 
     def save(self, *args, **kwargs):
         if self.working_version is None and self.is_default_version is True:
