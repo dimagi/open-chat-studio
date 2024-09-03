@@ -163,8 +163,14 @@ class ExperimentVersionsTable(tables.Table):
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
     is_default_version = columns.TemplateColumn(
         template_code="""{% if record.is_default_version %}
-        <span aria-label="true">✓</span>
-        {% endif %}""",
+        <div class="text-md">Current Default</div>
+        {% else %}
+        <a href="{% url 'experiments:update_default_experiment' team_slug=record.team.slug experiment_id=record.id %}"
+            class="btn btn-sm btn-primary">
+            Make default
+        </a>
+        {% endif %}
+        """,
         verbose_name="Default Version",
     )
     version_link = columns.TemplateColumn(

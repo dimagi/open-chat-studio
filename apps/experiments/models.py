@@ -511,6 +511,10 @@ class Experiment(BaseTeamModel):
         """Return whether or not this experiment is a versioned experiment"""
         return self.working_version is not None
 
+    @property
+    def is_working_version(self):
+        return self.working_version is None
+
     def get_chat_model(self):
         service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)

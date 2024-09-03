@@ -25,6 +25,7 @@ from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -145,7 +146,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        return Experiment.objects.filter(working_version=self.kwargs["experiment_id"]).all()
+        return Experiment.objects.filter(working_version=self.kwargs["experiment_id"]).order_by("version_number").all()
 
 
 class ExperimentForm(forms.ModelForm):
@@ -482,6 +483,27 @@ class CreateExperimentVersion(CreateView):
             kwargs={"team_slug": self.request.team.slug, "experiment_id": self.kwargs["experiment_id"]},
         )
         return f"{url}#versions"
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def set_default_experiment(request, team_slug: str, experiment_id: int):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team_slug=request.team.slug)
+    working_version_id = experiment.working_version_id
+    with transaction.atomic():
+        Experiment.objects.filter(working_version_id=working_version_id, is_default_version=True).update(
+            is_default_version=False, audit_action=AuditAction.AUDIT
+        )
+
+        experiment.is_default_version = True
+        experiment.save()
+        # TODO: Update experiment sessions to point to this version?
+
+    url = reverse(
+        "experiments:single_experiment_home",
+        kwargs={"team_slug": request.team.slug, "experiment_id": working_version_id},
+    )
+    return HttpResponseRedirect(f"{url}#versions")
 
 
 @login_and_team_required

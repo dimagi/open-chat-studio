@@ -45,6 +45,7 @@ urlpatterns = [
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path("e/<int:experiment_id>/create-version/", views.CreateExperimentVersion.as_view(), name="create_version"),
+    path("e/versions/default/<int:experiment_id>", views.set_default_experiment, name="update_default_experiment"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
     path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
