@@ -40,7 +40,7 @@ class ExperimentObjectManager(AuditingManager):
         Returns the default version of the family of experiments relating to `family_member` or if there is no default,
         the working experiment.
         """
-        if family_member.default_version:
+        if family_member.is_default_version:
             return family_member
         elif working_experiment := family_member.working_version:
             # family_member is some other version of working_version
@@ -51,7 +51,7 @@ class ExperimentObjectManager(AuditingManager):
 
         experiment = (
             self.get_queryset()
-            .filter(working_version=working_version, default_version=True, team=family_member.team)
+            .filter(working_version=working_version, is_default_version=True, team=family_member.team)
             .first()
         )
         return experiment if experiment else family_member
@@ -462,7 +462,7 @@ class Experiment(BaseTeamModel):
         related_name="versions",
     )
     version_number = models.PositiveIntegerField(default=1)
-    default_version = models.BooleanField(default=False)
+    is_default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     objects = ExperimentObjectManager()
 
@@ -474,8 +474,8 @@ class Experiment(BaseTeamModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["default_version", "working_version"],
-                condition=Q(default_version=True),
+                fields=["is_default_version", "working_version"],
+                condition=Q(is_default_version=True),
                 name="unique_default_version_per_experiment",
             ),
             models.UniqueConstraint(
@@ -489,7 +489,7 @@ class Experiment(BaseTeamModel):
         return self.name
 
     def save(self, *args, **kwargs):
-        if self.working_version is None and self.default_version is True:
+        if self.working_version is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
         return super().save(*args, **kwargs)
 
@@ -545,7 +545,7 @@ class Experiment(BaseTeamModel):
             new_version.source_material = self.source_material.create_new_version()
 
         if not new_version.working_version.has_versions:
-            new_version.default_version = True
+            new_version.is_default_version = True
         new_version.save()
 
         self.copy_safety_layers_to_new_version(new_version)

@@ -31,7 +31,7 @@ def fire_static_trigger(trigger_id, session_id):
 @shared_task(ignore_result=True)
 def enqueue_timed_out_events():
     active_triggers = TimeoutTrigger.objects.filter(
-        Q(experiment__default_version=True) | Q(experiment__working_version__isnull=True)
+        Q(experiment__is_default_version=True) | Q(experiment__working_version__isnull=True)
     )
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():

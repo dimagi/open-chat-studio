@@ -335,15 +335,15 @@ class TestExperimentRouteVersioning:
 class TestExperimentVersioning:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
-            ExperimentFactory(default_version=True, working_version=None)
+            ExperimentFactory(is_default_version=True, working_version=None)
 
     def test_single_default_version_per_experiment(self):
         working_exp = ExperimentFactory()
         team = working_exp.team
-        ExperimentFactory(default_version=True, working_version=working_exp, team=team)
+        ExperimentFactory(is_default_version=True, working_version=working_exp, team=team)
         with pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
-            ExperimentFactory(default_version=True, working_version=working_exp, team=team, version_number=2)
-        ExperimentFactory(default_version=False, working_version=working_exp, team=team, version_number=3)
+            ExperimentFactory(is_default_version=True, working_version=working_exp, team=team, version_number=2)
+        ExperimentFactory(is_default_version=False, working_version=working_exp, team=team, version_number=3)
 
     def test_unique_version_number_per_experiment(self):
         working_exp = ExperimentFactory()
@@ -398,7 +398,7 @@ class TestExperimentVersioning:
         assert original_experiment.version_number == 2
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
-        assert new_version.default_version is True
+        assert new_version.is_default_version is True
         assert new_version.working_version == original_experiment
         _compare_models(
             original=original_experiment,
@@ -409,7 +409,7 @@ class TestExperimentVersioning:
                 "public_id",
                 "working_version_id",
                 "version_number",
-                "default_version",
+                "is_default_version",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -423,7 +423,7 @@ class TestExperimentVersioning:
         original_experiment.refresh_from_db()
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
-        assert another_new_version.default_version is False
+        assert another_new_version.is_default_version is False
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
@@ -474,7 +474,7 @@ class TestExperimentObjectManager:
         # With versions, the default version should be returned
         team = working_exp.team
         exp_v1 = ExperimentFactory(team=team, version_number=2, working_version=working_exp)
-        exp_v2 = ExperimentFactory(team=team, version_number=3, working_version=working_exp, default_version=True)
+        exp_v2 = ExperimentFactory(team=team, version_number=3, working_version=working_exp, is_default_version=True)
 
         assert Experiment.objects.get_default_or_working(family_member=working_exp) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
