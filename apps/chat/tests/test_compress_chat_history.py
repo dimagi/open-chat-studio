@@ -25,9 +25,7 @@ def _patch_initial_tokens():
 
 @pytest.fixture()
 def chat(team_with_users):
-    chat = Chat.objects.create(team=team_with_users)
-    ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
-    return chat
+    return Chat.objects.create(team=team_with_users)
 
 
 def test_compress_history_no_need_for_compression(chat):
