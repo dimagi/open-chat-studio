@@ -539,6 +539,9 @@ class Experiment(BaseTeamModel):
         new_version.version_number = version_number
         if self.source_material:
             new_version.source_material = self.source_material.create_new_version()
+
+        if not new_version.working_version.has_versions:
+            new_version.default_version = True
         new_version.save()
 
         self.copy_safety_layers_to_new_version(new_version)
@@ -547,6 +550,10 @@ class Experiment(BaseTeamModel):
 
         new_version.files.set(self.files.all())
         return new_version
+
+    @property
+    def has_versions(self):
+        return self.versions.count() > 0
 
     def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []

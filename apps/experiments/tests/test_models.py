@@ -398,17 +398,32 @@ class TestExperimentVersioning:
         assert original_experiment.version_number == 2
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
+        assert new_version.default_version is True
         assert new_version.working_version == original_experiment
         _compare_models(
             original=original_experiment,
             new=new_version,
-            expected_changed_fields=["id", "source_material_id", "public_id", "working_version_id", "version_number"],
+            expected_changed_fields=[
+                "id",
+                "source_material_id",
+                "public_id",
+                "working_version_id",
+                "version_number",
+                "default_version",
+            ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
+
+        #
+        another_new_version = original_experiment.create_new_version()
+        original_experiment.refresh_from_db()
+        assert original_experiment.version_number == 3
+        assert another_new_version.version_number == 2
+        assert another_new_version.default_version is False
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
