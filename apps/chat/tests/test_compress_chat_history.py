@@ -46,8 +46,10 @@ def test_compress_history_no_need_for_compression(chat):
     assert len(llm.get_calls()) == 0
 
 
-def test_compress_history(chat):
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compress_history(mock_get_new_summary, chat):
+    mock_get_new_summary.return_value = "Summary"
+    llm = FakeLlmSimpleTokenCount(responses=[])
 
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
@@ -57,14 +59,16 @@ def test_compress_history(chat):
     assert result[0].content == "Summary"
     assert result[1].content == "Hello 10"
     assert ChatMessage.objects.get(id=result[1].additional_kwargs["id"]).summary == "Summary"
-    assert len(llm.get_calls()) == 1
+    mock_get_new_summary.assert_called_once()
 
 
-def test_compress_history_due_to_large_input(chat):
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compress_history_due_to_large_input(mock_get_new_summary, chat):
     for i in range(6):
         ChatMessage.objects.create(chat=chat, content=f"Hello-{i}", message_type=ChatMessageType.HUMAN)
 
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    mock_get_new_summary.return_value = "Summary"
+    llm = FakeLlmSimpleTokenCount(responses=[])
     input_messages = [HumanMessage("Hi this is a large")]
     # 1 message = 2 tokens. 2 summary tokens + 5 messages (keep_history_len=5) * 2 token each + 6 input_tokens is
     # 18 tokens total so we expect 2 messages to be removed to get it to 14 tokens, so 3 messages 1 summary message
@@ -73,22 +77,24 @@ def test_compress_history_due_to_large_input(chat):
     assert result[0].content == "Summary"
     assert result[1].content == "Hello-3"
     assert ChatMessage.objects.get(id=result[1].additional_kwargs["id"]).summary == "Summary"
-    assert len(llm.get_calls()) == 1
+    mock_get_new_summary.assert_called_once()
 
 
-def test_compress_chat_history_with_need_for_compression_after_truncate(chat):
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compress_chat_history_with_need_for_compression_after_truncate(mock_get_new_summary, chat):
     """History is still over token limit after truncating to keep_history_len so more
     messages are removed"""
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
 
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    mock_get_new_summary.return_value = "Summary"
+    llm = FakeLlmSimpleTokenCount(responses=[])
     result = compress_chat_history(chat, llm, 17, input_messages=[])
     # 5 messages * 3 tokens + 2 tokens for summary
     assert len(result) == 6
     assert result[0].content == "Summary"
     assert result[1].content == "Hello 10"
-    assert len(llm.get_calls()) == 1
+    mock_get_new_summary.assert_called_once()
 
 
 def test_compress_chat_history_not_needed_with_existing_summary(chat):
@@ -96,7 +102,7 @@ def test_compress_chat_history_not_needed_with_existing_summary(chat):
         summary = "Summary old" if i == 10 else None
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN, summary=summary)
 
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    llm = FakeLlmSimpleTokenCount(responses=[])
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 6
     assert result[0].content == "Summary old"
@@ -104,34 +110,36 @@ def test_compress_chat_history_not_needed_with_existing_summary(chat):
     assert len(llm.get_calls()) == 0
 
 
-def test_compression_with_large_summary(chat):
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compression_with_large_summary(mock_get_new_summary, chat):
     for i in range(15):
         ChatMessage.objects.create(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN)
 
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
-    llm.responses = [summary_content]
+    mock_get_new_summary.return_value = summary_content
     result = compress_chat_history(chat, llm, 26, input_messages=[])
     # 1 message * 3 tokens + 21 tokens for summary
     assert len(result) == 2
     assert result[0].content == summary_content
     assert result[1].content == "Hello 14"
-    assert len(llm.get_calls()) == 2
+    assert mock_get_new_summary.call_count == 2
 
 
-def test_compression_exhausts_history(chat):
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compression_exhausts_history(mock_get_new_summary, chat):
     messages = ChatMessage.objects.bulk_create(
         [ChatMessage(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN) for i in range(15)]
     )
 
-    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+    llm = FakeLlmSimpleTokenCount(responses=[])
     summary_content = "Summary " * 20
-    llm.responses = [summary_content]
+    mock_get_new_summary.return_value = summary_content
     result = compress_chat_history(chat, llm, 20, input_messages=[])
     assert len(result) == 1
     assert result[0].content == summary_content
     assert ChatMessage.objects.get(id=messages[-1].id).summary == summary_content
-    assert len(llm.get_calls()) == 2
+    assert mock_get_new_summary.call_count == 2
 
 
 def test_get_new_summary_with_large_history():
