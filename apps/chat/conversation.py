@@ -189,6 +189,8 @@ def compress_chat_history_from_messages(
 
 
 def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
+    """Get a new summary from the pruned memory. If the prune memory is still too long, prune it further and
+    recursively call this function with the remaining memory."""
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
     while tokens > max_token_limit:
