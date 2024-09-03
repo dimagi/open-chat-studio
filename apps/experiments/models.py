@@ -825,9 +825,6 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_scheduled_messages(self, as_dict=False, as_timezone: str | None = None):
-        return self.participant.get_schedules_for_experiment(self.experiment, as_dict=as_dict, as_timezone=as_timezone)
-
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
@@ -847,7 +844,7 @@ class ExperimentSession(BaseTeamModel):
         if use_participant_tz:
             as_timezone = self.get_participant_timezone()
 
-        scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
+        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return participant_data
