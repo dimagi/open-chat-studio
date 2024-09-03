@@ -50,17 +50,18 @@ def test_compress_history(chat):
     assert len(llm.get_calls()) == 1
 
 
-def test_compress_history_due_to_large_input(chat, llm):
-    for i in range(10):
-        ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
+def test_compress_history_due_to_large_input(chat):
+    for i in range(6):
+        ChatMessage.objects.create(chat=chat, content=f"Hello-{i}", message_type=ChatMessageType.HUMAN)
 
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
     input_messages = [HumanMessage("Hi this is a large")]
     # 1 message = 2 tokens. 2 summary tokens + 5 messages (keep_history_len=5) * 2 token each + 6 input_tokens is
     # 18 tokens total so we expect 2 messages to be removed to get it to 14 tokens, so 3 messages 1 summary message
     result = compress_chat_history(chat, llm, 15, keep_history_len=5, input_messages=input_messages)
     assert len(result) == 4
     assert result[0].content == "Summary"
-    assert result[1].content == "Hello"
+    assert result[1].content == "Hello-3"
     assert ChatMessage.objects.get(id=result[1].additional_kwargs["id"]).summary == "Summary"
     assert len(llm.get_calls()) == 1
 
