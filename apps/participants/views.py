@@ -104,5 +104,9 @@ class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         context["participant"] = participant
         context["experiment"] = experiment
         context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
-        context["participant_data"] = json.dumps(participant.get_data_for_experiment(experiment), indent=4)
+        data = participant.get_data_for_experiment(experiment)
+        schedules = participant.get_schedules_for_experiment(experiment)
+        if schedules:
+            data["schedules"] = schedules
+        context["participant_data"] = json.dumps(data, indent=4)
         return context
