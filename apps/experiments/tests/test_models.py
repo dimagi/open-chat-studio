@@ -1,6 +1,8 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from django.utils import timezone
+from django.utils.datetime_safe import datetime
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
@@ -140,7 +142,11 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "2024-01-02T00:00:00+00:00",
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=timezone.utc),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
             },
             {
                 "name": "Test",
@@ -148,7 +154,11 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "2024-01-02T00:00:00+00:00",
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=timezone.utc),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
             },
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version

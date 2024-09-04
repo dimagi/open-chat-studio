@@ -335,7 +335,7 @@ class ScheduledMessage(BaseTeamModel):
         return self.params["name"]
 
     @cached_property
-    def frequency(self) -> str:
+    def frequency(self) -> int:
         return self.params["frequency"]
 
     @cached_property
@@ -343,7 +343,7 @@ class ScheduledMessage(BaseTeamModel):
         return self.params["time_period"]
 
     @cached_property
-    def repetitions(self) -> str:
+    def repetitions(self) -> int:
         return self.params["repetitions"]
 
     @cached_property

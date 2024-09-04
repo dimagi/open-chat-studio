@@ -563,18 +563,25 @@ class Participant(BaseTeamModel):
         from apps.events.models import ScheduledMessage
 
         child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=experiment).values("child")
-        messages = ScheduledMessage.objects.filter(
-            Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
-            participant=self,
-            team=self.team,
-        ).select_related("action")
+        messages = (
+            ScheduledMessage.objects.filter(
+                Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+                participant=self,
+                team=self.team,
+            )
+            .select_related("action")
+            .order_by("created_at")
+        )
 
         scheduled_messages = []
-        as_timezone = as_timezone or timezone.get_current_timezone_name()
-
         for message in messages:
-            next_trigger_date = message.next_trigger_date.astimezone(pytz.timezone(as_timezone))
             if as_dict:
+                next_trigger_date = message.next_trigger_date
+                last_triggered_at = message.last_triggered_at
+                if as_timezone:
+                    next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
+                    if last_triggered_at:
+                        last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
                 scheduled_messages.append(
                     {
                         "name": message.name,
@@ -582,7 +589,11 @@ class Participant(BaseTeamModel):
                         "frequency": message.frequency,
                         "time_period": message.time_period,
                         "repetitions": message.repetitions,
-                        "next_trigger_date": next_trigger_date.isoformat(),
+                        "next_trigger_date": next_trigger_date,
+                        "last_triggered_at": last_triggered_at,
+                        "total_triggers": message.total_triggers,
+                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "is_complete": message.is_complete,
                     }
                 )
             else:
