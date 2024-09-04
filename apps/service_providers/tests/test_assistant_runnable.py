@@ -15,7 +15,7 @@ from openai.types.file_object import FileObject
 
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
-from apps.chat.models import Chat, ChatAttachment
+from apps.chat.models import Chat, ChatAttachment, ChatMessage
 from apps.service_providers.llm_service.runnables import (
     AssistantExperimentRunnable,
     GenerationCancelled,
@@ -31,7 +31,7 @@ from apps.utils.langchain import mock_experiment_llm
 ASSISTANT_ID = "test_assistant_id"
 
 
-@pytest.fixture(params=[True, False])
+@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def session(request):
     chat = Chat()
     chat.save = lambda: None
@@ -46,7 +46,7 @@ def session(request):
     return session
 
 
-@pytest.fixture(params=[True, False])
+@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_session(request):
     local_assistant = OpenAiAssistantFactory(
         id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
@@ -57,6 +57,10 @@ def db_session(request):
     return session
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -86,6 +90,10 @@ def test_assistant_conversation_new_chat(
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -115,6 +123,10 @@ def test_assistant_conversation_existing_chat(
     assert result.output == "ai response"
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -147,6 +159,10 @@ def test_assistant_conversation_input_formatting(
 
 
 @pytest.mark.django_db()
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -180,6 +196,10 @@ def test_assistant_includes_file_type_information(
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
@@ -192,6 +212,10 @@ def test_assistant_runnable_raises_error(session):
             assistant_runnable.invoke("test")
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
@@ -237,6 +261,10 @@ def test_assistant_runnable_handles_cancellation_status(session):
             None,
         ),
     ],
+)
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
@@ -300,7 +328,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
-def test_assistant_reponse_with_annotations(
+def test_assistant_response_with_annotations(
     list_messages,
     create_and_run,
     retrieve_run,
@@ -396,6 +424,48 @@ def test_assistant_reponse_with_annotations(
     message = chat.messages.filter(message_type="ai").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
     assert "openai-file-2" in message.metadata["openai_file_ids"]
+
+
+@pytest.mark.parametrize(
+    ("messages", "thread_id", "thread_created", "messages_created"),
+    [
+        ([], None, False, False),
+        ([], "test_thread_id", False, False),
+        ([{"role": "user", "content": "hello"}], None, True, False),
+        ([{"role": "user", "content": "hello"}], "test_thread_id", False, True),
+    ],
+)
+def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
+    state = Mock(spec=AssistantExperimentState)
+    state.get_messages_to_sync_to_thread.return_value = messages
+    assistant_runnable = AssistantExperimentRunnable(state=state)
+    assistant_runnable._sync_messages_to_thread(thread_id)
+
+    assert state.get_messages_to_sync_to_thread.called
+    if messages_created:
+        assert state.raw_client.beta.threads.messages.create.call_count == len(messages)
+    assert state.raw_client.beta.threads.create.called == thread_created
+    assert state.set_metadata.called == thread_created
+
+
+@pytest.mark.django_db()
+def test_get_messages_to_sync_to_thread():
+    session = ExperimentSessionFactory()
+    chat = session.chat
+    ChatMessage.objects.bulk_create(
+        [
+            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+        ]
+    )
+    state = AssistantExperimentState(session.experiment, session)
+    to_sync = state.get_messages_to_sync_to_thread()
+    assert to_sync == [
+        {"role": "user", "content": "hello2"},
+        {"role": "assistant", "content": "hello3"},
+    ]
 
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):

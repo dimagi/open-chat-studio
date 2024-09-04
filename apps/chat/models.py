@@ -47,10 +47,10 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
         return messages_from_dict(list(reversed(messages)))
 
-    def message_iterator(self):
+    def message_iterator(self, with_summaries=True):
         for message in self.messages.order_by("-created_at").iterator(100):
             yield message
-            if message.summary:
+            if with_summaries and message.summary:
                 yield message.get_summary_message()
 
     @cache
@@ -97,6 +97,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     # Metadata keys that should be excluded from the API response
     INTERNAL_METADATA_KEYS = {
         "openai_file_ids",
+        # boolean indicating that this message has been synced to the thread
+        "openai_thread_checkpoint",
     }
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
@@ -147,6 +149,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def created_at_datetime(self):
         return quote(self.created_at.isoformat())
 
+    @property
+    def role(self):
+        return ChatMessageType(self.message_type).role
+
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)
 
@@ -178,6 +184,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # those on the thread (chat) level, since they uploaded them
             return [file for file in self.chat.get_attached_files() if file.external_id in file_ids]
         return []
+
+    def get_metadata(self, key: str):
+        return self.metadata.get(key, None)
 
 
 class ChatAttachment(BaseModel):
