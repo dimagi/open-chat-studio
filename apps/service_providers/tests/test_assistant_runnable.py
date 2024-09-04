@@ -300,7 +300,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
-def test_assistant_reponse_with_annotations(
+def test_assistant_response_with_annotations(
     list_messages,
     create_and_run,
     retrieve_run,
@@ -396,6 +396,28 @@ def test_assistant_reponse_with_annotations(
     message = chat.messages.filter(message_type="ai").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
     assert "openai-file-2" in message.metadata["openai_file_ids"]
+
+
+@pytest.mark.parametrize(
+    ("messages", "thread_id", "thread_created", "messages_created"),
+    [
+        ([], None, False, False),
+        ([], "test_thread_id", False, False),
+        ([{"role": "user", "content": "hello"}], None, True, False),
+        ([{"role": "user", "content": "hello"}], "test_thread_id", False, True),
+    ],
+)
+def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
+    state = Mock(spec=AssistantExperimentState)
+    state.get_messages_to_sync_to_thread.return_value = messages
+    assistant_runnable = AssistantExperimentRunnable(state=state)
+    assistant_runnable._sync_messages_to_thread(thread_id)
+
+    assert state.get_messages_to_sync_to_thread.called
+    if messages_created:
+        assert state.raw_client.beta.threads.messages.create.call_count == len(messages)
+    assert state.raw_client.beta.threads.create.called == thread_created
+    assert state.set_metadata.called == thread_created
 
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):

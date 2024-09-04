@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
+from typing import Any
 
 from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
@@ -243,11 +244,14 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
+        metadata: dict[str, Any] = {"openai_file_ids": annotation_file_ids} if annotation_file_ids else {}
+        if type_ == ChatMessageType.HUMAN:
+            metadata["openai_thread_checkpoint"] = True
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat,
             message_type=type_.value,
             content=message,
-            metadata={"openai_file_ids": annotation_file_ids} if annotation_file_ids else {},
+            metadata=metadata,
         )
 
         if experiment_tag:
@@ -266,3 +270,18 @@ class AssistantExperimentState(ExperimentState, AssistantState):
     @property
     def tools_enabled(self):
         return self.experiment.assistant.tools_enabled
+
+    def get_messages_to_sync_to_thread(self):
+        to_sync = []
+        for message in self.chat.message_iterator(with_summaries=False):
+            if message.get_metadata("openai_thread_checkpoint"):
+                break
+            to_sync.append(message)
+        return [
+            {
+                "content": message.content,
+                "role": message.role,
+            }
+            for message in reversed(to_sync)
+            if message.message_type != "system"
+        ]
