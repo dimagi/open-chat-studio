@@ -1,8 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
-from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
@@ -142,7 +141,7 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=timezone.utc),
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
                 "is_complete": False,
                 "last_triggered_at": None,
                 "total_triggers": 0,
@@ -154,7 +153,7 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=timezone.utc),
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
                 "is_complete": False,
                 "last_triggered_at": None,
                 "total_triggers": 0,
