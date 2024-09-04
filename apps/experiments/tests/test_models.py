@@ -1,8 +1,8 @@
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
 from django.utils import timezone
-from django.utils.datetime_safe import datetime
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
