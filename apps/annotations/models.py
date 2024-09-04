@@ -16,6 +16,7 @@ from apps.users.models import CustomUser
 
 class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
+    EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
 
 
 @audit_fields(

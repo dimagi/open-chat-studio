@@ -147,6 +147,11 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
+        if type_ == ChatMessageType.AI and not self.experiment.is_working_version:
+            chat_message.add_system_tag(
+                tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+            )
+
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
         # temporary mechanism to cancel the chat
@@ -258,6 +263,12 @@ class AssistantExperimentState(ExperimentState, AssistantState):
                 category=TagCategories.BOT_RESPONSE,
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
+
+        if type_ == ChatMessageType.AI and not self.experiment.is_working_version:
+            chat_message.add_system_tag(
+                tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+            )
+
         return chat_message
 
     def get_tools(self):

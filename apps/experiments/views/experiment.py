@@ -488,7 +488,7 @@ class CreateExperimentVersion(CreateView):
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
 def set_default_experiment(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team_slug=request.team.slug)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
     working_version_id = experiment.working_version_id
     with transaction.atomic():
         Experiment.objects.filter(working_version_id=working_version_id, is_default_version=True).update(
@@ -497,7 +497,6 @@ def set_default_experiment(request, team_slug: str, experiment_id: int):
 
         experiment.is_default_version = True
         experiment.save()
-        # TODO: Update experiment sessions to point to this version?
 
     url = reverse(
         "experiments:single_experiment_home",

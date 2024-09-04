@@ -6,7 +6,7 @@ from django.db import models
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
-from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
+from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -128,6 +128,15 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 team=self.chat.team, external_id__in=file_ids, id__in=models.Subquery(chat_file_ids)
             )
         return []
+
+    def add_system_tag(self, tag: str, tag_category: TagCategories):
+        tag, _ = Tag.objects.get_or_create(
+            name=tag,
+            team=self.chat.team,
+            is_system_tag=True,
+            category=tag_category,
+        )
+        self.add_tag(tag, team=self.chat.team, added_by=None)
 
 
 class ChatAttachment(BaseModel):

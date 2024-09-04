@@ -488,7 +488,7 @@ class Experiment(BaseTeamModel):
     def __str__(self):
         if self.working_version is None:
             return self.name
-        return f"{self.name} (v{self.version_number})"
+        return f"{self.name} ({self.version_display})"
 
     def save(self, *args, **kwargs):
         if self.working_version is None and self.is_default_version is True:
@@ -514,6 +514,16 @@ class Experiment(BaseTeamModel):
     @property
     def is_working_version(self):
         return self.working_version is None
+
+    @property
+    def has_versions(self):
+        return self.versions.count() > 0
+
+    @property
+    def version_display(self) -> str:
+        if self.is_working_version:
+            return None
+        return f"v{self.version_number}"
 
     def get_chat_model(self):
         service = self.get_llm_service()
@@ -560,10 +570,6 @@ class Experiment(BaseTeamModel):
 
         new_version.files.set(self.files.all())
         return new_version
-
-    @property
-    def has_versions(self):
-        return self.versions.count() > 0
 
     def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
