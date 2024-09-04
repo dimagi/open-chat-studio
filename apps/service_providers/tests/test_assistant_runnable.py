@@ -15,7 +15,7 @@ from openai.types.file_object import FileObject
 
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
-from apps.chat.models import Chat, ChatAttachment
+from apps.chat.models import Chat, ChatAttachment, ChatMessage
 from apps.service_providers.llm_service.runnables import (
     AssistantExperimentRunnable,
     GenerationCancelled,
@@ -418,6 +418,26 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
         assert state.raw_client.beta.threads.messages.create.call_count == len(messages)
     assert state.raw_client.beta.threads.create.called == thread_created
     assert state.set_metadata.called == thread_created
+
+
+@pytest.mark.django_db()
+def test_get_messages_to_sync_to_thread():
+    session = ExperimentSessionFactory()
+    chat = session.chat
+    ChatMessage.objects.bulk_create(
+        [
+            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+        ]
+    )
+    state = AssistantExperimentState(session.experiment, session)
+    to_sync = state.get_messages_to_sync_to_thread()
+    assert to_sync == [
+        {"role": "user", "content": "hello2"},
+        {"role": "assistant", "content": "hello3"},
+    ]
 
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
