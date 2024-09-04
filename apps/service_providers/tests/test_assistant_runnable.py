@@ -57,6 +57,10 @@ def db_session(request):
     return session
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -86,6 +90,10 @@ def test_assistant_conversation_new_chat(
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -115,6 +123,10 @@ def test_assistant_conversation_existing_chat(
     assert result.output == "ai response"
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
@@ -147,6 +159,10 @@ def test_assistant_conversation_input_formatting(
 
 
 @pytest.mark.django_db()
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
 @patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -180,6 +196,10 @@ def test_assistant_includes_file_type_information(
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
@@ -192,6 +212,10 @@ def test_assistant_runnable_raises_error(session):
             assistant_runnable.invoke("test")
 
 
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
+)
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
@@ -237,6 +261,10 @@ def test_assistant_runnable_handles_cancellation_status(session):
             None,
         ),
     ],
+)
+@patch(
+    "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
+    Mock(return_value=[]),
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
