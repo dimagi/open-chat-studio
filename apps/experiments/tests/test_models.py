@@ -437,7 +437,6 @@ class TestExperimentVersioning:
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
 
-        #
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
         assert original_experiment.version_number == 3
@@ -472,6 +471,8 @@ class TestExperimentVersioning:
         elif trigger_type == "timeout":
             original_triggers = original_experiment.timeout_triggers.all()
             copied_triggers = new_version.timeout_triggers.all()
+
+        assert len(copied_triggers) == len(original_triggers)
 
         for copied_trigger in copied_triggers:
             assert copied_trigger.working_version is not None
