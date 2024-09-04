@@ -446,9 +446,10 @@ class ChannelBase(ABC):
                 self.experiment_session.save()
 
     def _get_latest_session(self):
+        """Returns the latest session for this participant with this experiment family"""
         return (
             ExperimentSession.objects.filter(
-                experiment=self.experiment,
+                experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
             .order_by("-created_at")
@@ -462,10 +463,10 @@ class ChannelBase(ABC):
 
     def _create_new_experiment_session(self):
         """Creates a new experiment session. If one already exists, the participant will be transfered to the new
-        session
+        session.
         """
         self.experiment_session = self.start_new_session(
-            experiment=self.experiment,
+            experiment=self.experiment.get_working_version(),
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
             participant_user=self.participant_user,
@@ -539,9 +540,9 @@ class WebChannel(ChannelBase):
     def check_and_process_seed_message(cls, session: ExperimentSession):
         from apps.experiments.tasks import get_response_for_webchat_task
 
-        if session.experiment.seed_message:
+        if seed_message := session.experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=session.experiment.seed_message, attachments=[]
+                session.id, message_text=seed_message, attachments=[]
             ).task_id
             session.save()
         return session
