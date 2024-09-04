@@ -31,7 +31,7 @@ from apps.utils.langchain import mock_experiment_llm
 ASSISTANT_ID = "test_assistant_id"
 
 
-@pytest.fixture(params=[True, False])
+@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def session(request):
     chat = Chat()
     chat.save = lambda: None
@@ -46,7 +46,7 @@ def session(request):
     return session
 
 
-@pytest.fixture(params=[True, False])
+@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_session(request):
     local_assistant = OpenAiAssistantFactory(
         id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
