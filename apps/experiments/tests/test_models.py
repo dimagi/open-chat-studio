@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -102,23 +103,24 @@ class TestExperimentSession:
     @freeze_time("2024-01-01")
     def test_get_participant_scheduled_messages(self):
         session = ExperimentSessionFactory()
-        event_action, params = self._construct_event_action(
-            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
-        )
+        experiment = session.experiment
+        event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
+        participant = session.participant
         message1 = ScheduledMessageFactory(
-            experiment=session.experiment,
+            experiment=experiment,
             team=session.team,
-            participant=session.participant,
+            participant=participant,
             action=event_action,
         )
         message2 = ScheduledMessageFactory(
-            experiment=session.experiment,
+            experiment=experiment,
             team=session.team,
-            participant=session.participant,
+            participant=participant,
             custom_schedule_params=params,
             action=None,
         )
-        assert len(session.get_participant_scheduled_messages()) == 2
+
+        assert len(participant.get_schedules_for_experiment(experiment)) == 2
         str_version1 = (
             f"{message1.name} (ID={message1.external_id}, message={message1.prompt_text}): Every 1 days on Tuesday, "
             "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
@@ -128,7 +130,7 @@ class TestExperimentSession:
             "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
         )
 
-        scheduled_messages_str = session.get_participant_scheduled_messages()
+        scheduled_messages_str = participant.get_schedules_for_experiment(experiment)
         assert str_version1 in scheduled_messages_str
         assert str_version2 in scheduled_messages_str
 
@@ -139,7 +141,11 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "2024-01-02T00:00:00+00:00",
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
             },
             {
                 "name": "Test",
@@ -147,10 +153,14 @@ class TestExperimentSession:
                 "frequency": 1,
                 "time_period": "days",
                 "repetitions": 1,
-                "next_trigger_date": "2024-01-02T00:00:00+00:00",
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
             },
         ]
-        assert session.get_participant_scheduled_messages(as_dict=True) == expected_dict_version
+        assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
 
     @pytest.mark.django_db()
     def test_get_participant_scheduled_messages_includes_child_experiments(self):
@@ -165,8 +175,8 @@ class TestExperimentSession:
         ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
         ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
 
-        assert len(session2.get_participant_scheduled_messages()) == 1
-        assert len(session.get_participant_scheduled_messages()) == 2
+        assert len(participant.get_schedules_for_experiment(session2.experiment)) == 1
+        assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("use_custom_experiment", [False, True])

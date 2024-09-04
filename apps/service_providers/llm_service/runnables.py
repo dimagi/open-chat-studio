@@ -277,12 +277,11 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             "attachments": message_attachments,
         } | self._extra_input_configs()
 
+        current_thread_id = self._sync_messages_to_thread(self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID))
+
         if config.get("configurable", {}).get("save_input_to_history", True):
             file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
             self.state.save_message_to_history(input, ChatMessageType.HUMAN, annotation_file_ids=list(file_ids))
-
-        # Note: if this is not a new chat then the history won't be persisted to the thread
-        current_thread_id = self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
 
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
@@ -298,6 +297,22 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids, experiment_tag=experiment_tag
         )
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
+
+    def _sync_messages_to_thread(self, current_thread_id):
+        """Sync any messages that need to be sent to the thread. Create a new thread if necessary
+        and return the thread ID.
+
+        This is necessary in multi-bot setups if some of the bots are assistants but not all.
+        """
+        if messages_to_sync := self.state.get_messages_to_sync_to_thread():
+            if current_thread_id:
+                for message in messages_to_sync:
+                    self.state.raw_client.beta.threads.messages.create(current_thread_id, **message)
+            else:
+                thread = self.state.raw_client.beta.threads.create(messages=messages_to_sync)
+                current_thread_id = thread.id
+                self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
+        return current_thread_id
 
     @transaction.atomic()
     def _save_response_annotations(self, output, thread_id, run_id) -> tuple[str, dict]:

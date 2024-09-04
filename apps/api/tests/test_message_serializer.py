@@ -1,18 +1,30 @@
 import pytest
+from django.utils import timezone
+from freezegun import freeze_time
 
 from apps.api.serializers import MessageSerializer
+from apps.chat.models import ChatMessage, ChatMessageType
 
-CASES = [("system", "system"), ("human", "user"), ("ai", "assistant")]
+CASES = [(ChatMessageType.SYSTEM, "system"), (ChatMessageType.HUMAN, "user"), (ChatMessageType.AI, "assistant")]
 
 
 @pytest.mark.parametrize(("type_", "role"), CASES)
 def test_message_serializer_api_to_internal(type_, role):
     serializer = MessageSerializer(data={"role": role, "content": "hello"})
     assert serializer.is_valid()
-    assert serializer.validated_data == {"type": type_, "message": "hello"}
+    assert serializer.validated_data == {"message_type": type_, "content": "hello"}
 
 
 @pytest.mark.parametrize(("type_", "role"), CASES)
+@freeze_time("2021-01-01T12:00:00Z")
 def test_message_serializer_internal_to_api(type_, role):
-    serializer = MessageSerializer(instance={"type": type_, "message": "hello"})
-    assert serializer.data == {"role": role, "content": "hello"}
+    now = timezone.now()
+    serializer = MessageSerializer(instance=ChatMessage(created_at=now, message_type=type_, content="hello"))
+    assert serializer.data == {
+        "created_at": "2021-01-01T12:00:00Z",
+        "role": role,
+        "content": "hello",
+        "metadata": {},
+        "tags": [],
+        "attachments": [],
+    }

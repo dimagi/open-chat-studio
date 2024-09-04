@@ -1,10 +1,15 @@
+import textwrap
+
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
+from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.files.models import File
 from apps.teams.models import Team
 
 
@@ -31,6 +36,57 @@ class TeamSerializer(serializers.ModelSerializer):
         fields = ["name", "slug"]
 
 
+class FileSerializer(serializers.ModelSerializer):
+    size = serializers.IntegerField(source="content_size")
+    content_url = serializers.HyperlinkedIdentityField(
+        view_name="api:file-content", lookup_field="id", lookup_url_kwarg="pk"
+    )
+
+    class Meta:
+        model = File
+        fields = ("name", "content_type", "size", "content_url")
+
+
+class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(read_only=True)
+    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
+    content = serializers.CharField()
+    metadata = serializers.JSONField(
+        required=False,
+        read_only=True,
+        help_text=textwrap.dedent(
+            """
+            Metadata for the message. Currently documented keys:
+              * `is_summary`: boolean, whether this message is a summary of the conversation to date. When this
+                is true, the message will not be displayed in the chat interface but it will be used when
+                generating the chat history for the LLM. The history will include all messages up to the last
+                summary message (starting from the most recent message).
+            """
+        ),
+    )
+    tags = TagListSerializerField(read_only=True)
+    attachments = serializers.ListField(source="get_attached_files", child=FileSerializer(), read_only=True)
+
+    class Meta:
+        model = ChatMessage
+        fields = ["created_at", "role", "content", "metadata", "tags", "attachments"]
+
+    def to_representation(self, instance):
+        if not instance.pk:
+            # don't try and load tags if it isn't saved to the DB e.g. summary messages
+            instance.tags = []
+        data = super().to_representation(instance)
+        data["role"] = ChatMessageType(data["role"]).role
+        for key in ChatMessage.INTERNAL_METADATA_KEYS:
+            data["metadata"].pop(key, None)
+        return data
+
+    def to_internal_value(self, data):
+        data = super().to_internal_value(data)
+        data["message_type"] = ChatMessageType.from_role(data["message_type"])
+        return data
+
+
 class ExperimentSessionSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
@@ -39,35 +95,25 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     team = TeamSerializer(read_only=True)
     experiment = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
+    messages = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at"]
+        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "messages"]
 
+    def __init__(self, *args, **kwargs):
+        self._include_messages = kwargs.pop("include_messages", False)
+        super().__init__(*args, **kwargs)
+        if not self._include_messages:
+            self.fields.pop("messages")
+        else:
+            # hack to change the component name for the schema to include messages
+            self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
 
-class MessageSerializer(serializers.Serializer):
-    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="type")
-    content = serializers.CharField(source="message")
-
-    def to_representation(self, instance):
-        output = super().to_representation(instance)
-        # map internal names to external names
-        output["role"] = {
-            "human": "user",
-            "ai": "assistant",
-            "system": "system",
-        }[output["role"]]
-        return output
-
-    def to_internal_value(self, data):
-        # map external names to internal names
-        data = super().to_internal_value(data)
-        data["type"] = {
-            "user": "human",
-            "assistant": "ai",
-            "system": "system",
-        }[data["type"]]
-        return data
+    @extend_schema_field(MessageSerializer(many=True))
+    def get_messages(self, instance):
+        messages = list(instance.chat.message_iterator())
+        return MessageSerializer(reversed(messages), many=True, context=self.context).data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
@@ -100,12 +146,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         messages = validated_data.pop("messages", [])
         instance = super().create(validated_data)
         if messages:
-            ChatMessage.objects.bulk_create(
-                [
-                    ChatMessage(chat=instance.chat, message_type=message["type"], content=message["message"])
-                    for message in messages
-                ]
-            )
+            ChatMessage.objects.bulk_create([ChatMessage(chat=instance.chat, **message) for message in messages])
         return instance
 
 
