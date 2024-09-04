@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -552,6 +551,55 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
+    def get_schedules_for_experiment(self, experiment, as_dict=False, as_timezone: str | None = None):
+        """
+        Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent
+
+        Parameters:
+        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        timezone: The timezone to use for the dates. Defaults to the active timezone.
+        """
+        from apps.events.models import ScheduledMessage
+
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=experiment).values("child")
+        messages = (
+            ScheduledMessage.objects.filter(
+                Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+                participant=self,
+                team=self.team,
+            )
+            .select_related("action")
+            .order_by("created_at")
+        )
+
+        scheduled_messages = []
+        for message in messages:
+            if as_dict:
+                next_trigger_date = message.next_trigger_date
+                last_triggered_at = message.last_triggered_at
+                if as_timezone:
+                    next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
+                    if last_triggered_at:
+                        last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+                scheduled_messages.append(
+                    {
+                        "name": message.name,
+                        "external_id": message.external_id,
+                        "frequency": message.frequency,
+                        "time_period": message.time_period,
+                        "repetitions": message.repetitions,
+                        "next_trigger_date": next_trigger_date,
+                        "last_triggered_at": last_triggered_at,
+                        "total_triggers": message.total_triggers,
+                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "is_complete": message.is_complete,
+                    }
+                )
+            else:
+                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
+        return scheduled_messages
+
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment):
         """
@@ -788,44 +836,6 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_scheduled_messages(self, as_dict=False, as_timezone: str | None = None):
-        """
-        Returns all scheduled messages for the associated participant for this session's experiment as well as
-        any child experiments in the case where the experiment is a parent
-
-        Parameters:
-        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
-        timezone: The timezone to use for the dates. Defaults to the active timezone.
-        """
-        from apps.events.models import ScheduledMessage
-
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
-        messages = ScheduledMessage.objects.filter(
-            Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
-            participant=self.participant,
-            team=self.team,
-        ).select_related("action")
-
-        scheduled_messages = []
-        as_timezone = as_timezone or timezone.get_current_timezone_name()
-
-        for message in messages:
-            next_trigger_date = message.next_trigger_date.astimezone(pytz.timezone(as_timezone))
-            if as_dict:
-                scheduled_messages.append(
-                    {
-                        "name": message.name,
-                        "external_id": message.external_id,
-                        "frequency": message.frequency,
-                        "time_period": message.time_period,
-                        "repetitions": message.repetitions,
-                        "next_trigger_date": next_trigger_date.isoformat(),
-                    }
-                )
-            else:
-                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
-        return scheduled_messages
-
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
@@ -845,14 +855,7 @@ class ExperimentSession(BaseTeamModel):
         if use_participant_tz:
             as_timezone = self.get_participant_timezone()
 
-        scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
+        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return participant_data
-
-    def get_participant_data_json(self):
-        participant_data = self.participant_data_from_experiment
-        scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return json.dumps(participant_data, indent=2)
