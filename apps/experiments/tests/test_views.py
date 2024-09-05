@@ -43,7 +43,7 @@ def test_create_experiment_success(client, team_with_users):
         "name": "some name",
         "description": "Some description",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant. The current date time is {current_datetime}",
+        "prompt_text": "You are a helpful assistant. The current date time is {current_datetime}. {participant_data}",
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
         "temperature": 0.7,
@@ -55,7 +55,7 @@ def test_create_experiment_success(client, team_with_users):
     }
 
     response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
-    assert response.status_code == 302, response.context.form.errors
+    assert response.status_code == 302, response.context["form"].errors
     experiment = Experiment.objects.filter(owner=user).first()
     assert experiment is not None
     experiment.tools == [AgentTools.ONE_OFF_REMINDER]
