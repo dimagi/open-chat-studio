@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -44,3 +45,8 @@ class ScheduledMessageSchema(BaseModel):
     hour: int = Field(description="The new hour of the day, in UTC")
     minute: int = Field(description="The new minute of the hour")
     specified_date: datetime | None = Field(description="True if the user requested a specific date", default=None)
+
+
+class UpdateUserDataSchema(BaseModel):
+    key: str = Field(description="The key in the user data to update")
+    value: Any = Field(description="The new value of the user data")

@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
 from django.db import transaction
 from langchain.tools.base import BaseTool
@@ -8,7 +9,7 @@ from langchain.tools.base import BaseTool
 from apps.chat.agent import schemas
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
@@ -132,6 +133,30 @@ class DeleteReminderTool(CustomBaseTool):
             return "Could not find this reminder"
 
         scheduled_message.delete()
+        return "Success"
+
+
+class UpdateParticipantDataTool(CustomBaseTool):
+    name = AgentTools.UPDATE_PARTICIPANT_DATA
+    description = "Update user data"
+    requires_session = True
+    args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: Any):
+        try:
+            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
+                participant=self.experiment_session.participant
+            )
+            participant_data.data[key] = value
+            participant_data.save()
+        except ParticipantData.DoesNotExist:
+            ParticipantData.objects.create(
+                participant=self.experiment_session.participant,
+                content_object=self.experiment_session.experiment,
+                team=self.experiment_session.team,
+                data={key: value},
+            )
         return "Success"
 
 
