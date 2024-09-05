@@ -94,7 +94,7 @@ class TestExperimentSession:
             "time_period": time_period,
             "frequency": frequency,
             "repetitions": repetitions,
-            "prompt_text": "",
+            "prompt_text": "hi",
             "experiment_id": experiment_id,
         }
         return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
@@ -146,6 +146,7 @@ class TestExperimentSession:
                 "last_triggered_at": None,
                 "total_triggers": 0,
                 "triggers_remaining": 1,
+                "prompt": "hi",
             },
             {
                 "name": "Test",
@@ -158,6 +159,7 @@ class TestExperimentSession:
                 "last_triggered_at": None,
                 "total_triggers": 0,
                 "triggers_remaining": 1,
+                "prompt": "hi",
             },
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
