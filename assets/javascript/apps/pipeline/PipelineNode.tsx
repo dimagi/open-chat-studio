@@ -131,7 +131,9 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
         return (
           <>
             <div className="m-1 font-medium text-center">
-              {inputParam.name.replace(/_/g, " ")}
+              {inputParam.human_name
+                ? inputParam.human_name
+                : inputParam.name.replace(/_/g, " ")}
             </div>
             <textarea
               className="textarea textarea-bordered w-full"
@@ -145,7 +147,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   };
 
   const getOuputHandles = () => {
-    const numberOfOutputs = params["num_outputs"] || 1;
+    const numberOfOutputs = parseInt(params["num_outputs"]) || 1;
     const outputHandles = Array.from(
       { length: numberOfOutputs },
       (_, index) => {
@@ -156,7 +158,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             type="source"
             position={Position.Right}
             style={{ top: `${position}%` }}
-            id={`output_${index}`}
+            id={numberOfOutputs > 1 ? `output_${index}` : "output"}
           />
         );
       },
@@ -165,22 +167,13 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   };
 
   const getRouterNodeInputs = () => {
-    const numberOfOutputs = params["num_outputs"] || 1;
+    const numberOfOutputs = parseInt(params["num_outputs"]) || 1;
     const inputs = Array.from({ length: numberOfOutputs }, (_, index) => {
-      return (
-        <>
-          <div className="m-1 font-medium text-center">
-            {`Input for output ${index + 1}`}
-          </div>
-          <textarea
-            className="textarea textarea-bordered w-full"
-            name={`output_${index}`}
-            key={`output_${index}`}
-            onChange={updateParamValue}
-            value={params[`output_${index}`] || ""}
-          ></textarea>
-        </>
-      );
+      return getInputWidget({
+        human_name: `Keyword ${index + 1} ${index === 0 ? "(default)" : ""}`,
+        name: `keyword_${index}`,
+        type: "str",
+      } as InputParam);
     });
     return <>{inputs}</>;
   };

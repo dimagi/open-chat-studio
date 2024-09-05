@@ -54,7 +54,7 @@ class PipelineGraph(pydantic.BaseModel):
     def conditional_edge_map(self) -> dict[str, dict[str, str]]:
         conditional_edge_map = defaultdict(dict)
         for edge in self.conditional_edges:
-            source_node = self.nodes_by_id[edge.source].pipeline_node_class
+            source_node = self.nodes_by_id[edge.source].pipeline_node_instance
             output_map = source_node.get_output_map()
             # this creates a map of the form:
             # {source_node: {'true': target_if_output_true, 'false': target_if_output_false}}
