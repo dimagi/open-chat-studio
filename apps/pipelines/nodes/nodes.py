@@ -15,7 +15,14 @@ from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
+from apps.pipelines.nodes.types import (
+    LlmModel,
+    LlmProviderId,
+    LlmTemperature,
+    NumOutputs,
+    PipelineJinjaTemplate,
+    SourceMaterialId,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.utils.time import pretty_date
@@ -154,6 +161,11 @@ class BooleanNode(Passthrough):
     def get_output_map(cls):
         """A mapping from the output handles on the frontent to the return values of process_conditional"""
         return {"output_true": "true", "output_false": "false"}
+
+
+class RouterNode(Passthrough):
+    __human_name__ = "Router"
+    num_outputs: NumOutputs = 2
 
 
 class ExtractStructuredDataNodeMixin:

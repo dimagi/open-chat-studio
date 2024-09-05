@@ -114,6 +114,19 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             />
           </>
         );
+      case "NumOutputs":
+        return (
+          <>
+            <div className="m-1 font-medium text-center">Number of Outputs</div>
+            <input
+              name={inputParam.name}
+              onChange={updateParamValue}
+              value={params[inputParam.name] || 1}
+              type="number"
+              step="1"
+            ></input>
+          </>
+        );
       default:
         return (
           <>
@@ -131,27 +144,45 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
     }
   };
 
-  const getOuputHandles = (type: string) => {
-    if (type === "BooleanNode") {
-      /* TODO: use output params */
+  const getOuputHandles = () => {
+    const numberOfOutputs = params["num_outputs"] || 1;
+    const outputHandles = Array.from(
+      { length: numberOfOutputs },
+      (_, index) => {
+        const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
+        return (
+          <Handle
+            key={`output_${index}`}
+            type="source"
+            position={Position.Right}
+            style={{ top: `${position}%` }}
+            id={`output_${index}`}
+          />
+        );
+      },
+    );
+    return <>{outputHandles}</>;
+  };
+
+  const getRouterNodeInputs = () => {
+    const numberOfOutputs = params["num_outputs"] || 1;
+    const inputs = Array.from({ length: numberOfOutputs }, (_, index) => {
       return (
         <>
-          <Handle
-            type="source"
-            position={Position.Right}
-            style={{ top: 10 }}
-            id="output_true"
-          />
-          <Handle
-            type="source"
-            position={Position.Right}
-            style={{ bottom: 10, top: "auto" }}
-            id="output_false"
-          />
+          <div className="m-1 font-medium text-center">
+            {`Input for output ${index + 1}`}
+          </div>
+          <textarea
+            className="textarea textarea-bordered w-full"
+            name={`output_${index}`}
+            key={`output_${index}`}
+            onChange={updateParamValue}
+            value={params[`output_${index}`] || ""}
+          ></textarea>
         </>
       );
-    }
-    return <Handle type="source" position={Position.Right} id="output" />;
+    });
+    return <>{inputs}</>;
   };
 
   return (
@@ -181,7 +212,13 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             </React.Fragment>
           ))}
         </div>
-        {getOuputHandles(data.type)}
+        {data.type === "RouterNode" && (
+          <div className="ml-2">
+            <hr />
+            {getRouterNodeInputs()}
+          </div>
+        )}
+        {getOuputHandles()}
       </div>
     </>
   );
