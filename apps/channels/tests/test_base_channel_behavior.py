@@ -44,7 +44,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
-    _simulate_user_message(telegram_channel, message)
+    _send_user_message_on_channel(telegram_channel, message)
 
     experiment_session = ExperimentSession.objects.filter(
         experiment=telegram_channel.experiment, participant__identifier=chat_id
@@ -59,7 +59,7 @@ def test_incoming_message_adds_channel_info(telegram_channel):
 def test_channel_added_for_experiment_session(telegram_channel):
     chat_id = 123123
     message = telegram_messages.text_message(chat_id=chat_id)
-    _simulate_user_message(telegram_channel, message)
+    _send_user_message_on_channel(telegram_channel, message)
     participant = Participant.objects.get(identifier=chat_id)
     experiment_session = participant.experimentsession_set.first()
     assert experiment_session.experiment_channel is not None
@@ -75,7 +75,7 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
 
     # First message
     message = telegram_messages.text_message(chat_id=chat_id)
-    _simulate_user_message(telegram_channel, message)
+    _send_user_message_on_channel(telegram_channel, message)
 
     # Let's find the session it created
     experiment_sessions_count = ExperimentSession.objects.filter(
@@ -87,7 +87,7 @@ def test_incoming_message_uses_existing_experiment_session(telegram_channel):
     telegram_channel._create_new_experiment_session = Mock()
 
     # Second message
-    _simulate_user_message(telegram_channel, message)
+    _send_user_message_on_channel(telegram_channel, message)
 
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.filter(
@@ -106,14 +106,14 @@ def test_different_sessions_created_for_different_users(telegram_channel):
 
     # First user's message
     user_1_message = telegram_messages.text_message(chat_id=user_1_chat_id)
-    _simulate_user_message(telegram_channel, user_1_message)
+    _send_user_message_on_channel(telegram_channel, user_1_message)
 
     # Calling new_user_message added an experiment_session, so we should remove it before reusing the instance
     telegram_channel.experiment_session = None
 
     # Second user's message
     user_2_message = telegram_messages.text_message(chat_id=user_2_chat_id)
-    _simulate_user_message(telegram_channel, user_2_message)
+    _send_user_message_on_channel(telegram_channel, user_2_message)
 
     # Assertions
     experiment_sessions_count = ExperimentSession.objects.count()
@@ -140,8 +140,8 @@ def test_different_participants_created_for_same_user_in_different_teams():
 
     assert experiment1.team != experiment2.team
 
-    _simulate_user_message(channel1, user_message)
-    _simulate_user_message(channel2, user_message)
+    _send_user_message_on_channel(channel1, user_message)
+    _send_user_message_on_channel(channel2, user_message)
 
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
@@ -158,7 +158,7 @@ def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, t
     telegram_chat_id = 00000
     normal_message = telegram_messages.text_message(chat_id=telegram_chat_id)
 
-    _simulate_user_message(telegram_channel, normal_message)
+    _send_user_message_on_channel(telegram_channel, normal_message)
 
     reset_message = telegram_messages.text_message(
         chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
@@ -183,10 +183,10 @@ def test_reset_conversation_does_not_create_new_session(
     telegram_chat_id = 00000
 
     message1 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
-    _simulate_user_message(telegram_channel, message1)
+    _send_user_message_on_channel(telegram_channel, message1)
 
     message2 = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND)
-    _simulate_user_message(telegram_channel, message2)
+    _send_user_message_on_channel(telegram_channel, message2)
 
     sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).all()
     assert len(sessions) == 1
@@ -194,7 +194,7 @@ def test_reset_conversation_does_not_create_new_session(
     assert sessions[0].chat.get_langchain_messages() == []
 
 
-def _simulate_user_message(channel_instance, user_message: str):
+def _send_user_message_on_channel(channel_instance: TelegramChannel, user_message: str):
     with mock_experiment_llm(channel_instance.experiment, responses=["OK"]):
         channel_instance.new_user_message(user_message)
 
