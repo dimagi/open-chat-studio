@@ -585,6 +585,7 @@ class Participant(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "prompt": message.prompt_text,
                         "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,
