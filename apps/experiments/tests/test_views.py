@@ -100,24 +100,25 @@ def test_experiment_form_with_assistants(
 
 
 @pytest.mark.parametrize(
-    ("source_material", "prompt_str", "expectation"),
+    ("tools", "source_material", "prompt_str", "expectation"),
     [
-        (None, "You're an assistant", does_not_raise()),
-        ("something", "You're an assistant", does_not_raise()),
-        ("something", "Answer questions from this source: {source_material}", does_not_raise()),
-        (None, "Answer questions from this source: {source_material}", pytest.raises(ValidationError)),
-        (None, "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
-        ("something", "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
-        ("something", "Source material: {source_material} and {source_material}", pytest.raises(ValidationError)),
+        (None, None, "You're an assistant", does_not_raise()),
+        (None, "something", "You're an assistant", does_not_raise()),
+        (None, "something", "Answer questions from this source: {source_material}", does_not_raise()),
+        (None, None, "Answer questions from this source: {source_material}", pytest.raises(ValidationError)),
+        (None, None, "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
+        (None, "something", "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
+        (None, "something", "Source material: {source_material} and {source_material}", pytest.raises(ValidationError)),
+        ("ToolA", None, "", pytest.raises(ValidationError)),
+        ("ToolA", None, "{current_datetime}", pytest.raises(ValidationError)),
+        ("ToolA", None, "{participant_data}", pytest.raises(ValidationError)),
+        ("ToolA", None, "{current_datetime} {participant_data}", does_not_raise()),
     ],
 )
-def test_prompt_variable_validation(source_material, prompt_str, expectation):
+def test_prompt_variable_validation(tools, source_material, prompt_str, expectation):
     with expectation:
         validate_prompt_variables(
-            {
-                "source_material": source_material,
-                "prompt_text": prompt_str,
-            },
+            {"source_material": source_material, "prompt_text": prompt_str, "tools": tools},
             prompt_key="prompt_text",
             known_vars={"source_material", "participant_data", "current_datetime"},
         )
