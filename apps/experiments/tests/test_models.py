@@ -405,6 +405,17 @@ class TestExperimentVersioning:
         return experiment
 
     @pytest.mark.django_db()
+    def test_first_version_is_automatically_the_default(self):
+        experiment = ExperimentFactory()
+        new_version = experiment.create_new_version()
+        another_version = experiment.create_new_version()
+        assert new_version.version_number == 1
+        assert new_version.is_default_version
+
+        assert another_version.version_number == 2
+        assert not another_version.is_default_version
+
+    @pytest.mark.django_db()
     def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 

@@ -554,7 +554,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if self.source_material:
             new_version.source_material = self.source_material.create_new_version()
 
-        if not new_version.working_version.has_versions:
+        if new_version.version_number == 1:
             new_version.is_default_version = True
         new_version.save()
 
