@@ -38,7 +38,7 @@ class CustomBaseTool(BaseTool):
 
 class RecurringReminderTool(CustomBaseTool):
     name = AgentTools.RECURRING_REMINDER
-    description = "useful to schedule recurring reminders"
+    description = "Schedule recurring reminders"
     requires_session = True
     args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
 
@@ -65,7 +65,7 @@ class RecurringReminderTool(CustomBaseTool):
 
 class OneOffReminderTool(CustomBaseTool):
     name = AgentTools.ONE_OFF_REMINDER
-    description = "useful to schedule one-off reminders"
+    description = "Schedule one-off reminders"
     requires_session = True
     args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
 
@@ -81,7 +81,7 @@ class OneOffReminderTool(CustomBaseTool):
 
 class MoveScheduledMessageDateTool(CustomBaseTool):
     name = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
-    description = "useful to move the day and time that the scheduled message should trigger"
+    description = "Move the day and time that the scheduled message should trigger"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
@@ -118,7 +118,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
 
 class DeleteReminderTool(CustomBaseTool):
     name = AgentTools.DELETE_REMINDER
-    description = "useful to delete reminders"
+    description = "Delete scheduled reminders"
     requires_session = True
     args_schema: type[schemas.DeleteReminderSchema] = schemas.DeleteReminderSchema
 
@@ -184,7 +184,7 @@ def create_schedule_message(
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
             return "Experiment does not exist! Could not create scheduled message"
-    logging.exception(f"Could not create one-off reminder. Form erros: {form.errors}")
+    logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
 
