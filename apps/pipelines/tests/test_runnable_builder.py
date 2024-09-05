@@ -485,6 +485,162 @@ def test_conditional_node(pipeline, experiment_session):
     assert "RenderTemplate-true" not in output["outputs"]
 
 
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node(get_llm_service, provider, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [
+            {
+                "id": "RouterNode -> A",
+                "source": "RouterNode",
+                "target": "A",
+                "sourceHandle": "output_0",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> B",
+                "source": "RouterNode",
+                "target": "B",
+                "sourceHandle": "output_1",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> C",
+                "source": "RouterNode",
+                "target": "C",
+                "sourceHandle": "output_2",
+                "targetHandle": "input",
+            },
+            {
+                "id": "A -> END",
+                "source": "A",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "B -> END",
+                "source": "B",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "C -> END",
+                "source": "C",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> D",
+                "source": "RouterNode",
+                "target": "D",
+                "sourceHandle": "output_3",
+                "targetHandle": "input",
+            },
+            {
+                "id": "D -> END",
+                "source": "D",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "RouterNode",
+                "data": {
+                    "id": "RouterNode",
+                    "type": "RouterNode",
+                    "label": "Router",
+                    "params": {
+                        "prompt": "{ input }",
+                        "keyword_0": "A",
+                        "keyword_1": "b",
+                        "keyword_2": "c",
+                        "keyword_3": "d",
+                        "llm_model": "claude-3-5-sonnet-20240620",
+                        "num_outputs": "4",
+                        "llm_provider_id": provider.id,
+                    },
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "A",
+                "data": {
+                    "id": "A",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "A {{input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "B",
+                "data": {
+                    "id": "B",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "B {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "C",
+                "data": {
+                    "id": "C",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "C {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "D",
+                "data": {
+                    "id": "D",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "D {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "END",
+                "data": {
+                    "id": "END",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                },
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A a"
+    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A A"
+    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B b"
+    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "C c"
+    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "D d"
+    output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A z"
+
+
 @contextmanager
 def extract_structured_data_pipeline(provider, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)

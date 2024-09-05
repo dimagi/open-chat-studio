@@ -179,18 +179,20 @@ class RouterNode(Passthrough, LLMResponseMixin):
         chain = prompt | self.get_chat_model()
         result = chain.invoke(state["messages"][-1], config=self._config)
         keyword = result.content.lower().strip()
+
         possible_values = list(self.get_output_map().values())
         if keyword in possible_values:
             return keyword
         else:
-            return getattr(self, "keyword_0")
+            return getattr(self, "keyword_0").lower()
 
     def get_output_map(self):
         """Returns a mapping of the form:
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
         return {
-            f"output_{output_num}": getattr(self, f"keyword_{output_num}") for output_num in range(self.num_outputs)
+            f"output_{output_num}": getattr(self, f"keyword_{output_num}").lower()
+            for output_num in range(self.num_outputs)
         }
 
 
