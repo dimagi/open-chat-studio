@@ -144,19 +144,19 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
               { length: parseInt(params["num_outputs"]) || 1 },
               (_, index) => {
                 return (
-                  <>
+                  <React.Fragment key={`keywords_${index}`}>
                     <div className="m-1 font-medium text-center">
                       {`Keyword ${index + 1}`}
                     </div>
                     <textarea
                       className="textarea textarea-bordered w-full"
-                      name={`keywords`}
+                      name="keywords"
                       onChange={(e) => updateParamValue(e, true, index)}
                       value={
                         params["keywords"] ? params["keywords"][index] : ""
                       }
                     ></textarea>
-                  </>
+                  </React.Fragment>
                 );
               },
             )}
