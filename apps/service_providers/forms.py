@@ -208,3 +208,11 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     public_key = forms.CharField(label=_("Public Key"))
     secret_key = forms.CharField(label=_("Secret Key"))
     host = forms.URLField(label=_("Host"))
+
+
+class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["api_key"]
+
+    api_key = forms.CharField(label=_("API Key"))
+    api_url = forms.CharField(label=_("API URL"), initial="https://api.smith.langchain.com")
+    project = forms.URLField(label=_("Project Name"))
