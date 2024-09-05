@@ -200,6 +200,7 @@ class TopicBot:
                 session_id=str(self.session.external_id),
             )
             config = {
+                "run_name": self.experiment.name,
                 "callbacks": [callback],
                 "metadata": {
                     "participant-id": str(self.session.participant.identifier),
