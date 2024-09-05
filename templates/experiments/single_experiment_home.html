@@ -228,20 +228,20 @@
     <div role="tabpanel" class="tab-content" id="content-mysessions">
       <div class="app-card">
         <div class="overflow-x-auto">
-          <table class="pg-table">
-            <thead>
+          <table class="w-full table-fixed">
+            <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
               <tr>
-                <th>Started</th>
-                <th>Last Message</th>
-                <th>Actions</th>
+                <th class="px-3 py-3 text-left">Started</th>
+                <th class="px-3 py-3 text-left">Last Message</th>
+                <th class="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {% for session in user_sessions %}
-                <tr>
-                  <td>{{ session.created_at }}</td>
-                  <td>{{ session.last_message_created_at }}</td>
-                  <td>
+                <tr class="text-sm">
+                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
                          href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
