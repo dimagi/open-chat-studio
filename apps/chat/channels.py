@@ -534,7 +534,7 @@ class WebChannel(ChannelBase):
         session = super().start_new_session(
             working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session, experiment=experiment)
+        WebChannel.check_and_process_seed_message(session=session, experiment=experiment)
         return session
 
     @classmethod

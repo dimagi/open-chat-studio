@@ -37,4 +37,20 @@ def test_start_new_session(new_user_message, with_seed_message, experiment):
         assert message.attachments == []
 
 
-# TODO: Add more tests
+@pytest.mark.django_db()
+@patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
+def test_start_new_session_for_versioned_experiment(check_and_process_seed_message, experiment):
+    working_experiment = experiment
+    working_experiment.seed_message = "Working hard are we?"
+    working_experiment.save()
+    version = working_experiment.create_new_version()
+    version.seed_message = "Version control is nice"
+    version.save()
+
+    session = WebChannel.start_new_session(
+        version,
+        participant_identifier="jack@titanic.com",
+    )
+    assert session.experiment == working_experiment
+    experiment = check_and_process_seed_message.call_args[1]["experiment"]
+    assert experiment == version

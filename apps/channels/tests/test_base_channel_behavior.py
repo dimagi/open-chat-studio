@@ -745,3 +745,21 @@ def test_send_message_to_user_with_multibot(
         send_text_to_user.assert_called()
     else:
         send_voice_to_user.assert_called()
+
+
+@pytest.mark.django_db()
+class TestVersioning:
+    """Tests relating to versioning behaviour within the ChannelBase class"""
+
+    @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
+    @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
+    def test_new_sessions_are_linked_to_the_working_experiment(self, experiment):
+        working_version = experiment
+        channel = ExperimentChannelFactory(experiment=working_version)
+        new_version = working_version.create_new_version()
+
+        telegram = TelegramChannel(experiment=new_version, experiment_channel=channel)
+        telegram.telegram_bot = Mock()
+        telegram.new_user_message(telegram_messages.text_message())
+
+        assert telegram.experiment_session.experiment == working_version
