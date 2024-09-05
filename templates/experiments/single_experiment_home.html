@@ -5,7 +5,6 @@
 {% load form_tags %}
 {% load render_table from django_tables2 %}
 {% block breadcrumbs %}
-  {% load waffle_tags %}
 
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
@@ -257,21 +256,22 @@
         </div>
       </div>
     </div>
-
-    <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
-    <div role="tabpanel" class="tab-content" id="content-versions">
-      <div class="app-card">
-        <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' team.slug experiment.id %}">
-          <i class="fa-regular fa-plus"></i> Create Version
-        </a>
-        <div id="versions-table"
-             hx-trigger="load"
-             hx-target="this"
-             hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
-             hx-swap="innerHTML">
+    {% flag "experiment_versions" %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+      <div role="tabpanel" class="tab-content" id="content-versions">
+        <div class="app-card">
+          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' team.slug experiment.id %}">
+            <i class="fa-regular fa-plus"></i> Create Version
+          </a>
+          <div id="versions-table"
+               hx-trigger="load"
+               hx-target="this"
+               hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
+               hx-swap="innerHTML">
+          </div>
         </div>
       </div>
-    </div>
+    {% endflag %}
 
     {% flag "events" %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
