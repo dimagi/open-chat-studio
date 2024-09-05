@@ -21,7 +21,6 @@ class LangSmithTraceService(TraceService):
         from langchain.callbacks.tracers import LangChainTracer
         from langsmith import Client
 
-        # You can create a client instance with an api key and api url
         client = Client(
             api_url=self.config["api_url"],
             api_key=self.config["api_key"],
