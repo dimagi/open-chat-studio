@@ -273,6 +273,7 @@ class AgentTools(models.TextChoices):
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
+    UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
@@ -585,6 +586,7 @@ class Participant(BaseTeamModel):
                 scheduled_messages.append(
                     {
                         "name": message.name,
+                        "prompt": message.prompt_text,
                         "external_id": message.external_id,
                         "frequency": message.frequency,
                         "time_period": message.time_period,

@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
 from django.db import transaction
 from langchain.tools.base import BaseTool
@@ -8,7 +9,7 @@ from langchain.tools.base import BaseTool
 from apps.chat.agent import schemas
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.utils.time import pretty_date
 
 BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
@@ -38,7 +39,7 @@ class CustomBaseTool(BaseTool):
 
 class RecurringReminderTool(CustomBaseTool):
     name = AgentTools.RECURRING_REMINDER
-    description = "useful to schedule recurring reminders"
+    description = "Schedule recurring reminders"
     requires_session = True
     args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
 
@@ -65,7 +66,7 @@ class RecurringReminderTool(CustomBaseTool):
 
 class OneOffReminderTool(CustomBaseTool):
     name = AgentTools.ONE_OFF_REMINDER
-    description = "useful to schedule one-off reminders"
+    description = "Schedule one-off reminders"
     requires_session = True
     args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
 
@@ -81,7 +82,7 @@ class OneOffReminderTool(CustomBaseTool):
 
 class MoveScheduledMessageDateTool(CustomBaseTool):
     name = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
-    description = "useful to move the day and time that the scheduled message should trigger"
+    description = "Move the day and time that the scheduled message should trigger"
     requires_session = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
@@ -118,7 +119,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
 
 class DeleteReminderTool(CustomBaseTool):
     name = AgentTools.DELETE_REMINDER
-    description = "useful to delete reminders"
+    description = "Delete scheduled reminders"
     requires_session = True
     args_schema: type[schemas.DeleteReminderSchema] = schemas.DeleteReminderSchema
 
@@ -132,6 +133,30 @@ class DeleteReminderTool(CustomBaseTool):
             return "Could not find this reminder"
 
         scheduled_message.delete()
+        return "Success"
+
+
+class UpdateParticipantDataTool(CustomBaseTool):
+    name = AgentTools.UPDATE_PARTICIPANT_DATA
+    description = "Update user data"
+    requires_session = True
+    args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: Any):
+        try:
+            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
+                participant=self.experiment_session.participant
+            )
+            participant_data.data[key] = value
+            participant_data.save()
+        except ParticipantData.DoesNotExist:
+            ParticipantData.objects.create(
+                participant=self.experiment_session.participant,
+                content_object=self.experiment_session.experiment,
+                team=self.experiment_session.team,
+                data={key: value},
+            )
         return "Success"
 
 
@@ -184,7 +209,7 @@ def create_schedule_message(
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
             return "Experiment does not exist! Could not create scheduled message"
-    logging.exception(f"Could not create one-off reminder. Form erros: {form.errors}")
+    logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
 

@@ -2,38 +2,27 @@ from django.forms import ValidationError
 from langchain_core.prompts import PromptTemplate
 
 
-def validate_prompt_variables(form_data, prompt_key: str, known_vars: dict):
+def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
     to be used, otherwise a `ValidationError` is thrown.
     """
     prompt_text = form_data[prompt_key]
     prompt_variables = set(PromptTemplate.from_template(prompt_text).input_variables)
-    available_variables = set(["participant_data", "current_datetime"])
+    unknown = prompt_variables - known_vars
+    if unknown:
+        raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
 
-    if form_data.get("source_material"):
-        available_variables.add("source_material")
+    if not form_data.get("source_material") and "source_material" in prompt_variables:
+        raise ValidationError({prompt_key: "Prompt expects source_material but it is not provided."})
 
     if form_data.get("tools"):
-        if "current_datetime" not in prompt_variables:
-            available_variables.remove("current_datetime")
-        # if there are "tools" then current_datetime is always required
-        prompt_variables.add("current_datetime")
-
-    missing_vars = prompt_variables - available_variables
-    if missing_vars:
-        errors = []
-        unknown_vars = missing_vars - known_vars
-        if unknown_vars:
-            errors.append("Prompt contains unknown variables: " + ", ".join(unknown_vars))
-            missing_vars -= unknown_vars
+        tools_need = {"current_datetime", "participant_data"}
+        missing_vars = tools_need - prompt_variables
         if missing_vars:
-            errors.append(
-                f"Prompt expects {', '.join(missing_vars)} but it is not provided. See the help text on variable "
-                "usage."
+            raise ValidationError(
+                {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
             )
-        raise ValidationError({prompt_key: errors})
 
-    for prompt_var in ["{source_material}", "{participant_data}"]:
-        if prompt_text.count(prompt_var) > 1:
-            error_msg = f"Multiple {prompt_var} variables found in the prompt. You can only use it once"
-            raise ValidationError({prompt_key: error_msg})
+    for var in prompt_variables:
+        if prompt_text.count(f"{{{var}}}") > 1:
+            raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
