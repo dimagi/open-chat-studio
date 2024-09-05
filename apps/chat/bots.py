@@ -199,7 +199,14 @@ class TopicBot:
                 participant_id=str(self.session.participant.identifier),
                 session_id=str(self.session.external_id),
             )
-            config = {"callbacks": [callback]}
+            config = {
+                "run_name": self.experiment.name,
+                "callbacks": [callback],
+                "metadata": {
+                    "participant-id": str(self.session.participant.identifier),
+                    "session-id": str(self.session.external_id),
+                },
+            }
         return main_bot_chain.invoke(user_input, config=config)
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
