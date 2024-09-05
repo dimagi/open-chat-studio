@@ -8,7 +8,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
-from apps.experiments.models import ExperimentSession, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.service_providers.models import LlmProvider
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
@@ -17,14 +17,15 @@ from apps.utils.taskbadger import update_taskbadger_data
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
-    self, experiment_session_id: int, message_text: str, attachments: list | None = None
+    self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
 ) -> str:
+    # experiment_id is the id of the experiment that was chosen to be chatted to
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
         id=experiment_session_id
     )
     web_channel = WebChannel(
-        experiment_session.experiment,
-        experiment_session.experiment_channel,
+        experiment=Experiment.objects.get(id=experiment_id),
+        experiment_channel=experiment_session.experiment_channel,
         experiment_session=experiment_session,
     )
     message_attachments = []

@@ -1,7 +1,7 @@
 {% extends 'account/email/email_template_base.html' %}
 {% load i18n %}
 {% block message_body %}
-  You've been invited to participate in a Dimagi ChatBot experiment called  {{ session.experiment }}.
+  You've been invited to participate in a Dimagi ChatBot experiment called  {{ experiment.name }}.
 {% endblock %}
-{% block cta_link %}{{ session.get_invite_url }}{% endblock %}
+{% block cta_link %}{{ invite_url }}{% endblock %}
 {% block cta_text %}{% translate "Start Experiment" %}{% endblock %}

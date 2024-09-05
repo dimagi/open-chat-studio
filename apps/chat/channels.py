@@ -466,7 +466,7 @@ class ChannelBase(ABC):
         session.
         """
         self.experiment_session = self.start_new_session(
-            experiment=self.experiment.get_working_version(),
+            experiment=self.experiment,
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
             participant_user=self.participant_user,
@@ -529,20 +529,21 @@ class WebChannel(ChannelBase):
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        working_experiment = experiment.get_working_version()
+        experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
-            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+            working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session)
+        WebChannel.check_and_process_seed_message(session, experiment=experiment)
         return session
 
     @classmethod
-    def check_and_process_seed_message(cls, session: ExperimentSession):
+    def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
         from apps.experiments.tasks import get_response_for_webchat_task
 
-        if seed_message := session.experiment.seed_message:
+        if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=seed_message, attachments=[]
+                experiment_session_id=session.id, experiment_id=experiment.id, message_text=seed_message, attachments=[]
             ).task_id
             session.save()
         return session
@@ -775,7 +776,7 @@ def _start_experiment_session(
 
         session = ExperimentSession.objects.create(
             team=experiment.team,
-            experiment=experiment,
+            experiment=experiment.get_working_version(),
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,

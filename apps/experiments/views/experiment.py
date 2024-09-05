@@ -749,7 +749,12 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
-    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
+    result = get_response_for_webchat_task.delay(
+        experiment_session_id=session.id,
+        experiment_id=experiment.id,
+        message_text=message_text,
+        attachments=attachments,
+    )
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
@@ -844,7 +849,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
             )
-            return _record_consent_and_redirect(request, team_slug, session)
+            return _record_consent_and_redirect(request, team_slug, session, experiment=experiment)
 
     else:
         form = ConsentForm(
@@ -882,7 +887,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
         if post_form.is_valid():
             if ExperimentSession.objects.filter(
                 team=request.team,
-                experiment=experiment,
+                experiment=experiment.get_working_version(),
                 status__in=["setup", "pending"],
                 participant__identifier=post_form.cleaned_data["email"],
             ).exists():
@@ -897,7 +902,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
                         timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
+                    send_experiment_invitation(session, experiment=experiment)
         else:
             form = post_form
 
@@ -931,7 +936,7 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
-    send_experiment_invitation(session)
+    send_experiment_invitation(session, experiment=experiment)
     return TemplateResponse(
         request,
         "experiments/manage/invite_row.html",
@@ -939,10 +944,12 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
     )
 
 
-def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
+def _record_consent_and_redirect(
+    request, team_slug: str, experiment_session: ExperimentSession, experiment: Experiment
+):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment.pre_survey:
+    if experiment.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
         redirct_url_name = "experiments:experiment_pre_survey"
     else:
@@ -952,7 +959,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
     response = HttpResponseRedirect(
         reverse(
             redirct_url_name,
-            args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
+            args=[team_slug, experiment.public_id, experiment_session.external_id],
         )
     )
     return set_session_access_cookie(response, experiment_session)
@@ -961,7 +968,9 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
+    experiment_session = get_object_or_404(
+        ExperimentSession, experiment=experiment.get_working_version(), external_id=session_id
+    )
     consent = experiment.consent_form
 
     initial = {
@@ -976,8 +985,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            WebChannel.check_and_process_seed_message(experiment_session)
-            return _record_consent_and_redirect(request, team_slug, experiment_session)
+            return _record_consent_and_redirect(request, team_slug, experiment_session, experiment=experiment)
 
     else:
         form = ConsentForm(consent, initial=initial)

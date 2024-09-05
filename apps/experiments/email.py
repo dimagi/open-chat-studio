@@ -3,15 +3,17 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 
 
-def send_experiment_invitation(experiment_session: ExperimentSession):
+def send_experiment_invitation(experiment_session: ExperimentSession, experiment: Experiment):
     if not experiment_session.participant:
         raise Exception("Session has no participant!")
 
     email_context = {
         "session": experiment_session,
+        "experiment": experiment,
+        "invite_url": experiment_session.get_invite_url(experiment),
     }
     send_mail(
         subject=_("You're invited to {}!").format(experiment_session.experiment.name),

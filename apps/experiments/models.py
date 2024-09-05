@@ -525,6 +525,12 @@ class Experiment(BaseTeamModel):
             return None
         return f"v{self.version_number}"
 
+    def get_working_version(self) -> "Experiment":
+        """Returns the working version of this experiment family"""
+        if self.is_working_version:
+            return self
+        return self.working_version
+
     def get_chat_model(self):
         service = self.get_llm_service()
         return service.get_chat_model(self.llm, self.temperature)
@@ -862,11 +868,11 @@ class ExperimentSession(BaseTeamModel):
         else:
             return "Anonymous"
 
-    def get_invite_url(self) -> str:
+    def get_invite_url(self, experiment: Experiment) -> str:
         return absolute_url(
             reverse(
                 "experiments:start_session_from_invite",
-                args=[self.team.slug, self.experiment.public_id, self.external_id],
+                args=[self.team.slug, experiment.public_id, self.external_id],
             )
         )
 
@@ -890,7 +896,7 @@ class ExperimentSession(BaseTeamModel):
 
         if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
             return False
-        return self.experiment_channel.experiment != self.experiment
+        return self.experiment_channel.experiment != self.working_experiment
 
     def is_complete(self):
         return self.status == SessionStatus.COMPLETE
@@ -1007,6 +1013,16 @@ class ExperimentSession(BaseTeamModel):
             return self.experiment.participant_data.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
+
+    @cached_property
+    def experiment_version(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return Experiment.objects.get_default_or_working(self.experiment)
+
+    @cached_property
+    def working_experiment(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return self.experiment.get_working_version()
 
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment

@@ -24,8 +24,9 @@ def experiment_session_view(allowed_states=None):
         @wraps(view_func)
         def decorated_view(request, team_slug: str, experiment_id: str, session_id: str):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+            working_experiment = request.experiment.get_working_version()
             request.experiment_session = get_object_or_404(
-                ExperimentSession, experiment=request.experiment, external_id=session_id, team=request.team
+                ExperimentSession, experiment=working_experiment, external_id=session_id, team=request.team
             )
 
             if allowed_states and request.experiment_session.status not in allowed_states:
