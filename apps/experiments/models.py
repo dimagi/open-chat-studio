@@ -42,18 +42,11 @@ class ExperimentObjectManager(AuditingManager):
         """
         if family_member.is_default_version:
             return family_member
-        elif working_experiment := family_member.working_version:
-            # family_member is some other version of working_version
-            working_version = working_experiment
-        else:
-            # family_member is the working_version
-            working_version = family_member
 
-        experiment = (
-            self.get_queryset()
-            .filter(working_version=working_version, is_default_version=True, team=family_member.team)
-            .first()
-        )
+        working_version_id = family_member.working_version_id or family_member.id
+        experiment = self.filter(
+            working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
+        ).first()
         return experiment if experiment else family_member
 
     def working_versions_queryset(self):
@@ -91,7 +84,7 @@ class PromptBuilderHistory(BaseTeamModel):
 
 class VersionsMixin:
     @transaction.atomic()
-    def create_new_version(self, new_version=None, save=True):
+    def create_new_version(self, save=True):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID
@@ -107,6 +100,21 @@ class VersionsMixin:
         if save:
             new_instance.save()
         return new_instance
+
+    @property
+    def is_versioned(self):
+        """Return whether or not this experiment is a versioned experiment"""
+        return self.working_version is not None
+
+    @property
+    def is_working_version(self):
+        return self.working_version is None
+
+    def get_working_version(self) -> "Experiment":
+        """Returns the working version of this experiment family"""
+        if self.is_working_version:
+            return self
+        return self.working_version
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -335,7 +343,7 @@ class AgentTools(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel):
+class Experiment(BaseTeamModel, VersionsMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -507,15 +515,6 @@ class Experiment(BaseTeamModel):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
     @property
-    def is_versioned(self):
-        """Return whether or not this experiment is a versioned experiment"""
-        return self.working_version is not None
-
-    @property
-    def is_working_version(self):
-        return self.working_version is None
-
-    @property
     def has_versions(self):
         return self.versions.count() > 0
 
@@ -524,12 +523,6 @@ class Experiment(BaseTeamModel):
         if self.is_working_version:
             return None
         return f"v{self.version_number}"
-
-    def get_working_version(self) -> "Experiment":
-        """Returns the working version of this experiment family"""
-        if self.is_working_version:
-            return self
-        return self.working_version
 
     def get_chat_model(self):
         service = self.get_llm_service()
@@ -552,15 +545,10 @@ class Experiment(BaseTeamModel):
         version_number = self.version_number
         self.version_number = version_number + 1
         self.save()
-        working_version_id = self.id
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
-        new_version = Experiment.objects.get(id=working_version_id)
-        new_version._state.adding = True
-        new_version.pk = None
-        new_version.id = None
-        new_version.working_version_id = working_version_id
+        new_version = super().create_new_version(save=False)
         new_version.public_id = uuid4()
         new_version.version_number = version_number
         if self.source_material:
@@ -645,7 +633,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
-        new_instance = super().create_new_version(new_version=new_parent, save=False)
+        new_instance = super().create_new_version(save=False)
         new_instance.parent = new_parent
 
         if not new_instance.child.is_versioned:
