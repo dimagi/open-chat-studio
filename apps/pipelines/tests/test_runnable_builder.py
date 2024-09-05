@@ -560,10 +560,7 @@ def test_router_node(get_llm_service, provider, pipeline, experiment_session):
                     "label": "Router",
                     "params": {
                         "prompt": "{ input }",
-                        "keyword_0": "A",
-                        "keyword_1": "b",
-                        "keyword_2": "c",
-                        "keyword_3": "d",
+                        "keywords": ["A", "b", "c", "d"],
                         "llm_model": "claude-3-5-sonnet-20240620",
                         "num_outputs": "4",
                         "llm_provider_id": provider.id,

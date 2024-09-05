@@ -16,6 +16,7 @@ from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
+    Keywords,
     LlmModel,
     LlmProviderId,
     LlmTemperature,
@@ -165,35 +166,28 @@ class BooleanNode(Passthrough):
 
 
 class RouterNode(Passthrough, LLMResponseMixin):
-    class Config:
-        extra = "allow"
-
     __human_name__ = "Router"
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     prompt: str = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
+    keywords: Keywords = []
 
     def process_conditional(self, state: PipelineState):
         prompt = PromptTemplate.from_template(template=self.prompt)
         chain = prompt | self.get_chat_model()
         result = chain.invoke(state["messages"][-1], config=self._config)
         keyword = result.content.lower().strip()
-
-        possible_values = list(self.get_output_map().values())
-        if keyword in possible_values:
-            return keyword
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
         else:
-            return getattr(self, "keyword_0").lower()
+            return self.keywords[0].lower()
 
     def get_output_map(self):
         """Returns a mapping of the form:
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
-        return {
-            f"output_{output_num}": getattr(self, f"keyword_{output_num}").lower()
-            for output_num in range(self.num_outputs)
-        }
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
 
 
 class ExtractStructuredDataNodeMixin:
