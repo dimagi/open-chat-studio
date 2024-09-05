@@ -196,17 +196,26 @@
                 hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
                 hx-swap="innerHTML"
               >
-                {% if perms.annotations.view_customtaggeditem %}
-                  <div class="w-96 my-2">
-                    <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple placeholder="Filter tags..."
-                            autocomplete="off">
-                      <option value="">Filter tags...</option>
-                      {% for tag in available_tags %}
-                        <option value="{{ tag.name }}">{{ tag.name }}</option>
-                      {% endfor %}
-                    </select>
+                <div class="flex">
+                  {% if perms.annotations.view_customtaggeditem %}
+                    <div class="w-96 my-2">
+                      <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
+                              placeholder="Filter tags..."
+                              autocomplete="off">
+                        <option value="">Filter tags...</option>
+                        {% for tag in available_tags %}
+                          <option value="{{ tag.name }}">{{ tag.name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                  {% endif %}
+                  <div class="form-control ml-2">
+                    <label class="label cursor-pointer">
+                      <span class="label-text mr-2">Include API Sessions</span>
+                      <input type="checkbox" name="show-all" class="toggle" checked="0"/>
+                    </label>
                   </div>
-                {% endif %}
+                </div>
               </form>
             </div>
           </div>
