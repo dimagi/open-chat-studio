@@ -1027,6 +1027,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
             "form": form,
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
+            "survey_link": request.experiment_session.get_pre_survey_link(request.experiment),
         },
     )
 
@@ -1071,7 +1072,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
         )
     elif request.experiment.post_survey:
         form = SurveyCompletedForm()
-        survey_link = request.experiment_session.get_post_survey_link()
+        survey_link = request.experiment_session.get_post_survey_link(request.experiment)
         survey_text = request.experiment.post_survey.confirmation_text.format(survey_link=survey_link)
 
     return TemplateResponse(

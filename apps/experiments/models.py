@@ -882,11 +882,11 @@ class ExperimentSession(BaseTeamModel):
     def get_platform_name(self) -> str:
         return self.experiment_channel.get_platform_display()
 
-    def get_pre_survey_link(self):
-        return self.experiment.pre_survey.get_link(self.participant, self)
+    def get_pre_survey_link(self, experiment: Experiment):
+        return experiment.pre_survey.get_link(self.participant, self)
 
-    def get_post_survey_link(self):
-        return self.experiment.post_survey.get_link(self.participant, self)
+    def get_post_survey_link(self, experiment: Experiment):
+        return experiment.post_survey.get_link(self.participant, self)
 
     def is_stale(self) -> bool:
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
