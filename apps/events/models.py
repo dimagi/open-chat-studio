@@ -12,7 +12,7 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
@@ -40,7 +40,7 @@ class EventActionType(models.TextChoices):
     PIPELINE_START = ("pipeline_start", "Start a pipeline")
 
 
-class EventAction(BaseModel):
+class EventAction(BaseModel, VersionsMixin):
     action_type = models.CharField(choices=EventActionType.choices)
     params = models.JSONField(blank=True, default=dict)
 
@@ -90,11 +90,18 @@ class StaticTriggerType(models.TextChoices):
     PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
-class StaticTrigger(BaseModel):
+class StaticTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
     event_logs = GenericRelation(EventLog)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
 
     @property
     def trigger_type(self):
@@ -115,8 +122,17 @@ class StaticTrigger(BaseModel):
         self.action.delete(*args, **kwargs)
         return result
 
+    @transaction.atomic()
+    def create_new_version(self, new_experiment: Experiment):
+        """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
+        new_instance = super().create_new_version(save=False)
+        new_instance.experiment = new_experiment
+        new_instance.action = new_instance.action.create_new_version()
+        new_instance.save()
+        return new_instance
 
-class TimeoutTrigger(BaseModel):
+
+class TimeoutTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
@@ -127,6 +143,22 @@ class TimeoutTrigger(BaseModel):
         help_text="The number of times to trigger the action",
     )
     event_logs = GenericRelation(EventLog)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+
+    @transaction.atomic()
+    def create_new_version(self, new_experiment: Experiment):
+        """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
+        new_instance = super().create_new_version(save=False)
+        new_instance.experiment = new_experiment
+        new_instance.action = new_instance.action.create_new_version()
+        new_instance.save()
+        return new_instance
 
     @property
     def trigger_type(self):
