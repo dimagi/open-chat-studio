@@ -943,16 +943,16 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment.pre_survey:
+    if experiment_session.experiment_version.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
-        redirct_url_name = "experiments:experiment_pre_survey"
+        redirect_url_name = "experiments:experiment_pre_survey"
     else:
         experiment_session.status = SessionStatus.ACTIVE
-        redirct_url_name = "experiments:experiment_chat"
+        redirect_url_name = "experiments:experiment_chat"
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
-            redirct_url_name,
+            redirect_url_name,
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
@@ -963,10 +963,11 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
-    consent = experiment.consent_form
+    experiment_version = experiment_session.experiment_version
+    consent = experiment_version.consent_form
 
     initial = {
-        "experiment_id": experiment.id,
+        "experiment_id": experiment_version.id,
     }
     if not experiment_session.participant:
         raise Http404()
@@ -977,7 +978,6 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            WebChannel.check_and_process_seed_message(experiment_session)
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:

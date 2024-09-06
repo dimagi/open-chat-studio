@@ -551,9 +551,9 @@ class WebChannel(ChannelBase):
     def check_and_process_seed_message(cls, session: ExperimentSession):
         from apps.experiments.tasks import get_response_for_webchat_task
 
-        if session.experiment.seed_message:
+        if seed_message := session.experiment_version.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=session.experiment.seed_message, attachments=[]
+                session.id, message_text=seed_message, attachments=[]
             ).task_id
             session.save()
         return session

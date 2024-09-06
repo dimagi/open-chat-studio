@@ -14,7 +14,7 @@ def send_experiment_invitation(experiment_session: ExperimentSession):
         "session": experiment_session,
     }
     send_mail(
-        subject=_("You're invited to {}!").format(experiment_session.experiment.name),
+        subject=_("You're invited to {}!").format(experiment_session.experiment_version.name),
         message=render_to_string("experiments/email/invitation.txt", context=email_context),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[experiment_session.participant.email],
