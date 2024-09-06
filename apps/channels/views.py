@@ -96,9 +96,12 @@ def new_api_message(request, experiment_id: uuid):
     session = None
     if session_id := message_data.get("session"):
         try:
+            # TODO: Support ability to select a specific version
+            experiment = Experiment.objects.get(public_id=experiment_id)
+            working_version_id = experiment.get_working_version_id()
             session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
-                experiment__public_id=experiment_id,
+                experiment__id=working_version_id,
                 team=request.team,
                 participant__user=request.user,
                 experiment_channel__platform=ChannelPlatform.API,
@@ -115,7 +118,7 @@ def new_api_message(request, experiment_id: uuid):
 
     response = tasks.handle_api_message(
         request.user,
-        experiment,
+        experiment.default_version,
         experiment_channel,
         message_data["message"],
         participant_id,

@@ -460,7 +460,7 @@ class ChannelBase(ABC):
     def _get_latest_session(self):
         return (
             ExperimentSession.objects.filter(
-                experiment=self.experiment,
+                experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
             .order_by("-created_at")
