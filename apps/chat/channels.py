@@ -544,14 +544,14 @@ class WebChannel(ChannelBase):
         session = super().start_new_session(
             experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session)
+        WebChannel.check_and_process_seed_message(session, experiment)
         return session
 
     @classmethod
-    def check_and_process_seed_message(cls, session: ExperimentSession):
+    def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
         from apps.experiments.tasks import get_response_for_webchat_task
 
-        if seed_message := session.experiment_version.seed_message:
+        if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
                 session.id, message_text=seed_message, attachments=[]
             ).task_id
@@ -786,7 +786,7 @@ def _start_experiment_session(
 
         session = ExperimentSession.objects.create(
             team=experiment.team,
-            experiment=experiment,
+            experiment=experiment.get_working_version(),
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,

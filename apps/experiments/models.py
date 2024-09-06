@@ -115,6 +115,14 @@ class VersionsMixin:
             return self
         return self.working_version
 
+    def get_working_version_id(self) -> int:
+        return self.working_version_id if self.working_version_id else self.id
+
+    @cached_property
+    def default_version(self) -> "Experiment":
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return Experiment.objects.get_default_or_working(self)
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
