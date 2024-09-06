@@ -61,10 +61,11 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     slack_user = event.get("user")
 
+    experiment_version = experiment_channel.experiment.default_version
     if not session:
         external_id = make_session_external_id(channel_id, thread_ts)
         session = SlackChannel.start_new_session(
-            experiment_channel.experiment, experiment_channel, slack_user, session_external_id=external_id
+            experiment_version, experiment_channel, slack_user, session_external_id=external_id
         )
 
     # strip out the mention
@@ -75,7 +76,7 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
     # it here using the already authenticated client.
-    ocs_channel = SlackChannel(experiment_channel.experiment, experiment_channel, session, send_response_to_user=False)
+    ocs_channel = SlackChannel(experiment_version, experiment_channel, session, send_response_to_user=False)
     response = ocs_channel.new_user_message(message)
     context.say(response, thread_ts=thread_ts)
 
