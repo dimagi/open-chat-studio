@@ -67,11 +67,26 @@ class SurveyAdmin(admin.ModelAdmin):
 
 @admin.register(models.Experiment)
 class ExperimentAdmin(admin.ModelAdmin):
-    list_display = ("name", "team", "owner", "source_material", "llm", "llm_provider")
+    list_display = (
+        "name",
+        "team",
+        "owner",
+        "source_material",
+        "llm",
+        "llm_provider",
+        "version_family",
+        "version_number",
+    )
     list_filter = ("team", "owner", "source_material")
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
+
+    @admin.display(description="Version Family")
+    def version_family(self, obj):
+        if obj.working_version:
+            return obj.working_version.name
+        return obj.name
 
 
 @admin.register(models.ExperimentRoute)
