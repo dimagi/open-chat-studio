@@ -616,7 +616,13 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
-        """Returns a list of experiments: that are not parents, and are not children of the current experiment"""
+        """
+        Returns a list of experiments that fit the following criteria:
+        - They are not the same as the parent
+        - they are not parents
+        - they are ot not children of the current experiment
+        - they are not part of the current experiment's version family
+        """
         parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
 
         if parent:
@@ -626,6 +632,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
                 .exclude(id__in=child_ids)
                 .exclude(id__in=parent_ids)
                 .exclude(id=parent.id)
+                .exclude(id__in=parent.versions.all())
             )
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
