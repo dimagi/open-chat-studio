@@ -30,7 +30,7 @@ class SafetyLayerTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return SafetyLayer.objects.filter(team=self.request.team)
+        return SafetyLayer.objects.filter(team=self.request.team).exclude(working_version__isnull=False)
 
 
 class CreateSafetyLayer(CreateView):
