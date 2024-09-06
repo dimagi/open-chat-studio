@@ -201,7 +201,8 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
 
     if not context["new_lines"]:
         log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
-        return summary
+        # If the summary is too large, discard it and compute a new summary from the pruned memory
+        return _get_new_summary(llm, next_batch, None, max_token_limit)
 
     chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
     summary = chain.invoke(context)["text"]

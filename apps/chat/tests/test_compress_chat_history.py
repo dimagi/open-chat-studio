@@ -181,9 +181,10 @@ def test_get_new_summary_with_large_summary(caplog):
     pruned_memory = [HumanMessage(f"Hello {i}") for i in range(2)]
 
     prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
-    llm.max_token_limit = prompt_tokens + 5  # set below what we expect when generating the summary
+    llm.max_token_limit = prompt_tokens + 10  # set below what we expect when generating the summary
 
     summary = "Summary " * 20
     new_summary = _get_new_summary(llm, pruned_memory, summary, llm.max_token_limit)
-    assert new_summary == summary
+    assert new_summary == "Summary"
+    assert len(llm.get_calls()) == 1
     assert caplog.record_tuples == [("ocs.bots", logging.ERROR, SUMMARY_TOO_LARGE_ERROR_MESSAGE)]
