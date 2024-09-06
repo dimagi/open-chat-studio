@@ -1,3 +1,4 @@
+import logging
 import re
 from unittest import mock
 
@@ -5,7 +6,12 @@ import pytest
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from apps.chat.conversation import _get_new_summary, _get_summary_tokens_with_context, compress_chat_history
+from apps.chat.conversation import (
+    SUMMARY_TOO_LARGE_ERROR_MESSAGE,
+    _get_new_summary,
+    _get_summary_tokens_with_context,
+    compress_chat_history,
+)
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.utils.langchain import FakeLlm
 
@@ -167,3 +173,17 @@ def test_get_new_summary_with_large_history():
         ["8", "9", "10", "11", "12", "13", "14", "15"],
         ["16", "17", "18", "19"],
     ]
+
+
+def test_get_new_summary_with_large_summary(caplog):
+    llm = FakeLlmSimpleTokenCount(responses=["Summary"])
+
+    pruned_memory = [HumanMessage(f"Hello {i}") for i in range(2)]
+
+    prompt_tokens, _ = _get_summary_tokens_with_context(llm, None, [])
+    llm.max_token_limit = prompt_tokens + 5  # set below what we expect when generating the summary
+
+    summary = "Summary " * 20
+    new_summary = _get_new_summary(llm, pruned_memory, summary, llm.max_token_limit)
+    assert new_summary == summary
+    assert caplog.record_tuples == [("ocs.bots", logging.ERROR, SUMMARY_TOO_LARGE_ERROR_MESSAGE)]
