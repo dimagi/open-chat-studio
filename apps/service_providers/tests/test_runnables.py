@@ -6,6 +6,7 @@ import freezegun
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
@@ -76,6 +77,19 @@ def test_runnable(runnable, session, fake_llm_service):
         assert "tools" in fake_llm_service.llm.get_calls()[0].kwargs
     else:
         assert "tools" not in fake_llm_service.llm.get_calls()[0].kwargs
+
+
+@pytest.mark.django_db()
+@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
+def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_llm_service):
+    experiment_version = session.experiment.create_new_version()
+    experiment_version.get_llm_service = lambda: fake_llm_service
+    chain = runnable.build(state=ChatExperimentState(experiment_version, session))
+    chain.invoke("hi")
+    ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
+    tag = ai_message.tags.first()
+    assert tag.name == "v1"
+    assert tag.category == TagCategories.EXPERIMENT_VERSION
 
 
 @pytest.mark.django_db()
