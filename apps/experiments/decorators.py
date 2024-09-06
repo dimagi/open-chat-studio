@@ -103,19 +103,20 @@ def _validate_access_cookie_data(experiment_session, access_data):
 
 def _redirect_for_state(request, team_slug):
     view_args = [team_slug, request.experiment.public_id, request.experiment_session.external_id]
-    # TODO: Refactor using case match
-    if request.experiment_session.status in [SessionStatus.SETUP, SessionStatus.PENDING]:
-        return HttpResponseRedirect(reverse("experiments:start_session_from_invite", args=view_args))
-    elif request.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:
-        return HttpResponseRedirect(reverse("experiments:experiment_pre_survey", args=view_args))
-    elif request.experiment_session.status == SessionStatus.ACTIVE:
-        return HttpResponseRedirect(reverse("experiments:experiment_chat", args=view_args))
-    elif request.experiment_session.status == SessionStatus.PENDING_REVIEW:
-        return HttpResponseRedirect(reverse("experiments:experiment_review", args=view_args))
-    elif request.experiment_session.status == SessionStatus.COMPLETE:
-        return HttpResponseRedirect(reverse("experiments:experiment_complete", args=view_args))
-    else:
-        messages.info(
-            request, "Session was in an unknown/unexpected state." " It may be old, or something may have gone wrong."
-        )
-        return HttpResponseRedirect(reverse("experiments:experiment_session_view", args=view_args))
+    match request.experiment_session.status:
+        case SessionStatus.SETUP | SessionStatus.PENDING:
+            return HttpResponseRedirect(reverse("experiments:start_session_from_invite", args=view_args))
+        case SessionStatus.PENDING_PRE_SURVEY:
+            return HttpResponseRedirect(reverse("experiments:experiment_pre_survey", args=view_args))
+        case SessionStatus.ACTIVE:
+            return HttpResponseRedirect(reverse("experiments:experiment_chat", args=view_args))
+        case SessionStatus.PENDING_REVIEW:
+            return HttpResponseRedirect(reverse("experiments:experiment_review", args=view_args))
+        case SessionStatus.COMPLETE:
+            return HttpResponseRedirect(reverse("experiments:experiment_complete", args=view_args))
+        case _:
+            messages.info(
+                request,
+                "Session was in an unknown/unexpected state." " It may be old, or something may have gone wrong.",
+            )
+            return HttpResponseRedirect(reverse("experiments:experiment_session_view", args=view_args))
