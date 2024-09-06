@@ -1,8 +1,8 @@
-import json
 import logging
 import uuid
 from datetime import datetime
 from functools import cached_property
+from uuid import uuid4
 
 import markdown
 import pytz
@@ -34,7 +34,23 @@ class PromptObjectManager(AuditingManager):
 
 
 class ExperimentObjectManager(AuditingManager):
-    pass
+    def get_default_or_working(self, family_member: "Experiment"):
+        """
+        Returns the default version of the family of experiments relating to `family_member` or if there is no default,
+        the working experiment.
+        """
+        if family_member.is_default_version:
+            return family_member
+
+        working_version_id = family_member.working_version_id or family_member.id
+        experiment = self.filter(
+            working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
+        ).first()
+        return experiment if experiment else family_member
+
+    def working_versions_queryset(self):
+        """Returns a queryset for all working experiments"""
+        return self.get_queryset().filter(working_version=None)
 
 
 class SourceMaterialObjectManager(AuditingManager):
@@ -65,17 +81,59 @@ class PromptBuilderHistory(BaseTeamModel):
         return str(self.history)
 
 
+class VersionsMixin:
+    @transaction.atomic()
+    def create_new_version(self, save=True):
+        """
+        Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
+        original instance ID
+        """
+        working_version_id = self.id
+        new_instance = self._meta.model.objects.get(id=working_version_id)
+        new_instance.pk = None
+        new_instance.id = None
+        new_instance._state.adding = True
+        if hasattr(new_instance, "working_version_id"):
+            new_instance.working_version_id = working_version_id
+
+        if save:
+            new_instance.save()
+        return new_instance
+
+    @property
+    def is_versioned(self):
+        """Return whether or not this experiment is a versioned experiment"""
+        return self.working_version is not None
+
+    @property
+    def is_working_version(self):
+        return self.working_version is None
+
+    def get_working_version(self) -> "Experiment":
+        """Returns the working version of this experiment family"""
+        if self.is_working_version:
+            return self
+        return self.working_version
+
+
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
-class SourceMaterial(BaseTeamModel):
+class SourceMaterial(BaseTeamModel, VersionsMixin):
     """
     Some Source Material on a particular topic.
     """
 
-    objects = SourceMaterialObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    objects = SourceMaterialObjectManager()
 
     class Meta:
         ordering = ["topic"]
@@ -88,8 +146,7 @@ class SourceMaterial(BaseTeamModel):
 
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
-class SafetyLayer(BaseTeamModel):
-    objects = SafetyLayerObjectManager()
+class SafetyLayer(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
@@ -108,6 +165,14 @@ class SafetyLayer(BaseTeamModel):
         default="",
         help_text="If specified, the message that will be sent to the bot instead of the filtered message.",
     )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    objects = SafetyLayerObjectManager()
 
     def __str__(self):
         return self.name
@@ -274,16 +339,16 @@ class AgentTools(models.TextChoices):
     ONE_OFF_REMINDER = "one-off-reminder", gettext("One-off Reminder")
     DELETE_REMINDER = "delete-reminder", gettext("Delete Reminder")
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
+    UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel):
+class Experiment(BaseTeamModel, VersionsMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
     """
 
-    objects = ExperimentObjectManager()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -315,9 +380,6 @@ class Experiment(BaseTeamModel):
         "E.g. 'Safe or unsafe? {input}'",
     )
     safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
-    is_active = models.BooleanField(
-        default=True, help_text="If unchecked, this experiment will be hidden from everyone besides the owner."
-    )
 
     source_material = models.ForeignKey(
         SourceMaterial,
@@ -395,6 +457,20 @@ class Experiment(BaseTeamModel):
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
     use_processor_bot_voice = models.BooleanField(default=False)
+    participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+
+    # Versioning fields
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    version_number = models.PositiveIntegerField(default=1)
+    is_default_version = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+    objects = ExperimentObjectManager()
 
     class Meta:
         ordering = ["name"]
@@ -402,9 +478,31 @@ class Experiment(BaseTeamModel):
             ("invite_participants", "Invite experiment participants"),
             ("download_chats", "Download experiment chats"),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_default_version", "working_version"],
+                condition=Q(is_default_version=True),
+                name="unique_default_version_per_experiment",
+            ),
+            models.UniqueConstraint(
+                fields=["version_number", "working_version"],
+                condition=Q(working_version__isnull=False),
+                name="unique_version_number_per_experiment",
+            ),
+        ]
 
     def __str__(self):
-        return self.name
+        if self.working_version is None:
+            return self.name
+        return f"{self.name} ({self.version_display})"
+
+    def save(self, *args, **kwargs):
+        if self.working_version is None and self.is_default_version is True:
+            raise ValueError("A working experiment cannot be a default version")
+        return super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     @property
     def tools_enabled(self):
@@ -413,6 +511,16 @@ class Experiment(BaseTeamModel):
     @property
     def event_triggers(self):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
+
+    @property
+    def has_versions(self):
+        return self.versions.count() > 0
+
+    @property
+    def version_display(self) -> str:
+        if self.is_working_version:
+            return ""
+        return f"v{self.version_number}"
 
     def get_chat_model(self):
         service = self.get_llm_service()
@@ -427,8 +535,66 @@ class Experiment(BaseTeamModel):
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
-    def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+    @transaction.atomic()
+    def create_new_version(self):
+        """
+        Creates a copy of an experiment as a new version of the original experiment.
+        """
+        version_number = self.version_number
+        self.version_number = version_number + 1
+        self.save()
+
+        # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
+        # why simply chaing the pk, id and _state.adding wasn't enough.
+        new_version = super().create_new_version(save=False)
+        new_version.public_id = uuid4()
+        new_version.version_number = version_number
+        if self.source_material:
+            new_version.source_material = self.source_material.create_new_version()
+
+        if new_version.version_number == 1:
+            new_version.is_default_version = True
+        new_version.save()
+
+        self.copy_safety_layers_to_new_version(new_version)
+        self.copy_routes_to_new_version(new_version)
+        self.copy_static_triggers_to_new_version(new_version)
+        self.copy_timeout_triggers_to_new_version(new_version)
+
+        new_version.files.set(self.files.all())
+        return new_version
+
+    def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
+        duplicated_layers = []
+        for layer in self.safety_layers.all():
+            duplicated_layers.append(layer.create_new_version())
+        new_version.safety_layers.set(duplicated_layers)
+
+    def copy_routes_to_new_version(self, new_version: "Experiment"):
+        """
+        This copies the experiment routes where this experiment is the parent and sets the new parent to the new
+        version.
+        """
+        for route in self.child_links.all():
+            route.create_new_version(new_version)
+
+    def copy_static_triggers_to_new_version(self, new_version: "Experiment"):
+        for static_trigger in self.static_triggers.all():
+            static_trigger.create_new_version(new_experiment=new_version)
+
+    def copy_timeout_triggers_to_new_version(self, new_version: "Experiment"):
+        for timeout_trigger in self.timeout_triggers.all():
+            timeout_trigger.create_new_version(new_experiment=new_version)
+
+    @property
+    def is_public(self) -> bool:
+        """
+        Whether or not a bot is public depends on the `participant_allowlist`. If it's empty, the bot is public.
+        """
+        return len(self.participant_allowlist) == 0
+
+    def is_participant_allowed(self, identifier: str):
+        return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -436,7 +602,7 @@ class ExperimentRouteType(models.TextChoices):
     TERMINAL = "terminal"
 
 
-class ExperimentRoute(BaseTeamModel):
+class ExperimentRoute(BaseTeamModel, VersionsMixin):
     """
     Through model for Experiment.children routes.
     """
@@ -465,6 +631,18 @@ class ExperimentRoute(BaseTeamModel):
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
 
         return eligible_experiments
+
+    @transaction.atomic()
+    def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
+        new_instance = super().create_new_version(save=False)
+        new_instance.parent = new_parent
+
+        if not new_instance.child.is_versioned:
+            # TODO: The user must be notified and give consent to us doing this. Ignore for now
+            new_instance.child = new_instance.child.create_new_version()
+
+        new_instance.save()
+        return new_instance
 
     class Meta:
         unique_together = (
@@ -543,6 +721,56 @@ class Participant(BaseTeamModel):
             return self.data_set.get(bots=experiment).data
         except ParticipantData.DoesNotExist:
             return {}
+
+    def get_schedules_for_experiment(self, experiment, as_dict=False, as_timezone: str | None = None):
+        """
+        Returns all scheduled messages for the associated participant for this session's experiment as well as
+        any child experiments in the case where the experiment is a parent
+
+        Parameters:
+        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
+        timezone: The timezone to use for the dates. Defaults to the active timezone.
+        """
+        from apps.events.models import ScheduledMessage
+
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=experiment).values("child")
+        messages = (
+            ScheduledMessage.objects.filter(
+                Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+                participant=self,
+                team=self.team,
+            )
+            .select_related("action")
+            .order_by("created_at")
+        )
+
+        scheduled_messages = []
+        for message in messages:
+            if as_dict:
+                next_trigger_date = message.next_trigger_date
+                last_triggered_at = message.last_triggered_at
+                if as_timezone:
+                    next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
+                    if last_triggered_at:
+                        last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+                scheduled_messages.append(
+                    {
+                        "name": message.name,
+                        "prompt": message.prompt_text,
+                        "external_id": message.external_id,
+                        "frequency": message.frequency,
+                        "time_period": message.time_period,
+                        "repetitions": message.repetitions,
+                        "next_trigger_date": next_trigger_date,
+                        "last_triggered_at": last_triggered_at,
+                        "total_triggers": message.total_triggers,
+                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "is_complete": message.is_complete,
+                    }
+                )
+            else:
+                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
+        return scheduled_messages
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment):
@@ -703,6 +931,10 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
+        from apps.channels.models import ChannelPlatform
+
+        if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
+            return False
         return self.experiment_channel.experiment != self.experiment
 
     def is_complete(self):
@@ -776,44 +1008,6 @@ class ExperimentSession(BaseTeamModel):
             if not fail_silently:
                 raise e
 
-    def get_participant_scheduled_messages(self, as_dict=False, as_timezone: str | None = None):
-        """
-        Returns all scheduled messages for the associated participant for this session's experiment as well as
-        any child experiments in the case where the experiment is a parent
-
-        Parameters:
-        as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
-        timezone: The timezone to use for the dates. Defaults to the active timezone.
-        """
-        from apps.events.models import ScheduledMessage
-
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=self.experiment).values("child")
-        messages = ScheduledMessage.objects.filter(
-            Q(experiment=self.experiment) | Q(experiment__in=models.Subquery(child_experiments)),
-            participant=self.participant,
-            team=self.team,
-        ).select_related("action")
-
-        scheduled_messages = []
-        as_timezone = as_timezone or timezone.get_current_timezone_name()
-
-        for message in messages:
-            next_trigger_date = message.next_trigger_date.astimezone(pytz.timezone(as_timezone))
-            if as_dict:
-                scheduled_messages.append(
-                    {
-                        "name": message.name,
-                        "external_id": message.external_id,
-                        "frequency": message.frequency,
-                        "time_period": message.time_period,
-                        "repetitions": message.repetitions,
-                        "next_trigger_date": next_trigger_date.isoformat(),
-                    }
-                )
-            else:
-                scheduled_messages.append(message.as_string(as_timezone=as_timezone))
-        return scheduled_messages
-
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
@@ -833,14 +1027,7 @@ class ExperimentSession(BaseTeamModel):
         if use_participant_tz:
             as_timezone = self.get_participant_timezone()
 
-        scheduled_messages = self.get_participant_scheduled_messages(as_timezone=as_timezone)
+        scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return participant_data
-
-    def get_participant_data_json(self):
-        participant_data = self.participant_data_from_experiment
-        scheduled_messages = self.get_participant_scheduled_messages(as_dict=True)
-        if scheduled_messages:
-            participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return json.dumps(participant_data, indent=2)

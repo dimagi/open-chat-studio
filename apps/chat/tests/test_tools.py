@@ -10,6 +10,7 @@ from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
     DeleteReminderTool,
+    UpdateParticipantDataTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
@@ -338,3 +339,34 @@ def test_create_schedule_message_experiment_does_not_exist():
         ).count()
 
         assert scheduled_message_count == 0
+
+
+@pytest.mark.django_db()
+class TestUpdateParticipantDataTool:
+    def _invoke_tool(self, session, **tool_kwargs):
+        tool = UpdateParticipantDataTool(experiment_session=session)
+        return tool.action(**tool_kwargs)
+
+    @pytest.fixture()
+    def session(self, db):
+        return ExperimentSessionFactory()
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "string",
+            1,
+            1.0,
+            True,
+            False,
+            None,
+            ["hi", "there"],
+            {"key": "value"},
+            [{"key": "value"}],
+        ],
+    )
+    def test_update(self, session, value):
+        response = self._invoke_tool(session, key="test", value=value)
+        assert response == "Success"
+
+        assert session.participant_data_from_experiment == {"test": value}

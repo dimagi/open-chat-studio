@@ -161,6 +161,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "gpt_playground.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
+FORMS_URLFIELD_ASSUME_HTTPS = True
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
@@ -515,6 +516,8 @@ API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
+    "teams:signup_after_invite",
+    "account_login",
 ]
 FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Request-ID",  # Heroku

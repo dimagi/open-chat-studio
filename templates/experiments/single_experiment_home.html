@@ -3,7 +3,7 @@
 {% load team_tags %}
 {% load static %}
 {% load form_tags %}
-{% load render_table from django_tables2 %}
+{% load django_tables2 %}
 {% block breadcrumbs %}
 
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -21,7 +21,7 @@
       </div>
       <div class="justify-self-end">
         <div class="join">
-          {% if experiment.is_active %}
+          {% if experiment.is_public %}
             <div class="tooltip" data-tip="Public Link">
               <a class="btn btn-primary join-item rounded-l-full"
                  href="{% url 'experiments:start_session_public' team.slug experiment.public_id %}" target="_blank">
@@ -179,34 +179,46 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: ''}" x-init="$watch('tags', value => filterSessions(value))">
+          <div x-data="{tags: ''}">
             <div class="grid grid-flow-col auto-cols-max gap-x-2">
               {% if perms.experiments.download_chats %}
-                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}" class="my-2">
+                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}"
+                      class="my-2">
                   {% csrf_token %}
-                  <input name="tags" class="hidden" x-bind:value="tags" />
-                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All" />
+                  <input name="tags" class="hidden" x-bind:value="tags"/>
+                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All"/>
                 </form>
               {% endif %}
-              {% if perms.annotations.view_customtaggeditem %}
-                <div class="w-96 my-2">
-                  <select x-model="tags" id="tag-multiselect-filter" name="state[]" multiple placeholder="Filter tags..." autocomplete="off">
-                    <option value="">Filter tags...</option>
-                    {% for tag in available_tags %}
-                      <option value="{{ tag.name }}">{{ tag.name }}</option>
-                    {% endfor %}
-                  </select>
+              <form
+                hx-trigger="load, change"
+                hx-target="#sessions-table"
+                hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
+                hx-swap="innerHTML"
+              >
+                <div class="flex">
+                  {% if perms.annotations.view_customtaggeditem %}
+                    <div class="w-96 my-2">
+                      <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
+                              placeholder="Filter tags..."
+                              autocomplete="off">
+                        <option value="">Filter tags...</option>
+                        {% for tag in available_tags %}
+                          <option value="{{ tag.name }}">{{ tag.name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                  {% endif %}
+                  <div class="form-control ml-2">
+                    <label class="label cursor-pointer">
+                      <span class="label-text mr-2">Include API Sessions</span>
+                      <input type="checkbox" name="show-all" class="toggle" />
+                    </label>
+                  </div>
                 </div>
-              {% endif %}
+              </form>
             </div>
-            <div
-              id="sessions-table"
-              hx-trigger="load, tagFilter"
-              hx-target="this"
-              hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}{% if sort %}?sort={{ sort }}{% endif %}"
-              hx-swap="innerHTML"
-            ></div>
           </div>
+          <div id="sessions-table"></div>
         </div>
       </div>
     {% endif %}
@@ -215,20 +227,20 @@
     <div role="tabpanel" class="tab-content" id="content-mysessions">
       <div class="app-card">
         <div class="overflow-x-auto">
-          <table class="pg-table">
-            <thead>
+          <table class="w-full table-fixed">
+            <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
               <tr>
-                <th>Started</th>
-                <th>Last Message</th>
-                <th>Actions</th>
+                <th class="px-3 py-3 text-left">Started</th>
+                <th class="px-3 py-3 text-left">Last Message</th>
+                <th class="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {% for session in user_sessions %}
-                <tr>
-                  <td>{{ session.created_at }}</td>
-                  <td>{{ session.last_message_created_at }}</td>
-                  <td>
+                <tr class="text-sm">
+                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
                          href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
@@ -304,9 +316,8 @@
   </div>
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
-    let url = "{{ filter_tags_url|escapejs }}"
     function filterSessions(tags) {
-      htmx.ajax('GET', url, {target: "#sessions-table", swap: 'innerHTML', values: {"tags": tags.join("&")}});
+      htmx.trigger(htmx.find("#sessions-table"), "tagFilter", {});
     }
 
     let element = document.getElementById('tag-multiselect-filter');

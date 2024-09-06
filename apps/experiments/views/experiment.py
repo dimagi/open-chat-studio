@@ -125,11 +125,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
-            .exclude(experiment_channel__platform=ChannelPlatform.API)
+        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
         )
+        if not self.request.GET.get("show-all"):
+            query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
+
         tags_query = self.request.GET.get("tags")
         if tags_query:
             tags = tags_query.split("&")
@@ -203,16 +204,18 @@ class ExperimentForm(forms.ModelForm):
             "echo_transcript",
             "use_processor_bot_voice",
             "trace_provider",
+            "participant_allowlist",
         ]
-        labels = {
-            "source_material": "Inline Source Material",
-        }
+        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
             "use_processor_bot_voice": (
                 "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
                 "have one, the router bot's voice will be used."
+            ),
+            "participant_allowlist": (
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
             ),
         }
 
@@ -249,6 +252,12 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+    def clean_participant_allowlist(self):
+        cleaned_identifiers = []
+        for identifier in self.cleaned_data["participant_allowlist"]:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        return cleaned_identifiers
 
     def clean(self):
         cleaned_data = super().clean()
@@ -308,6 +317,14 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
             experiment_type = "llm"
         if self.request.POST.get("type"):
             experiment_type = self.request.POST.get("type")
+
+        team_participant_identifiers = list(
+            self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
+        )
+        if self.object:
+            team_participant_identifiers.extend(self.object.participant_allowlist)
+            team_participant_identifiers = set(team_participant_identifiers)
+
         return {
             **{
                 "title": self.title,
@@ -315,6 +332,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "active_tab": "experiments",
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
+                "team_participant_identifiers": team_participant_identifiers,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -500,7 +518,6 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         )
         .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
-    sort = request.GET.get("sort", None)
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
@@ -521,10 +538,6 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platform_forms": platform_forms,
             "channels": channels,
             "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
-            "filter_tags_url": reverse(
-                "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
-            ),
-            "sort": sort,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
             **_get_terminal_bots_context(experiment, team_slug),
@@ -805,9 +818,12 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 
 def start_session_public(request, team_slug: str, experiment_id: str):
     try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, is_active=True, team=request.team)
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
         # old links dont have uuids
+        raise Http404
+
+    if not experiment.is_public:
         raise Http404
 
     consent = experiment.consent_form

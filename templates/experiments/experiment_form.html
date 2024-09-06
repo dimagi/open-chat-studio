@@ -1,6 +1,7 @@
 {% extends "generic/object_form.html" %}
 {% load i18n %}
 {% load waffle_tags %}
+{% load static %}
 {% load form_tags %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -87,6 +88,28 @@
         {% render_form_fields form "tools" %}
       </div>
 
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Allowlist">
+      <div role="tabpanel" class="tab-content">
+        <h3 class="text-md font-bold">{% translate "Please note" %}</h3>
+        <p class="py-4 text-sm">
+          {% blocktranslate %}
+            To limit the set of particiapants that can chat with this bot, simply add their identifiers in this list.
+            When the list is empty, the bot will accessible via its public link.
+          {% endblocktranslate %}
+          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist }}}">
+            <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist"></input>
+            <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
+              {% for identifier in team_participant_identifiers %}
+                <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm no-animation !normal-case" onclick="SiteJS.app.copyToClipboard(this, 'id_participant_allowlist')" title="Copy to clipboard">
+              <i class="fa-solid fa-copy"></i> <span>Copy participant list</span>
+            </button>
+          </div>
+        </p>
+      </div>
+
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "trace_provider" %}
@@ -97,7 +120,22 @@
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
   {{ llm_options|json_script:"llmModelOptions" }}
+  <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
+
+    let element = document.getElementById('allowlist-multiselect');
+    new TomSelect(element, {
+      maxItems: null,
+      create: true,
+      plugins: {
+        'checkbox_options': {
+          'checkedClassNames':   ['ts-checked'],
+          'uncheckedClassNames': ['ts-unchecked'],
+        }
+      },
+    });
+
+
     const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);
     const voiceOptions = JSON.parse(document.getElementById("voiceOptions").textContent);
     const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);

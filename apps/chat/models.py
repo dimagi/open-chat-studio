@@ -1,5 +1,6 @@
 import logging
 from enum import StrEnum
+from functools import cache
 from urllib.parse import quote
 
 from django.db import models
@@ -39,13 +40,22 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     def get_langchain_messages_until_summary(self) -> list[BaseMessage]:
         messages = []
-        for message in self.messages.order_by("-created_at").iterator(100):
+        for message in self.message_iterator():
             messages.append(message.to_langchain_dict())
-            if message.summary:
-                messages.append(message.summary_to_langchain_dict())
+            if message.is_summary:
                 break
 
         return messages_from_dict(list(reversed(messages)))
+
+    def message_iterator(self, with_summaries=True):
+        for message in self.messages.order_by("-created_at").iterator(100):
+            yield message
+            if with_summaries and message.summary:
+                yield message.get_summary_message()
+
+    @cache
+    def get_attached_files(self):
+        return list(File.objects.filter(chatattachment__chat=self))
 
 
 class ChatMessageType(models.TextChoices):
@@ -62,11 +72,34 @@ class ChatMessageType(models.TextChoices):
             if choice[0] != ChatMessageType.SYSTEM
         )
 
+    @staticmethod
+    def from_role(role: str):
+        return {
+            "user": ChatMessageType.HUMAN,
+            "assistant": ChatMessageType.AI,
+            "system": ChatMessageType.SYSTEM,
+        }[role]
+
+    @property
+    def role(self):
+        return {
+            ChatMessageType.HUMAN: "user",
+            ChatMessageType.AI: "assistant",
+            ChatMessageType.SYSTEM: "system",
+        }[self]
+
 
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
+
+    # Metadata keys that should be excluded from the API response
+    INTERNAL_METADATA_KEYS = {
+        "openai_file_ids",
+        # boolean indicating that this message has been synced to the thread
+        "openai_thread_checkpoint",
+    }
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
@@ -79,6 +112,27 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     class Meta:
         ordering = ["created_at"]
 
+    @classmethod
+    def make_summary_message(cls, message):
+        """A 'summary message' is a special message only ever exists in memory. It is
+        not saved to the database. It is used to represent the summary of a chat up to a certain point."""
+        return ChatMessage(
+            created_at=message.created_at,
+            message_type=ChatMessageType.SYSTEM,
+            content=message.summary,
+            metadata={"is_summary": True},
+        )
+
+    def save(self, *args, **kwargs):
+        if self.is_summary:
+            raise ValueError("Cannot save a summary message")
+        super().save(*args, **kwargs)
+
+    def get_summary_message(self):
+        if not self.summary:
+            raise ValueError("Message does not have a summary")
+        return ChatMessage.make_summary_message(self)
+
     @property
     def is_ai_message(self):
         return self.message_type == ChatMessageType.AI
@@ -88,17 +142,22 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return self.message_type == ChatMessageType.HUMAN
 
     @property
+    def is_summary(self):
+        return self.metadata.get("is_summary", False)
+
+    @property
     def created_at_datetime(self):
         return quote(self.created_at.isoformat())
+
+    @property
+    def role(self):
+        return ChatMessageType(self.message_type).role
 
     def to_langchain_dict(self) -> dict:
         return self._get_langchain_dict(self.content, self.message_type)
 
     def to_langchain_message(self) -> BaseMessage:
         return messages_from_dict([self.to_langchain_dict()])[0]
-
-    def summary_to_langchain_dict(self) -> dict:
-        return self._get_langchain_dict(self.summary, ChatMessageType.SYSTEM)
 
     def _get_langchain_dict(self, content, message_type):
         return {
@@ -123,11 +182,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if file_ids := self.metadata.get("openai_file_ids", []):
             # We should not show files that are on the assistant level. Users should only be able to download
             # those on the thread (chat) level, since they uploaded them
-            chat_file_ids = ChatAttachment.objects.filter(chat=self.chat).values_list("files")
-            return File.objects.filter(
-                team=self.chat.team, external_id__in=file_ids, id__in=models.Subquery(chat_file_ids)
-            )
+            return [file for file in self.chat.get_attached_files() if file.external_id in file_ids]
         return []
+
+    def get_metadata(self, key: str):
+        return self.metadata.get(key, None)
 
 
 class ChatAttachment(BaseModel):
