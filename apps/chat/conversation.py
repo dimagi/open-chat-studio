@@ -18,6 +18,8 @@ from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_strin
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
+SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
+
 INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
 
 log = logging.getLogger("ocs.bots")
@@ -193,9 +195,14 @@ def _get_new_summary(llm, pruned_memory, summary, max_token_limit):
     recursively call this function with the remaining memory."""
     tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
     next_batch = []
-    while tokens > max_token_limit:
+    while pruned_memory and tokens > max_token_limit:
         next_batch.insert(0, pruned_memory.pop())
         tokens, context = _get_summary_tokens_with_context(llm, summary, pruned_memory)
+
+    if not context["new_lines"]:
+        log.error(SUMMARY_TOO_LARGE_ERROR_MESSAGE)
+        # If the summary is too large, discard it and compute a new summary from the pruned memory
+        return _get_new_summary(llm, next_batch, None, max_token_limit)
 
     chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
     summary = chain.invoke(context)["text"]
