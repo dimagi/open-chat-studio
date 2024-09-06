@@ -519,7 +519,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def version_display(self) -> str:
         if self.is_working_version:
-            return None
+            return ""
         return f"v{self.version_number}"
 
     def get_chat_model(self):
