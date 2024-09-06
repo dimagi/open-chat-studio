@@ -695,7 +695,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
     session = WebChannel.start_new_session(
-        experiment,
+        experiment_version=experiment,
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
@@ -851,7 +851,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 identifier = user.email if user else str(uuid.uuid4())
 
             session = WebChannel.start_new_session(
-                experiment,
+                experiment_version=experiment,
                 participant_user=user,
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
@@ -904,7 +904,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             else:
                 with transaction.atomic():
                     session = WebChannel.start_new_session(
-                        experiment=experiment.default_version,
+                        experiment_version=experiment.default_version,
                         participant_identifier=post_form.cleaned_data["email"],
                         session_status=SessionStatus.SETUP,
                         timezone=request.session.get("detected_tz", None),

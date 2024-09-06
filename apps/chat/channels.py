@@ -113,7 +113,7 @@ class ChannelBase(ABC):
     @classmethod
     def start_new_session(
         cls,
-        experiment: Experiment,
+        experiment_version: Experiment,
         experiment_channel: ExperimentChannel,
         participant_identifier: str,
         participant_user: CustomUser | None = None,
@@ -122,7 +122,7 @@ class ChannelBase(ABC):
         session_external_id: str | None = None,
     ):
         return _start_experiment_session(
-            experiment,
+            experiment_version,
             experiment_channel,
             participant_identifier,
             participant_user,
@@ -477,7 +477,7 @@ class ChannelBase(ABC):
         session
         """
         self.experiment_session = self.start_new_session(
-            experiment=self.experiment,
+            experiment_version=self.experiment,
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
             participant_user=self.participant_user,
@@ -534,17 +534,17 @@ class WebChannel(ChannelBase):
     @classmethod
     def start_new_session(
         cls,
-        experiment: Experiment,
+        experiment_version: Experiment,
         participant_identifier: str,
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment_version.team)
         session = super().start_new_session(
-            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+            experiment_version, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session, experiment)
+        WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
 
     @classmethod
@@ -758,7 +758,7 @@ class SlackChannel(ChannelBase):
 
 
 def _start_experiment_session(
-    experiment: Experiment,
+    experiment_version: Experiment,
     experiment_channel: ExperimentChannel,
     participant_identifier: str,
     participant_user: CustomUser | None = None,
@@ -766,6 +766,8 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
 ) -> ExperimentSession:
+    team = experiment_version.team
+    working_version = experiment_version.get_working_version()
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
 
@@ -775,7 +777,7 @@ def _start_experiment_session(
 
     with transaction.atomic():
         participant, created = Participant.objects.get_or_create(
-            team=experiment.team,
+            team=team,
             identifier=participant_identifier,
             platform=experiment_channel.platform,
             defaults={"user": participant_user},
@@ -785,8 +787,8 @@ def _start_experiment_session(
             participant.save()
 
         session = ExperimentSession.objects.create(
-            team=experiment.team,
-            experiment=experiment.get_working_version(),
+            team=team,
+            experiment=working_version,
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,
@@ -795,7 +797,7 @@ def _start_experiment_session(
 
         # Record the participant's timezone
         if timezone:
-            participant.update_memory(data={"timezone": timezone}, experiment=experiment)
+            participant.update_memory(data={"timezone": timezone}, experiment=working_version)
 
     if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
