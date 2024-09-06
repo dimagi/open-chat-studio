@@ -1015,6 +1015,16 @@ class ExperimentSession(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
+    @cached_property
+    def experiment_version(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return Experiment.objects.get_default_or_working(self.experiment)
+
+    @cached_property
+    def working_experiment(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return self.experiment.get_working_version()
+
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
         return participant_data.get("timezone")
