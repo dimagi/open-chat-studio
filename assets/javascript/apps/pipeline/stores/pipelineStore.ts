@@ -82,8 +82,18 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     return get().nodes.find((node) => node.id === id);
   },
   deleteNode: (nodeId) => {
-    const node = get().nodes.filter((node) => node.id === nodeId)[0];
-    const connectedEdges = getConnectedEdges([node], get().edges);
+    if (typeof nodeId === "string" && !nodeId) {
+      return
+    } else if (Array.isArray(nodeId) && !nodeId.length) {
+      return
+    }
+
+    const nodes = get().nodes.filter((node) =>
+        typeof nodeId === "string"
+          ? node.id === nodeId
+          : nodeId.includes(node.id)
+      )
+    const connectedEdges = getConnectedEdges(nodes, get().edges);
     const remainingEdges = get().edges.filter(
       (edge) => !connectedEdges.includes(edge),
     );
