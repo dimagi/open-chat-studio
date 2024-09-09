@@ -14,7 +14,6 @@ import 'reactflow/dist/style.css';
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 import {getNodeId} from "./utils";
-import {useShortcutsStore} from "./stores/shortcutStore";
 import {useHotkeys} from "react-hotkeys-hook";
 
 const fitViewOptions: FitViewOptions = {
@@ -42,8 +41,6 @@ export default function Pipeline() {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
-
-  const deleteAction = useShortcutsStore((state) => state.delete);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -105,7 +102,7 @@ export default function Pipeline() {
     }
   }
 
-  useHotkeys(deleteAction, handleDelete);
+  useHotkeys("backspace", handleDelete);
 
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
