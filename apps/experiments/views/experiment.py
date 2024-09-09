@@ -477,6 +477,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 class ExperimentVersionForm(forms.ModelForm):
     class Meta:
         model = Experiment
+        fields = ["is_default_version"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
