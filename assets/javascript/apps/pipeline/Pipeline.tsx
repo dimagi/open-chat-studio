@@ -1,11 +1,11 @@
-import React, {useCallback, useEffect} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
   FitViewOptions, MarkerType,
   NodeDragHandler,
-  NodeTypes, OnMove
+  NodeTypes, OnMove, OnSelectionChangeParams
 } from 'reactflow';
 
 import {PipelineNode} from './PipelineNode';
@@ -14,6 +14,8 @@ import 'reactflow/dist/style.css';
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 import {getNodeId} from "./utils";
+import {useShortcutsStore} from "./stores/shortcutStore";
+import {useHotkeys} from "react-hotkeys-hook";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -32,11 +34,16 @@ export default function Pipeline() {
   const resetFlow = usePipelineStore((state) => state.resetFlow);
   const setNodes = usePipelineStore((state) => state.setNodes);
   const addNode = usePipelineStore((state) => state.addNode);
+  const deleteEdge = usePipelineStore((state) => state.deleteEdge);
+  const deleteNode = usePipelineStore((state) => state.deleteNode);
   const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
   const setReactFlowInstance = usePipelineStore((state) => state.setReactFlowInstance);
   const currentPipelineId = usePipelineManagerStore((state) => state.currentPipelineId);
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
+  const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
+
+  const deleteAction = useShortcutsStore((state) => state.delete);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -89,6 +96,23 @@ export default function Pipeline() {
     autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
   }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
 
+  function handleDelete(e: KeyboardEvent) {
+    if (lastSelection) {
+      e.preventDefault();
+      (e as unknown as Event).stopImmediatePropagation();
+      deleteNode(lastSelection.nodes.map((node) => node.id));
+      deleteEdge(lastSelection.edges.map((edge) => edge.id));
+    }
+  }
+
+  useHotkeys(deleteAction, handleDelete);
+
+  const onSelectionChange = useCallback(
+    (flow: OnSelectionChangeParams): void => {
+      setLastSelection(flow);
+    },
+    [],
+  );
 
   const defaultEdgeOptions = {
     markerEnd: {
@@ -114,6 +138,7 @@ export default function Pipeline() {
         maxZoom={8}
         deleteKeyCode={[]}
         defaultEdgeOptions={defaultEdgeOptions}
+        onSelectionChange={onSelectionChange}
       >
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         {/*<MiniMap position="bottom-right"/>*/}

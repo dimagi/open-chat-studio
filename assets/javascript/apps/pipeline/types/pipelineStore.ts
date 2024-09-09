@@ -14,6 +14,9 @@ export type PipelineStoreType = {
   deleteNode: (nodeId: string | Array<string>) => void;
   deleteEdge: (edgeId: string | Array<string>) => void;
   onConnect: (connection: Connection) => void;
+  // onReconnectStart: () => void;
+  // onReconnectEnd: () => void;
+  // onReconnect: (oldEdge, newConnection) => void;
   addNode: (
     node: any,
     position: { x: number; y: number; paneX?: number; paneY?: number }
