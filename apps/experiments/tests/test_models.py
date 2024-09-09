@@ -131,12 +131,12 @@ class TestExperimentSession:
 
         assert len(participant.get_schedules_for_experiment(experiment)) == 2
         str_version1 = (
-            f"{message1.name} (ID={message1.external_id}, message={message1.prompt_text}): Every 1 days on Tuesday, "
-            "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
+            f"{message1.name} (Message id={message1.external_id}, message={message1.prompt_text}): Every 1 days on "
+            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
         )
         str_version2 = (
-            f"{message2.name} (ID={message2.external_id}, message={message2.prompt_text}): Every 1 days on Tuesday, "
-            "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
+            f"{message2.name} (Message id={message2.external_id}, message={message2.prompt_text}): Every 1 days on "
+            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
         )
 
         scheduled_messages_str = participant.get_schedules_for_experiment(experiment)

@@ -94,7 +94,12 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
         minute: int,
         specified_date: datetime | None = None,
     ):
-        message = ScheduledMessage.objects.get(participant=self.experiment_session.participant, external_id=message_id)
+        try:
+            message = ScheduledMessage.objects.get(
+                participant=self.experiment_session.participant, external_id=message_id
+            )
+        except ScheduledMessage.DoesNotExist:
+            return f"The scheduled message with id={message_id} was not found."
         if specified_date and message.was_created_by_system:
             # When the user specifies a new date, the bot will extract the day of the week that that day falls on
             # and pass it as a parameter to this method.
