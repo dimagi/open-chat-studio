@@ -477,11 +477,9 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 class ExperimentVersionForm(forms.ModelForm):
     class Meta:
         model = Experiment
-        fields = ["description"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["description"].widget.attrs.update({"class": "input input-bordered", "style": "width: 50%"})
 
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
