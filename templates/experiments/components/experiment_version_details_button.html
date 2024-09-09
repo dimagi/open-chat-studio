@@ -5,14 +5,60 @@
 
 <dialog id="modal-{{ record.id }}" class="modal">
     <div class="modal-box">
-        <h3 class="font-bold text-lg">Details for {{ record.version_number }}</h3>
-        <p>{{ record.description }}</p>
-        {% url 'experiments:set-default-experiment' record.id as form_action_url %}
-        <form method="post" action="{{ form_action_url }}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-primary">Set as Default</button>
-        </form>
+        <h3 class="font-bold text-lg">Details for {{ record.name }} (Version {{ record.version_number }})</h3>
+        <p><strong>Description:</strong> {{ record.description }}</p>
+
+        <p><strong>LLM Model:</strong> {{ record.llm }}</p>
+
+        {% if record.llm_provider %}
+            <p><strong>LLM Provider:</strong> {{ record.llm_provider.name }}</p>
+        {% endif %}
+
+        {% if record.assistant %}
+            <p><strong>Assistant:</strong> {{ record.assistant.name }}</p>
+        {% endif %}
+
+        {% if record.pipeline %}
+            <p><strong>Pipeline:</strong> {{ record.pipeline.name }}</p>
+        {% endif %}
+
+        <p><strong>Temperature:</strong> {{ record.temperature }}</p>
+
+        {% if record.source_material %}
+            <p><strong>Source Material:</strong> {{ record.source_material.name }}</p>
+        {% endif %}
+
+        {% if record.pre_survey %}
+            <p><strong>Pre-Survey:</strong> {{ record.pre_survey.name }}</p>
+        {% endif %}
+
+        {% if record.post_survey %}
+            <p><strong>Post-Survey:</strong> {{ record.post_survey.name }}</p>
+        {% endif %}
+
+        {% if record.safety_violation_notification_emails %}
+            <p><strong>Safety Violation Notification Emails:</strong> {{ record.safety_violation_notification_emails|join:", " }}</p>
+        {% endif %}
+
+        <p><strong>Max Token Limit:</strong> {{ record.max_token_limit }}</p>
+
+        <p><strong>Voice Response Behaviour:</strong> {{ record.get_voice_response_behaviour_display }}</p>
+
+        {% if record.trace_provider %}
+            <p><strong>Trace Provider:</strong> {{ record.trace_provider.name }}</p>
+        {% endif %}
+
+        <p><strong>Consent Form:</strong> {{ record.consent_form.name }}</p>
+
+        <p><strong>Conversational Consent Enabled:</strong> {{ record.conversational_consent_enabled|yesno:"Yes,No" }}</p>
+
+        <p><strong>Echo Transcript:</strong> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
         <div class="modal-action">
+            {% url 'experiments:set-default-experiment' record.id as form_action_url %}
+            <form method="post" action="{{ form_action_url }}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Set as Default</button>
+            </form>
             <button class="btn" onclick="document.getElementById('modal-{{ record.id }}').close()">Close</button>
         </div>
     </div>
