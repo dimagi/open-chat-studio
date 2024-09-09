@@ -104,7 +104,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team)
+        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
@@ -146,7 +146,11 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        return Experiment.objects.filter(working_experiment=self.kwargs["experiment_id"]).all()
+        return (
+            Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
+            .order_by("version_number")
+            .all()
+        )
 
 
 class ExperimentForm(forms.ModelForm):
@@ -480,30 +484,29 @@ class ExperimentVersionForm(forms.ModelForm):
         self.fields["description"].widget.attrs.update({"class": "input input-bordered", "style": "width: 50%"})
 
 
-class CreateExperimentVersion(CreateView):
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
     title = "Create Experiment Version"
     button_title = "Create"
     permission_required = "experiments.add_experiment"
+    pk_url_kwarg = "experiment_id"
 
-    # TODO: add logic
     def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.parent_id = self.kwargs["experiment_id"]
-        return self.create_verion(form)
-
-    # TODO: add logic
-    def create_verion(self, form):
-        return None
+        working_experiment = self.get_object()
+        working_experiment.create_new_version()
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
-        return redirect(
-            "experiments:experiment_versions",
-            team_slug=self.request.team.slug,
-            experiment_id=self.kwargs["experiment_id"],
+        url = reverse(
+            "experiments:single_experiment_home",
+            kwargs={
+                "team_slug": self.request.team.slug,
+                "experiment_id": self.kwargs["experiment_id"],
+            },
         )
+        return f"{url}#versions"
 
 
 @login_and_team_required
