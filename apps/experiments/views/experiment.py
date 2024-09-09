@@ -1158,3 +1158,15 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+def set_default_experiment(request, team_slug: str, pk: int):
+    experiment = get_object_or_404(Experiment, id=pk)
+    Experiment.objects.exclude(pk=experiment.pk).update(is_default_version=False)
+    experiment.is_default_version = True
+    experiment.save()
+
+    return redirect("experiments:versions-list", team_slug=request.team.slug)

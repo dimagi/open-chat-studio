@@ -34,6 +34,7 @@ from .experiment import (  # noqa: F401
     get_message_response,
     poll_messages,
     send_invitation,
+    set_default_experiment,
     single_experiment_home,
     start_authed_web_session,
     start_session_from_invite,
