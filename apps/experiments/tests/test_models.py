@@ -363,7 +363,7 @@ class TestExperimentRoute:
 
 
 @pytest.mark.django_db()
-class TestExperimentVersioning:
+class TestExperimentModel:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
             ExperimentFactory(is_default_version=True, working_version=None)
@@ -416,7 +416,6 @@ class TestExperimentVersioning:
         TimeoutTriggerFactory(experiment=experiment)
         return experiment
 
-    @pytest.mark.django_db()
     def test_first_version_is_automatically_the_default(self):
         experiment = ExperimentFactory()
         new_version = experiment.create_new_version()
@@ -427,7 +426,6 @@ class TestExperimentVersioning:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @pytest.mark.django_db()
     def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
@@ -505,6 +503,29 @@ class TestExperimentVersioning:
                 new=copied_trigger,
                 expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
             )
+
+    def test_delete_working_experiment_without_versions(self):
+        working_version = ExperimentFactory()
+        working_version.delete()
+        with pytest.raises(Experiment.DoesNotExist):
+            working_version.refresh_from_db()
+
+    def test_delete_working_experiment_with_versions(self):
+        working_version = ExperimentFactory()
+        working_version.create_new_version()
+
+        working_version.delete()
+        working_version.refresh_from_db()
+        assert working_version.is_archived is True
+        for version in working_version.versions.all():
+            assert version.is_archived is True
+
+    def test_delete_versioned_experiment(self):
+        working_version = ExperimentFactory()
+        version = working_version.create_new_version()
+        version.delete()
+        version.refresh_from_db()
+        assert version.is_archived is True
 
 
 @pytest.mark.django_db()

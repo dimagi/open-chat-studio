@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
@@ -625,6 +625,20 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
+
+    @transaction.atomic()
+    def delete(self, *args, **kwargs) -> tuple:
+        """Deletion strategy:
+        - If this experiment is a version, archive it
+        - If this experiment is the working version and has versions, archive all versions and this one
+        - If this experiment is the working version and does not have versions, delete it
+        """
+        if self.is_working_version and not self.has_versions:
+            return super().delete(*args, **kwargs)
+
+        self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
+        self.is_archived = True
+        self.save()
 
 
 class ExperimentRouteType(models.TextChoices):
