@@ -1170,3 +1170,15 @@ def set_default_experiment(request, team_slug: str, pk: int):
     experiment.save()
 
     return redirect("experiments:versions-list", team_slug=request.team.slug)
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+def archive_experiment(request, team_slug: str, pk: int):
+    experiment = get_object_or_404(Experiment, id=pk)
+    experiment.is_archived = True
+    experiment.save()
+    return redirect(
+        "experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working_version.id
+    )
