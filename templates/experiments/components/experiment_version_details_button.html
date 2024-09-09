@@ -41,7 +41,7 @@
             <p><span class="font-semibold">Echo Transcript:</span> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
         </div>
         <div class="modal-action">
-            <form method="post" action="{% url 'experiments:archive-experiment' team.slug record.id %}" >
+            <form method="post" action="{% url 'experiments:archive-experiment' team.slug record.id %}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-warning">Archive</button>
             </form>
