@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -54,11 +54,33 @@ class ExperimentObjectManager(AuditingManager):
 
 
 class SourceMaterialObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class SafetyLayerObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class ConsentFormObjectManager(AuditingManager):
