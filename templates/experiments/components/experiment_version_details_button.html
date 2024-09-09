@@ -5,54 +5,41 @@
 
 <dialog id="modal-{{ record.id }}" class="modal">
     <div class="modal-box">
-        <h3 class="font-bold text-lg">Details for {{ record.name }} (Version {{ record.version_number }})</h3>
-        <p><strong>Description:</strong> {{ record.description }}</p>
-
-        <p><strong>LLM Model:</strong> {{ record.llm }}</p>
-
-        {% if record.llm_provider %}
-            <p><strong>LLM Provider:</strong> {{ record.llm_provider.name }}</p>
-        {% endif %}
-
-        {% if record.assistant %}
-            <p><strong>Assistant:</strong> {{ record.assistant.name }}</p>
-        {% endif %}
-
-        {% if record.pipeline %}
-            <p><strong>Pipeline:</strong> {{ record.pipeline.name }}</p>
-        {% endif %}
-
-        <p><strong>Temperature:</strong> {{ record.temperature }}</p>
-
-        {% if record.source_material %}
-            <p><strong>Source Material:</strong> {{ record.source_material.name }}</p>
-        {% endif %}
-
-        {% if record.pre_survey %}
-            <p><strong>Pre-Survey:</strong> {{ record.pre_survey.name }}</p>
-        {% endif %}
-
-        {% if record.post_survey %}
-            <p><strong>Post-Survey:</strong> {{ record.post_survey.name }}</p>
-        {% endif %}
-
-        {% if record.safety_violation_notification_emails %}
-            <p><strong>Safety Violation Notification Emails:</strong> {{ record.safety_violation_notification_emails|join:", " }}</p>
-        {% endif %}
-
-        <p><strong>Max Token Limit:</strong> {{ record.max_token_limit }}</p>
-
-        <p><strong>Voice Response Behaviour:</strong> {{ record.get_voice_response_behaviour_display }}</p>
-
-        {% if record.trace_provider %}
-            <p><strong>Trace Provider:</strong> {{ record.trace_provider.name }}</p>
-        {% endif %}
-
-        <p><strong>Consent Form:</strong> {{ record.consent_form.name }}</p>
-
-        <p><strong>Conversational Consent Enabled:</strong> {{ record.conversational_consent_enabled|yesno:"Yes,No" }}</p>
-
-        <p><strong>Echo Transcript:</strong> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
+        <h3 class="font-bold text-xl mb-4">Details for {{ record.name }} (Version {{ record.version_number }})</h3>
+        <div class="my-4 space-y-2">
+            <p><span class="font-semibold">Description:</span> {{ record.description }}</p>
+            <p><span class="font-semibold">LLM Model:</span> {{ record.llm }}</p>
+            {% if record.llm_provider %}
+                <p><span class="font-semibold">LLM Provider:</span> {{ record.llm_provider.name }}</p>
+            {% endif %}
+            {% if record.assistant %}
+                <p><span class="font-semibold">Assistant:</span> {{ record.assistant.name }}</p>
+            {% endif %}
+            {% if record.pipeline %}
+                <p><span class="font-semibold">Pipeline:</span> {{ record.pipeline.name }}</p>
+            {% endif %}
+            <p><span class="font-semibold">Temperature:</span> {{ record.temperature }}</p>
+            {% if record.source_material %}
+                <p><span class="font-semibold">Source Material:</span> {{ record.source_material.name }}</p>
+            {% endif %}
+            {% if record.pre_survey %}
+                <p><span class="font-semibold">Pre-Survey:</span> {{ record.pre_survey.name }}</p>
+            {% endif %}
+            {% if record.post_survey %}
+                <p><span class="font-semibold">Post-Survey:</span> {{ record.post_survey.name }}</p>
+            {% endif %}
+            {% if record.safety_violation_notification_emails %}
+                <p><span class="font-semibold">Safety Violation Notification Emails:</span> {{ record.safety_violation_notification_emails|join:", " }}</p>
+            {% endif %}
+            <p><span class="font-semibold">Max Token Limit:</span> {{ record.max_token_limit }}</p>
+            <p><span class="font-semibold">Voice Response Behaviour:</span> {{ record.get_voice_response_behaviour_display }}</p>
+            {% if record.trace_provider %}
+                <p><span class="font-semibold">Trace Provider:</span> {{ record.trace_provider.name }}</p>
+            {% endif %}
+            <p><span class="font-semibold">Consent Form:</span> {{ record.consent_form.name }}</p>
+            <p><span class="font-semibold">Conversational Consent Enabled:</span> {{ record.conversational_consent_enabled|yesno:"Yes,No" }}</p>
+            <p><span class="font-semibold">Echo Transcript:</span> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
+        </div>
         <div class="modal-action">
             {% url 'experiments:set-default-experiment' record.id as form_action_url %}
             <form method="post" action="{{ form_action_url }}">
