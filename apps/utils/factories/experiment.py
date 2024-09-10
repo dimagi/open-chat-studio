@@ -84,6 +84,7 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     identifier = factory.Faker("uuid4")
+    name = factory.Faker("name")
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):

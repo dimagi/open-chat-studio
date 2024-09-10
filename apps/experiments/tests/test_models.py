@@ -215,6 +215,32 @@ class TestExperimentSession:
             assert experiment_used == session.experiment
 
     @pytest.mark.django_db()
+    def test_get_participant_data_name(self):
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant, team=participant.team)
+        participant_data = ParticipantData.objects.create(
+            content_object=session.experiment,
+            participant=participant,
+            team=participant.team,
+            data={"first_name": "Jimmy"},
+        )
+        data = session.get_participant_data()
+        assert data == {
+            "name": participant.name,
+            "first_name": "Jimmy",
+        }
+
+        participant_data.data["name"] = "James Newman"
+        participant_data.save()
+
+        del session.participant_data_from_experiment
+        data = session.get_participant_data()
+        assert data == {
+            "name": "James Newman",
+            "first_name": "Jimmy",
+        }
+
+    @pytest.mark.django_db()
     @freeze_time("2022-01-01 08:00:00")
     @pytest.mark.parametrize("use_participant_tz", [False, True])
     def test_get_participant_data_timezone(self, use_participant_tz):
