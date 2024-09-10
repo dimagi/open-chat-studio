@@ -158,6 +158,24 @@ class ExperimentSessionsTable(tables.Table):
         empty_text = "No sessions yet!"
 
 
+class ExperimentVersionsTable(tables.Table):
+    version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
+    created_at = columns.Column(verbose_name="Created On", accessor="created_at")
+    is_default = columns.TemplateColumn(
+        template_code="""{% if record.is_default_version %}
+        <span aria-label="true">✓</span>
+        {% endif %}""",
+        verbose_name="Default Version",
+    )
+
+    class Meta:
+        model = Experiment
+        fields = []
+        row_attrs = {"class": "text-sm"}
+        orderable = False
+        empty_text = "No versions yet!"
+
+
 def _get_route_url(url_name, request, record):
     return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
 

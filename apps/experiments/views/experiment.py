@@ -64,6 +64,7 @@ from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
     ExperimentTable,
+    ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
@@ -103,7 +104,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team)
+        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
@@ -135,6 +136,21 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
+
+
+class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = Experiment
+    paginate_by = 25
+    table_class = ExperimentVersionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experiment"
+
+    def get_queryset(self):
+        return (
+            Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
+            .order_by("version_number")
+            .all()
+        )
 
 
 class ExperimentForm(forms.ModelForm):
@@ -455,6 +471,41 @@ class AddFileToExperiment(BaseAddFileHtmxView):
 
 class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
+
+
+# TODO: complete form
+class ExperimentVersionForm(forms.ModelForm):
+    class Meta:
+        model = Experiment
+        fields = ["is_default_version"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
+    model = Experiment
+    form_class = ExperimentVersionForm
+    template_name = "experiments/create_version_form.html"
+    title = "Create Experiment Version"
+    button_title = "Create"
+    permission_required = "experiments.add_experiment"
+    pk_url_kwarg = "experiment_id"
+
+    def form_valid(self, form):
+        working_experiment = self.get_object()
+        working_experiment.create_new_version()
+        return HttpResponseRedirect(self.get_success_url())
+
+    def get_success_url(self):
+        url = reverse(
+            "experiments:single_experiment_home",
+            kwargs={
+                "team_slug": self.request.team.slug,
+                "experiment_id": self.kwargs["experiment_id"],
+            },
+        )
+        return f"{url}#versions"
 
 
 @login_and_team_required
