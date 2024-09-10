@@ -108,7 +108,7 @@ class ChannelBase(ABC):
         self.experiment_session = experiment_session
         self.message = None
         self._user_query = None
-        self.bot = get_bot(experiment_session) if experiment_session else None
+        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
 
     @classmethod
     def start_new_session(
@@ -220,7 +220,7 @@ class ChannelBase(ABC):
             raise ParticipantNotAllowedException()
 
         self._ensure_sessions_exists()
-        self.bot = get_bot(self.experiment_session)
+        self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
     def new_user_message(self, message) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -414,7 +414,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or get_bot(self.experiment_session)
+        self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         answer = self.bot.process_input(message, attachments=self.message.attachments)
         return answer
 
@@ -513,7 +513,7 @@ class ChannelBase(ABC):
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
-        topic_bot = self.bot or get_bot(self.experiment_session)
+        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
 
@@ -553,7 +553,7 @@ class WebChannel(ChannelBase):
 
         if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=seed_message, attachments=[]
+                experiment_session_id=session.id, experiment_id=experiment.id, message_text=seed_message, attachments=[]
             ).task_id
             session.save()
         return session

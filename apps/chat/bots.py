@@ -85,7 +85,6 @@ class TopicBot:
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
-
         self._initialize()
 
     def _initialize(self):

@@ -755,7 +755,12 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
-    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
+    result = get_response_for_webchat_task.delay(
+        experiment_session_id=session.id,
+        experiment_id=experiment.id,
+        message_text=message_text,
+        attachments=attachments,
+    )
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
