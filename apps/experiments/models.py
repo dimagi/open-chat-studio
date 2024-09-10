@@ -518,6 +518,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     version_number = models.PositiveIntegerField(default=1)
     is_default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
+    version_description = models.TextField(
+        blank=True,
+        default="",
+    )
     objects = ExperimentObjectManager()
 
     class Meta:
@@ -580,7 +584,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self, version_description: str | None = None):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
@@ -591,6 +595,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
         new_version = super().create_new_version(save=False)
+        new_version.version_description = version_description
         new_version.public_id = uuid4()
         new_version.version_number = version_number
 

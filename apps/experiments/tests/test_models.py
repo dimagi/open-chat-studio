@@ -440,7 +440,7 @@ class TestExperimentModel:
 
         assert original_experiment.version_number == 1
 
-        new_version = original_experiment.create_new_version()
+        new_version = original_experiment.create_new_version("tis a new version")
         original_experiment.refresh_from_db()
 
         assert new_version != original_experiment
@@ -449,6 +449,7 @@ class TestExperimentModel:
         assert new_version.version_number == 1
         assert new_version.is_default_version is True
         assert new_version.working_version == original_experiment
+        assert new_version.version_description == "tis a new version"
         _compare_models(
             original=original_experiment,
             new=new_version,
@@ -462,6 +463,7 @@ class TestExperimentModel:
                 "consent_form_id",
                 "pre_survey_id",
                 "post_survey_id",
+                "version_description",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)

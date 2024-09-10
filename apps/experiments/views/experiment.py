@@ -477,7 +477,8 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 class ExperimentVersionForm(forms.ModelForm):
     class Meta:
         model = Experiment
-        fields = ["is_default_version"]
+        fields = ["version_description", "is_default_version"]
+        help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -494,7 +495,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def form_valid(self, form):
         working_experiment = self.get_object()
-        working_experiment.create_new_version()
+        working_experiment.create_new_version(version_description=form.cleaned_data["version_description"])
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
