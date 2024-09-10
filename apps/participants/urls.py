@@ -15,6 +15,8 @@ urlpatterns = [
     path(
         "<int:participant_id>/experiments/<int:experiment_id>", views.ExperimentData.as_view(), name="experiment_data"
     ),
+    path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
+    path("participants/<int:pk>/update_name/", views.update_name, name="update_name"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))
