@@ -238,11 +238,11 @@ class ExperimentForm(forms.ModelForm):
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
-        self.fields["safety_layers"].queryset = team.safetylayer_set
-        self.fields["source_material"].queryset = team.sourcematerial_set
-        self.fields["pre_survey"].queryset = team.survey_set
-        self.fields["post_survey"].queryset = team.survey_set
-        self.fields["consent_form"].queryset = team.consentform_set
+        self.fields["safety_layers"].queryset = team.safetylayer_set.exclude(is_version=True)
+        self.fields["source_material"].queryset = team.sourcematerial_set.exclude(is_version=True)
+        self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
+        self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
+        self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
 

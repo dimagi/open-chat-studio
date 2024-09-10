@@ -84,7 +84,18 @@ class SafetyLayerObjectManager(AuditingManager):
 
 
 class ConsentFormObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
@@ -215,6 +226,21 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
+class SurveyObjectManager(models.Manager):
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
+
+
 class Survey(BaseTeamModel, VersionsMixin):
     """
     A survey.
@@ -237,6 +263,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    objects = SurveyObjectManager()
 
     class Meta:
         ordering = ["name"]
