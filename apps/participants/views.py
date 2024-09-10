@@ -61,7 +61,9 @@ class ParticipantTableView(SingleTableView):
         query = Participant.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query = query.filter(Q(identifier__icontains=search) | Q(platform__iexact=search))
+            query = query.filter(
+                Q(identifier__icontains=search) | Q(platform__iexact=search) | Q(name__icontains=search)
+            )
         return query
 
 
