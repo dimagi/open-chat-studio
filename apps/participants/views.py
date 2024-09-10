@@ -13,6 +13,7 @@ from apps.participants.forms import ParticipantForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+from ..channels.models import ChannelPlatform
 from .tables import ParticipantTable
 
 
@@ -61,9 +62,10 @@ class ParticipantTableView(SingleTableView):
         query = Participant.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query = query.filter(
-                Q(identifier__icontains=search) | Q(platform__iexact=search) | Q(name__icontains=search)
-            )
+            if search in {v.lower() for v in ChannelPlatform.values}:
+                query = query.filter(platform__iexact=search)
+            else:
+                query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
         return query
 
 
