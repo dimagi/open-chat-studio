@@ -124,6 +124,11 @@ def update_participant_data(request):
     team = request.team
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
+    # Update the participant's name if provided
+    if name := serializer.data.get("name"):
+        participant.name = name
+        participant.save()
+
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
