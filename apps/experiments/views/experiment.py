@@ -698,7 +698,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
     session = WebChannel.start_new_session(
-        experiment_version=experiment,
+        experiment_version=experiment.default_version,
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
@@ -711,9 +711,8 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    working_version = experiment.get_working_version()
     session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=working_version.id, id=session_id
+        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
     return TemplateResponse(
         request,
@@ -730,11 +729,8 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
-    working_version_id = experiment.get_working_version_id()
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=working_version_id, id=session_id
-    )
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
@@ -777,12 +773,9 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 # @login_and_team_required
 def get_message_response(request, team_slug: str, experiment_id: int, session_id: int, task_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    working_version_id = experiment.get_working_version_id()
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=working_version_id, id=session_id
-    )
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
@@ -840,6 +833,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 def start_session_public(request, team_slug: str, experiment_id: str):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+        experiment = experiment.default_version
     except ValidationError:
         # old links dont have uuids
         raise Http404
@@ -892,18 +886,17 @@ def start_session_public(request, team_slug: str, experiment_id: str):
 @permission_required("experiments.invite_participants", raise_exception=True)
 def experiment_invitations(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    working_version = experiment.get_working_version()
     sessions = experiment.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    form = ExperimentInvitationForm(initial={"experiment_id": working_version.id})
+    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
             if ExperimentSession.objects.filter(
                 team=request.team,
-                experiment=working_version,
+                experiment_id=experiment_id,
                 status__in=["setup", "pending"],
                 participant__identifier=post_form.cleaned_data["email"],
             ).exists():
@@ -981,12 +974,10 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
-    # A session from invite will (for now?) always use the default experiment version
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    working_version = experiment.get_working_version()
+    experiment_session = get_object_or_404(ExperimentSession, experiment_id=experiment_id, external_id=session_id)
     default_version = experiment.default_version
-    experiment_session = get_object_or_404(ExperimentSession, experiment=working_version, external_id=session_id)
-    consent = experiment.consent_form
+    consent = default_version.consent_form
 
     initial = {
         "experiment_id": default_version.id,
@@ -1011,7 +1002,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
-            "experiment": experiment.default_version,
+            "experiment": default_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
         },

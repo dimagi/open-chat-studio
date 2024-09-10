@@ -734,7 +734,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
                 .exclude(id__in=child_ids)
                 .exclude(id__in=parent_ids)
                 .exclude(id=parent.id)
-                .exclude(id__in=parent.versions.all())
+                .exclude(working_version_id=parent.id)
             )
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)

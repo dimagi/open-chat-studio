@@ -26,7 +26,7 @@ def experiment_session_view(allowed_states=None):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
             request.experiment_session = get_object_or_404(
                 ExperimentSession,
-                experiment_id=request.experiment.get_working_version_id(),
+                experiment_id=experiment_id,
                 external_id=session_id,
                 team=request.team,
             )
@@ -90,7 +90,7 @@ def verify_session_access_cookie(view):
 
 def _get_access_cookie_data(experiment_session):
     return {
-        "experiment_id": str(experiment_session.working_experiment.public_id),
+        "experiment_id": str(experiment_session.experiment.public_id),
         "session_id": str(experiment_session.external_id),
         "participant_id": experiment_session.participant_id,
         "user_id": experiment_session.participant.user_id,
