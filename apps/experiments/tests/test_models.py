@@ -19,6 +19,7 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
     SourceMaterialFactory,
+    SurveyFactory,
     SyntheticVoiceFactory,
     VersionedExperimentFactory,
 )
@@ -414,6 +415,14 @@ class TestExperimentModel:
 
         # Setup Timeout Trigger
         TimeoutTriggerFactory(experiment=experiment)
+
+        # Surveys
+        pre_survey = SurveyFactory(team=team)
+        post_survey = SurveyFactory(team=team)
+        experiment.pre_survey = pre_survey
+        experiment.post_survey = post_survey
+
+        experiment.save()
         return experiment
 
     def test_first_version_is_automatically_the_default(self):
@@ -450,13 +459,19 @@ class TestExperimentModel:
                 "working_version_id",
                 "version_number",
                 "is_default_version",
+                "consent_form_id",
+                "pre_survey_id",
+                "post_survey_id",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
-        self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
+        self._assert_attribute_duplicated("source_material", original_experiment, new_version)
+        self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
+        self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
+        self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
@@ -503,6 +518,13 @@ class TestExperimentModel:
                 new=copied_trigger,
                 expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
             )
+
+    def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
+        _compare_models(
+            original=getattr(original_experiment, attr_name),
+            new=getattr(new_version, attr_name),
+            expected_changed_fields=["id", "working_version_id"],
+        )
 
     def test_delete_working_experiment_without_versions(self):
         working_version = ExperimentFactory()
@@ -574,4 +596,7 @@ def _compare_models(original, new, expected_changed_fields: list) -> set:
         if field_value != new_dict[field_name]:
             changed_fields.add(field_name)
 
-    assert changed_fields.difference(set(expected_changed_fields)) == set()
+    field_difference = changed_fields.difference(set(expected_changed_fields))
+    assert (
+        field_difference == set()
+    ), f"These fields differ between the experiment versions, but should not: {field_difference}"

@@ -145,6 +145,10 @@ class VersionsMixin:
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self)
 
+    @property
+    def has_versions(self):
+        return self.versions.count() > 0
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -211,7 +215,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
-class Survey(BaseTeamModel):
+class Survey(BaseTeamModel, VersionsMixin):
     """
     A survey.
     """
@@ -225,6 +229,13 @@ class Survey(BaseTeamModel):
             " When you have finished, respond with '1' to let us know that you've completed it."
             " Survey link: {survey_link}"
         ),
+    )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
     )
 
     class Meta:
@@ -246,7 +257,7 @@ class Survey(BaseTeamModel):
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
-class ConsentForm(BaseTeamModel):
+class ConsentForm(BaseTeamModel, VersionsMixin):
     """
     Custom markdown consent form to be used by experiments.
     """
@@ -262,6 +273,13 @@ class ConsentForm(BaseTeamModel):
         null=False,
         default="Respond with '1' if you agree",
         help_text=("Use this text to tell the user to respond with '1' in order to give their consent"),
+    )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
     )
 
     class Meta:
@@ -543,10 +561,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
     @property
-    def has_versions(self):
-        return self.versions.count() > 0
-
-    @property
     def version_display(self) -> str:
         if self.is_working_version:
             return ""
@@ -579,28 +593,38 @@ class Experiment(BaseTeamModel, VersionsMixin):
         new_version = super().create_new_version(save=False)
         new_version.public_id = uuid4()
         new_version.version_number = version_number
-        if self.source_material:
-            new_version.source_material = self.source_material.create_new_version()
+
+        self._copy_attr_to_new_version("source_material", new_version)
+        self._copy_attr_to_new_version("consent_form", new_version)
+        self._copy_attr_to_new_version("pre_survey", new_version)
+        self._copy_attr_to_new_version("post_survey", new_version)
 
         if new_version.version_number == 1:
             new_version.is_default_version = True
         new_version.save()
 
-        self.copy_safety_layers_to_new_version(new_version)
-        self.copy_routes_to_new_version(new_version)
-        self.copy_static_triggers_to_new_version(new_version)
-        self.copy_timeout_triggers_to_new_version(new_version)
+        self._copy_safety_layers_to_new_version(new_version)
+        self._copy_routes_to_new_version(new_version)
+        self.copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
+        self.copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
 
         new_version.files.set(self.files.all())
         return new_version
 
-    def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
+    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
+        """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
+        linking that to `new_version`
+        """
+        if instance := getattr(self, attr_name):
+            setattr(new_version, attr_name, instance.create_new_version())
+
+    def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
         for layer in self.safety_layers.all():
             duplicated_layers.append(layer.create_new_version())
         new_version.safety_layers.set(duplicated_layers)
 
-    def copy_routes_to_new_version(self, new_version: "Experiment"):
+    def _copy_routes_to_new_version(self, new_version: "Experiment"):
         """
         This copies the experiment routes where this experiment is the parent and sets the new parent to the new
         version.
@@ -608,13 +632,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for route in self.child_links.all():
             route.create_new_version(new_version)
 
-    def copy_static_triggers_to_new_version(self, new_version: "Experiment"):
-        for static_trigger in self.static_triggers.all():
-            static_trigger.create_new_version(new_experiment=new_version)
-
-    def copy_timeout_triggers_to_new_version(self, new_version: "Experiment"):
-        for timeout_trigger in self.timeout_triggers.all():
-            timeout_trigger.create_new_version(new_experiment=new_version)
+    def copy_trigger_to_new_version(self, trigger_queryset, new_version):
+        for trigger in trigger_queryset.all():
+            trigger.create_new_version(new_experiment=new_version)
 
     @property
     def is_public(self) -> bool:
