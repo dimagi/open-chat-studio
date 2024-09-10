@@ -33,7 +33,7 @@ class SurveyTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Survey.objects.filter(team=self.request.team)
+        return Survey.objects.filter(team=self.request.team, is_version=False)
 
 
 class CreateSurvey(CreateView):
