@@ -26,7 +26,7 @@ def experiment_session_view(allowed_states=None):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
             request.experiment_session = get_object_or_404(
                 ExperimentSession,
-                experiment_id=experiment_id,
+                experiment=request.experiment,
                 external_id=session_id,
                 team=request.team,
             )

@@ -966,7 +966,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
     response = HttpResponseRedirect(
         reverse(
             redirect_url_name,
-            args=[team_slug, experiment_session.experiment_version.public_id, experiment_session.external_id],
+            args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
     return set_session_access_cookie(response, experiment_session)
@@ -975,7 +975,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    experiment_session = get_object_or_404(ExperimentSession, experiment_id=experiment_id, external_id=session_id)
+    experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
     default_version = experiment.default_version
     consent = default_version.consent_form
 
