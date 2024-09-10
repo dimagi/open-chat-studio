@@ -722,7 +722,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         Returns a list of experiments that fit the following criteria:
         - They are not the same as the parent
         - they are not parents
-        - they are ot not children of the current experiment
+        - they are not not children of the current experiment
         - they are not part of the current experiment's version family
         """
         parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
