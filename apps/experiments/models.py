@@ -611,7 +611,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
     @transaction.atomic()
-    def create_new_version(self, version_description: str | None = None):
+    def create_new_version(self, version_description: str | None = None, make_default: bool = False):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
@@ -631,8 +631,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_attr_to_new_version("pre_survey", new_version)
         self._copy_attr_to_new_version("post_survey", new_version)
 
-        if new_version.version_number == 1:
+        if new_version.version_number == 1 or make_default:
             new_version.is_default_version = True
+
+        if make_default:
+            self.versions.filter(is_default_version=True).update(
+                is_default_version=False, audit_action=AuditAction.AUDIT
+            )
+
         new_version.save()
 
         self._copy_safety_layers_to_new_version(new_version)

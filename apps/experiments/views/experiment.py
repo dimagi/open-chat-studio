@@ -495,7 +495,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def form_valid(self, form):
         working_experiment = self.get_object()
-        working_experiment.create_new_version(version_description=form.cleaned_data["version_description"])
+        description = form.cleaned_data["version_description"]
+        is_default = form.cleaned_data["is_default_version"]
+        working_experiment.create_new_version(version_description=description, make_default=is_default)
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
