@@ -9,7 +9,6 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.web.meta import absolute_url
 
@@ -40,35 +39,6 @@ def _get_latest_sessions_for_participants(
         .prefetch_related("experiment")
         .all()
     )
-
-
-@shared_task(ignore_result=True)
-def send_bot_message_to_users(message: str, chat_ids: list[str], is_bot_instruction: bool, experiment_public_id: UUID):
-    """This sends `message` to the sessions related to `chat_ids` as the bot.
-
-    If `is_bot_instruction` is true, the message will be interpreted as an instruction for the bot. For each
-    chat_id in `chat_ids`, the bot will be given the instruction along with the chat history. Only the bot's
-    response will be saved to the chat history.
-    """
-
-    latest_sessions = _get_latest_sessions_for_participants(chat_ids, experiment_public_id=UUID(experiment_public_id))
-
-    for experiment_session in latest_sessions:
-        try:
-            if experiment_session.is_stale():
-                continue
-
-            bot_message_to_user = message
-            if is_bot_instruction:
-                bot_message_to_user = experiment_session.ad_hoc_bot_message(prompt_instruction=message)
-            else:
-                ChatMessage.objects.create(
-                    chat=experiment_session.chat, message_type=ChatMessageType.AI, content=message
-                )
-                experiment_session.try_send_message(message=bot_message_to_user)
-
-        except Exception as exception:
-            logger.exception(exception)
 
 
 @shared_task(ignore_result=True)
