@@ -1,10 +1,12 @@
 import logging
+import operator
 from datetime import timedelta
 from functools import cached_property
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.fields import ArrayField
 from django.db import models, transaction
 from django.db.models import F, Func, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -90,10 +92,30 @@ class StaticTriggerType(models.TextChoices):
     PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
+class Operators(models.TextChoices):
+    eq = ("eq", "Equals")
+    ne = ("ne", "Not Equals")
+    in_ = ("in", "In")
+
+    @property
+    def operator(self):
+        match self:
+            case Operators.eq:
+                return operator.eq
+            case Operators.ne:
+                return operator.ne
+            case Operators.in_:
+                return operator.contains
+            case _:
+                raise ValueError("Invalid operator")
+
+
 class StaticTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
     type = models.CharField(choices=StaticTriggerType.choices, db_index=True)
+    trigger_op = models.CharField(choices=Operators.choices, blank=True)
+    trigger_arg = ArrayField(models.CharField(max_length=255), blank=True, default=list)
     event_logs = GenericRelation(EventLog)
     working_version = models.ForeignKey(
         "self",
