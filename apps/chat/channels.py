@@ -316,7 +316,7 @@ class ChannelBase(ABC):
         self.send_text_to_user(bot_message)
 
     def _ask_user_to_take_survey(self):
-        pre_survey_link = self.experiment_session.get_pre_survey_link()
+        pre_survey_link = self.experiment_session.get_pre_survey_link(self.experiment)
         confirmation_text = self.experiment.pre_survey.confirmation_text
         bot_message = confirmation_text.format(survey_link=pre_survey_link)
         self._add_message_to_history(bot_message, ChatMessageType.AI)

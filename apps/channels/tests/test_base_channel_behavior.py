@@ -229,7 +229,7 @@ def test_pre_conversation_flow(send_text_to_user_mock, generate_response_for_use
 
     _user_message("Hi")
     chat = channel.experiment_session.chat
-    pre_survey_link = channel.experiment_session.get_pre_survey_link()
+    pre_survey_link = channel.experiment_session.get_pre_survey_link(experiment)
     confirmation_text = pre_survey.confirmation_text
     expected_survey_text = confirmation_text.format(survey_link=pre_survey_link)
     # Let's see if the bot asked consent

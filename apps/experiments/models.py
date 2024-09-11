@@ -629,7 +629,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
         new_version = super().create_new_version(save=False)
-        new_version.version_description = version_description
+        new_version.version_description = version_description or ""
         new_version.public_id = uuid4()
         new_version.version_number = version_number
 
