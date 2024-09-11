@@ -769,6 +769,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
 
 class Participant(BaseTeamModel):
+    name = models.CharField(max_length=320, blank=True)
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
@@ -782,6 +783,12 @@ class Participant(BaseTeamModel):
     def email(self):
         validate_email(self.identifier)
         return self.identifier
+
+    @property
+    def global_data(self):
+        if self.name:
+            return {"name": self.name}
+        return {}
 
     def __str__(self):
         return self.identifier
@@ -1157,4 +1164,4 @@ class ExperimentSession(BaseTeamModel):
         scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return participant_data
+        return self.participant.global_data | participant_data

@@ -9,13 +9,14 @@ from freezegun import freeze_time
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    TOOL_CLASS_MAP,
     DeleteReminderTool,
     UpdateParticipantDataTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import Experiment
+from apps.experiments.models import AgentTools, Experiment
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import pretty_date
@@ -370,3 +371,8 @@ class TestUpdateParticipantDataTool:
         assert response == "Success"
 
         assert session.participant_data_from_experiment == {"test": value}
+
+
+@pytest.mark.parametrize("tool", list(AgentTools))
+def test_tools_present(tool):
+    assert tool in TOOL_CLASS_MAP
