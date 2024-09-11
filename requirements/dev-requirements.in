@@ -11,3 +11,4 @@ pytest
 pytest-django
 factory-boy
 pytest-httpx
+pytest-cov
