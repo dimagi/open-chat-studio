@@ -17,7 +17,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[str] = []):
+def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = None, participant: str = None):
     queryset = experiment.sessions.prefetch_related(
         "chat",
         "chat__messages",
@@ -28,8 +28,10 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
         "chat__messages__comments",
         "chat__messages__comments__user",
     )
-    if filter_tags:
-        queryset = queryset.filter(chat__tags__name__in=filter_tags)
+    if tags:
+        queryset = queryset.filter(chat__tags__name__in=tags)
+    if participant:
+        queryset = queryset.filter(participant__identifier=participant)
 
     for session in queryset:
         for message in session.chat.messages.all():
@@ -54,7 +56,7 @@ def experiment_to_message_export_rows(experiment: Experiment, filter_tags: list[
             ]
 
 
-def experiment_to_csv(experiment: Experiment, tags: list[str] = []) -> io.StringIO:
+def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participant: str = None) -> io.StringIO:
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     writer.writerow(
@@ -78,6 +80,6 @@ def experiment_to_csv(experiment: Experiment, tags: list[str] = []) -> io.String
             "Message Comments",
         ]
     )
-    for row in experiment_to_message_export_rows(experiment, filter_tags=tags):
+    for row in experiment_to_message_export_rows(experiment, tags=tags, participant=participant):
         writer.writerow(row)
     return csv_in_memory

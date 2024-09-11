@@ -923,8 +923,10 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
     tags = request.POST["tags"]
     tags = tags.split(",") if tags else []
 
+    participant = request.POST.get("participant")
+
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags, participant).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 
