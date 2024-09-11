@@ -33,6 +33,26 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
     if participant:
         queryset = queryset.filter(participant__identifier=participant)
 
+    yield [
+        "Message ID",
+        "Message Date",
+        "Message Type",
+        "Message Content",
+        "Platform",
+        "Chat ID",
+        "Chat User",
+        "Chat Tags",
+        "Chat Comments",
+        "Session ID",
+        "Session LLM",
+        "Experiment ID",
+        "Experiment Name",
+        "Participant Identifier",
+        "Participant Public ID",
+        "Message Tags",
+        "Message Comments",
+    ]
+
     for session in queryset:
         for message in session.chat.messages.all():
             yield [
@@ -59,27 +79,6 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
 def experiment_to_csv(experiment: Experiment, tags: list[str] = None, participant: str = None) -> io.StringIO:
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    writer.writerow(
-        [
-            "Message ID",
-            "Message Date",
-            "Message Type",
-            "Message Content",
-            "Platform",
-            "Chat ID",
-            "Chat User",
-            "Chat Tags",
-            "Chat Comments",
-            "Session ID",
-            "Session LLM",
-            "Experiment ID",
-            "Experiment Name",
-            "Participant Identifier",
-            "Participant Public ID",
-            "Message Tags",
-            "Message Comments",
-        ]
-    )
     for row in experiment_to_message_export_rows(experiment, tags=tags, participant=participant):
         writer.writerow(row)
     return csv_in_memory
