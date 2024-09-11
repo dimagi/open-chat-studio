@@ -165,7 +165,7 @@ class VersionsMixin:
 
     @property
     def has_versions(self):
-        return self.versions.count() > 0
+        return self.versions.exists()
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
