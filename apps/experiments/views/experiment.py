@@ -480,9 +480,6 @@ class ExperimentVersionForm(forms.ModelForm):
         fields = ["version_description", "is_default_version"]
         help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     model = Experiment

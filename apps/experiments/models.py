@@ -158,11 +158,6 @@ class VersionsMixin:
     def get_working_version_id(self) -> int:
         return self.working_version_id if self.working_version_id else self.id
 
-    @cached_property
-    def default_version(self) -> "Experiment":
-        """Returns the default experiment, or if there is none, the working experiment"""
-        return Experiment.objects.get_default_or_working(self)
-
     @property
     def has_versions(self):
         return self.versions.exists()
@@ -603,6 +598,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if self.is_working_version:
             return ""
         return f"v{self.version_number}"
+
+    @cached_property
+    def default_version(self) -> "Experiment":
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return Experiment.objects.get_default_or_working(self)
 
     def get_chat_model(self):
         service = self.get_llm_service()
