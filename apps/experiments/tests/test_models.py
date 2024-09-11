@@ -579,6 +579,17 @@ class TestExperimentObjectManager:
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
+    def test_archived_experiments_are_filtered_out(self):
+        """Default queries should exclude archived experiments"""
+        experiment = ExperimentFactory()
+        experiment.create_new_version()
+        assert Experiment.objects.count() == 2
+        experiment.delete()
+        assert Experiment.objects.count() == 0
+
+        # To get all experiment,s use the dedicated object method
+        assert Experiment.objects.get_all().count() == 2
+
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
     """

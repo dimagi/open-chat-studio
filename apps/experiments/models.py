@@ -52,6 +52,13 @@ class ExperimentObjectManager(AuditingManager):
         """Returns a queryset for all working experiments"""
         return self.get_queryset().filter(working_version=None)
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
+    def get_all(self):
+        """A method to return all experiments whether it is deprecated or not"""
+        return super().get_queryset()
+
 
 class SourceMaterialObjectManager(AuditingManager):
     def get_queryset(self) -> models.QuerySet:

@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.db.models.query import QuerySet
+from django.http import HttpRequest
 
 from apps.experiments import models
 
@@ -81,6 +83,9 @@ class ExperimentAdmin(admin.ModelAdmin):
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return models.Experiment.objects.get_all()
 
     @admin.display(description="Version Family")
     def version_family(self, obj):
