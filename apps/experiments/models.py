@@ -698,6 +698,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         - If this experiment is the working version and has versions, archive all versions and this one
         - If this experiment is the working version and does not have versions, delete it
         """
+        self.experimentchannel_set.update(deleted=True, audit_action=AuditAction.AUDIT)
         if self.is_working_version and not self.has_versions:
             return super().delete(*args, **kwargs)
 
