@@ -136,4 +136,6 @@ def search_participant_api(request, team_slug: str):
     query = Participant.objects.filter(team=request.team)
     if search:
         query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
-    return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in query[:10]]})
+
+    results = query.order_by("identifier")[:10]
+    return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in results]})
