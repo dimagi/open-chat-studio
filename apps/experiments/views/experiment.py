@@ -987,13 +987,11 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
     consent = default_version.consent_form
 
     initial = {
-        "experiment_id": default_version.id,
+        "participant_id": experiment_session.participant.id,
+        "identifier": experiment_session.participant.identifier,
     }
     if not experiment_session.participant:
         raise Http404()
-
-    initial["participant_id"] = experiment_session.participant.id
-    initial["identifier"] = experiment_session.participant.identifier
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
