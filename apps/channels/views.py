@@ -98,10 +98,9 @@ def new_api_message(request, experiment_id: uuid):
         try:
             # TODO: Support ability to select a specific version
             experiment = Experiment.objects.get(public_id=experiment_id)
-            working_version_id = experiment.get_working_version_id()
             session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
-                experiment__id=working_version_id,
+                experiment__id=experiment_id,
                 team=request.team,
                 participant__user=request.user,
                 experiment_channel__platform=ChannelPlatform.API,

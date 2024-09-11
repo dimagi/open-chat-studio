@@ -803,14 +803,11 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
 
 
 def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
-    # experiment_id can be a version's ID
     user = get_real_user_or_none(request.user)
     params = request.GET.dict()
     since_param = params.get("since")
-    experiment = get_object_or_404(Experiment, id=experiment_id)
-    working_version_id = experiment.get_working_version_id()
     experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=working_version_id, id=session_id, team=request.team
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
     )
 
     since = timezone.now()
@@ -840,11 +837,11 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
 def start_session_public(request, team_slug: str, experiment_id: str):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-        experiment_version = experiment.default_version
     except ValidationError:
         # old links dont have uuids
         raise Http404
 
+    experiment_version = experiment.default_version
     if not experiment_version.is_public:
         raise Http404
 

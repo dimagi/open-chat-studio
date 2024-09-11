@@ -554,29 +554,6 @@ class TestExperimentModel:
             expected_changed_fields=["id", "working_version_id"],
         )
 
-    def test_delete_working_experiment_without_versions(self):
-        working_version = ExperimentFactory()
-        working_version.delete()
-        with pytest.raises(Experiment.DoesNotExist):
-            working_version.refresh_from_db()
-
-    def test_delete_working_experiment_with_versions(self):
-        working_version = ExperimentFactory()
-        working_version.create_new_version()
-
-        working_version.delete()
-        working_version.refresh_from_db()
-        assert working_version.is_archived is True
-        for version in working_version.versions.all():
-            assert version.is_archived is True
-
-    def test_delete_versioned_experiment(self):
-        working_version = ExperimentFactory()
-        version = working_version.create_new_version()
-        version.delete()
-        version.refresh_from_db()
-        assert version.is_archived is True
-
 
 @pytest.mark.django_db()
 class TestExperimentObjectManager:
@@ -608,10 +585,11 @@ class TestExperimentObjectManager:
     def test_archived_experiments_are_filtered_out(self):
         """Default queries should exclude archived experiments"""
         experiment = ExperimentFactory()
-        experiment.create_new_version()
+        new_version = experiment.create_new_version()
         assert Experiment.objects.count() == 2
-        experiment.delete()
-        assert Experiment.objects.count() == 0
+        new_version.is_archived = True
+        new_version.save()
+        assert Experiment.objects.count() == 1
 
         # To get all experiment,s use the dedicated object method
         assert Experiment.objects.get_all().count() == 2
