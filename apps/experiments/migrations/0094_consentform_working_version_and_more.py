@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0092_experiment_is_archived_experiment_is_default_version_and_more'),
+        ('experiments', '0093_participant_name'),
     ]
 
     operations = [
