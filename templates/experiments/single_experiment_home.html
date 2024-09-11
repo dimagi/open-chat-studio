@@ -196,6 +196,10 @@
                 hx-swap="innerHTML"
               >
                 <div class="flex">
+                  <div class="w-96 my-2">
+                    <select x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
+                    </select>
+                  </div>
                   {% if perms.annotations.view_customtaggeditem %}
                     <div class="w-96 my-2">
                       <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
@@ -316,10 +320,6 @@
   </div>
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
-    function filterSessions(tags) {
-      htmx.trigger(htmx.find("#sessions-table"), "tagFilter", {});
-    }
-
     let element = document.getElementById('tag-multiselect-filter');
     new TomSelect(element, {
       maxItems: null,
