@@ -131,10 +131,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
-        tags_query = self.request.GET.get("tags")
-        if tags_query:
+        if tags_query := self.request.GET.get("tags"):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
+
+        if participant := self.request.GET.get("participant"):
+            query_set = query_set.filter(participant__identifier=participant)
         return query_set
 
 

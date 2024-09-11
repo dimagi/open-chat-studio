@@ -179,12 +179,13 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: ''}">
-            <div class="grid grid-flow-col auto-cols-max gap-x-2">
+          <div x-data="{tags: '', participant: null}">
+            <div class="flex gap-x-2">
               {% if perms.experiments.download_chats %}
                 <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}"
                       class="my-2">
                   {% csrf_token %}
+                  <input name="participant" class="hidden" x-bind:value="participant"/>
                   <input name="tags" class="hidden" x-bind:value="tags"/>
                   <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All"/>
                 </form>
@@ -195,13 +196,13 @@
                 hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
                 hx-swap="innerHTML"
               >
-                <div class="flex">
-                  <div class="w-96 my-2">
+                <div class="flex gap-2">
+                  <div class="w-60 my-2">
                     <select x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
                     </select>
                   </div>
                   {% if perms.annotations.view_customtaggeditem %}
-                    <div class="w-96 my-2">
+                    <div class="w-60 my-2">
                       <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
                               placeholder="Filter tags..."
                               autocomplete="off">
@@ -212,7 +213,7 @@
                       </select>
                     </div>
                   {% endif %}
-                  <div class="form-control ml-2">
+                  <div class="form-control">
                     <label class="label cursor-pointer">
                       <span class="label-text mr-2">Include API Sessions</span>
                       <input type="checkbox" name="show-all" class="toggle" />
@@ -321,9 +322,42 @@
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      let element = document.getElementById('tag-multiselect-filter');
-      new TomSelect(element, {
+      new TomSelect('#tag-multiselect-filter', {
         maxItems: null,
+      });
+
+      new TomSelect('#participant-filter', {
+        valueField: 'identifier',
+        searchField: ['name', 'identifier'],
+        load: function(query, callback) {
+          const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
+          fetch(url)
+            .then(response => response.json())
+            .then(json => {
+              console.log(json.results);
+              callback(json.results);
+            }).catch(()=>{
+              callback();
+            });
+        },
+        render: {
+          option: function(item, escape) {
+            return `<div class="mb-1">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                </div>`;
+          },
+          item: function(item, escape) {
+            return `<div class="mb-1">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                </div>`;
+          }
+        },
       });
 
       const tabs = document.querySelectorAll('.tab');
