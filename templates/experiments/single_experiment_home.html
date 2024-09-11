@@ -320,12 +320,12 @@
   </div>
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
-    let element = document.getElementById('tag-multiselect-filter');
-    new TomSelect(element, {
-      maxItems: null,
-    });
-
     document.addEventListener('DOMContentLoaded', () => {
+      let element = document.getElementById('tag-multiselect-filter');
+      new TomSelect(element, {
+        maxItems: null,
+      });
+
       const tabs = document.querySelectorAll('.tab');
       const tabContents = document.querySelectorAll('.tab-content');
       const showTabContent = (tabId) => {
