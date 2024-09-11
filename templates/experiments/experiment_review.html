@@ -18,7 +18,7 @@
     <h1 class="pg-title">Experiment Review</h1>
     <div class="prose !max-w-none">
       <p>Thanks for completing the experiment!</p>
-      {% if experiment.post_survey %}
+      {% if post_survey %}
         <p>{{ survey_text }}</p>
         <p><a class="btn btn-accent" href="{{ survey_link }}" target="_blank">Take the Survey</a></p>
       {% else %}
