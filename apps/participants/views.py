@@ -120,14 +120,9 @@ class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 @permission_required("experiments.change_participant")
 def edit_name(request, team_slug: str, pk: int):
     participant = get_object_or_404(Participant, id=pk, team=request.team)
-    return render(request, "participants/partials/edit_name.html", {"participant": participant})
-
-
-@login_and_team_required
-@permission_required("experiments.change_participant")
-def update_name(request, team_slug: str, pk: int):
-    participant = get_object_or_404(Participant, id=pk, team=request.team)
     if request.method == "POST":
-        participant.name = request.POST.get("name")
-        participant.save()
-    return render(request, "participants/partials/participant_name.html", {"participant": participant})
+        if name := request.POST.get("name"):
+            participant.name = name
+            participant.save()
+        return render(request, "participants/partials/participant_name.html", {"participant": participant})
+    return render(request, "participants/partials/edit_name.html", {"participant": participant})

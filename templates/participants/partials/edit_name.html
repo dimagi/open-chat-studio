@@ -1,4 +1,4 @@
-{% url "participants:update_name" request.team.slug participant.id as update_url %}
+{% url "participants:edit_name" request.team.slug participant.id as update_url %}
 <form
   hx-post="{{ update_url }}"
   hx-swap="innerHTML"
@@ -6,5 +6,5 @@
 >
   <input class="input input-xs input-bordered" type="text" name="name" value="{{ participant.name }}"/>
   <button class="btn btn-xs btn-success btn-outline"><i class="fa-solid fa-check"></i></button>
-  <button class="btn btn-xs btn-error btn-outline" hx-get="{{ update_url }}"><i class="fa-solid fa-xmark"></i></button>
+  <button class="btn btn-xs btn-error btn-outline" hx-post="{{ update_url }}" hx-params="none"><i class="fa-solid fa-xmark"></i></button>
 </form>
