@@ -197,12 +197,11 @@
                 hx-swap="innerHTML"
               >
                 <div class="flex gap-2">
-                  <div class="w-60 my-2">
-                    <select x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
-                    </select>
+                  <div class="w-72 my-2">
+                    <input x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
                   </div>
-                  {% if perms.annotations.view_customtaggeditem %}
-                    <div class="w-60 my-2">
+                  {% if perms.annotattions.view_customtaggeditem %}
+                    <div class="w-72 my-2">
                       <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
                               placeholder="Filter tags..."
                               autocomplete="off">
@@ -324,11 +323,13 @@
     document.addEventListener('DOMContentLoaded', () => {
       new TomSelect('#tag-multiselect-filter', {
         maxItems: null,
+        hidePlaceholder: true,
       });
 
       new TomSelect('#participant-filter', {
         valueField: 'identifier',
         searchField: ['name', 'identifier'],
+        hidePlaceholder: true,
         load: function(query, callback) {
           const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
           fetch(url)
@@ -342,7 +343,7 @@
         },
         render: {
           option: function(item, escape) {
-            return `<div class="mb-1">
+            return `<div class="">
                       <span class="h4">
                         ${ escape(item.name || 'No Name') }
                       </span>
@@ -350,7 +351,7 @@
                 </div>`;
           },
           item: function(item, escape) {
-            return `<div class="mb-1">
+            return `<div class="">
                       <span class="h4">
                         ${ escape(item.name || 'No Name') }
                       </span>
