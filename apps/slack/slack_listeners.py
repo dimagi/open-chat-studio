@@ -52,20 +52,23 @@ def respond_to_message(event, context: BoltContext, session=None):
     channel_id = event.get("channel")
     thread_ts = event.get("thread_ts", None) or event["ts"]
     experiment_channel = get_experiment_channel(channel_id)
+    experiment = experiment_channel.experiment
     if not experiment_channel:
         context.say("There are no bots associated with this channel.", thread_ts=thread_ts)
         return
 
-    if session and session.team_id != experiment_channel.experiment.team_id:
+    if session and session.team_id != experiment.team_id:
         raise TeamAccessException("Session and Channel teams do not match")
 
     slack_user = event.get("user")
 
-    experiment_version = experiment_channel.experiment.default_version
     if not session:
         external_id = make_session_external_id(channel_id, thread_ts)
         session = SlackChannel.start_new_session(
-            experiment_version, experiment_channel, slack_user, session_external_id=external_id
+            working_experiment=experiment,
+            experiment_channel=experiment_channel,
+            participant_identifier=slack_user,
+            session_external_id=external_id,
         )
 
     # strip out the mention
@@ -76,7 +79,7 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     # Set `send_response_to_user` to `False` to prevent it sending the message since we're going to send
     # it here using the already authenticated client.
-    ocs_channel = SlackChannel(experiment_version, experiment_channel, session, send_response_to_user=False)
+    ocs_channel = SlackChannel(experiment.default_version, experiment_channel, session, send_response_to_user=False)
     response = ocs_channel.new_user_message(message)
     context.say(response, thread_ts=thread_ts)
 
