@@ -70,18 +70,12 @@
                   {% endfor %}
                 </div>
               </td>
-              {% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
-                <td class="w-1/4 overflow-y-visible">
-                  <div class="my-2 mr-2">
-                    {% include "generic/tag_multiselect.html" with object=message %}
-                  </div>
+              <td class="w-1/4 overflow-y-visible">
+                <div class="my-2 mr-2">
+                  {% include "generic/tag_multiselect.html" with object=message %}
+                </div>
 
-                </td>
-              {% elif perms.annotations.view_customtaggeditem %}
-                <td class="w-1/4 overflow-y-visible">
-                  {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.tags.all %}
-                </td>
-              {% endif %}
+              </td>
               {% if perms.annotations.add_usercomment %}
                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                   <i class="fa-regular fa-comment"></i> <span

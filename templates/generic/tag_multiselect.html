@@ -6,13 +6,15 @@
            title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
       >{{ tag.name }}</div>
     {% endfor %}
-    <button class="btn btn-xs btn-ghost" title="Edit tags"
-            hx-get="{% url "annotations:tag_ui" request.team.slug %}?edit=1"
-            hx-vals='{{ object.object_info }}'
-            hx-target="#tag-ui-{{ object.id }}"
-    >
-      <i class="fa-solid fa-pencil"></i>
-    </button>
+    {% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
+      <button class="btn btn-xs btn-ghost" title="Edit tags"
+              hx-get="{% url "annotations:tag_ui" request.team.slug %}?edit=1"
+              hx-vals='{{ object.object_info }}'
+              hx-target="#tag-ui-{{ object.id }}"
+      >
+        <i class="fa-solid fa-pencil"></i>
+      </button>
+    {% endif %}
   {% else %}
     <div class="flex place-items-center">
       <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple
