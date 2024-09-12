@@ -1,6 +1,13 @@
 import factory
 
-from apps.events.models import EventAction, EventActionType, ScheduledMessage, StaticTrigger, StaticTriggerType
+from apps.events.models import (
+    EventAction,
+    EventActionType,
+    ScheduledMessage,
+    StaticTrigger,
+    StaticTriggerType,
+    TimeoutTrigger,
+)
 from apps.utils.factories.experiment import ExperimentFactory
 
 
@@ -18,6 +25,16 @@ class StaticTriggerFactory(factory.django.DjangoModelFactory):
     experiment = factory.SubFactory(ExperimentFactory)
     action = factory.SubFactory(EventActionFactory)
     type = StaticTriggerType.NEW_HUMAN_MESSAGE
+
+
+class TimeoutTriggerFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TimeoutTrigger
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    action = factory.SubFactory(EventActionFactory)
+    delay = 1
+    total_num_triggers = 1
 
 
 class ScheduledMessageFactory(factory.django.DjangoModelFactory):

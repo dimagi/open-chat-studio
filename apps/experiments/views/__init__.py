@@ -10,10 +10,12 @@ from .consent import (  # noqa: F401
 from .experiment import (  # noqa: F401
     AddFileToExperiment,
     CreateExperiment,
+    CreateExperimentVersion,
     DeleteFileFromExperiment,
     EditExperiment,
     ExperimentSessionsTableView,
     ExperimentTableView,
+    ExperimentVersionsTableView,
     create_channel,
     delete_experiment,
     download_experiment_chats,

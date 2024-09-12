@@ -1,8 +1,30 @@
 {% extends 'table/tailwind.html' %}
 {% load django_tables2 %}
 {% comment %}
-Override pagination in base template to use htmx
+Override pagination and sorting in base template to use htmx
 {% endcomment %}
+
+{% block table.thead %}
+    {% if table.show_header %}
+        <thead {{ table.attrs.thead.as_html }}>
+            <tr>
+                {% for column in table.columns %}
+                    <th {{ column.attrs.th.as_html }} scope="col"
+                        {% if column.orderable %}
+                            hx-get="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
+                            hx-trigger="click"
+                            hx-target="div.table-container"
+                            hx-swap="outerHTML"
+                            style="cursor: pointer;"
+                        {% endif %}>
+                        {{ column.header }}
+                    </th>
+                {% endfor %}
+            </tr>
+        </thead>
+    {% endif %}
+{% endblock table.thead %}
+
 {% block prev-page-link-attr %}
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
     hx-trigger="click"

@@ -26,7 +26,7 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     topic = columns.Column(accessor="source_material__topic", verbose_name="Topic", orderable=True)
-    is_public = columns.Column(verbose_name="Publically accessible", orderable=True)
+    is_public = columns.Column(verbose_name="Publically accessible", orderable=False)
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
@@ -156,6 +156,24 @@ class ExperimentSessionsTable(tables.Table):
         row_attrs = {"class": "text-sm"}
         orderable = False
         empty_text = "No sessions yet!"
+
+
+class ExperimentVersionsTable(tables.Table):
+    version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
+    created_at = columns.Column(verbose_name="Created On", accessor="created_at")
+    is_default = columns.TemplateColumn(
+        template_code="""{% if record.is_default_version %}
+        <span aria-label="true">✓</span>
+        {% endif %}""",
+        verbose_name="Default Version",
+    )
+
+    class Meta:
+        model = Experiment
+        fields = []
+        row_attrs = {"class": "text-sm"}
+        orderable = False
+        empty_text = "No versions yet!"
 
 
 def _get_route_url(url_name, request, record):

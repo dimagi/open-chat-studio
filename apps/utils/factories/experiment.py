@@ -66,6 +66,11 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     voice_provider = factory.SubFactory(VoiceProviderFactory)
 
 
+class VersionedExperimentFactory(ExperimentFactory):
+    working_version = factory.SubFactory(ExperimentFactory, version_number=2, team=factory.SelfAttribute("..team"))
+    version_number = 1
+
+
 class ChatFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Chat
@@ -79,6 +84,7 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     identifier = factory.Faker("uuid4")
+    name = factory.Faker("name")
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
@@ -87,7 +93,7 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
 
     experiment = factory.SubFactory(ExperimentFactory)
     team = factory.LazyAttribute(lambda obj: obj.experiment.team)
-    chat = factory.SubFactory(ChatFactory)
+    chat = factory.SubFactory(ChatFactory, team=factory.SelfAttribute("..team"))
     participant = factory.SubFactory(ParticipantFactory, team=factory.SelfAttribute("..team"))
     experiment_channel = factory.SubFactory(
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")

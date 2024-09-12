@@ -64,6 +64,7 @@ from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
     ExperimentTable,
+    ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
@@ -103,7 +104,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team)
+        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
@@ -124,16 +125,32 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "annotations.view_customtaggeditem"
 
     def get_queryset(self):
-        query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
-            .exclude(experiment_channel__platform=ChannelPlatform.API)
+        query_set = ExperimentSession.objects.with_last_message_created_at().filter(
+            team=self.request.team, experiment__id=self.kwargs["experiment_id"]
         )
+        if not self.request.GET.get("show-all"):
+            query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
+
         tags_query = self.request.GET.get("tags")
         if tags_query:
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
         return query_set
+
+
+class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
+    model = Experiment
+    paginate_by = 25
+    table_class = ExperimentVersionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experiment"
+
+    def get_queryset(self):
+        return (
+            Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
+            .order_by("version_number")
+            .all()
+        )
 
 
 class ExperimentForm(forms.ModelForm):
@@ -456,6 +473,41 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
     pass
 
 
+# TODO: complete form
+class ExperimentVersionForm(forms.ModelForm):
+    class Meta:
+        model = Experiment
+        fields = ["is_default_version"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
+    model = Experiment
+    form_class = ExperimentVersionForm
+    template_name = "experiments/create_version_form.html"
+    title = "Create Experiment Version"
+    button_title = "Create"
+    permission_required = "experiments.add_experiment"
+    pk_url_kwarg = "experiment_id"
+
+    def form_valid(self, form):
+        working_experiment = self.get_object()
+        working_experiment.create_new_version()
+        return HttpResponseRedirect(self.get_success_url())
+
+    def get_success_url(self):
+        url = reverse(
+            "experiments:single_experiment_home",
+            kwargs={
+                "team_slug": self.request.team.slug,
+                "experiment_id": self.kwargs["experiment_id"],
+            },
+        )
+        return f"{url}#versions"
+
+
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
@@ -468,7 +520,6 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         )
         .exclude(experiment_channel__platform=ChannelPlatform.API)
     )
-    sort = request.GET.get("sort", None)
     channels = experiment.experimentchannel_set.exclude(platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
@@ -489,10 +540,6 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platform_forms": platform_forms,
             "channels": channels,
             "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
-            "filter_tags_url": reverse(
-                "experiments:sessions-list", kwargs={"team_slug": team_slug, "experiment_id": experiment.id}
-            ),
-            "sort": sort,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
             **_get_terminal_bots_context(experiment, team_slug),
