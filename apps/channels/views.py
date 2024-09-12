@@ -100,7 +100,7 @@ def new_api_message(request, experiment_id: uuid):
             experiment = Experiment.objects.get(public_id=experiment_id)
             session = ExperimentSession.objects.select_related("experiment", "experiment_channel").get(
                 external_id=session_id,
-                experiment__id=experiment_id,
+                experiment__public_id=experiment_id,
                 team=request.team,
                 participant__user=request.user,
                 experiment_channel__platform=ChannelPlatform.API,

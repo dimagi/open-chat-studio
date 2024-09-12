@@ -52,11 +52,12 @@ def respond_to_message(event, context: BoltContext, session=None):
     channel_id = event.get("channel")
     thread_ts = event.get("thread_ts", None) or event["ts"]
     experiment_channel = get_experiment_channel(channel_id)
-    experiment = experiment_channel.experiment
+
     if not experiment_channel:
         context.say("There are no bots associated with this channel.", thread_ts=thread_ts)
         return
 
+    experiment = experiment_channel.experiment
     if session and session.team_id != experiment.team_id:
         raise TeamAccessException("Session and Channel teams do not match")
 
