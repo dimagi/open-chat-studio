@@ -142,7 +142,7 @@ class ExperimentSessionsTable(tables.Table):
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
-        template_name="generic/tag_multiselect.html",
+        template_name="annotations/tag_ui.html",
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
 

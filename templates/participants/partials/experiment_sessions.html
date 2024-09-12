@@ -15,7 +15,7 @@
         <td>{{ forloop.counter }}</td>
         <td>{{ session.created_at }}</td>
         <td>
-          {% include "generic/tag_multiselect.html" with object=session.chat allow_edit=False %}
+          {% include "annotations/tag_ui.html" with object=session.chat allow_edit=False %}
         </td>
       </tr>
     {% endfor %}

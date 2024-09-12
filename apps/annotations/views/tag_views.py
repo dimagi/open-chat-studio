@@ -121,7 +121,7 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
         return render(
             request,
-            "generic/tag_multiselect.html",
+            "annotations/tag_ui.html",
             {
                 "team_slug": team_slug,
                 "object": obj,
