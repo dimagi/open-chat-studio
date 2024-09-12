@@ -131,10 +131,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
-        tags_query = self.request.GET.get("tags")
-        if tags_query:
+        if tags_query := self.request.GET.get("tags"):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
+
+        if participant := self.request.GET.get("participant"):
+            query_set = query_set.filter(participant__identifier=participant)
         return query_set
 
 
@@ -921,8 +923,10 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
     tags = request.POST["tags"]
     tags = tags.split(",") if tags else []
 
+    participant = request.POST.get("participant")
+
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags, participant).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 

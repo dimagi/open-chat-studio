@@ -137,7 +137,7 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
+    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier", orderable=True)
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
