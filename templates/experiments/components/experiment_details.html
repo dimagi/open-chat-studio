@@ -9,21 +9,12 @@
           <dd class="text-sm col-span-2">{{ detail }}</dd>
         </div>
       {% endfor %}
-      {% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
-        <div class="py-3 grid grid-cols-3">
-          <dt class="text-sm font-medium leading-6">Tags</dt>
-          <dd class="col-span-2 mr-2">
-            {% include "generic/tag_multiselect.html" with object=experiment_session.chat %}
-          </dd>
-        </div>
-      {% elif perms.annotations.view_customtaggeditem %}
-        <div class="py-3 grid grid-cols-3">
-          <dt class="text-sm font-medium leading-6">Tags</dt>
-          <dd class="col-span-2 mr-2">
-            {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=experiment_session.chat.tags.all %}
-          </dd>
-        </div>
-      {% endif %}
+      <div class="py-3 grid grid-cols-3">
+        <dt class="text-sm font-medium leading-6">Tags</dt>
+        <dd class="col-span-2 mr-2">
+          {% include "annotations/tag_ui.html" with object=experiment_session.chat %}
+        </dd>
+      </div>
       {% if perms.annotations.add_usercomment %}
         <div x-data="{showComments: false}">
           <div class="py-3 grid grid-cols-3 mb-2">

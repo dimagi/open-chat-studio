@@ -3,10 +3,10 @@
 To add tagging ability to your model, simply add the `TaggedModelMixin` to your model. This will add a `tags`
 field and provide helper methods to manage these tags.
 
-### Include the `tag_multiselect.html` template in your template:
+### Include the `tag_ui.html` template in your template:
 
 ```
-{% include "generic/tag_multiselect.html" with object_tags=object_variable %}
+{% include "annotations/tag_ui.html" with object_tags=object_variable %}
 ```
 
 Be sure to pass the available tags as a template variable called `available_tags`.
@@ -16,7 +16,7 @@ Be sure to pass the available tags as a template variable called `available_tags
 ```html
 <script
     id="tag-multiselect"  (you must use this ID)
-    src="{% static './tag_multiselect.js' %}"
+    src="{% static "js/tagMultiselect-bundle.js" %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
     >
