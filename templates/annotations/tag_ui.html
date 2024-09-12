@@ -1,5 +1,5 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
-  {% if view_only|default_if_none:'true' %}
+  {% if not edit_mode|default_if_none:False %}
     <i class="fa-solid fa-tags"></i>
     {% for tag in object.get_linked_tags %}
       <div class="badge {% if tag.is_system_tag %}badge-warning{% else %}badge-neutral{% endif %}"

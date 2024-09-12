@@ -125,7 +125,7 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
             {
                 "team_slug": team_slug,
                 "object": obj,
-                "view_only": not request.GET.get("edit"),
+                "edit_mode": request.GET.get("edit"),
                 "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
             },
         )
