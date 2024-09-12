@@ -43,4 +43,5 @@ function configureTomSelect() {
 
 export const setupTagSelects = () => {
   configureTomSelect();
+  htmx.on("htmx:afterSwap", () => { configureTomSelect() });
 }

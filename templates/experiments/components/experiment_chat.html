@@ -13,9 +13,6 @@
             {% if perms.annotations.add_customtaggeditem %}
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Tags</th>
             {% endif %}
-            {% if perms.annotations.view_customtaggeditem %}
-              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">System Tags</th>
-            {% endif %}
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
@@ -55,15 +52,11 @@
                   <div class="my-2 mr-2">
                     {% include "generic/tag_multiselect.html" with object=message %}
                   </div>
+
                 </td>
               {% elif perms.annotations.view_customtaggeditem %}
-                <td scope="col" class="w-1/4 overflow-y-visible">
+                <td class="w-1/4 overflow-y-visible">
                   {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.tags.all %}
-                </td>
-              {% endif %}
-              {% if perms.annotations.view_customtaggeditem %}
-                <td scope="col" class="w-1/4 overflow-y-visible">
-                  {% include 'experiments/components/experiment_sessions_list_tags.html' with tags=message.get_system_tags %}
                 </td>
               {% endif %}
               {% if perms.annotations.add_usercomment %}

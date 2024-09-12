@@ -96,14 +96,16 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
-    @property
     def get_linked_tags(self):
-        # return [{"user": item.user.username, "tag": item.tag.name} for item in self.tagged_items.all()]
-        return [item.tag.name for item in self.tagged_items.all()]
+        return self.tags.all()
 
-    @property
-    def get_system_tags(self):
-        return self.tags.filter(is_system_tag=True)
+    @cached_property
+    def user_tag_names(self):
+        return {tag.name for tag in self.tags.filter(is_system_tag=False)}
+
+    @cached_property
+    def system_tags_names(self):
+        return {tag.name for tag in self.tags.filter(is_system_tag=True)}
 
 
 class UserComment(BaseTeamModel):

@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse, HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -107,6 +107,28 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         obj = content_type.get_object_for_this_type(id=object_id)
         obj.tags.remove(tag_name)
         return HttpResponse()
+
+
+class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "annotations.view_customtaggeditem"
+
+    def get(self, request, team_slug: str):
+        object_id = request.GET.get("id")
+        content_type = get_object_or_404(
+            ContentType, app_label=request.GET.get("app"), model=request.GET.get("model_name")
+        )
+        obj = content_type.get_object_for_this_type(id=object_id)
+
+        return render(
+            request,
+            "generic/tag_multiselect.html",
+            {
+                "team_slug": team_slug,
+                "object": obj,
+                "view_only": not request.GET.get("edit"),
+                "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            },
+        )
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
