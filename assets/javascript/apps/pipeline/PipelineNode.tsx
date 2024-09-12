@@ -111,7 +111,11 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
               inputParam={inputParam}
               value={params[inputParam.name]}
               onChange={updateParamValue}
-              provider={params.llm_provider_id}
+              provider={
+                Array.isArray(params.llm_provider_id)
+                  ? params.llm_provider_id.join("")
+                  : params.llm_provider_id
+              }
             />
           </>
         );
@@ -128,25 +132,31 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             ></input>
           </>
         );
-      case "Keywords":
+      case "Keywords": {
+        const length =
+          parseInt(
+            Array.isArray(params.num_outputs)
+              ? params.num_outputs.join("")
+              : params.num_outputs,
+          ) || 1;
         return (
           <>
-            {Array.from(
-              { length: parseInt(params["num_outputs"]) || 1 },
-              (_, index) => {
-                return (
-                  <KeywordsWidget
-                    index={index}
-                    keywords={params["keywords"]}
-                    setParams={setParams}
-                    id={id}
-                    key={`${inputParam.name}-${index}`}
-                  ></KeywordsWidget>
-                );
-              },
-            )}
+            {Array.from({ length: length }, (_, index) => {
+              return (
+                <KeywordsWidget
+                  index={index}
+                  keywords={
+                    Array.isArray(params.keywords) ? params["keywords"] : []
+                  }
+                  setParams={setParams}
+                  id={id}
+                  key={`${inputParam.name}-${index}`}
+                ></KeywordsWidget>
+              );
+            })}
           </>
         );
+      }
       default:
         return (
           <>
@@ -167,7 +177,12 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   };
 
   const getOuputHandles = () => {
-    const numberOfOutputs = parseInt(params["num_outputs"]) || 1;
+    const numberOfOutputs =
+      parseInt(
+        Array.isArray(params.num_outputs)
+          ? params.num_outputs.join("")
+          : params.num_outputs,
+      ) || 1;
     const outputHandles = Array.from(
       { length: numberOfOutputs },
       (_, index) => {

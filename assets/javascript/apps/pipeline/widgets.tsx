@@ -62,7 +62,7 @@ export function LlmProviderIdWidget({
 }: {
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  value: string;
+  value: string | string[];
   setParams: Dispatch<SetStateAction<NodeParams>>;
   id: NodeProps["id"];
 }) {
@@ -113,7 +113,7 @@ export function LlmModelWidget({
 }: {
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  value: string;
+  value: string | string[];
   onChange: ChangeEventHandler;
   provider: string;
 }) {
@@ -145,7 +145,7 @@ export function SourceMaterialIdWidget({
 }: {
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  value: string;
+  value: string | string[];
   onChange: ChangeEventHandler;
 }) {
   return (
