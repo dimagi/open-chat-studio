@@ -28,11 +28,13 @@ class RecurringReminderSchema(BaseModel):
     datetime_end: datetime | None = Field(description="The date of the last reminder in ISO 8601 format", default=None)
     message: str = Field(description=REMINDER_MESSAGE_HELP_TEXT)
     repetitions: str | None = Field(description="The number of repetitions", default=None)
+    schedule_name: str = Field(description="The name for this scheduled message")
 
 
 class OneOffReminderSchema(BaseModel):
     datetime_due: datetime = Field(description="The datetime that the reminder is due in ISO 8601 format")
     message: str = Field(description=REMINDER_MESSAGE_HELP_TEXT)
+    schedule_name: str = Field(description="The name for this scheduled message")
 
 
 class DeleteReminderSchema(BaseModel):

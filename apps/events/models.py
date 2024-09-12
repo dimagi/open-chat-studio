@@ -387,7 +387,7 @@ class ScheduledMessage(BaseTeamModel):
         return self.action_id is not None
 
     def as_string(self, as_timezone: str | None = None):
-        header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
+        header_str = f"{self.name} (Message id={self.external_id}, message={self.prompt_text})"
         if self.repetitions == 0:
             schedule_details_str = "One-off reminder"
         elif self.time_period in ["hour", "day"]:
