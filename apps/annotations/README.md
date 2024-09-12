@@ -16,7 +16,7 @@ Be sure to pass the available tags as a template variable called `available_tags
 ```html
 <script
     id="tag-multiselect"  (you must use this ID)
-    src="{% static './tag_multiselect.js' %}"
+    src="{% static "js/tagMultiselect-bundle.js" %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
     >
