@@ -610,7 +610,10 @@ components:
       properties:
         identifier:
           type: string
-          title: Participant identifier
+          title: Participant Identifier
+        name:
+          type: string
+          title: Participant Name
         platform:
           allOf:
           - $ref: '#/components/schemas/PlatformEnum'

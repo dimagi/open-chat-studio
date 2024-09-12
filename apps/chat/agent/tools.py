@@ -223,6 +223,7 @@ TOOL_CLASS_MAP = {
     AgentTools.ONE_OFF_REMINDER: OneOffReminderTool,
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
+    AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
 }
 
 
