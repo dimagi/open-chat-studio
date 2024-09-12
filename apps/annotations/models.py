@@ -1,3 +1,4 @@
+import json
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -69,8 +70,6 @@ class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
 class AnnotationMixin:
     @cached_property
     def object_info(self):
-        import json
-
         return json.dumps(
             {
                 "id": self.id,
@@ -99,13 +98,18 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     def get_linked_tags(self):
         return self.tags.all()
 
-    @cached_property
     def user_tag_names(self):
-        return {tag.name for tag in self.tags.filter(is_system_tag=False)}
+        return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
+
+    def system_tags_names(self):
+        return {tag["name"] for tag in self.tags_json if tag["is_system_tag"]}
+
+    def all_tag_names(self):
+        return [tag["name"] for tag in self.tags_json]
 
     @cached_property
-    def system_tags_names(self):
-        return {tag.name for tag in self.tags.filter(is_system_tag=True)}
+    def tags_json(self):
+        return [{"name": tag.name, "id": tag.id, "is_system_tag": tag.is_system_tag} for tag in self.tags.all()]
 
 
 class UserComment(BaseTeamModel):
