@@ -12,8 +12,6 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.utils.time import pretty_date
 
-BOT_MESSAGE_FOR_USER_TASK = "apps.chat.tasks.send_bot_message_to_users"
-
 
 class CustomBaseTool(BaseTool):
     experiment_session: ExperimentSession | None = None
