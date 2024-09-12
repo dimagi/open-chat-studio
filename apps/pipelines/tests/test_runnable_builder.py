@@ -635,6 +635,74 @@ def test_router_node(get_llm_service, provider, pipeline, experiment_session):
     assert output["messages"][-1] == "A z"
 
 
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [
+            {
+                "id": "llm-1->llm-2",
+                "source": "llm-1",
+                "target": "llm-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            }
+        ],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "history_type": "node",
+                        "prompt": ("Node 1:"),
+                    },
+                },
+                "id": "llm-1",
+            },
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond again",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "prompt": "Node 2:",
+                        # No history_type
+                    },
+                },
+                "id": "llm-2",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    user_input = "The User Input"
+    output_1 = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
+        -1
+    ]
+    expected_saved_history = f"Node 1: {user_input}"
+    expected_output = f"Node 2: {expected_saved_history}"
+    assert output_1 == expected_output
+
+    user_input_2 = "Saying more stuff"
+    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
+        "messages"
+    ][-1]
+    expected_output = f"Node 2: Node 1: {expected_saved_history} {user_input_2}"
+    assert output_2 == expected_output
+
+
 @contextmanager
 def extract_structured_data_pipeline(provider, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
