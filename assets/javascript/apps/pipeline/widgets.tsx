@@ -10,6 +10,49 @@ import usePipelineStore from "./stores/pipelineStore";
 import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
 
+export function KeywordsWidget({
+  index,
+  keywords,
+  setParams,
+  id,
+}: {
+  index: number;
+  keywords: string[];
+  setParams: Dispatch<SetStateAction<NodeParams>>;
+  id: NodeProps["id"];
+}) {
+  const setNode = usePipelineStore((state) => state.setNode);
+  const updateParamValue = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    setParams((prevParams) => {
+      const { name, value } = event.target;
+      const updatedList = [...(prevParams[name] || [])];
+      updatedList[index] = value;
+      const newParams = { ...prevParams, [name]: updatedList };
+      setNode(id, (old) => ({
+        ...old,
+        data: {
+          ...old.data,
+          params: newParams,
+        },
+      }));
+      return newParams;
+    });
+  };
+  return (
+    <>
+      <div className="m-1 font-medium text-center">
+        {`Keyword ${index + 1}`}
+      </div>
+      <textarea
+        className="textarea textarea-bordered w-full"
+        name="keywords"
+        onChange={updateParamValue}
+        value={keywords ? keywords[index] : ""}
+      ></textarea>
+    </>
+  );
+}
+
 export function LlmProviderIdWidget({
   parameterValues,
   inputParam,
