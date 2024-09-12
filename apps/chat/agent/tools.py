@@ -1,5 +1,4 @@
 import logging
-import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -45,6 +44,7 @@ class RecurringReminderTool(CustomBaseTool):
 
     def action(
         self,
+        schedule_name: str,
         datetime_due: datetime,
         every: int,
         period: TimePeriod,
@@ -55,6 +55,7 @@ class RecurringReminderTool(CustomBaseTool):
         return create_schedule_message(
             self.experiment_session,
             message=message,
+            name=schedule_name,
             start_date=datetime_due,
             end_date=datetime_end,
             repetitions=repetitions,
@@ -74,9 +75,10 @@ class OneOffReminderTool(CustomBaseTool):
         self,
         datetime_due: datetime,
         message: str,
+        schedule_name: str,
     ):
         return create_schedule_message(
-            self.experiment_session, message=message, start_date=datetime_due, is_recurring=False
+            self.experiment_session, message=message, name=schedule_name, start_date=datetime_due, is_recurring=False
         )
 
 
@@ -174,13 +176,13 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
 def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
+    name: str,
     start_date: datetime,
     is_recurring: bool,
     end_date: datetime | None = None,
     **kwargs,
 ):
-    name_id = uuid.uuid4()
-    kwargs["name"] = f"schedule_message_{name_id}"
+    kwargs["name"] = name
     kwargs["prompt_text"] = message
     kwargs["experiment_id"] = experiment_session.experiment.id
 
