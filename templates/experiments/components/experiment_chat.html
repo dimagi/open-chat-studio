@@ -18,8 +18,9 @@
         <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
           {% for message in experiment_session.get_messages_for_display %}
             <tr
+              x-data="{get isSelected() { return this.commentsRow === {{ forloop.counter }} }}"
               class="cursor-pointer"
-              x-bind:class="commentsRow === {{ forloop.counter }} ? 'bg-gray-300' : ''"
+              x-bind:class="isSelected ? 'bg-gray-300' : ''"
               x-on:click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
             >
               <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">{{ forloop.counter }}</td>
@@ -35,7 +36,9 @@
                   </time></small>
                 </div>
               </td>
-              <td class="px-3 py-4 text-sm text-gray-500 flex flex-col gap-2">
+              <td class="px-3 py-4 text-sm flex flex-col gap-2"
+                  x-bind:class="isSelected ? 'text-neutral' : ''"
+              >
                 <div>
                   {{ message.content|render_markdown }}
                 </div>
