@@ -141,7 +141,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
 
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         self.calls.append(mock.call(messages, *args, **kwargs))
-        return messages[-1]
+        return " ".join(message.content for message in messages)
 
 
 @contextmanager

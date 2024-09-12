@@ -88,11 +88,14 @@ class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: str = "You are a helpful assistant. Answer the user's query as best you can"
 
     def _process(self, input, state: PipelineState) -> PipelineState:
-        prompt = PromptTemplate.from_template(template=self.prompt)
-        context = self._get_context(input, state, prompt)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.prompt),
+            MessagesPlaceholder("history", optional=True),
+            ("human", "{input}")
+        ])
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         return output.content
