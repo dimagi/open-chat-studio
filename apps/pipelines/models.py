@@ -182,3 +182,26 @@ class PipelineEventInputs(models.TextChoices):
     FULL_HISTORY = "full_history", "Full History"
     HISTORY_LAST_SUMMARY = "history_last_summary", "History to last summary"
     LAST_MESSAGE = "last_message", "Last message"
+
+
+class PipelineChatHistoryTypes(models.TextChoices):
+    NODE = "node", "Node History"
+    NAMED = "named", "Named History"
+    GLOBAL = "global", "Global History"
+
+
+class PipelineChatHistory(BaseModel):
+    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="pipeline_chat_history")
+
+    type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
+    name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
+
+    class Meta:
+        unique_together = [("session", "type", "name")]
+        ordering = ["-created_at"]
+
+
+class PipelineChatMessages(BaseModel):
+    chat_history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="messages")
+    message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
+    content = models.TextField()
