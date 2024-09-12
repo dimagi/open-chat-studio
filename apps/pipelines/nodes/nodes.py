@@ -15,7 +15,15 @@ from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
+from apps.pipelines.nodes.types import (
+    Keywords,
+    LlmModel,
+    LlmProviderId,
+    LlmTemperature,
+    NumOutputs,
+    PipelineJinjaTemplate,
+    SourceMaterialId,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.utils.time import pretty_date
@@ -47,17 +55,10 @@ class RenderTemplate(PipelineNode):
         return template.render(content)
 
 
-class LLMResponse(PipelineNode):
-    __human_name__ = "LLM response"
-
+class LLMResponseMixin:
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
-
-    def _process(self, input, state: PipelineState) -> PipelineState:
-        llm = self.get_chat_model()
-        output = llm.invoke(input, config=self._config)
-        return output.content
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -72,6 +73,15 @@ class LLMResponse(PipelineNode):
 
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
+
+
+class LLMResponse(PipelineNode, LLMResponseMixin):
+    __human_name__ = "LLM response"
+
+    def _process(self, input, state: PipelineState) -> PipelineState:
+        llm = self.get_chat_model()
+        output = llm.invoke(input, config=self._config)
+        return output.content
 
 
 class LLMResponseWithPrompt(LLMResponse):
@@ -150,10 +160,34 @@ class BooleanNode(Passthrough):
             return "true"
         return "false"
 
-    @classmethod
-    def get_output_map(cls):
-        """A mapping from the output handles on the frontent to the return values of process_conditional"""
+    def get_output_map(self):
+        """A mapping from the output handles on the frontend to the return values of process_conditional"""
         return {"output_true": "true", "output_false": "false"}
+
+
+class RouterNode(Passthrough, LLMResponseMixin):
+    __human_name__ = "Router"
+    llm_provider_id: LlmProviderId
+    llm_model: LlmModel
+    prompt: str = "You are an extremely helpful router {input}"
+    num_outputs: NumOutputs = 2
+    keywords: Keywords = []
+
+    def process_conditional(self, state: PipelineState):
+        prompt = PromptTemplate.from_template(template=self.prompt)
+        chain = prompt | self.get_chat_model()
+        result = chain.invoke(state["messages"][-1], config=self._config)
+        keyword = result.content.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
+        else:
+            return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
 
 
 class ExtractStructuredDataNodeMixin:
