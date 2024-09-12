@@ -44,4 +44,6 @@ def test_experiment_to_message_export_rows(chat1_tags, chat2_tags, filter_tags, 
     rows = []
     for row in experiment_to_message_export_rows(session_1.experiment, filter_tags):
         rows.append(row)
+
+    rows.pop(0)  # Remove header row
     assert len(rows) == expected_chats_count
