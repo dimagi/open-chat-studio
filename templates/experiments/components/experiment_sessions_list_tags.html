@@ -1,6 +1,0 @@
-<i class="fa-solid fa-tags text-gray-500"></i>
-{% for tag in tags %}
-    <div class="badge {% if tag.is_system_tag %}badge-warning{% else %}badge-neutral{% endif %}"
-         title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
-    >{{ tag.name }}</div>
-{% endfor %}

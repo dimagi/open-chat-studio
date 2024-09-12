@@ -6,7 +6,7 @@
            title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
       >{{ tag.name }}</div>
     {% endfor %}
-    {% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
+    {% if allow_edit|default_if_none:1 and perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
       <button class="btn btn-xs btn-ghost" title="Edit tags"
               hx-get="{% url "annotations:tag_ui" request.team.slug %}?edit=1"
               hx-vals='{{ object.object_info }}'
