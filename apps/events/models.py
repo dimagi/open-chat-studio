@@ -355,10 +355,7 @@ class ScheduledMessage(BaseTeamModel):
         self.save()
 
     def _should_mark_complete(self):
-        return bool(
-            (self.total_triggers > 0 and self.total_triggers >= self.repetitions)
-            or (self.end_date and self.end_date <= timezone.now())
-        )
+        return bool(not self.remaining_triggers or (self.end_date and self.end_date <= timezone.now()))
 
     @cached_property
     def params(self):
