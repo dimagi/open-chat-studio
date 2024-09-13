@@ -355,9 +355,8 @@ class ScheduledMessage(BaseTeamModel):
         self.save()
 
     def _should_mark_complete(self):
-        repetitions = self.params.get("repetitions", None) or 0
         return bool(
-            (self.total_triggers > 0 and self.total_triggers >= repetitions)
+            (self.total_triggers > 0 and self.total_triggers >= self.repetitions)
             or (self.end_date and self.end_date <= timezone.now())
         )
 
@@ -379,11 +378,19 @@ class ScheduledMessage(BaseTeamModel):
 
     @cached_property
     def repetitions(self) -> int:
-        return self.params["repetitions"]
+        return self.params["repetitions"] or 0
 
     @cached_property
     def prompt_text(self) -> str:
         return self.params["prompt_text"]
+
+    @property
+    def expected_trigger_count(self):
+        return self.repetitions or 1
+
+    @property
+    def remaining_triggers(self):
+        return self.expected_trigger_count - self.total_triggers
 
     @property
     def was_created_by_system(self) -> bool:
@@ -391,7 +398,7 @@ class ScheduledMessage(BaseTeamModel):
 
     def as_string(self, as_timezone: str | None = None):
         header_str = f"{self.name} (Message id={self.external_id}, message={self.prompt_text})"
-        if not self.repetitions or self.repetitions <= 1:
+        if self.repetitions <= 1:
             schedule_details_str = "One-off reminder"
         elif self.time_period in [TimePeriod.DAYS, TimePeriod.HOURS]:
             schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
@@ -401,8 +408,7 @@ class ScheduledMessage(BaseTeamModel):
         elif self.time_period == TimePeriod.MONTHS:
             schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
 
-        has_triggers_remaining = (self.repetitions or 1) - self.total_triggers
-        if not self.is_complete and has_triggers_remaining:
+        if not self.is_complete and self.remaining_triggers:
             next_trigger_date = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
             next_trigger_str = f"Next trigger is at {next_trigger_date}"
         else:

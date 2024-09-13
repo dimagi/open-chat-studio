@@ -197,7 +197,7 @@ class TestExperimentSession:
 
         assert len(schedules) == 1
         schedule = schedules[0]
-        assert schedule["repetitions"] == repetitions
+        assert schedule["repetitions"] == (repetitions or 0)
         assert schedule["total_triggers"] == total_triggers
         assert schedule["triggers_remaining"] == expected_triggers_remaining
 
