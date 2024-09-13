@@ -376,7 +376,7 @@ class ScheduledMessage(BaseTeamModel):
 
     @cached_property
     def repetitions(self) -> int:
-        return self.params["repetitions"]
+        return self.params["repetitions"] or 0
 
     @cached_property
     def prompt_text(self) -> str:
