@@ -12,7 +12,7 @@ from apps.chat.channels import WebChannel
 @patch("apps.events.tasks.enqueue_static_triggers", Mock())
 @patch("apps.chat.channels.WebChannel.new_user_message")
 def test_start_new_session(new_user_message, with_seed_message, experiment):
-    """A simple test to make sure we create"""
+    """A simple test to make sure we create a session and send a session message"""
     if with_seed_message:
         experiment.seed_message = "Tell a joke"
         experiment.save()
@@ -37,4 +37,17 @@ def test_start_new_session(new_user_message, with_seed_message, experiment):
         assert message.attachments == []
 
 
-# TODO: Add more tests
+@pytest.mark.django_db()
+class TestVersioning:
+    @patch("apps.events.tasks.enqueue_static_triggers", Mock())
+    @patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
+    def test_start_new_session_uses_default_version(self, check_and_process_seed_message, experiment):
+        new_version = experiment.create_new_version()
+        session = WebChannel.start_new_session(
+            experiment,
+            "jack@titanic.com",
+        )
+
+        _session_used, experiment_used = check_and_process_seed_message.call_args[0]
+        assert experiment_used == new_version
+        assert session.experiment == experiment

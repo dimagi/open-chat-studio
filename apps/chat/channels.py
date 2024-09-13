@@ -15,7 +15,12 @@ from telebot.util import antiflood, smart_split
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
-from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException, ParticipantNotAllowedException
+from apps.chat.exceptions import (
+    AudioSynthesizeException,
+    MessageHandlerException,
+    ParticipantNotAllowedException,
+    VersionedExperimentSessionsNotAllowedException,
+)
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -121,6 +126,11 @@ class ChannelBase(ABC):
         timezone: str | None = None,
         session_external_id: str | None = None,
     ):
+        if working_experiment.is_versioned:
+            raise VersionedExperimentSessionsNotAllowedException(
+                message="A session cannot be linked to an experiment version. "
+            )
+
         return _start_experiment_session(
             working_experiment,
             experiment_channel,

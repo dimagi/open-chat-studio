@@ -10,6 +10,7 @@ import pytest
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import URL_REGEX, ChannelBase, TelegramChannel, strip_urls_and_emojis
+from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import (
     ExperimentRoute,
@@ -777,9 +778,25 @@ def test_participant_authorization(
         assert send_text_to_user.call_args[0][0] == "Sorry, you are not allowed to chat to this bot"
 
 
+class TestChannel(ChannelBase):
+    def send_text_to_user(self):
+        pass
+
+
 @pytest.mark.django_db()
-class TestVersioning:
-    """Tests relating to versioning behaviour within the ChannelBase class"""
+class TestBaseChannelMethods:
+    """Unit tests for the methods of the ChannelBase class"""
+
+    def test_participant_identifier(self):
+        """Fetching the participant data"""
+        session = ExperimentSessionFactory(participant__identifier="Alpha")
+        exp_channel = ExperimentChannelFactory(experiment=session.experiment)
+        channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
+        channel_base.message = telegram_messages.text_message(chat_id="Beta")
+
+        assert channel_base.participant_identifier == "Beta"
+        channel_base.experiment_session = session
+        assert channel_base.participant_identifier == "Alpha"
 
     @patch("apps.chat.channels.TelegramChannel.send_text_to_user", Mock())
     @patch("apps.chat.channels.TelegramChannel._get_bot_response", Mock())
@@ -795,3 +812,16 @@ class TestVersioning:
         # Check that the working experiment is linked to the session
         assert ExperimentSession.objects.filter(experiment=working_version).exists()
         assert not ExperimentSession.objects.filter(experiment=new_version).exists()
+
+    def test_can_start_a_session_with_working_experiment(self, experiment):
+        assert experiment.is_versioned is False
+        channel = ExperimentChannelFactory(experiment=experiment)
+        session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
+        assert session.experiment == experiment
+
+    def test_cannot_start_a_session_with_an_experiment_version(self, experiment):
+        channel = ExperimentChannelFactory(experiment=experiment)
+        new_version = experiment.create_new_version()
+        assert new_version.is_versioned is True
+        with pytest.raises(VersionedExperimentSessionsNotAllowedException):
+            ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
