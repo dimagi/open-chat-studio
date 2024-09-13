@@ -42,6 +42,7 @@ def get_session_json(session, expected_messages=None):
             "id": str(experiment.public_id),
             "name": experiment.name,
             "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+            "version_number": 1,
         },
         "participant": {"identifier": session.participant.identifier},
         "id": str(session.external_id),
