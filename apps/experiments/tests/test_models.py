@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
@@ -98,7 +99,11 @@ class TestSyntheticVoice:
 
 class TestExperimentSession:
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
-        params = {
+        params = self._get_params(experiment_id, time_period, frequency, repetitions)
+        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+
+    def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
+        return {
             "name": "Test",
             "time_period": time_period,
             "frequency": frequency,
@@ -106,11 +111,10 @@ class TestExperimentSession:
             "prompt_text": "hi",
             "experiment_id": experiment_id,
         }
-        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
     @pytest.mark.django_db()
     @freeze_time("2024-01-01")
-    def test_get_participant_scheduled_messages(self):
+    def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
         event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
@@ -130,48 +134,151 @@ class TestExperimentSession:
         )
 
         assert len(participant.get_schedules_for_experiment(experiment)) == 2
-        str_version1 = (
-            f"{message1.name} (Message id={message1.external_id}, message={message1.prompt_text}): Every 1 days on "
-            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
-        )
-        str_version2 = (
-            f"{message2.name} (Message id={message2.external_id}, message={message2.prompt_text}): Every 1 days on "
-            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
-        )
+
+        def _make_string(message, is_system):
+            return (
+                f"{message.name} (Message id={message.external_id}, message={message.prompt_text}): "
+                "One-off reminder. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC."
+                f"{' (System)' if is_system else ''}"
+            )
 
         scheduled_messages_str = participant.get_schedules_for_experiment(experiment)
-        assert str_version1 in scheduled_messages_str
-        assert str_version2 in scheduled_messages_str
+        assert scheduled_messages_str[0] == _make_string(message1, True)
+        assert scheduled_messages_str[1] == _make_string(message2, False)
+
+        def _make_expected_dict(external_id):
+            return {
+                "name": "Test",
+                "external_id": external_id,
+                "frequency": 1,
+                "time_period": "days",
+                "repetitions": 1,
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
+                "prompt": "hi",
+            }
 
         expected_dict_version = [
-            {
-                "name": "Test",
-                "external_id": message1.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
-            {
-                "name": "Test",
-                "external_id": message2.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
+            _make_expected_dict(message1.external_id),
+            _make_expected_dict(message2.external_id),
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "expected_triggers_remaining"),
+        [
+            (None, 0, 1),
+            (0, 0, 1),
+            (1, 0, 1),
+            (1, 1, 0),
+        ],
+    )
+    def test_get_schedules_for_experiment_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
+        session = ExperimentSessionFactory()
+        experiment = session.experiment
+        participant = session.participant
+
+        ScheduledMessageFactory(
+            experiment=experiment,
+            team=session.team,
+            participant=participant,
+            action=None,
+            next_trigger_date=timezone.now(),
+            last_triggered_at=timezone.now() if total_triggers > 0 else None,
+            total_triggers=total_triggers,
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
+        )
+
+        schedules = participant.get_schedules_for_experiment(experiment, as_dict=True)
+
+        assert len(schedules) == 1
+        schedule = schedules[0]
+        assert schedule["repetitions"] == (repetitions or 0)
+        assert schedule["total_triggers"] == total_triggers
+        assert schedule["triggers_remaining"] == expected_triggers_remaining
+
+    @pytest.mark.django_db()
+    @freeze_time("2024-01-01")
+    @pytest.mark.parametrize(
+        ("time_period", "repetitions", "total_triggers", "expected"),
+        [
+            (
+                TimePeriod.DAYS,
+                None,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                0,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                1,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                1,
+                1,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. Complete.",
+            ),
+            (
+                TimePeriod.DAYS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                2,
+                2,
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. Complete.",
+            ),
+            (
+                TimePeriod.WEEKS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): "
+                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+            ),
+            (
+                TimePeriod.MONTHS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): Every 1 months, 2 times. {next_trigger}",
+            ),
+        ],
+    )
+    def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
+        session = ExperimentSessionFactory()
+        experiment = session.experiment
+        participant = session.participant
+
+        message = ScheduledMessageFactory(
+            experiment=experiment,
+            team=session.team,
+            participant=participant,
+            action=None,
+            next_trigger_date=timezone.now(),
+            last_triggered_at=timezone.now() if total_triggers > 0 else None,
+            total_triggers=total_triggers,
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
+        )
+
+        schedules = participant.get_schedules_for_experiment(experiment, as_dict=False)
+
+        assert len(schedules) == 1
+        schedule = schedules[0]
+        next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
+        assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
     @pytest.mark.django_db()
     def test_get_participant_scheduled_messages_includes_child_experiments(self):
@@ -213,6 +320,27 @@ class TestExperimentSession:
             assert experiment_used == custom_experiment
         else:
             assert experiment_used == session.experiment
+
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "end_date", "expected"),
+        [
+            pytest.param(None, 0, None, False, id="null_reps_not_triggered"),
+            pytest.param(None, 1, None, True, id="null_reps_triggered"),
+            pytest.param(0, 0, None, False, id="zero_reps_not_triggered"),
+            pytest.param(0, 1, None, True, id="zero_reps_triggered"),
+            pytest.param(3, 2, None, False, id="reps_not_met"),
+            pytest.param(3, 3, None, True, id="reps_met"),
+            pytest.param(1, 0, timezone.now() - timezone.timedelta(days=1), True, id="past_end_date"),
+            pytest.param(1, 0, timezone.now() + timezone.timedelta(days=1), False, id="before_end_date"),
+        ],
+    )
+    def test_should_mark_complete(self, repetitions, total_triggers, end_date, expected):
+        scheduled_message = ScheduledMessage(
+            custom_schedule_params={"repetitions": repetitions},
+            total_triggers=total_triggers,
+            end_date=end_date,
+        )
+        assert scheduled_message._should_mark_complete() == expected
 
     @pytest.mark.django_db()
     def test_get_participant_data_name(self):

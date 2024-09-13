@@ -729,7 +729,9 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
-    def get_schedules_for_experiment(self, experiment, as_dict=False, as_timezone: str | None = None):
+    def get_schedules_for_experiment(
+        self, experiment, as_dict=False, as_timezone: str | None = None, include_complete=False
+    ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
         any child experiments in the case where the experiment is a parent
@@ -750,6 +752,8 @@ class Participant(BaseTeamModel):
             .select_related("action")
             .order_by("created_at")
         )
+        if not include_complete:
+            messages = messages.filter(is_complete=False)
 
         scheduled_messages = []
         for message in messages:
@@ -771,7 +775,7 @@ class Participant(BaseTeamModel):
                         "next_trigger_date": next_trigger_date,
                         "last_triggered_at": last_triggered_at,
                         "total_triggers": message.total_triggers,
-                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "triggers_remaining": message.remaining_triggers,
                         "is_complete": message.is_complete,
                     }
                 )
