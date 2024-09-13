@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
@@ -98,7 +99,11 @@ class TestSyntheticVoice:
 
 class TestExperimentSession:
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
-        params = {
+        params = self._get_params(experiment_id, time_period, frequency, repetitions)
+        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+
+    def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
+        return {
             "name": "Test",
             "time_period": time_period,
             "frequency": frequency,
@@ -106,7 +111,6 @@ class TestExperimentSession:
             "prompt_text": "hi",
             "experiment_id": experiment_id,
         }
-        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
     @pytest.mark.django_db()
     @freeze_time("2024-01-01")
@@ -172,6 +176,40 @@ class TestExperimentSession:
             },
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "expected_triggers_remaining"),
+        [
+            (None, 0, 1),
+            (0, 0, 1),
+            (1, 0, 1),
+            (1, 1, 0),
+        ],
+    )
+    def test_get_schedules_for_experiment(self, repetitions, total_triggers, expected_triggers_remaining):
+        session = ExperimentSessionFactory()
+        experiment = session.experiment
+        participant = session.participant
+
+        ScheduledMessageFactory(
+            experiment=experiment,
+            team=session.team,
+            participant=participant,
+            action=None,
+            next_trigger_date=timezone.now(),
+            last_triggered_at=timezone.now() if total_triggers > 0 else None,
+            total_triggers=total_triggers,
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
+        )
+
+        schedules = participant.get_schedules_for_experiment(experiment, as_dict=True)
+
+        assert len(schedules) == 1
+        schedule = schedules[0]
+        assert schedule["repetitions"] == repetitions
+        assert schedule["total_triggers"] == total_triggers
+        assert schedule["triggers_remaining"] == expected_triggers_remaining
 
     @pytest.mark.django_db()
     def test_get_participant_scheduled_messages_includes_child_experiments(self):

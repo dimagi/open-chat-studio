@@ -760,6 +760,7 @@ class Participant(BaseTeamModel):
                     next_trigger_date = next_trigger_date.astimezone(pytz.timezone(as_timezone))
                     if last_triggered_at:
                         last_triggered_at = last_triggered_at.astimezone(pytz.timezone(as_timezone))
+                expected_trigger_count = message.repetitions or 1
                 scheduled_messages.append(
                     {
                         "name": message.name,
@@ -771,7 +772,7 @@ class Participant(BaseTeamModel):
                         "next_trigger_date": next_trigger_date,
                         "last_triggered_at": last_triggered_at,
                         "total_triggers": message.total_triggers,
-                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "triggers_remaining": expected_trigger_count - message.total_triggers,
                         "is_complete": message.is_complete,
                     }
                 )
