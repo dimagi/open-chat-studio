@@ -204,37 +204,60 @@ class TestExperimentSession:
     @pytest.mark.django_db()
     @freeze_time("2024-01-01")
     @pytest.mark.parametrize(
-        ("repetitions", "total_triggers", "expected"),
+        ("time_period", "repetitions", "total_triggers", "expected"),
         [
             (
+                TimePeriod.DAYS,
                 None,
                 0,
                 "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
-            (0, 0, "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}"),
             (
+                TimePeriod.DAYS,
+                0,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
                 1,
                 0,
                 "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
             (
+                TimePeriod.DAYS,
                 1,
                 1,
                 "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
             (
+                TimePeriod.DAYS,
                 2,
                 1,
                 "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
             ),
             (
+                TimePeriod.DAYS,
                 2,
                 2,
                 "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
             ),
+            (
+                TimePeriod.WEEKS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): "
+                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+            ),
+            (
+                TimePeriod.MONTHS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): Every 1 months, 2 times. {next_trigger}",
+            ),
         ],
     )
-    def test_get_schedules_for_experiment_as_string(self, repetitions, total_triggers, expected):
+    def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
         session = ExperimentSessionFactory()
         experiment = session.experiment
         participant = session.participant
@@ -247,7 +270,7 @@ class TestExperimentSession:
             next_trigger_date=timezone.now(),
             last_triggered_at=timezone.now() if total_triggers > 0 else None,
             total_triggers=total_triggers,
-            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
         )
 
         schedules = participant.get_schedules_for_experiment(experiment, as_dict=False)

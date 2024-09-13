@@ -392,9 +392,11 @@ class ScheduledMessage(BaseTeamModel):
             schedule_details_str = "One-off reminder"
         elif self.time_period in [TimePeriod.DAYS, TimePeriod.HOURS]:
             schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
-        else:
+        elif self.time_period == TimePeriod.WEEKS:
             weekday = self.next_trigger_date.strftime("%A")
             schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
+        elif self.time_period == TimePeriod.MONTHS:
+            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
 
         next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
         tail_str = ""
