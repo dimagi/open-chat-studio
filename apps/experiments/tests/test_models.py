@@ -225,14 +225,12 @@ class TestExperimentSession:
             (
                 2,
                 1,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 days on Monday, 2 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
             ),
             (
                 2,
                 2,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 days on Monday, 2 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
             ),
         ],
     )

@@ -390,7 +390,7 @@ class ScheduledMessage(BaseTeamModel):
         header_str = f"{self.name} (Message id={self.external_id}, message={self.prompt_text})"
         if not self.repetitions or self.repetitions <= 1:
             schedule_details_str = "One-off reminder"
-        elif self.time_period in ["hour", "day"]:
+        elif self.time_period in [TimePeriod.DAYS, TimePeriod.HOURS]:
             schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
         else:
             weekday = self.next_trigger_date.strftime("%A")
