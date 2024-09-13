@@ -398,11 +398,18 @@ class ScheduledMessage(BaseTeamModel):
         elif self.time_period == TimePeriod.MONTHS:
             schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
 
-        next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        has_triggers_remaining = (self.repetitions or 1) - self.total_triggers
+        if not self.is_complete and has_triggers_remaining:
+            next_trigger_date = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+            next_trigger_str = f"Next trigger is at {next_trigger_date}"
+        else:
+            next_trigger_str = "Complete"
+
         tail_str = ""
         if self.action is not None:
             tail_str = " (System)"
-        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}.{tail_str}"
+
+        return f"{header_str}: {schedule_details_str}. {next_trigger_str}.{tail_str}"
 
     def __str__(self):
         return self.as_string()
