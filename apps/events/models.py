@@ -399,8 +399,8 @@ class ScheduledMessage(BaseTeamModel):
         next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
         tail_str = ""
         if self.action is not None:
-            tail_str = "(System)"
-        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}. {tail_str}"
+            tail_str = " (System)"
+        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}.{tail_str}"
 
     def __str__(self):
         return self.as_string()

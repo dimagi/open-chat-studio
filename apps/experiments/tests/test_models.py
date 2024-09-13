@@ -114,7 +114,7 @@ class TestExperimentSession:
 
     @pytest.mark.django_db()
     @freeze_time("2024-01-01")
-    def test_get_participant_scheduled_messages(self):
+    def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
         event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
@@ -134,46 +134,36 @@ class TestExperimentSession:
         )
 
         assert len(participant.get_schedules_for_experiment(experiment)) == 2
-        str_version1 = (
-            f"{message1.name} (Message id={message1.external_id}, message={message1.prompt_text}): Every 1 days on "
-            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
-        )
-        str_version2 = (
-            f"{message2.name} (Message id={message2.external_id}, message={message2.prompt_text}): Every 1 days on "
-            "Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
-        )
+
+        def _make_string(message, is_system):
+            return (
+                f"{message.name} (Message id={message.external_id}, message={message.prompt_text}): "
+                "Every 1 days on Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC."
+                f"{' (System)' if is_system else ''}"
+            )
 
         scheduled_messages_str = participant.get_schedules_for_experiment(experiment)
-        assert str_version1 in scheduled_messages_str
-        assert str_version2 in scheduled_messages_str
+        assert scheduled_messages_str[0] == _make_string(message1, True)
+        assert scheduled_messages_str[1] == _make_string(message2, False)
+
+        def _make_expected_dict(external_id):
+            return {
+                "name": "Test",
+                "external_id": external_id,
+                "frequency": 1,
+                "time_period": "days",
+                "repetitions": 1,
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
+                "prompt": "hi",
+            }
 
         expected_dict_version = [
-            {
-                "name": "Test",
-                "external_id": message1.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
-            {
-                "name": "Test",
-                "external_id": message2.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
+            _make_expected_dict(message1.external_id),
+            _make_expected_dict(message2.external_id),
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
 
