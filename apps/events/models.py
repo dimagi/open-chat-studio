@@ -364,23 +364,23 @@ class ScheduledMessage(BaseTeamModel):
     def params(self):
         return self.custom_schedule_params or (self.action.params if self.action else {})
 
-    @cached_property
+    @property
     def name(self) -> str:
         return self.params["name"]
 
-    @cached_property
+    @property
     def frequency(self) -> int:
         return self.params["frequency"]
 
-    @cached_property
+    @property
     def time_period(self) -> str:
         return self.params["time_period"]
 
-    @cached_property
+    @property
     def repetitions(self) -> int:
         return self.params["repetitions"] or 0
 
-    @cached_property
+    @property
     def prompt_text(self) -> str:
         return self.params["prompt_text"]
 
