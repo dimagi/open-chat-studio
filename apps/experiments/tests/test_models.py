@@ -209,21 +209,18 @@ class TestExperimentSession:
             (
                 None,
                 0,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 days on Monday, None times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
             (0, 0, "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}"),
             (
                 1,
                 0,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 days on Monday, 1 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
             (
                 1,
                 1,
-                "Test (Message id={message.external_id}, message=hi): "
-                "Every 1 days on Monday, 1 times. {next_trigger}",
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
             ),
             (
                 2,
@@ -259,7 +256,6 @@ class TestExperimentSession:
 
         assert len(schedules) == 1
         schedule = schedules[0]
-        print(schedule)
         next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
         assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
