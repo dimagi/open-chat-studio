@@ -400,13 +400,14 @@ class ScheduledMessage(BaseTeamModel):
         header_str = f"{self.name} (Message id={self.external_id}, message={self.prompt_text})"
         if self.repetitions <= 1:
             schedule_details_str = "One-off reminder"
-        elif self.time_period in [TimePeriod.DAYS, TimePeriod.HOURS]:
-            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
-        elif self.time_period == TimePeriod.WEEKS:
-            weekday = self.next_trigger_date.strftime("%A")
-            schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
-        elif self.time_period == TimePeriod.MONTHS:
-            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
+        else:
+            if self.time_period == TimePeriod.WEEKS:
+                weekday = self.next_trigger_date.strftime("%A")
+                schedule_details_str = (
+                    f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
+                )
+            else:
+                schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
 
         if not self.is_complete and self.remaining_triggers:
             next_trigger_date = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
