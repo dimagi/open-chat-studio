@@ -3,6 +3,7 @@ import json
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView
@@ -112,7 +113,9 @@ class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
         data = participant.get_data_for_experiment(experiment)
         context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = participant.get_schedules_for_experiment(experiment, as_dict=True)
+        context["participant_schedules"] = participant.get_schedules_for_experiment(
+            experiment, as_dict=True, include_complete=True
+        )
         return context
 
 
@@ -126,3 +129,15 @@ def edit_name(request, team_slug: str, pk: int):
             participant.save()
         return render(request, "participants/partials/participant_name.html", {"participant": participant})
     return render(request, "participants/partials/edit_name.html", {"participant": participant})
+
+
+@login_and_team_required
+@permission_required("experiments.view_participant")
+def search_participant_api(request, team_slug: str):
+    search = request.GET.get("q")
+    query = Participant.objects.filter(team=request.team)
+    if search:
+        query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
+
+    results = query.order_by("identifier")[:10]
+    return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in results]})

@@ -10,6 +10,7 @@ module.exports = {
     app: './assets/javascript/app.js',  // logged-in javascript
     'pipeline': './assets/javascript/apps/pipeline.tsx',
     adminDashboard: './assets/javascript/admin-dashboard.js',
+    'tagMultiselect': './assets/javascript/tag-multiselect.js',
   },
   output: {
     path: path.resolve(__dirname, './static'),
