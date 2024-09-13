@@ -20,7 +20,6 @@ from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
 
-
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
     "log": actions.LogAction,
@@ -347,16 +346,20 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        repetitions = self.params.get("repetitions", None)
-        if (repetitions is not None and self.total_triggers >= repetitions) or (
-            self.end_date and self.end_date <= timezone.now()
-        ):
+        if self._should_mark_complete():
             self.is_complete = True
         else:
             delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
             self.next_trigger_date = utc_now + delta
 
         self.save()
+
+    def _should_mark_complete(self):
+        repetitions = self.params.get("repetitions", None) or 0
+        return bool(
+            (self.total_triggers > 0 and self.total_triggers >= repetitions)
+            or (self.end_date and self.end_date <= timezone.now())
+        )
 
     @cached_property
     def params(self):

@@ -321,6 +321,27 @@ class TestExperimentSession:
         else:
             assert experiment_used == session.experiment
 
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "end_date", "expected"),
+        [
+            pytest.param(None, 0, None, False, id="null_reps_not_triggered"),
+            pytest.param(None, 1, None, True, id="null_reps_triggered"),
+            pytest.param(0, 0, None, False, id="zero_reps_not_triggered"),
+            pytest.param(0, 1, None, True, id="zero_reps_triggered"),
+            pytest.param(3, 2, None, False, id="reps_not_met"),
+            pytest.param(3, 3, None, True, id="reps_met"),
+            pytest.param(1, 0, timezone.now() - timezone.timedelta(days=1), True, id="past_end_date"),
+            pytest.param(1, 0, timezone.now() + timezone.timedelta(days=1), False, id="before_end_date"),
+        ],
+    )
+    def test_should_mark_complete(self, repetitions, total_triggers, end_date, expected):
+        scheduled_message = ScheduledMessage(
+            custom_schedule_params={"repetitions": repetitions},
+            total_triggers=total_triggers,
+            end_date=end_date,
+        )
+        assert scheduled_message._should_mark_complete() == expected
+
     @pytest.mark.django_db()
     def test_get_participant_data_name(self):
         participant = ParticipantFactory()
