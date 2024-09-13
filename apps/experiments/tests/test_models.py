@@ -138,7 +138,7 @@ class TestExperimentSession:
         def _make_string(message, is_system):
             return (
                 f"{message.name} (Message id={message.external_id}, message={message.prompt_text}): "
-                "Every 1 days on Tuesday, 1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC."
+                "One-off reminder. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC."
                 f"{' (System)' if is_system else ''}"
             )
 
