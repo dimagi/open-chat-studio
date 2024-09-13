@@ -71,7 +71,7 @@ jobs:
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
-        run: pytest --cov
+        run: pytest --cov --cov-context=test
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
