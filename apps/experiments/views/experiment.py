@@ -967,7 +967,7 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment_version.pre_survey:
+    if experiment_session.default_experiment_version.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
         redirect_url_name = "experiments:experiment_pre_survey"
     else:

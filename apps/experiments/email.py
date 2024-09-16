@@ -10,7 +10,7 @@ def send_experiment_invitation(experiment_session: ExperimentSession):
     if not experiment_session.participant:
         raise Exception("Session has no participant!")
 
-    experiment_version_name = experiment_session.experiment_version.name
+    experiment_version_name = experiment_session.default_experiment_version.name
     email_context = {
         "session": experiment_session,
         "experiment_name": experiment_version_name,

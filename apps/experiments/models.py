@@ -1129,7 +1129,7 @@ class ExperimentSession(BaseTeamModel):
             return {}
 
     @cached_property
-    def experiment_version(self) -> Experiment:
+    def default_experiment_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self.experiment)
 
