@@ -2,7 +2,7 @@ import os
 from unittest.mock import patch
 
 import pytest
-from openai import OpenAI
+from openai import NotFoundError, OpenAI
 from pytest_django.fixtures import live_server_helper
 
 from apps.api.models import UserAPIKey
@@ -48,26 +48,43 @@ def api_key(team_with_users):
     available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users"],
     serialized_rollback=True,
 )
+@pytest.mark.parametrize(
+    ("version", "version_exists"),
+    [
+        ("default", True),
+        (2, False),
+    ],
+)
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
-def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
+def test_chat_completion(mock_experiment_response, version, version_exists, experiment, api_key, live_server):
     mock_experiment_response.return_value = "I am fine, thank you."
 
-    base_url = f"{live_server.url}/api/openai/{experiment.public_id}"
+    base_url = f"{live_server.url}/api/openai/{experiment.public_id}/{version}"
 
     client = OpenAI(
         api_key=api_key,
         base_url=base_url,
     )
 
-    completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hi, how are you?"},
-        ],
-    )
+    if version_exists:
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi, how are you?"},
+            ],
+        )
 
-    assert ExperimentSession.objects.count() == 1
-    assert completion.id == ExperimentSession.objects.first().external_id
-    assert completion.model == experiment.llm
-    assert completion.choices[0].message.content == "I am fine, thank you."
+        assert ExperimentSession.objects.count() == 1
+        assert completion.id == ExperimentSession.objects.first().external_id
+        assert completion.model == experiment.llm
+        assert completion.choices[0].message.content == "I am fine, thank you."
+    else:
+        with pytest.raises(NotFoundError, match=f"Version {version} was not found for this experiment"):
+            client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Hi, how are you?"},
+                ],
+            )

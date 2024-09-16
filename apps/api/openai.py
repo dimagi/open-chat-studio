@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
+from apps.experiments.models import Experiment
 
 
 @extend_schema(
@@ -30,7 +31,7 @@ from apps.channels.tasks import handle_api_message
         
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}/default",
         )
         
         completion = client.chat.completions.create(
@@ -83,10 +84,16 @@ from apps.channels.tasks import handle_api_message
             location=OpenApiParameter.PATH,
             description="Experiment ID",
         ),
+        OpenApiParameter(
+            name="version",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description=("The experiment version. This can be either 'default' or the version number"),
+        ),
     ],
 )
 @api_view(["POST"])
-def chat_completions(request, experiment_id: str):
+def chat_completions(request, experiment_id: str, version: str):
     messages = request.data.get("messages", [])
     try:
         last_message = messages.pop()
@@ -107,9 +114,17 @@ def chat_completions(request, experiment_id: str):
         return _make_error_response(400, str(e))
 
     session = serializer.save()
+    if version == "default":
+        experiment_version = session.default_experiment_version
+    else:
+        try:
+            experiment_version = session.experiment_version(version)
+        except Experiment.DoesNotExist:
+            return _make_error_response(404, f"Version {version} was not found for this experiment")
+
     response_message = handle_api_message(
         request.user,
-        session.default_experiment_version,
+        experiment_version,
         session.experiment_channel,
         last_message.get("content"),
         session.participant.identifier,

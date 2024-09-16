@@ -615,7 +615,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return self.assistant.llm_provider.get_llm_service()
 
     def get_api_url(self):
-        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
+        return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id, "default"]))
 
     @transaction.atomic()
     def create_new_version(self, version_description: str | None = None, make_default: bool = False):
@@ -1132,6 +1132,13 @@ class ExperimentSession(BaseTeamModel):
     def default_experiment_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self.experiment)
+
+    def experiment_version(self, version: int) -> Experiment:
+        """Returns the version of the experiment family specified by `version`
+
+        `Experimet.DoesNotExist` will be raised if this version does not exist.
+        """
+        return self.experiment.versions.get(version_number=version)
 
     @cached_property
     def working_experiment(self) -> Experiment:

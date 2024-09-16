@@ -73,7 +73,7 @@ paths:
                 type: string
                 format: binary
           description: ''
-  /api/openai/{experiment_id}/chat/completions:
+  /api/openai/{experiment_id}/{version}/chat/completions:
     post:
       operationId: openai_chat_completions
       description: |2
@@ -91,7 +91,7 @@ paths:
 
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}/default",
         )
 
         completion = client.chat.completions.create(
@@ -111,6 +111,13 @@ paths:
         schema:
           type: string
         description: Experiment ID
+        required: true
+      - in: path
+        name: version
+        schema:
+          type: string
+        description: The experiment version. This can be either 'default' or the version
+          number
         required: true
       tags:
       - OpenAI
