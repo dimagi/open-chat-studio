@@ -113,7 +113,7 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
         "timeout": TimeoutTrigger,
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
-    trigger.delete()
+    trigger.archive() if trigger.has_versions else trigger.delete()
     return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
 
 

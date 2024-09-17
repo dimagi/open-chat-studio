@@ -14,6 +14,7 @@ from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import current_team
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
@@ -115,7 +116,8 @@ class StaticTrigger(BaseModel, VersionsMixin):
 
     def fire(self, session):
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
+            with current_team(session.team):
+                result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
             self.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -127,6 +129,11 @@ class StaticTrigger(BaseModel, VersionsMixin):
         result = super().delete(*args, **kwargs)
         self.action.delete(*args, **kwargs)
         return result
+
+    @transaction.atomic()
+    def archive(self):
+        self.is_archived = True
+        self.save()
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment):
