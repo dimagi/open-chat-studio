@@ -13,6 +13,7 @@ from apps.events.models import (
     StaticTriggerType,
     TimeoutTrigger,
 )
+from apps.events.tasks import _get_triggers_to_fire
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
@@ -74,3 +75,27 @@ def test_last_timeout_can_end_conversation(session):
     session.refresh_from_db()
     assert session.ended_at is not None
     assert static_trigger.event_logs.count() == 1
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@pytest.mark.django_db()
+def test_enqueue_static_triggers_for_current_default(session):
+    def _assert_static_triggers_belongs_to_experiment(versioned_experiment):
+        trigger_ids = _get_triggers_to_fire(session, StaticTriggerType.LAST_TIMEOUT)
+        experiment_ids = set(StaticTrigger.objects.filter(id__in=trigger_ids).values_list("experiment_id", flat=True))
+        assert experiment_ids.difference(set([versioned_experiment.id])) == set()
+        # Cache cleanup
+        del session.default_experiment_version
+
+    working_experiment = session.experiment
+    StaticTrigger.objects.create(
+        experiment=session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
+        type=StaticTriggerType.LAST_TIMEOUT,
+    )
+
+    _assert_static_triggers_belongs_to_experiment(working_experiment)
+    experiment_version = working_experiment.create_new_version()
+    _assert_static_triggers_belongs_to_experiment(experiment_version)
+    latest_version = working_experiment.create_new_version(make_default=True)
+    _assert_static_triggers_belongs_to_experiment(latest_version)

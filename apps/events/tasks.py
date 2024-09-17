@@ -3,7 +3,7 @@ import logging
 from celery.app import shared_task
 from django.db.models import functions
 
-from apps.events.models import ScheduledMessage, StaticTrigger, TimeoutTrigger
+from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger(__name__)
@@ -12,12 +12,15 @@ logger = logging.getLogger(__name__)
 @shared_task(ignore_result=True)
 def enqueue_static_triggers(session_id, trigger_type):
     session = ExperimentSession.objects.get(id=session_id)
-
-    trigger_ids = StaticTrigger.objects.filter(experiment_id=session.experiment_id, type=trigger_type).values_list(
-        "id", flat=True
-    )
-    for trigger_id in trigger_ids:
+    for trigger_id in _get_triggers_to_fire(session, trigger_type):
         fire_static_trigger.delay(trigger_id, session_id)
+
+
+def _get_triggers_to_fire(session: ExperimentSession, trigger_type: StaticTriggerType) -> list[int]:
+    trigger_ids = StaticTrigger.objects.filter(
+        experiment=session.default_experiment_version, type=trigger_type
+    ).values_list("id", flat=True)
+    return trigger_ids
 
 
 @shared_task(ignore_result=True)
