@@ -99,7 +99,7 @@ class TestSyntheticVoice:
 
 
 class TestExperimentSession:
-    def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
+    def construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
         params = self._get_params(experiment_id, time_period, frequency, repetitions)
         return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
@@ -118,7 +118,7 @@ class TestExperimentSession:
     def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
-        event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
+        event_action, params = self.construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
         participant = session.participant
         message1 = ScheduledMessageFactory(
             experiment=experiment,
@@ -287,7 +287,7 @@ class TestExperimentSession:
         team = session.team
         participant = session.participant
         session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
-        event_action = event_action, params = self._construct_event_action(
+        event_action = event_action, params = self.construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
         )
         ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
@@ -307,7 +307,7 @@ class TestExperimentSession:
         if custom_experiment:
             event_action_kwargs["experiment_id"] = custom_experiment.id
 
-        event_action, params = self._construct_event_action(**event_action_kwargs)
+        event_action, params = self.construct_event_action(**event_action_kwargs)
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 
@@ -375,7 +375,7 @@ class TestExperimentSession:
     def test_get_participant_data_timezone(self, use_participant_tz):
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
-        event_action = event_action, params = self._construct_event_action(
+        event_action = event_action, params = self.construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
         )
         ScheduledMessageFactory(
