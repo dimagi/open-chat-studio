@@ -49,9 +49,9 @@ class SummarizeConversationAction(EventActionHandlerBase):
         history = session.chat.get_langchain_messages_until_summary()
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
-        summary = SummarizerMixin(llm=session.experiment.get_chat_model(), prompt=prompt).predict_new_summary(
-            messages, current_summary
-        )
+        summary = SummarizerMixin(
+            llm=session.default_experiment_version.get_chat_model(), prompt=prompt
+        ).predict_new_summary(messages, current_summary)
 
         return summary
 
