@@ -89,6 +89,11 @@ class StaticTriggerType(models.TextChoices):
     PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
 
 
+class StaticTriggerObjectManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
+
 class StaticTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
@@ -101,6 +106,8 @@ class StaticTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = StaticTriggerObjectManager()
 
     @property
     def trigger_type(self):
