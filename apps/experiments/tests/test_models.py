@@ -635,17 +635,21 @@ class TestExperimentModel:
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
 
-    def test_remove_static_trigger_between_versions(self):
+    def test_remove_triggers_between_versions(self):
         original_experiment = self._setup_original_experiment()
         new_version = original_experiment.create_new_version()
         assert original_experiment.static_triggers.count() == 1
         [trigger.archive() for trigger in original_experiment.static_triggers.all()]
+        [trigger.archive() for trigger in original_experiment.timeout_triggers.all()]
         another_new_version = original_experiment.create_new_version()
 
-        self._assert_triggers_are_duplicated("static", original_experiment, another_new_version)
         assert new_version.static_triggers.count() == 1
         assert original_experiment.static_triggers.count() == 0
         assert another_new_version.static_triggers.count() == 0
+
+        assert new_version.timeout_triggers.count() == 1
+        assert original_experiment.timeout_triggers.count() == 0
+        assert another_new_version.timeout_triggers.count() == 0
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():

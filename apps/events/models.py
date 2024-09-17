@@ -95,6 +95,12 @@ class StaticTriggerObjectManager(models.Manager):
         return super().get_queryset().filter(is_archived=False)
 
 
+# TODO: Can we have a versions Manager mixin?
+class TimeoutTriggerObjectManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
+
 class StaticTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="static_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="static_triggers")
@@ -130,7 +136,6 @@ class StaticTrigger(BaseModel, VersionsMixin):
         self.action.delete(*args, **kwargs)
         return result
 
-    @transaction.atomic()
     def archive(self):
         self.is_archived = True
         self.save()
@@ -163,6 +168,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = TimeoutTriggerObjectManager()
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment):
@@ -292,6 +299,10 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         return not (has_succeeded or failed)
+
+    def archive(self):
+        self.is_archived = True
+        self.save()
 
 
 class TimePeriod(models.TextChoices):
