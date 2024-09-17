@@ -358,12 +358,16 @@ class ScheduledMessage(BaseTeamModel):
             logger.exception(f"An error occured while trying to send scheduled messsage {self.id}. Error: {e}")
 
     def _trigger(self):
-        experiment_id = self.params.get("experiment_id", self.experiment.id)
-        experiment_session = self.participant.get_latest_session(experiment=self.experiment)
+        if experiment_id := self.params.get("experiment_id"):
+            experiment_to_use = Experiment.objects.get(id=experiment_id)
+        else:
+            experiment_to_use = self.experiment.default_version
+
+        experiment_session = self.participant.get_latest_session(experiment=self.experiment.get_working_version())
         if not experiment_session:
             # Schedules probably created by the API
             return
-        experiment_to_use = Experiment.objects.get(id=experiment_id)
+
         experiment_session.ad_hoc_bot_message(
             self.params["prompt_text"], fail_silently=False, use_experiment=experiment_to_use
         )

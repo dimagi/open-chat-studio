@@ -135,3 +135,21 @@ class TestScheduledMessageModel:
         self._assert_next_trigger_date(message3, message3_next_trigger_data)
         assert message1.next_trigger_date < message1_prev_trigger_date
         assert message2.next_trigger_date < message2_prev_trigger_date
+
+    @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+    def test_default_experiment_version_is_used_to_generate_message(self, ad_hoc_bot_message):
+        session = ExperimentSessionFactory()
+        working_experiment = session.experiment
+        new_version = working_experiment.create_new_version()
+        event_action, _params = construct_event_action(frequency=1, time_period=TimePeriod.WEEKS, repetitions=4)
+        message = ScheduledMessage.objects.create(
+            participant=session.participant,
+            team=session.team,
+            action=event_action,
+            last_triggered_at=timezone.now() - relativedelta(days=5),
+            experiment=working_experiment,
+        )
+
+        message._trigger()
+        experiment_used = ad_hoc_bot_message.call_args[1]["use_experiment"]
+        assert experiment_used == new_version
