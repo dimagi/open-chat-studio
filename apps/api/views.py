@@ -263,7 +263,10 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        queryset = ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        if tags_query_param := self.request.query_params.get("tags"):
+            queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
+        return queryset
 
     def create(self, request, *args, **kwargs):
         # Custom create method because we use a different serializer processing the request than for

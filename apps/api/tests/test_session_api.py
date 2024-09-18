@@ -34,6 +34,46 @@ def test_list_sessions(session):
     }
 
 
+@pytest.mark.django_db()
+def test_list_sessions_with_tag(experiment):
+    team = experiment.team
+    user = experiment.team.members.first()
+    sessions = ExperimentSessionFactory.create_batch(3, experiment=experiment)
+
+    tags = Tag.objects.bulk_create(
+        [
+            Tag(name="interesting", slug="interesting", team=team, created_by=user),
+            Tag(name="awesome", slug="awesome", team=team, created_by=user),
+        ]
+    )
+
+    session1 = sessions[0]
+    session2 = sessions[1]
+
+    session1.chat.add_tag(tags[0], team, user)
+    session2.chat.add_tag(tags[1], team, user)
+
+    client = ApiTestClient(user, team)
+    # Filter by tag
+    response = client.get(reverse("api:session-list") + "?tags=interesting,awesome")
+    assert response.status_code == 200
+    expected_results = [get_session_json(session2), get_session_json(session1)]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+    # Remove filters by tag
+    response = client.get(reverse("api:session-list"))
+    expected_results = [get_session_json(sessions[2]), get_session_json(session2), get_session_json(session1)]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+
 def get_session_json(session, expected_messages=None):
     experiment = session.experiment
     data = {
