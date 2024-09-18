@@ -1,8 +1,16 @@
 <button class="btn btn-sm btn-outline btn-primary"
         hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id pk=record.version_number %}"
-        hx-target="#modal-content"
+        hx-target="#details_modal_content"
         hx-trigger="click"
-        data-bs-toggle="modal"
-        data-bs-target="#detailsModal">
-    Details
+        onclick="document.querySelector('#details_modal').showModal();">
+  Details
 </button>
+
+<dialog id="details_modal" class="modal">
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close">✕</button>
+    </form>
+    <div id="details_modal_content"></div>
+  </div>
+</dialog>

@@ -1,7 +1,9 @@
 <div class="modal-header">
-    <h5 class="modal-title" id="detailsModalLabel">Details for {{ record.name }} (Version {{ record.version_number }})</h5>
-    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-title" id="detailsModalLabel">
+        <span class="font-bold">Details for Example Name (Version 1.0)</span>
+    </div>
 </div>
+
 <div class="modal-body">
     <div class="my-4 space-y-2">
         <p><span class="font-semibold">Description:</span> {{ record.description }}</p>
@@ -44,5 +46,4 @@
         {% csrf_token %}
         <button type="submit" class="btn btn-primary">Set as Default</button>
     </form>
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
 </div>
