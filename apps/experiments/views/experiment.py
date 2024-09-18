@@ -142,7 +142,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     model = Experiment
     paginate_by = 25
     table_class = ExperimentVersionsTable
-    template_name = "table/single_table.html"
+    template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
@@ -1170,3 +1170,9 @@ def set_default_experiment(request, team_slug: str, pk: int):
     experiment.save()
 
     return redirect("experiments:versions-list", team_slug=request.team.slug)
+
+
+@login_and_team_required
+def experiment_version_details(request, team_slug: str, pk: int):
+    record = get_object_or_404(Experiment, pk=pk)
+    return render(request, "experiments/experiment_version_details_content.html", {"record": record})

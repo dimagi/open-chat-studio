@@ -1,0 +1,13 @@
+{% extends "table/single_table.html" %}
+
+{% block content %}
+    {{ block.super }}
+
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content" id="modal-content">
+              <!-- HTMX injects content -->
+            </div>
+        </div>
+    </div>
+{% endblock %}

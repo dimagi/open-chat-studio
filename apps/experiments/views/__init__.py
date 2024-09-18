@@ -30,6 +30,7 @@ from .experiment import (  # noqa: F401
     experiment_session_details_view,
     experiment_session_message,
     experiment_session_pagination_view,
+    experiment_version_details,
     experiments_home,
     get_message_response,
     poll_messages,
