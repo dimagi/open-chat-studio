@@ -1114,7 +1114,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
             "experiment_session": session,
             "active_tab": "experiments",
             "details": [
-                (gettext("Participant"), session.get_participant_display),
+                (gettext("Participant"), session.get_participant_chip()),
                 (gettext("Status"), session.get_status_display),
                 (gettext("Started"), session.consent_date or session.created_at),
                 (gettext("Ended"), session.ended_at or "-"),
