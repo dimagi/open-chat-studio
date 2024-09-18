@@ -169,6 +169,7 @@ class ExperimentVersionsTable(tables.Table):
     )
     details = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_details_button.html",
+        verbose_name="",
     )
 
     class Meta:
