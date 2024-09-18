@@ -957,7 +957,7 @@ class ExperimentSession(BaseTeamModel):
         if commit:
             self.save()
 
-    def get_absolute_edit_url(self):
+    def get_absolute_url(self):
         return reverse(
             "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
         )

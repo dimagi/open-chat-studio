@@ -153,7 +153,7 @@ class ExperimentSessionsTable(tables.Table):
     class Meta:
         model = ExperimentSession
         fields = []
-        row_attrs = {"class": "text-sm"}
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
 
