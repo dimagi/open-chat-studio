@@ -216,6 +216,14 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         operation_id="session_list",
         summary="List Experiment Sessions",
         tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="tags",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="A list of session tags (comma separated) to filter the results by",
+            ),
+        ],
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
