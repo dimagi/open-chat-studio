@@ -41,7 +41,7 @@
             <p><span class="font-semibold">Echo Transcript:</span> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
         </div>
         <div class="modal-action">
-            {% url 'experiments:set-default-experiment' record.id as form_action_url %}
+            {% url 'experiments:set-default-experiment' request.team.slug record.id as form_action_url %}
             <form method="post" action="{{ form_action_url }}">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-primary">Set as Default</button>
