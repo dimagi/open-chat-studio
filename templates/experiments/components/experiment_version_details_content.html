@@ -39,7 +39,7 @@
     </div>
 </div>
 <div class="modal-footer">
-    {% url 'experiments:set-default-experiment' record.id as form_action_url %}
+    {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=record.working_version_id pk=record.version_number as form_action_url %}
     <form method="post" action="{{ form_action_url }}">
         {% csrf_token %}
         <button type="submit" class="btn btn-primary">Set as Default</button>

@@ -49,7 +49,11 @@ urlpatterns = [
         views.experiment_version_details,
         name="experiment-version-details",
     ),
-    path("e/<int:pk>/versions/set_default", views.set_default_experiment, name="set-default-experiment"),
+    path(
+        "e/<int:experiment_id>/versions/set_default/<int:pk>/",
+        views.set_default_experiment,
+        name="set-default-experiment",
+    ),
     path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),

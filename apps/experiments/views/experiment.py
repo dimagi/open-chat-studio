@@ -25,6 +25,7 @@ from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -1163,13 +1164,15 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def set_default_experiment(request, team_slug: str, pk: int):
-    experiment = get_object_or_404(Experiment, id=pk)
-    Experiment.objects.exclude(pk=experiment.pk).update(is_default_version=False)
+def set_default_experiment(request, team_slug: str, experiment_id: int, pk: int):
+    experiment = get_object_or_404(Experiment, working_version_id=experiment_id, version_number=pk, team=request.team)
+    Experiment.objects.exclude(version_number=pk).filter(team__slug=team_slug, working_version_id=experiment_id).update(
+        is_default_version=False, audit_action=AuditAction.AUDIT
+    )
     experiment.is_default_version = True
     experiment.save()
 
-    return redirect("experiments:versions-list", team_slug=request.team.slug)
+    return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment_id)
 
 
 @login_and_team_required
