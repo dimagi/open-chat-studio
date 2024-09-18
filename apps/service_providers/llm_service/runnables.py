@@ -305,20 +305,19 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         This is necessary in multi-bot setups if some of the bots are assistants but not all.
         """
 
-        def __sync_messages_to_thread(thread_id, messages):
+        def _sync_messages_to_existing_thread(thread_id, messages):
             for message in messages_to_sync:
                 self.state.raw_client.beta.threads.messages.create(current_thread_id, **message)
 
         if messages_to_sync := self.state.get_messages_to_sync_to_thread():
             if current_thread_id:
-                __sync_messages_to_thread(current_thread_id, messages_to_sync)
+                _sync_messages_to_existing_thread(current_thread_id, messages_to_sync)
             else:
                 # There is a 32 message limit when creating a new thread
                 first, rest = messages_to_sync[:32], messages_to_sync[32:]
                 thread = self.state.raw_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
-                if rest:
-                    __sync_messages_to_thread(current_thread_id, rest)
+                _sync_messages_to_existing_thread(current_thread_id, rest)
                 self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
         return current_thread_id
 
