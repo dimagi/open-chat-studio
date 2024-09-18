@@ -1173,6 +1173,6 @@ def set_default_experiment(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
-def experiment_version_details(request, team_slug: str, pk: int):
-    record = get_object_or_404(Experiment, pk=pk)
-    return render(request, "experiments/experiment_version_details_content.html", {"record": record})
+def experiment_version_details(request, team_slug: str, experiment_id: int, pk: int):
+    record = get_object_or_404(Experiment, working_version_id=experiment_id, version_number=pk, team=request.team)
+    return render(request, "experiments/components/experiment_version_details_content.html", {"record": record})
