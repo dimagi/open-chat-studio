@@ -26,3 +26,6 @@ static/css/
 static/js/
 .git-backup
 tmp_schema.yml
+
+# Editor config files
+.zed/
