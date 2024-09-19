@@ -13,7 +13,7 @@ Override pagination and sorting in base template to use htmx
                         {% if column.orderable %}
                             hx-get="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
                             hx-trigger="click"
-                            hx-target="div.table-container"
+                            hx-target="closest div.table-container"
                             hx-swap="outerHTML"
                             style="cursor: pointer;"
                         {% endif %}>
