@@ -1206,18 +1206,31 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def set_default_experiment(request, team_slug: str, experiment_id: int, pk: int):
-    experiment = get_object_or_404(Experiment, working_version_id=experiment_id, version_number=pk, team=request.team)
-    Experiment.objects.exclude(version_number=pk).filter(team__slug=team_slug, working_version_id=experiment_id).update(
-        is_default_version=False, audit_action=AuditAction.AUDIT
+def set_default_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
+    Experiment.objects.exclude(version_number=version_number).filter(
+        team__slug=team_slug, working_version_id=experiment_id
+    ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
     experiment.is_default_version = True
     experiment.save()
 
-    return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment_id)
+    url = (
+        reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )
+    return redirect(url)
 
 
 @login_and_team_required
-def experiment_version_details(request, team_slug: str, experiment_id: int, pk: int):
-    record = get_object_or_404(Experiment, working_version_id=experiment_id, version_number=pk, team=request.team)
-    return render(request, "experiments/components/experiment_version_details_content.html", {"record": record})
+def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment_version = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
+    return render(
+        request, "experiments/components/experiment_version_details_content.html", {"experiment": experiment_version}
+    )

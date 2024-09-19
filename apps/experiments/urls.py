@@ -45,12 +45,12 @@ urlpatterns = [
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path(
-        "e/<int:experiment_id>/versions/details/<int:pk>/",
+        "e/<int:experiment_id>/versions/details/<int:version_number>/",
         views.experiment_version_details,
         name="experiment-version-details",
     ),
     path(
-        "e/<int:experiment_id>/versions/set_default/<int:pk>/",
+        "e/<int:experiment_id>/versions/set_default/<int:version_number>/",
         views.set_default_experiment,
         name="set-default-experiment",
     ),

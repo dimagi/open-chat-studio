@@ -1,5 +1,5 @@
 <button class="btn btn-sm btn-outline btn-primary"
-        hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id pk=record.version_number %}"
+        hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
         hx-target="#details_modal_content"
         hx-trigger="click"
         onclick="document.querySelector('#details_modal').showModal();">
