@@ -191,3 +191,8 @@ class ActionsColumn(TemplateColumn):
             td["class"] = td["class"].replace("text-left", f"text-{align}")
             extra = {"attrs": {"th": th, "td": td}, **extra}
         super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
+
+
+def chip_column(label: str = None, align="left", **kwargs):
+    """A column a chip link"""
+    return ActionsColumn(actions=[chip_action(label=label)], align=align, **kwargs)

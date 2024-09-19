@@ -45,7 +45,7 @@ class PipelineRunTable(tables.Table):
         },
         orderable=True,
     )
-    actions = actions.ActionsColumn(actions=[actions.chip_action(label="Session Details")])
+    actions = actions.chip_column(label="Session Details")
 
     class Meta:
         model = PipelineRun

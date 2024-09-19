@@ -125,8 +125,8 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = actions.ActionsColumn(
-        actions=[actions.chip_action()], accessor="participant", orderable=True, order_by="participant__identifier"
+    participant = actions.chip_column(
+        accessor="participant", align="center", orderable=True, order_by="participant__identifier"
     )
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
@@ -134,7 +134,7 @@ class ExperimentSessionsTable(tables.Table):
         verbose_name="Tags",
         template_name="annotations/tag_ui.html",
     )
-    actions = actions.ActionsColumn(actions=[actions.chip_action(label="Session Details")])
+    actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
@@ -171,7 +171,7 @@ def _get_route_url(url_name, request, record, value):
 
 
 class ChildExperimentRoutesTable(tables.Table):
-    child = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
+    child = actions.chip_column(orderable=True)
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(
@@ -194,7 +194,7 @@ class ChildExperimentRoutesTable(tables.Table):
 
 
 class TerminalBotsTable(ChildExperimentRoutesTable):
-    child = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
+    child = actions.chip_column(orderable=True)
 
     class Meta:
         model = ExperimentRoute
@@ -205,7 +205,7 @@ class TerminalBotsTable(ChildExperimentRoutesTable):
 
 
 class ParentExperimentRoutesTable(tables.Table):
-    parent = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
+    parent = actions.chip_column(orderable=True)
 
     class Meta:
         model = ExperimentRoute
