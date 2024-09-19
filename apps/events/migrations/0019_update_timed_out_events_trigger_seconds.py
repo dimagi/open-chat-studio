@@ -31,7 +31,7 @@ def update_periodic_task(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0017_statictrigger_working_version_and_more'),
+        ('events', '0018_statictrigger_is_archived_timeouttrigger_is_archived'),
     ]
 
     operations = [migrations.RunPython(update_periodic_task, migrations.RunPython.noop)]
