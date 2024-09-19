@@ -98,15 +98,13 @@ class Pipeline(BaseTeamModel):
         pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
 
-        if save_run_to_history and session is not None:
-            self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
+                self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
                 self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:

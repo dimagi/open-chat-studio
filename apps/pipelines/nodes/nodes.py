@@ -128,11 +128,11 @@ class LLMResponseWithPrompt(LLMResponse):
         return context
 
     def _get_history(self, session: ExperimentSession, node_id: str):
+        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+            return session.chat.get_langchain_messages_until_summary()
+
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             history_name = self.history_name
-        elif self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            history_name = "global"
-            # TODO
         else:
             history_name = node_id
 
@@ -144,11 +144,11 @@ class LLMResponseWithPrompt(LLMResponse):
         return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
 
     def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
+        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+            return
+
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             history_name = self.history_name
-        elif self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            return
-            # TODO
         else:
             history_name = node_id
 
