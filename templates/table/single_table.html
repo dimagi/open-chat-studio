@@ -5,8 +5,6 @@
   function initializeRowClickHandlers() {
     document.querySelectorAll('tr[data-redirect-url]:not([data-redirect-url=""])').forEach(function (element) {
       element.addEventListener('click', function (event) {
-        console.log(event);
-        console.log(event.target.tagName);
         if (event.target.tagName === 'TR' || event.target.tagName === 'TD') {
           let editUrl = this.getAttribute('data-redirect-url');
           window.location.href = editUrl;
