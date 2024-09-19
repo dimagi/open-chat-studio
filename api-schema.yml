@@ -205,6 +205,12 @@ paths:
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - in: query
+        name: tags
+        schema:
+          type: string
+        description: A list of session tags (comma separated) to filter the results
+          by
       tags:
       - Experiment Sessions
       security:

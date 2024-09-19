@@ -126,11 +126,6 @@ class ChannelBase(ABC):
         timezone: str | None = None,
         session_external_id: str | None = None,
     ):
-        if working_experiment.is_versioned:
-            raise VersionedExperimentSessionsNotAllowedException(
-                message="A session cannot be linked to an experiment version. "
-            )
-
         return _start_experiment_session(
             working_experiment,
             experiment_channel,
@@ -775,6 +770,11 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
 ) -> ExperimentSession:
+    if working_experiment.is_versioned:
+        raise VersionedExperimentSessionsNotAllowedException(
+            message="A session cannot be linked to an experiment version. "
+        )
+
     team = working_experiment.team
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
