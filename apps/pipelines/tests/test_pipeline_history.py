@@ -355,3 +355,126 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     assert [
         [(message.type, message.content) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session):
+    llm = FakeLlmEcho()
+    service = build_fake_llm_service(None, [0], llm)
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [
+            {
+                "id": "llm-1->llm-2",
+                "source": "llm-1",
+                "target": "llm-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "llm-2->llm-3",
+                "source": "llm-2",
+                "target": "llm-3",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "history_type": "named",
+                        "history_name": "history1",
+                        "prompt": "Node 1:",
+                    },
+                },
+                "id": "llm-1",
+            },
+            {
+                "data": {
+                    "id": "llm-2",
+                    "label": "Get the robot to respond again",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "prompt": "Node 2:",
+                        "history_type": "named",
+                        "history_name": "history1",
+                    },
+                },
+                "id": "llm-2",
+            },
+            {
+                "data": {
+                    "id": "llm-3",
+                    "label": "No History",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "prompt": "Node 3:",
+                    },
+                },
+                "id": "llm-3",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    user_input = "The User Input"
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][-1]
+    user_input_2 = "Second User Input"
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))["messages"][-1]
+
+    expected_call_messages = [
+        # First call to Node 1
+        [("system", "Node 1:"), ("human", user_input)],
+        # Call to Node 2. Since we are using the same history as for Node 1, it's history is included.
+        [
+            ("system", "Node 2:"),
+            ("human", user_input),  # The input to Node 1
+            ("ai", f"Node 1: {user_input}"),  # The output from node 1
+            ("human", f"Node 1: {user_input}"),  # The input to Node 2
+        ],
+        # First call to Node 3, there is no history here.
+        [("system", "Node 3:"), ("human", f"Node 2: Node 1: {user_input}")],
+        # Second call to Node 1. Includes the full history from node 1 and node 2
+        [
+            ("system", "Node 1:"),
+            ("human", user_input),  # First input
+            ("ai", f"Node 1: {user_input}"),  # The output of node 1
+            ("human", f"Node 1: {user_input}"),  # The input to Node 2
+            ("ai", f"Node 2: Node 1: {user_input}"),  # The output of Node 2
+            ("human", user_input_2),  # The second input to Node 1
+        ],
+        # Second call to Node 2. Includes the full history from node 1 and node 2
+        [
+            ("system", "Node 2:"),
+            ("human", user_input),  # First input
+            ("ai", f"Node 1: {user_input}"),  # The output of node 1
+            ("human", f"Node 1: {user_input}"),  # The input to Node 2
+            ("ai", f"Node 2: Node 1: {user_input}"),  # The output of Node 2
+            ("human", user_input_2),  # The second input to Node 1
+            ("ai", f"Node 1: {user_input_2}"),  # The second output of Node 1
+            ("human", f"Node 1: {user_input_2}"),  # The second input to Node 2 (the output from Node 1)
+        ],
+        # Second Call to Node 3. Still no history is include, only the output of node 2 used as the input
+        [
+            ("system", "Node 3:"),
+            ("human", f"Node 2: Node 1: {user_input_2}"),  # The output from node 2 into node 3
+        ],
+    ]
+    assert [
+        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+    ] == expected_call_messages
