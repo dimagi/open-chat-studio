@@ -691,6 +691,42 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
+    def version_details_for_display(self) -> list[dict]:
+        """
+        Returns a list of dictionaries, each representing a specific detail of this the current experiment.
+        Each dictionary should have a `name` and `value` key.
+        """
+
+        def name_or_none(attr_name):
+            return getattr(self, attr_name) or ""
+
+        def yes_no(condition):
+            return "Yes" if condition else "No"
+
+        return [
+            {"name": "Description", "value": self.description},
+            {"name": "Version", "value": self.version_number},
+            {"name": "Version Description", "value": self.version_description},
+            {"name": "LLM Model", "value": self.llm},
+            {"name": "LLM Provider", "value": self.llm_provider.name},
+            {"name": "Assistant", "value": name_or_none("assistant")},
+            {"name": "Pipeline", "value": name_or_none("pipeline")},
+            {"name": "Temperature", "value": self.temperature},
+            {"name": "Source Material", "value": name_or_none("source_material")},
+            {"name": "Pre-Survey", "value": name_or_none("pre_survey")},
+            {"name": "Post-Survey", "value": name_or_none("post_survey")},
+            {
+                "name": "Safety Violation Notification Emails",
+                "value": ", ".join(self.safety_violation_notification_emails),
+            },
+            {"name": "Max Token Limit", "value": self.max_token_limit},
+            {"name": "Voice Response Behaviour", "value": self.get_voice_response_behaviour_display},
+            {"name": "Trace Provider", "value": name_or_none("trace_provider")},
+            {"name": "Consent Form", "value": name_or_none("consent_form")},
+            {"name": "Conversational Consent Enabled", "value": yes_no(self.conversational_consent_enabled)},
+            {"name": "Echo Transcript", "value": yes_no(self.echo_transcript)},
+        ]
+
 
 class ExperimentRouteType(models.TextChoices):
     PROCESSOR = "processor"
