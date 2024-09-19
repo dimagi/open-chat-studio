@@ -98,8 +98,8 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
 
     history = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-1")
     assert history.type == "node"
-    assert history.messages.count() == 2
-    assert [m.as_tuple() for m in history.messages.all()] == [("human", user_input), ("ai", f"Node 1: {user_input}")]
+    assert history.messages.count() == 1
+    assert history.messages.first().as_tuples() == [("human", user_input), ("ai", f"Node 1: {user_input}")]
 
     history_2 = PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").count()
     assert history_2 == 0
@@ -112,8 +112,8 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
 
-    assert history.messages.count() == 4
-    new_messages = list(reversed([m.as_tuple() for m in history.messages.order_by("-created_at")[:2]]))
+    assert history.messages.count() == 2
+    new_messages = history.messages.last().as_tuples()
     assert new_messages == [("human", user_input_2), ("ai", f"Node 1: {user_input_2}")]
 
     history_2 = PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").count()
@@ -197,13 +197,13 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
 
     history = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-1")
     assert history.type == "node"
-    assert history.messages.count() == 2
-    assert [m.as_tuple() for m in history.messages.all()] == [("human", user_input), ("ai", f"Node 1: {user_input}")]
+    assert history.messages.count() == 1
+    assert history.messages.first().as_tuples() == [("human", user_input), ("ai", f"Node 1: {user_input}")]
 
     history_2 = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-2")
     assert history_2.type == "node"
-    assert history_2.messages.count() == 2
-    assert [m.as_tuple() for m in history_2.messages.all()] == [
+    assert history_2.messages.count() == 1
+    assert history_2.messages.first().as_tuples() == [
         ("human", f"Node 1: {user_input}"),
         ("ai", expected_output),
     ]
@@ -215,11 +215,11 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
 
-    assert history.messages.count() == 4
-    new_messages = list(reversed([m.as_tuple() for m in history.messages.order_by("-created_at")[:2]]))
+    assert history.messages.count() == 2
+    new_messages = history.messages.last().as_tuples()
     assert new_messages == [("human", user_input_2), ("ai", f"Node 1: {user_input_2}")]
-    assert history_2.messages.count() == 4
-    new_messages_2 = list(reversed([m.as_tuple() for m in history_2.messages.order_by("-created_at")[:2]]))
+    assert history_2.messages.count() == 2
+    new_messages_2 = history_2.messages.last().as_tuples()
     assert new_messages_2 == [("human", f"Node 1: {user_input_2}"), ("ai", output_2)]
 
     expected_call_messages = [

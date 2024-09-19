@@ -203,8 +203,8 @@ class PipelineChatHistory(BaseModel):
 
 class PipelineChatMessages(BaseModel):
     chat_history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="messages")
-    message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
-    content = models.TextField()
+    human_message = models.TextField()
+    ai_message = models.TextField()
 
-    def as_tuple(self):
-        return (self.message_type, self.content)
+    def as_tuples(self):
+        return [(ChatMessageType.HUMAN.value, self.human_message), (ChatMessageType.AI.value, self.ai_message)]

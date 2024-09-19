@@ -13,7 +13,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field, create_model
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
@@ -105,8 +104,7 @@ class LLMResponseWithPrompt(LLMResponse):
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         if self.history_type is not None:
-            self._save_history(state["experiment_session"], node_id, input, ChatMessageType.HUMAN)
-            self._save_history(state["experiment_session"], node_id, output.content, ChatMessageType.AI)
+            self._save_history(state["experiment_session"], node_id, input, output.content)
         return output.content
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
@@ -134,6 +132,7 @@ class LLMResponseWithPrompt(LLMResponse):
             history_name = self.history_name
         elif self.history_type == PipelineChatHistoryTypes.GLOBAL:
             history_name = "global"
+            # TODO
         else:
             history_name = node_id
 
@@ -141,19 +140,20 @@ class LLMResponseWithPrompt(LLMResponse):
             history: PipelineChatHistory = session.pipeline_chat_history.get(type=self.history_type, name=history_name)
         except PipelineChatHistory.DoesNotExist:
             return []
-        messages = history.messages.all()
-        return [message.as_tuple() for message in messages]
+        message_pairs = history.messages.all()
+        return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
 
-    def _save_history(self, session: ExperimentSession, node_id: str, content, message_type):
+    def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             history_name = self.history_name
         elif self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            history_name = "global"
+            return
+            # TODO
         else:
             history_name = node_id
 
         history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=history_name)
-        message = history.messages.create(message_type=message_type, content=content)
+        message = history.messages.create(human_message=human_message, ai_message=ai_message)
         return message
 
     def _get_participant_data(self, session):
