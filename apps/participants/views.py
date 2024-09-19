@@ -15,6 +15,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..channels.models import ChannelPlatform
+from ..experiments.tables import ExperimentSessionsTable
 from .tables import ParticipantTable
 
 
@@ -110,7 +111,10 @@ class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         participant = Participant.objects.get(id=self.kwargs["participant_id"])
         context["participant"] = participant
         context["experiment"] = experiment
-        context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
+        context["session_table"] = ExperimentSessionsTable(
+            participant.experimentsession_set.filter(experiment=experiment).all(),
+            extra_columns=[("participant", None)],  # remove participant column
+        )
         data = participant.get_data_for_experiment(experiment)
         context["participant_data"] = json.dumps(data, indent=4)
         context["participant_schedules"] = participant.get_schedules_for_experiment(
