@@ -15,7 +15,12 @@ from telebot.util import antiflood, smart_split
 from apps.channels import audio
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import get_bot
-from apps.chat.exceptions import AudioSynthesizeException, MessageHandlerException, ParticipantNotAllowedException
+from apps.chat.exceptions import (
+    AudioSynthesizeException,
+    MessageHandlerException,
+    ParticipantNotAllowedException,
+    VersionedExperimentSessionsNotAllowedException,
+)
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -108,12 +113,12 @@ class ChannelBase(ABC):
         self.experiment_session = experiment_session
         self.message = None
         self._user_query = None
-        self.bot = get_bot(experiment_session) if experiment_session else None
+        self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
 
     @classmethod
     def start_new_session(
         cls,
-        experiment: Experiment,
+        working_experiment: Experiment,
         experiment_channel: ExperimentChannel,
         participant_identifier: str,
         participant_user: CustomUser | None = None,
@@ -122,7 +127,7 @@ class ChannelBase(ABC):
         session_external_id: str | None = None,
     ):
         return _start_experiment_session(
-            experiment,
+            working_experiment,
             experiment_channel,
             participant_identifier,
             participant_user,
@@ -220,7 +225,7 @@ class ChannelBase(ABC):
             raise ParticipantNotAllowedException()
 
         self._ensure_sessions_exists()
-        self.bot = get_bot(self.experiment_session)
+        self.bot = get_bot(self.experiment_session, experiment=self.experiment)
 
     def new_user_message(self, message) -> str:
         """Handles the message coming from the user. Call this to send bot messages to the user.
@@ -316,7 +321,7 @@ class ChannelBase(ABC):
         self.send_text_to_user(bot_message)
 
     def _ask_user_to_take_survey(self):
-        pre_survey_link = self.experiment_session.get_pre_survey_link()
+        pre_survey_link = self.experiment_session.get_pre_survey_link(self.experiment)
         confirmation_text = self.experiment.pre_survey.confirmation_text
         bot_message = confirmation_text.format(survey_link=pre_survey_link)
         self._add_message_to_history(bot_message, ChatMessageType.AI)
@@ -414,7 +419,7 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
 
     def _get_bot_response(self, message: str) -> str:
-        self.bot = self.bot or get_bot(self.experiment_session)
+        self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         answer = self.bot.process_input(message, attachments=self.message.attachments)
         return answer
 
@@ -441,7 +446,6 @@ class ChannelBase(ABC):
 
         if not self.experiment_session:
             self._create_new_experiment_session()
-            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         else:
             if self._is_reset_conversation_request() and self.experiment_session.user_already_engaged():
                 self._reset_session()
@@ -460,7 +464,7 @@ class ChannelBase(ABC):
     def _get_latest_session(self):
         return (
             ExperimentSession.objects.filter(
-                experiment=self.experiment,
+                experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
             .order_by("-created_at")
@@ -477,7 +481,7 @@ class ChannelBase(ABC):
         session
         """
         self.experiment_session = self.start_new_session(
-            experiment=self.experiment,
+            working_experiment=self.experiment.get_working_version(),
             experiment_channel=self.experiment_channel,
             participant_identifier=self.participant_identifier,
             participant_user=self.participant_user,
@@ -513,7 +517,7 @@ class ChannelBase(ABC):
 
     def _generate_response_for_user(self, prompt: str) -> str:
         """Generates a response based on the `prompt`."""
-        topic_bot = self.bot or get_bot(self.experiment_session)
+        topic_bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
         return topic_bot.process_input(user_input=prompt, save_input_to_history=False)
 
 
@@ -534,26 +538,26 @@ class WebChannel(ChannelBase):
     @classmethod
     def start_new_session(
         cls,
-        experiment: Experiment,
+        working_experiment: Experiment,
         participant_identifier: str,
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
     ):
-        experiment_channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
-            experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
+            working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session)
+        WebChannel.check_and_process_seed_message(session, working_experiment.default_version)
         return session
 
     @classmethod
-    def check_and_process_seed_message(cls, session: ExperimentSession):
+    def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
         from apps.experiments.tasks import get_response_for_webchat_task
 
-        if session.experiment.seed_message:
+        if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(
-                session.id, message_text=session.experiment.seed_message, attachments=[]
+                experiment_session_id=session.id, experiment_id=experiment.id, message_text=seed_message, attachments=[]
             ).task_id
             session.save()
         return session
@@ -758,7 +762,7 @@ class SlackChannel(ChannelBase):
 
 
 def _start_experiment_session(
-    experiment: Experiment,
+    working_experiment: Experiment,
     experiment_channel: ExperimentChannel,
     participant_identifier: str,
     participant_user: CustomUser | None = None,
@@ -766,6 +770,12 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
 ) -> ExperimentSession:
+    if working_experiment.is_versioned:
+        raise VersionedExperimentSessionsNotAllowedException(
+            message="A session cannot be linked to an experiment version. "
+        )
+
+    team = working_experiment.team
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
 
@@ -775,7 +785,7 @@ def _start_experiment_session(
 
     with transaction.atomic():
         participant, created = Participant.objects.get_or_create(
-            team=experiment.team,
+            team=team,
             identifier=participant_identifier,
             platform=experiment_channel.platform,
             defaults={"user": participant_user},
@@ -785,8 +795,8 @@ def _start_experiment_session(
             participant.save()
 
         session = ExperimentSession.objects.create(
-            team=experiment.team,
-            experiment=experiment,
+            team=team,
+            experiment=working_experiment,
             experiment_channel=experiment_channel,
             status=session_status,
             participant=participant,
@@ -795,7 +805,7 @@ def _start_experiment_session(
 
         # Record the participant's timezone
         if timezone:
-            participant.update_memory(data={"timezone": timezone}, experiment=experiment)
+            participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
 
     if participant.experimentsession_set.count() == 1:
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)

@@ -15,9 +15,7 @@
         <td>{{ forloop.counter }}</td>
         <td>{{ session.created_at }}</td>
         <td>
-          {% with tags=session.chat.tags.all %}
-            {% include 'experiments/components/experiment_sessions_list_tags.html' %}
-          {% endwith %}
+          {% include "annotations/tag_ui.html" with object=session.chat allow_edit=False %}
         </td>
       </tr>
     {% endfor %}

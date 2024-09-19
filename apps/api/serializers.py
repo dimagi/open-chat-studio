@@ -21,7 +21,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Experiment
-        fields = ["id", "name", "url"]
+        fields = ["id", "name", "url", "version_number"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -178,7 +178,8 @@ class ParticipantExperimentData(serializers.Serializer):
 
 
 class ParticipantDataUpdateRequest(serializers.Serializer):
-    identifier = serializers.CharField(label="Participant identifier")
+    identifier = serializers.CharField(label="Participant Identifier")
+    name = serializers.CharField(label="Participant Name", required=False)
     platform = serializers.ChoiceField(
         choices=ChannelPlatform.choices, default=ChannelPlatform.API, label="Participant Platform"
     )

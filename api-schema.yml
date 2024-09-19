@@ -198,6 +198,12 @@ paths:
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - in: query
+        name: tags
+        schema:
+          type: string
+        description: A list of session tags (comma separated) to filter the results
+          by
       tags:
       - Experiment Sessions
       security:
@@ -362,6 +368,10 @@ components:
           format: uri
           readOnly: true
           title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
       required:
       - id
       - name
@@ -610,7 +620,10 @@ components:
       properties:
         identifier:
           type: string
-          title: Participant identifier
+          title: Participant Identifier
+        name:
+          type: string
+          title: Participant Name
         platform:
           allOf:
           - $ref: '#/components/schemas/PlatformEnum'

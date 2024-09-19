@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory
 from django.urls import reverse
 from waffle.testutils import override_flag
 
@@ -17,7 +18,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import ExperimentForm, validate_prompt_variables
+from apps.experiments.views.experiment import ExperimentForm, ExperimentTableView, validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -377,3 +378,21 @@ def test_experiment_session_message_view_creates_files(delay_mock, experiment, c
     assert ci_resource.files.filter(name="ci.text").exists()
     fs_resource = session.chat.attachments.get(tool_type="file_search")
     assert fs_resource.files.filter(name="fs.text").exists()
+
+
+class TestExperimentTableView:
+    def test_get_queryset(self, experiment):
+        team = experiment.team
+        experiment.create_new_version()
+        archived_working = ExperimentFactory(team=team)
+        archived_version = archived_working.create_new_version()
+        archived_version.is_archived = archived_working.is_archived = True
+        archived_version.save()
+        archived_working.save()
+        assert Experiment.objects.get_all().count() == 4
+
+        request = RequestFactory().get(reverse("experiments:table", args=[team.slug]))
+        request.team = team
+        view = ExperimentTableView()
+        view.request = request
+        assert list(view.get_queryset().all()) == [experiment]

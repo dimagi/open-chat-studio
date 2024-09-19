@@ -1,0 +1,10 @@
+<div class="flex gap-2">
+  {{ participant.name }}
+  <button
+    class="btn btn-xs"
+    hx-get="{% url "participants:edit_name" request.team.slug participant.id %}"
+    hx-swap="innerHTML"
+    hx-target="#participant-name">
+    <i class="fa-solid fa-pencil"></i>
+  </button>
+</div>

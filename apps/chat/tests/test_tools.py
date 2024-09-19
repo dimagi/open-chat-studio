@@ -9,13 +9,14 @@ from freezegun import freeze_time
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    TOOL_CLASS_MAP,
     DeleteReminderTool,
     UpdateParticipantDataTool,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
 )
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import Experiment
+from apps.experiments.models import AgentTools, Experiment
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import pretty_date
@@ -46,6 +47,7 @@ class TestOneOffReminderTool(BaseTestAgentTool):
         tool_kwargs = {
             "datetime_due": datetime_due,
             "message": "Hi there",
+            "schedule_name": "test",
         }
 
         self._invoke_tool(session, **tool_kwargs)
@@ -67,6 +69,7 @@ class TestRecurringReminderTool(BaseTestAgentTool):
         tool_kwargs = {
             "datetime_due": datetime_due,
             "every": 1,
+            "schedule_name": "test",
             "period": TimePeriod.DAYS,
             "message": "Hi there",
             "datetime_end": None,
@@ -88,6 +91,7 @@ class TestRecurringReminderTool(BaseTestAgentTool):
         tool_kwargs = {
             "datetime_due": datetime_due,
             "every": 1,
+            "schedule_name": "test",
             "period": TimePeriod.DAYS,
             "message": "Hi there",
             "datetime_end": datetime_end,
@@ -109,6 +113,7 @@ class TestRecurringReminderTool(BaseTestAgentTool):
         tool_kwargs = {
             "datetime_due": datetime_due,
             "every": 1,
+            "schedule_name": "test",
             "period": TimePeriod.DAYS,
             "message": "Hi there",
             "datetime_end": None,
@@ -275,7 +280,7 @@ def test_create_schedule_message_success():
     start_date = timezone.now()
     end_date = timezone.now()
     response = create_schedule_message(
-        experiment_session, message, start_date=start_date, end_date=end_date, is_recurring=True, **kwargs
+        experiment_session, message, name="Test", start_date=start_date, end_date=end_date, is_recurring=True, **kwargs
     )
     assert response == "Success: scheduled message created"
 
@@ -286,7 +291,7 @@ def test_create_schedule_message_success():
     ).first()
 
     assert scheduled_message is not None
-    assert scheduled_message.custom_schedule_params["name"].startswith("schedule_message_")
+    assert scheduled_message.custom_schedule_params["name"] == "Test"
     assert scheduled_message.custom_schedule_params["prompt_text"] == message
     assert scheduled_message.custom_schedule_params["frequency"] == kwargs["frequency"]
     assert scheduled_message.custom_schedule_params["time_period"] == kwargs["time_period"]
@@ -306,7 +311,9 @@ def test_create_schedule_message_invalid_form():
         "repetitions": 2,
     }
 
-    response = create_schedule_message(experiment_session, message, start_date=None, is_recurring=True, **kwargs)
+    response = create_schedule_message(
+        experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
+    )
     assert response == "Could not create scheduled message"
 
     scheduled_message_count = ScheduledMessage.objects.filter(
@@ -329,7 +336,9 @@ def test_create_schedule_message_experiment_does_not_exist():
     }
 
     with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
-        response = create_schedule_message(experiment_session, message, start_date=None, is_recurring=True, **kwargs)
+        response = create_schedule_message(
+            experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
+        )
         assert response == "Experiment does not exist! Could not create scheduled message"
 
         scheduled_message_count = ScheduledMessage.objects.filter(
@@ -370,3 +379,8 @@ class TestUpdateParticipantDataTool:
         assert response == "Success"
 
         assert session.participant_data_from_experiment == {"test": value}
+
+
+@pytest.mark.parametrize("tool", list(AgentTools))
+def test_tools_present(tool):
+    assert tool in TOOL_CLASS_MAP

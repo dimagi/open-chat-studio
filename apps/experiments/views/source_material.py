@@ -33,7 +33,7 @@ class SourceMaterialTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        query_set = SourceMaterial.objects.filter(team=self.request.team)
+        query_set = SourceMaterial.objects.filter(team=self.request.team, is_version=False)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("topic", weight="A") + SearchVector("description", weight="B")

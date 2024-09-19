@@ -137,18 +137,18 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
+    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier", orderable=True)
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
-        template_name="experiments/components/experiment_sessions_list_tags.html",
+        template_name="annotations/tag_ui.html",
     )
     actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
-        return template.render({"tags": record.chat.tags.all()})
+        return template.render({"object": record.chat})
 
     class Meta:
         model = ExperimentSession
@@ -161,6 +161,7 @@ class ExperimentSessionsTable(tables.Table):
 class ExperimentVersionsTable(tables.Table):
     version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
+    version_description = columns.Column(verbose_name="Description", default="")
     is_default = columns.TemplateColumn(
         template_code="""{% if record.is_default_version %}
         <span aria-label="true">✓</span>

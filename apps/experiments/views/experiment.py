@@ -105,7 +105,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
+        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True, is_archived=False)
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
@@ -132,10 +132,12 @@ class ExperimentSessionsTableView(SingleTableView, PermissionRequiredMixin):
         if not self.request.GET.get("show-all"):
             query_set = query_set.exclude(experiment_channel__platform=ChannelPlatform.API)
 
-        tags_query = self.request.GET.get("tags")
-        if tags_query:
+        if tags_query := self.request.GET.get("tags"):
             tags = tags_query.split("&")
             query_set = query_set.filter(chat__tags__name__in=tags).distinct()
+
+        if participant := self.request.GET.get("participant"):
+            query_set = query_set.filter(participant__identifier=participant)
         return query_set
 
 
@@ -239,11 +241,11 @@ class ExperimentForm(forms.ModelForm):
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
-        self.fields["safety_layers"].queryset = team.safetylayer_set
-        self.fields["source_material"].queryset = team.sourcematerial_set
-        self.fields["pre_survey"].queryset = team.survey_set
-        self.fields["post_survey"].queryset = team.survey_set
-        self.fields["consent_form"].queryset = team.consentform_set
+        self.fields["safety_layers"].queryset = team.safetylayer_set.exclude(is_version=True)
+        self.fields["source_material"].queryset = team.sourcematerial_set.exclude(is_version=True)
+        self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
+        self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
+        self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
 
@@ -478,10 +480,8 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 class ExperimentVersionForm(forms.ModelForm):
     class Meta:
         model = Experiment
-        fields = ["is_default_version"]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        fields = ["version_description", "is_default_version"]
+        help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
 
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
@@ -495,7 +495,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
 
     def form_valid(self, form):
         working_experiment = self.get_object()
-        working_experiment.create_new_version()
+        description = form.cleaned_data["version_description"]
+        is_default = form.cleaned_data["is_default_version"]
+        working_experiment.create_new_version(version_description=description, make_default=is_default)
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
@@ -692,10 +694,11 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 @require_POST
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int):
+    """Start an authed web session with the chosen experiment, be it a specific version or not"""
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
     session = WebChannel.start_new_session(
-        experiment,
+        working_experiment=experiment,
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
@@ -711,14 +714,15 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
+    experiment_version = experiment.default_version
+    version_specific_vars = {
+        "assistant": experiment_version.assistant,
+        "experiment_name": experiment_version.name,
+    }
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
-        {
-            "experiment": experiment,
-            "session": session,
-            "active_tab": "experiments",
-        },
+        {"experiment": experiment, "session": session, "active_tab": "experiments", **version_specific_vars},
     )
 
 
@@ -748,7 +752,17 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
-    result = get_response_for_webchat_task.delay(session.id, message_text, attachments=attachments)
+    experiment_version = experiment.default_version
+    result = get_response_for_webchat_task.delay(
+        experiment_session_id=session.id,
+        experiment_id=experiment_version.id,
+        message_text=message_text,
+        attachments=attachments,
+    )
+
+    version_specific_vars = {
+        "assistant": experiment_version.assistant,
+    }
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
@@ -758,6 +772,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
             "message_text": message_text,
             "task_id": result.task_id,
             "created_files": created_files,
+            **version_specific_vars,
         },
     )
 
@@ -826,10 +841,11 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         # old links dont have uuids
         raise Http404
 
-    if not experiment.is_public:
+    experiment_version = experiment.default_version
+    if not experiment_version.is_public:
         raise Http404
 
-    consent = experiment.consent_form
+    consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -841,7 +857,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 identifier = user.email if user else str(uuid.uuid4())
 
             session = WebChannel.start_new_session(
-                experiment,
+                working_experiment=experiment,
                 participant_user=user,
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
@@ -852,12 +868,16 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         form = ConsentForm(
             consent,
             initial={
-                "experiment_id": experiment.id,
+                "experiment_id": experiment_version.id,
                 "identifier": user.email if user else None,
             },
         )
 
     consent_notice = consent.get_rendered_content()
+    version_specific_vars = {
+        "experiment_name": experiment_version.name,
+        "experiment_description": experiment_version.description,
+    }
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
@@ -866,6 +886,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
             "experiment": experiment,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
+            **version_specific_vars,
         },
     )
 
@@ -874,17 +895,18 @@ def start_session_public(request, team_slug: str, experiment_id: str):
 @permission_required("experiments.invite_participants", raise_exception=True)
 def experiment_invitations(request, team_slug: str, experiment_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment_version = experiment.default_version
     sessions = experiment.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment.id})
+    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":
         post_form = ExperimentInvitationForm(request.POST)
         if post_form.is_valid():
             if ExperimentSession.objects.filter(
                 team=request.team,
-                experiment=experiment,
+                experiment_id=experiment_id,
                 status__in=["setup", "pending"],
                 participant__identifier=post_form.cleaned_data["email"],
             ).exists():
@@ -893,7 +915,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
             else:
                 with transaction.atomic():
                     session = WebChannel.start_new_session(
-                        experiment=experiment,
+                        experiment,
                         participant_identifier=post_form.cleaned_data["email"],
                         session_status=SessionStatus.SETUP,
                         timezone=request.session.get("detected_tz", None),
@@ -903,14 +925,14 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
         else:
             form = post_form
 
+    version_specific_vars = {
+        "experiment_name": experiment_version.name,
+        "experiment_description": experiment_version.description,
+    }
     return TemplateResponse(
         request,
         "experiments/experiment_invitations.html",
-        {
-            "invitation_form": form,
-            "experiment": experiment,
-            "sessions": sessions,
-        },
+        {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
     )
 
 
@@ -922,8 +944,10 @@ def download_experiment_chats(request, team_slug: str, experiment_id: str):
     tags = request.POST["tags"]
     tags = tags.split(",") if tags else []
 
+    participant = request.POST.get("participant")
+
     # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment, tags).getvalue(), content_type="text/csv")
+    response = HttpResponse(experiment_to_csv(experiment, tags, participant).getvalue(), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
     return response
 
@@ -944,16 +968,16 @@ def send_invitation(request, team_slug: str, experiment_id: str, session_id: str
 def _record_consent_and_redirect(request, team_slug: str, experiment_session: ExperimentSession):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment.pre_survey:
+    if experiment_session.experiment_version.pre_survey:
         experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
-        redirct_url_name = "experiments:experiment_pre_survey"
+        redirect_url_name = "experiments:experiment_pre_survey"
     else:
         experiment_session.status = SessionStatus.ACTIVE
-        redirct_url_name = "experiments:experiment_chat"
+        redirect_url_name = "experiments:experiment_chat"
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
-            redirct_url_name,
+            redirect_url_name,
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
@@ -964,35 +988,38 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
-    consent = experiment.consent_form
+    default_version = experiment.default_version
+    consent = default_version.consent_form
 
     initial = {
-        "experiment_id": experiment.id,
+        "participant_id": experiment_session.participant.id,
+        "identifier": experiment_session.participant.identifier,
     }
     if not experiment_session.participant:
         raise Http404()
 
-    initial["participant_id"] = experiment_session.participant.id
-    initial["identifier"] = experiment_session.participant.identifier
-
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial=initial)
         if form.is_valid():
-            WebChannel.check_and_process_seed_message(experiment_session)
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:
         form = ConsentForm(consent, initial=initial)
 
     consent_notice = consent.get_rendered_content()
+    version_specific_vars = {
+        "experiment_name": default_version.name,
+        "experiment_description": default_version.description,
+    }
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
-            "experiment": experiment,
+            "experiment": default_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
+            **version_specific_vars,
         },
     )
 
@@ -1013,6 +1040,14 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
             )
     else:
         form = SurveyCompletedForm()
+
+    default_version = request.experiment.default_version
+    experiment_session = request.experiment_session
+    version_specific_vars = {
+        "experiment_name": default_version.name,
+        "experiment_description": default_version.description,
+        "pre_survey_link": experiment_session.get_pre_survey_link(default_version),
+    }
     return TemplateResponse(
         request,
         "experiments/pre_survey.html",
@@ -1020,7 +1055,8 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
             "active_tab": "experiments",
             "form": form,
             "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
+            "experiment_session": experiment_session,
+            **version_specific_vars,
         },
     )
 
@@ -1055,6 +1091,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
     form = None
     survey_link = None
     survey_text = None
+    experiment_version = request.experiment.default_version
     if request.method == "POST":
         # no validation needed
         request.experiment_session.status = SessionStatus.COMPLETE
@@ -1063,11 +1100,17 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
         return HttpResponseRedirect(
             reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
         )
-    elif request.experiment.post_survey:
+    elif experiment_version.post_survey:
         form = SurveyCompletedForm()
-        survey_link = request.experiment_session.get_post_survey_link()
-        survey_text = request.experiment.post_survey.confirmation_text.format(survey_link=survey_link)
+        survey_link = request.experiment_session.get_post_survey_link(experiment_version)
+        survey_text = experiment_version.post_survey.confirmation_text.format(survey_link=survey_link)
 
+    version_specific_vars = {
+        "experiment.post_survey": experiment_version.post_survey,
+        "survey_link": survey_link,
+        "survey_text": survey_text,
+        "experiment_name": experiment_version.name,
+    }
     return TemplateResponse(
         request,
         "experiments/experiment_review.html",
@@ -1075,10 +1118,9 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
             "active_tab": "experiments",
-            "survey_link": survey_link,
-            "survey_text": survey_text,
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            **version_specific_vars,
         },
     )
 

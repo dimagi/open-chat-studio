@@ -12,13 +12,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
@@ -52,17 +52,57 @@ class ExperimentObjectManager(AuditingManager):
         """Returns a queryset for all working experiments"""
         return self.get_queryset().filter(working_version=None)
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
+    def get_all(self):
+        """A method to return all experiments whether it is deprecated or not"""
+        return super().get_queryset()
+
 
 class SourceMaterialObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class SafetyLayerObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class ConsentFormObjectManager(AuditingManager):
-    pass
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
@@ -114,6 +154,13 @@ class VersionsMixin:
         if self.is_working_version:
             return self
         return self.working_version
+
+    def get_working_version_id(self) -> int:
+        return self.working_version_id if self.working_version_id else self.id
+
+    @property
+    def has_versions(self):
+        return self.versions.exists()
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -181,7 +228,22 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
-class Survey(BaseTeamModel):
+class SurveyObjectManager(models.Manager):
+    def get_queryset(self) -> models.QuerySet:
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
+
+
+class Survey(BaseTeamModel, VersionsMixin):
     """
     A survey.
     """
@@ -196,6 +258,14 @@ class Survey(BaseTeamModel):
             " Survey link: {survey_link}"
         ),
     )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    objects = SurveyObjectManager()
 
     class Meta:
         ordering = ["name"]
@@ -216,7 +286,7 @@ class Survey(BaseTeamModel):
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
-class ConsentForm(BaseTeamModel):
+class ConsentForm(BaseTeamModel, VersionsMixin):
     """
     Custom markdown consent form to be used by experiments.
     """
@@ -232,6 +302,13 @@ class ConsentForm(BaseTeamModel):
         null=False,
         default="Respond with '1' if you agree",
         help_text=("Use this text to tell the user to respond with '1' in order to give their consent"),
+    )
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
     )
 
     class Meta:
@@ -470,6 +547,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     version_number = models.PositiveIntegerField(default=1)
     is_default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
+    version_description = models.TextField(
+        blank=True,
+        default="",
+    )
     objects = ExperimentObjectManager()
 
     class Meta:
@@ -513,14 +594,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return [*self.timeout_triggers.all(), *self.static_triggers.all()]
 
     @property
-    def has_versions(self):
-        return self.versions.count() > 0
-
-    @property
     def version_display(self) -> str:
         if self.is_working_version:
             return ""
         return f"v{self.version_number}"
+
+    @cached_property
+    def default_version(self) -> "Experiment":
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return Experiment.objects.get_default_or_working(self)
 
     def get_chat_model(self):
         service = self.get_llm_service()
@@ -536,7 +618,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self, version_description: str | None = None, make_default: bool = False):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
@@ -547,30 +629,47 @@ class Experiment(BaseTeamModel, VersionsMixin):
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
         new_version = super().create_new_version(save=False)
+        new_version.version_description = version_description or ""
         new_version.public_id = uuid4()
         new_version.version_number = version_number
-        if self.source_material:
-            new_version.source_material = self.source_material.create_new_version()
 
-        if new_version.version_number == 1:
+        self._copy_attr_to_new_version("source_material", new_version)
+        self._copy_attr_to_new_version("consent_form", new_version)
+        self._copy_attr_to_new_version("pre_survey", new_version)
+        self._copy_attr_to_new_version("post_survey", new_version)
+
+        if new_version.version_number == 1 or make_default:
             new_version.is_default_version = True
+
+        if make_default:
+            self.versions.filter(is_default_version=True).update(
+                is_default_version=False, audit_action=AuditAction.AUDIT
+            )
+
         new_version.save()
 
-        self.copy_safety_layers_to_new_version(new_version)
-        self.copy_routes_to_new_version(new_version)
-        self.copy_static_triggers_to_new_version(new_version)
-        self.copy_timeout_triggers_to_new_version(new_version)
+        self._copy_safety_layers_to_new_version(new_version)
+        self._copy_routes_to_new_version(new_version)
+        self.copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
+        self.copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
 
         new_version.files.set(self.files.all())
         return new_version
 
-    def copy_safety_layers_to_new_version(self, new_version: "Experiment"):
+    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
+        """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
+        linking that to `new_version`
+        """
+        if instance := getattr(self, attr_name):
+            setattr(new_version, attr_name, instance.create_new_version())
+
+    def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
         for layer in self.safety_layers.all():
             duplicated_layers.append(layer.create_new_version())
         new_version.safety_layers.set(duplicated_layers)
 
-    def copy_routes_to_new_version(self, new_version: "Experiment"):
+    def _copy_routes_to_new_version(self, new_version: "Experiment"):
         """
         This copies the experiment routes where this experiment is the parent and sets the new parent to the new
         version.
@@ -578,13 +677,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for route in self.child_links.all():
             route.create_new_version(new_version)
 
-    def copy_static_triggers_to_new_version(self, new_version: "Experiment"):
-        for static_trigger in self.static_triggers.all():
-            static_trigger.create_new_version(new_experiment=new_version)
-
-    def copy_timeout_triggers_to_new_version(self, new_version: "Experiment"):
-        for timeout_trigger in self.timeout_triggers.all():
-            timeout_trigger.create_new_version(new_experiment=new_version)
+    def copy_trigger_to_new_version(self, trigger_queryset, new_version):
+        for trigger in trigger_queryset.all():
+            trigger.create_new_version(new_experiment=new_version)
 
     @property
     def is_public(self) -> bool:
@@ -616,7 +711,13 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
-        """Returns a list of experiments: that are not parents, and are not children of the current experiment"""
+        """
+        Returns a list of experiments that fit the following criteria:
+        - They are not the same as the parent
+        - they are not parents
+        - they are not not children of the current experiment
+        - they are not part of the current experiment's version family
+        """
         parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
 
         if parent:
@@ -626,6 +727,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
                 .exclude(id__in=child_ids)
                 .exclude(id__in=parent_ids)
                 .exclude(id=parent.id)
+                .exclude(working_version_id=parent.id)
             )
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
@@ -652,6 +754,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
 
 class Participant(BaseTeamModel):
+    name = models.CharField(max_length=320, blank=True)
     identifier = models.CharField(max_length=320, blank=True)  # max email length
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
@@ -665,6 +768,12 @@ class Participant(BaseTeamModel):
     def email(self):
         validate_email(self.identifier)
         return self.identifier
+
+    @property
+    def global_data(self):
+        if self.name:
+            return {"name": self.name}
+        return {}
 
     def __str__(self):
         return self.identifier
@@ -722,7 +831,9 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
-    def get_schedules_for_experiment(self, experiment, as_dict=False, as_timezone: str | None = None):
+    def get_schedules_for_experiment(
+        self, experiment, as_dict=False, as_timezone: str | None = None, include_complete=False
+    ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
         any child experiments in the case where the experiment is a parent
@@ -743,6 +854,8 @@ class Participant(BaseTeamModel):
             .select_related("action")
             .order_by("created_at")
         )
+        if not include_complete:
+            messages = messages.filter(is_complete=False)
 
         scheduled_messages = []
         for message in messages:
@@ -764,7 +877,7 @@ class Participant(BaseTeamModel):
                         "next_trigger_date": next_trigger_date,
                         "last_triggered_at": last_triggered_at,
                         "total_triggers": message.total_triggers,
-                        "triggers_remaining": message.repetitions - message.total_triggers,
+                        "triggers_remaining": message.remaining_triggers,
                         "is_complete": message.is_complete,
                     }
                 )
@@ -921,11 +1034,11 @@ class ExperimentSession(BaseTeamModel):
     def get_platform_name(self) -> str:
         return self.experiment_channel.get_platform_display()
 
-    def get_pre_survey_link(self):
-        return self.experiment.pre_survey.get_link(self.participant, self)
+    def get_pre_survey_link(self, experiment_version: Experiment):
+        return experiment_version.pre_survey.get_link(self.participant, self)
 
-    def get_post_survey_link(self):
-        return self.experiment.post_survey.get_link(self.participant, self)
+    def get_post_survey_link(self, experiment_version: Experiment):
+        return experiment_version.post_survey.get_link(self.participant, self)
 
     def is_stale(self) -> bool:
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
@@ -1015,6 +1128,16 @@ class ExperimentSession(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
+    @cached_property
+    def experiment_version(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return self.experiment.default_version
+
+    @cached_property
+    def working_experiment(self) -> Experiment:
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return self.experiment.get_working_version()
+
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
         return participant_data.get("timezone")
@@ -1030,4 +1153,4 @@ class ExperimentSession(BaseTeamModel):
         scheduled_messages = self.participant.get_schedules_for_experiment(self.experiment, as_timezone=as_timezone)
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
-        return participant_data
+        return self.participant.global_data | participant_data
