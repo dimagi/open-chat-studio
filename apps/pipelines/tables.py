@@ -45,7 +45,7 @@ class PipelineRunTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(template_name="pipelines/components/experiment_session_view_button.html")
+    actions = actions.ActionsColumn(actions=[actions.chip_action(label="Session Details")])
 
     class Meta:
         model = PipelineRun

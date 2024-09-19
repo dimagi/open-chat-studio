@@ -132,7 +132,7 @@ class ExperimentSessionsTable(tables.Table):
         verbose_name="Tags",
         template_name="annotations/tag_ui.html",
     )
-    actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
+    actions = actions.ActionsColumn(actions=[actions.chip_action(label="Session Details")])
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)

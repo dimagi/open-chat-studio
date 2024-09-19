@@ -19,6 +19,7 @@ class Action:
     label: str = None
     title: str = None
     icon_class: str = None
+    button_style: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
     display_condition: callable = None
@@ -55,6 +56,8 @@ class Action:
             "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
         }
+        if self.button_style:
+            ctxt["button_style"] = self.button_style
         if self.extra_context:
             ctxt.update(self.extra_context)
         return ctxt
@@ -131,6 +134,27 @@ def delete_action(
         confirm_message=confirm_message,
         hx_method="delete",
         **kwargs,
+    )
+
+
+def chip_action(
+    label: str = None,
+    required_permissions: list = None,
+    display_condition: callable = None,
+):
+    """Action to display a chip-style link that links to another page.
+
+    This must be used with objects that implement the `get_absolute_url` method.
+
+    Note: Keep the styling consistent with`generic/chip.html`"""
+    return Action(
+        url_name="",
+        url_factory=lambda _, __, record: record.get_absolute_url(),
+        label=label,
+        icon_class="fa-solid fa-external-link",
+        button_style="",
+        required_permissions=required_permissions,
+        display_condition=display_condition,
     )
 
 
