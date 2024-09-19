@@ -125,7 +125,9 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier", orderable=True)
+    participant = actions.ActionsColumn(
+        actions=[actions.chip_action()], accessor="participant", orderable=True, order_by="participant__identifier"
+    )
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
@@ -164,18 +166,12 @@ class ExperimentVersionsTable(tables.Table):
         empty_text = "No versions yet!"
 
 
-def _get_route_url(url_name, request, record):
+def _get_route_url(url_name, request, record, value):
     return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
 
 
 class ChildExperimentRoutesTable(tables.Table):
-    child = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
+    child = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(
@@ -198,14 +194,7 @@ class ChildExperimentRoutesTable(tables.Table):
 
 
 class TerminalBotsTable(ChildExperimentRoutesTable):
-    child = columns.Column(
-        verbose_name="Bot",
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
+    child = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
 
     class Meta:
         model = ExperimentRoute
@@ -216,13 +205,7 @@ class TerminalBotsTable(ChildExperimentRoutesTable):
 
 
 class ParentExperimentRoutesTable(tables.Table):
-    parent = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
+    parent = actions.ActionsColumn(actions=[actions.chip_action()], align="left", orderable=True)
 
     class Meta:
         model = ExperimentRoute

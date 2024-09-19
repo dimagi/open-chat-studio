@@ -32,7 +32,7 @@ def make_table(provider_type, model, fields=("type", "name")):
 
 
 def _make_url_factory(provider_type):
-    def url_factory(url_name, request, record):
+    def url_factory(url_name, request, record, value):
         return reverse(url_name, args=[request.team.slug, provider_type, record.pk])
 
     return url_factory

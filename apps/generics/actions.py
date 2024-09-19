@@ -1,8 +1,9 @@
 import dataclasses
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
+from django.conf import settings
 from django.template import Context
 from django.template.loader import get_template
 from django.urls import reverse
@@ -12,21 +13,25 @@ from django_tables2 import TemplateColumn
 @dataclasses.dataclass
 class Action:
     url_name: str
-    url_factory: Callable[[str, Any, Any], str] = None
+    url_factory: Callable[[str, Any, Any, Any], str] = None
     """A custom function called during rendering to generate the URL for the action. The function is passed
-    the URL name, the request, and the record, and should return the URL."""
+    the URL name, the request, the record, and the cell value and should return the URL."""
 
     label: str = None
+    label_factory: Callable[[Any, Any], str] = None
+    """A custom function called during rendering to generate the action label. The function is passed
+    the row's record and cell's value and must return a string."""
+
     title: str = None
     icon_class: str = None
     button_style: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
-    display_condition: callable = None
+    display_condition: Callable[[Any, Any], bool] = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
 
-    enabled_condition: callable = None
+    enabled_condition: Callable[[Any, Any], bool] = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be enabled. If none is provided, the action is always enabled."""
 
@@ -35,24 +40,30 @@ class Action:
     def render(self, context: Context):
         request = context["request"]
         record = context.get("record")
+        value = context.get("value")  # value from record that corresponds to the current column
 
         if not self.should_display(request, record):
             return ""
 
         template = get_template(self.template)
-        with context.push(self.get_context(request, record)):
+        with context.push(self.get_context(request, record, value)):
             return template.render(context.update(context.flatten()))
 
-    def get_context(self, request, record):
+    def get_context(self, request, record, value):
         if self.url_factory:
-            action_url = self.url_factory(self.url_name, request, record)
+            action_url = self.url_factory(self.url_name, request, record, value)
         else:
             args = [request.team.slug, record.pk] if record else [request.team.slug]
             action_url = reverse(self.url_name, args=args)
+
+        label = self.label
+        if not label and self.label_factory:
+            label = self.label_factory(record, value)
+
         ctxt = {
             "action_url": action_url,
             "icon_class": self.icon_class,
-            "label": self.label or "",
+            "label": label or "",
             "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
         }
@@ -86,8 +97,8 @@ class AjaxAction(Action):
     """A message to display in a confirmation dialog when the action is clicked.
     If none is provided, no confirmation dialog is shown."""
 
-    def get_context(self, request, record):
-        ctxt = super().get_context(request, record)
+    def get_context(self, request, record, value):
+        ctxt = super().get_context(request, record, value)
         ctxt.update(
             {"hx_method": self.hx_method, "confirm_message": self.confirm_message, "action_id": uuid.uuid4().hex}
         )
@@ -139,6 +150,7 @@ def delete_action(
 
 def chip_action(
     label: str = None,
+    label_factory: Callable[[Any, Any], str] = None,
     required_permissions: list = None,
     display_condition: callable = None,
 ):
@@ -147,10 +159,21 @@ def chip_action(
     This must be used with objects that implement the `get_absolute_url` method.
 
     Note: Keep the styling consistent with`generic/chip.html`"""
+    if not label and not label_factory:
+
+        def label_factory(record, value):
+            return str(value)
+
+    def url_factory(_, __, record, value):
+        if hasattr(value, "get_absolute_url"):
+            return value.get_absolute_url()
+        return record.get_absolute_url()
+
     return Action(
         url_name="",
-        url_factory=lambda _, __, record: record.get_absolute_url(),
+        url_factory=url_factory,
         label=label,
+        label_factory=label_factory,
         icon_class="fa-solid fa-external-link",
         button_style="",
         required_permissions=required_permissions,
@@ -159,7 +182,12 @@ def chip_action(
 
 
 class ActionsColumn(TemplateColumn):
-    def __init__(self, actions, **extra):
+    def __init__(self, actions, align: Literal["left", "right", "center"] = "center", **extra):
         extra_context = {"actions": actions}
-        extra = {"attrs": {"th": {"class": "text-center"}, "td": {"class": "text-center"}}, **extra}
+        if align != "left":
+            th = settings.DJANGO_TABLES2_TABLE_ATTRS["th"].copy()
+            th["class"] = th["class"].replace("text-left", f"text-{align}")
+            td = settings.DJANGO_TABLES2_TABLE_ATTRS["td"].copy()
+            td["class"] = td["class"].replace("text-left", f"text-{align}")
+            extra = {"attrs": {"th": th, "td": td}, **extra}
         super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
