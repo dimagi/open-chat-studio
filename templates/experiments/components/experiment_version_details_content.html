@@ -1,0 +1,26 @@
+<div class="modal-header">
+    <div class="modal-title" id="detailsModalLabel">
+        <h3 class="text-base text-xl font-bold">Details for {{ experiment }}</h3>
+    </div>
+</div>
+
+<div class="modal-body">
+    <div class="my-4 space-y-2">
+        {% for field in experiment.version_details_for_display %}
+            <div class="grid grid-cols-3 gap-2">
+                <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
+                <dd class="text-sm col-span-2">{{ field.value }}</dd>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="modal-footer">
+    {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as form_action_url%}
+    <form method="post" action="{{ form_action_url }}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
+            Set as Default
+        </button>
+    </form>
+</div>

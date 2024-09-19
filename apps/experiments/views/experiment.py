@@ -25,6 +25,7 @@ from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django_tables2 import SingleTableView
+from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
@@ -144,7 +145,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     model = Experiment
     paginate_by = 25
     table_class = ExperimentVersionsTable
-    template_name = "table/single_table.html"
+    template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
@@ -1200,3 +1201,36 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
         return FileResponse(file, as_attachment=True, filename=resource.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+def set_default_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
+    Experiment.objects.exclude(version_number=version_number).filter(
+        team__slug=team_slug, working_version_id=experiment_id
+    ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
+    experiment.is_default_version = True
+    experiment.save()
+
+    url = (
+        reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )
+    return redirect(url)
+
+
+@login_and_team_required
+def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment_version = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
+    return render(
+        request, "experiments/components/experiment_version_details_content.html", {"experiment": experiment_version}
+    )

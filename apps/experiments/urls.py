@@ -44,6 +44,16 @@ urlpatterns = [
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
+    path(
+        "e/<int:experiment_id>/versions/details/<int:version_number>/",
+        views.experiment_version_details,
+        name="experiment-version-details",
+    ),
+    path(
+        "e/<int:experiment_id>/versions/set_default/<int:version_number>/",
+        views.set_default_experiment,
+        name="set-default-experiment",
+    ),
     path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),

@@ -168,6 +168,10 @@ class ExperimentVersionsTable(tables.Table):
         {% endif %}""",
         verbose_name="Default Version",
     )
+    details = columns.TemplateColumn(
+        template_name="experiments/components/experiment_version_details_button.html",
+        verbose_name="",
+    )
 
     class Meta:
         model = Experiment

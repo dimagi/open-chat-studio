@@ -2,6 +2,7 @@ import logging
 import uuid
 from datetime import datetime
 from functools import cached_property
+from typing import TypedDict
 from uuid import uuid4
 
 import markdown
@@ -27,6 +28,13 @@ from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
+
+
+class ExperimentDetail(TypedDict):
+    """Represents a specific detail about an experiment. The label is the user friendly name"""
+
+    label: str
+    value: str | int
 
 
 class PromptObjectManager(AuditingManager):
@@ -690,6 +698,42 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
+
+    def version_details_for_display(self) -> list[ExperimentDetail]:
+        """
+        Returns a list of dictionaries, each representing a specific detail of this the current experiment.
+        Each dictionary should have a `name` and `value` key.
+        """
+
+        def name_or_none(attr_name):
+            return getattr(self, attr_name) or ""
+
+        def yes_no(condition):
+            return "Yes" if condition else "No"
+
+        return [
+            ExperimentDetail(label="Description", value=self.description),
+            ExperimentDetail(label="Version", value=self.version_number),
+            ExperimentDetail(label="Version Description", value=self.version_description),
+            ExperimentDetail(label="LLM Model", value=self.llm),
+            ExperimentDetail(label="LLM Provider", value=self.llm_provider.name),
+            ExperimentDetail(label="Assistant", value=name_or_none("assistant")),
+            ExperimentDetail(label="Pipeline", value=name_or_none("pipeline")),
+            ExperimentDetail(label="Temperature", value=self.temperature),
+            ExperimentDetail(label="Source Material", value=name_or_none("source_material")),
+            ExperimentDetail(label="Pre-Survey", value=name_or_none("pre_survey")),
+            ExperimentDetail(label="Post-Survey", value=name_or_none("post_survey")),
+            ExperimentDetail(
+                label="Safety Violation Notification Emails",
+                value=", ".join(self.safety_violation_notification_emails),
+            ),
+            ExperimentDetail(label="Max Token Limit", value=self.max_token_limit),
+            ExperimentDetail(label="Voice Response Behaviour", value=self.get_voice_response_behaviour_display),
+            ExperimentDetail(label="Trace Provider", value=name_or_none("trace_provider")),
+            ExperimentDetail(label="Consent Form", value=name_or_none("consent_form")),
+            ExperimentDetail(label="Conversational Consent Enabled", value=yes_no(self.conversational_consent_enabled)),
+            ExperimentDetail(label="Echo Transcript", value=yes_no(self.echo_transcript)),
+        ]
 
 
 class ExperimentRouteType(models.TextChoices):
