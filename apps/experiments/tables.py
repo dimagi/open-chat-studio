@@ -40,14 +40,11 @@ class ExperimentTable(tables.Table):
 
 
 class SafetyLayerTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:safety_edit"),
-                actions.delete_action(url_name="experiments:safety_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:safety_edit"),
+            actions.delete_action(url_name="experiments:safety_delete"),
+        ]
     )
 
     class Meta:
@@ -64,14 +61,11 @@ class SafetyLayerTable(tables.Table):
 
 class SourceMaterialTable(tables.Table):
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:source_material_edit"),
-                actions.delete_action(url_name="experiments:source_material_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:source_material_edit"),
+            actions.delete_action(url_name="experiments:source_material_delete"),
+        ]
     )
 
     class Meta:
@@ -87,14 +81,11 @@ class SourceMaterialTable(tables.Table):
 
 
 class SurveyTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:survey_edit"),
-                actions.delete_action(url_name="experiments:survey_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:survey_edit"),
+            actions.delete_action(url_name="experiments:survey_delete"),
+        ]
     )
 
     class Meta:
@@ -109,17 +100,14 @@ class SurveyTable(tables.Table):
 
 
 class ConsentFormTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:consent_edit"),
-                actions.delete_action(
-                    url_name="experiments:consent_delete",
-                    display_condition=lambda request, record: not record.is_default,
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:consent_edit"),
+            actions.delete_action(
+                url_name="experiments:consent_delete",
+                display_condition=lambda request, record: not record.is_default,
+            ),
+        ]
     )
 
     class Meta:
@@ -188,20 +176,17 @@ class ChildExperimentRoutesTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(
-                    url_name="experiments:experiment_route_edit",
-                    url_factory=_get_route_url,
-                ),
-                actions.delete_action(
-                    url_name="experiments:experiment_route_delete",
-                    url_factory=_get_route_url,
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                url_name="experiments:experiment_route_edit",
+                url_factory=_get_route_url,
+            ),
+            actions.delete_action(
+                url_name="experiments:experiment_route_delete",
+                url_factory=_get_route_url,
+            ),
+        ]
     )
 
     class Meta:

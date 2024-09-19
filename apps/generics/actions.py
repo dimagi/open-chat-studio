@@ -6,6 +6,7 @@ from typing import Any
 from django.template import Context
 from django.template.loader import get_template
 from django.urls import reverse
+from django_tables2 import TemplateColumn
 
 
 @dataclasses.dataclass
@@ -131,3 +132,10 @@ def delete_action(
         hx_method="delete",
         **kwargs,
     )
+
+
+class ActionsColumn(TemplateColumn):
+    def __init__(self, actions, **extra):
+        extra_context = {"actions": actions}
+        extra = {"attrs": {"th": {"class": "text-center"}, "td": {"class": "text-center"}}, **extra}
+        super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
