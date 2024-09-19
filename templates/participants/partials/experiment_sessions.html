@@ -10,7 +10,7 @@
     {% for session in sessions %}
       <tr
         class="cursor-pointer"
-        x-on:click="window.location.href='{{ session.get_absolute_edit_url }}'"
+        x-on:click="window.location.href='{{ session.get_absolute_url }}'"
       >
         <td>{{ forloop.counter }}</td>
         <td>{{ session.created_at }}</td>

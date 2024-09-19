@@ -1,0 +1,10 @@
+{% if chip.url %}
+  <a href="{{ chip.url }}" class="btn btn-sm">
+    {{ chip.label }}
+    <i class="fa-solid fa-external-link"></i>
+  </a>
+{% elif chip.label %}
+  <div class="btn btn-sm">{{ chip.label }}</div>
+{% else %}
+  {{ chip }}
+{% endif %}

@@ -30,7 +30,11 @@
                                     {% endif %}
                                    ">{{ pipeline_run.status|upper }}</div>
                     </div>
-                    {% include "pipelines/components/experiment_session_view_button.html" with record=pipeline_run %}
+                    {% if pipeline_run.session %}
+                        <a class="btn btn-sm btn-outline btn-primary" href="{{ pipeline_run.session.get_absolute_url }}" class="link">
+                            Session Details
+                        </a>
+                    {% endif %}
                 </div>
             </div>
             {% include "pipelines/components/pipeline_run_detail_tabs.html" %}
