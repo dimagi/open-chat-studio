@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 import tiktoken
 from django.utils import timezone
@@ -14,7 +15,15 @@ from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import LlmModel, LlmProviderId, LlmTemperature, PipelineJinjaTemplate, SourceMaterialId
+from apps.pipelines.nodes.types import (
+    Keywords,
+    LlmModel,
+    LlmProviderId,
+    LlmTemperature,
+    NumOutputs,
+    PipelineJinjaTemplate,
+    SourceMaterialId,
+)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.utils.time import pretty_date
@@ -24,11 +33,9 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
-
-        input = state["messages"][-1]
 
         env = SandboxedEnvironment()
         try:
@@ -48,17 +55,10 @@ class RenderTemplate(PipelineNode):
         return template.render(content)
 
 
-class LLMResponse(PipelineNode):
-    __human_name__ = "LLM response"
-
+class LLMResponseMixin:
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
-
-    def _process(self, state: PipelineState) -> PipelineState:
-        llm = self.get_chat_model()
-        output = llm.invoke(state["messages"][-1], config=self._config)
-        return output.content
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -75,25 +75,34 @@ class LLMResponse(PipelineNode):
         return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
 
 
+class LLMResponse(PipelineNode, LLMResponseMixin):
+    __human_name__ = "LLM response"
+
+    def _process(self, input, state: PipelineState) -> PipelineState:
+        llm = self.get_chat_model()
+        output = llm.invoke(input, config=self._config)
+        return output.content
+
+
 class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
     source_material_id: SourceMaterialId | None = None
     prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         prompt = PromptTemplate.from_template(template=self.prompt)
-        context = self._get_context(state, prompt)
+        context = self._get_context(input, state, prompt)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         return output.content
 
-    def _get_context(self, state: PipelineState, prompt: PromptTemplate):
+    def _get_context(self, input, state: PipelineState, prompt: PromptTemplate):
         session = state["experiment_session"]
         context = {}
 
         if "input" in prompt.input_variables:
-            context["input"] = state["messages"][-1]
+            context["input"] = input
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")
@@ -128,19 +137,57 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState) -> PipelineState:
         send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=state["messages"][-1]
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
 
 
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        input = state["messages"][-1]
+    def _process(self, input, state: PipelineState) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return input
+
+
+class BooleanNode(Passthrough):
+    __human_name__ = "Boolean Node"
+    input_equals: str
+
+    def process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
+        if self.input_equals == state["messages"][-1]:
+            return "true"
+        return "false"
+
+    def get_output_map(self):
+        """A mapping from the output handles on the frontend to the return values of process_conditional"""
+        return {"output_true": "true", "output_false": "false"}
+
+
+class RouterNode(Passthrough, LLMResponseMixin):
+    __human_name__ = "Router"
+    llm_provider_id: LlmProviderId
+    llm_model: LlmModel
+    prompt: str = "You are an extremely helpful router {input}"
+    num_outputs: NumOutputs = 2
+    keywords: Keywords = []
+
+    def process_conditional(self, state: PipelineState):
+        prompt = PromptTemplate.from_template(template=self.prompt)
+        chain = prompt | self.get_chat_model()
+        result = chain.invoke(state["messages"][-1], config=self._config)
+        keyword = result.content.lower().strip()
+        if keyword in [k.lower() for k in self.keywords]:
+            return keyword.lower()
+        else:
+            return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
 
 
 class ExtractStructuredDataNodeMixin:
@@ -163,9 +210,8 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, state: PipelineState) -> RunnableLambda:
+    def _process(self, input, state: PipelineState) -> RunnableLambda:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
-        input: str = state["messages"][-1]
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
         message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)

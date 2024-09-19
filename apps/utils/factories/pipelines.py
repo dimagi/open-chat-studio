@@ -22,7 +22,13 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     name = "Test Pipeline"
     data = {
         "edges": [
-            {"id": "1->2", "source": "first", "target": "second"},
+            {
+                "id": "1->2",
+                "source": "first",
+                "target": "second",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
         ],
         "nodes": [
             {
