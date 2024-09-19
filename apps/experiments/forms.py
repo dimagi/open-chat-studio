@@ -8,7 +8,6 @@ from apps.experiments.models import ExperimentRoute, ExperimentRouteType, Survey
 class ConsentForm(forms.Form):
     identifier = forms.CharField(required=False)
     consent_agreement = forms.BooleanField(required=True, label="I Agree")
-    experiment_id = forms.IntegerField(widget=forms.HiddenInput())
     participant_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, consent, *args, **kwargs):

@@ -21,3 +21,7 @@ class MessageHandlerException(ChatException):
 
 class ParticipantNotAllowedException(Exception):
     pass
+
+
+class VersionedExperimentSessionsNotAllowedException(ChatException):
+    pass

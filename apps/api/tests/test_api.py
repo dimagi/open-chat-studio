@@ -30,6 +30,7 @@ def test_list_experiments(experiment):
                 "name": experiment.name,
                 "id": experiment.public_id,
                 "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+                "version_number": 1,
             }
         ],
         "next": None,
@@ -48,6 +49,7 @@ def test_retrieve_experiments(experiment):
         "id": experiment.public_id,
         "name": experiment.name,
         "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+        "version_number": 1,
     }
 
 

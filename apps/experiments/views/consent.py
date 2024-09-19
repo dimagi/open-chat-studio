@@ -32,7 +32,7 @@ class ConsentFormTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return ConsentForm.objects.filter(team=self.request.team)
+        return ConsentForm.objects.filter(team=self.request.team, is_version=False)
 
 
 class CreateConsentForm(CreateView):

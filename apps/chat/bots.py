@@ -60,7 +60,7 @@ class TopicBot:
     """
 
     def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-        self.experiment = experiment or session.experiment
+        self.experiment = experiment or session.experiment_version
         self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
@@ -85,7 +85,6 @@ class TopicBot:
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
-
         self._initialize()
 
     def _initialize(self):
@@ -255,7 +254,7 @@ class SafetyBot:
 
 class PipelineBot:
     def __init__(self, session: ExperimentSession):
-        self.experiment = session.experiment
+        self.experiment = session.experiment_version
         self.session = session
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):

@@ -368,6 +368,10 @@ components:
           format: uri
           readOnly: true
           title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
       required:
       - id
       - name

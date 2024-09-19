@@ -20,6 +20,7 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
     SourceMaterialFactory,
+    SurveyFactory,
     SyntheticVoiceFactory,
     VersionedExperimentFactory,
 )
@@ -498,7 +499,26 @@ class TestExperimentRouteVersioning:
 
 
 @pytest.mark.django_db()
-class TestExperimentVersioning:
+class TestExperimentRoute:
+    def test_eligible_children(self):
+        parent = ExperimentFactory()
+        experiment_version = parent.create_new_version()
+        experiment1 = ExperimentFactory(team=parent.team)
+        experiment2 = ExperimentFactory(team=parent.team)
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team, parent=parent)
+        assert parent not in queryset
+        assert experiment_version not in queryset
+        assert experiment1 in queryset
+        assert experiment2 in queryset
+        assert len(queryset) == 2
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team)
+        assert len(queryset) == 4
+
+
+@pytest.mark.django_db()
+class TestExperimentModel:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
             ExperimentFactory(is_default_version=True, working_version=None)
@@ -549,9 +569,16 @@ class TestExperimentVersioning:
 
         # Setup Timeout Trigger
         TimeoutTriggerFactory(experiment=experiment)
+
+        # Surveys
+        pre_survey = SurveyFactory(team=team)
+        post_survey = SurveyFactory(team=team)
+        experiment.pre_survey = pre_survey
+        experiment.post_survey = post_survey
+
+        experiment.save()
         return experiment
 
-    @pytest.mark.django_db()
     def test_first_version_is_automatically_the_default(self):
         experiment = ExperimentFactory()
         new_version = experiment.create_new_version()
@@ -562,13 +589,12 @@ class TestExperimentVersioning:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @pytest.mark.django_db()
     def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
 
-        new_version = original_experiment.create_new_version()
+        new_version = original_experiment.create_new_version("tis a new version")
         original_experiment.refresh_from_db()
 
         assert new_version != original_experiment
@@ -577,6 +603,7 @@ class TestExperimentVersioning:
         assert new_version.version_number == 1
         assert new_version.is_default_version is True
         assert new_version.working_version == original_experiment
+        assert new_version.version_description == "tis a new version"
         _compare_models(
             original=original_experiment,
             new=new_version,
@@ -587,13 +614,20 @@ class TestExperimentVersioning:
                 "working_version_id",
                 "version_number",
                 "is_default_version",
+                "consent_form_id",
+                "pre_survey_id",
+                "post_survey_id",
+                "version_description",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
-        self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
+        self._assert_attribute_duplicated("source_material", original_experiment, new_version)
+        self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
+        self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
+        self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
@@ -641,6 +675,13 @@ class TestExperimentVersioning:
                 expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
             )
 
+    def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
+        _compare_models(
+            original=getattr(original_experiment, attr_name),
+            new=getattr(new_version, attr_name),
+            expected_changed_fields=["id", "working_version_id"],
+        )
+
 
 @pytest.mark.django_db()
 class TestExperimentObjectManager:
@@ -669,6 +710,18 @@ class TestExperimentObjectManager:
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
+    def test_archived_experiments_are_filtered_out(self):
+        """Default queries should exclude archived experiments"""
+        experiment = ExperimentFactory()
+        new_version = experiment.create_new_version()
+        assert Experiment.objects.count() == 2
+        new_version.is_archived = True
+        new_version.save()
+        assert Experiment.objects.count() == 1
+
+        # To get all experiment,s use the dedicated object method
+        assert Experiment.objects.get_all().count() == 2
+
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
     """
@@ -688,4 +741,7 @@ def _compare_models(original, new, expected_changed_fields: list) -> set:
         if field_value != new_dict[field_name]:
             changed_fields.add(field_name)
 
-    assert changed_fields.difference(set(expected_changed_fields)) == set()
+    field_difference = changed_fields.difference(set(expected_changed_fields))
+    assert (
+        field_difference == set()
+    ), f"These fields differ between the experiment versions, but should not: {field_difference}"

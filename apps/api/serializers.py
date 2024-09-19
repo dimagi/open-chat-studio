@@ -21,7 +21,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Experiment
-        fields = ["id", "name", "url"]
+        fields = ["id", "name", "url", "version_number"]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
