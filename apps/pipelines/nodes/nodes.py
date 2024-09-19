@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import Field, create_model
+from pydantic import BaseModel, Field, create_model
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
@@ -59,7 +59,7 @@ class RenderTemplate(PipelineNode):
         return template.render(content)
 
 
-class LLMResponseMixin:
+class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
@@ -206,8 +206,6 @@ class BooleanNode(Passthrough):
 
 class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
-    llm_provider_id: LlmProviderId
-    llm_model: LlmModel
     prompt: str = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
