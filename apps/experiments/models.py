@@ -91,6 +91,9 @@ class SourceMaterialObjectManager(AuditingManager):
             )
         )
 
+    def get_all(self):
+        return super().get_queryset()
+
 
 class SafetyLayerObjectManager(AuditingManager):
     def get_queryset(self) -> models.QuerySet:
@@ -106,6 +109,9 @@ class SafetyLayerObjectManager(AuditingManager):
             )
         )
 
+    def get_all(self):
+        return super().get_queryset()
+
 
 class ConsentFormObjectManager(AuditingManager):
     def get_queryset(self) -> models.QuerySet:
@@ -120,6 +126,9 @@ class ConsentFormObjectManager(AuditingManager):
                 )
             )
         )
+
+    def get_all(self):
+        return super().get_queryset()
 
 
 class SyntheticVoiceObjectManager(AuditingManager):

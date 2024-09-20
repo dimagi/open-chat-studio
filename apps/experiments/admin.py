@@ -19,6 +19,9 @@ class SourceMaterialAdmin(admin.ModelAdmin):
         "owner",
     )
 
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return models.SourceMaterial.objects.get_all()
+
 
 class SafetyLayerInline(admin.TabularInline):
     model = models.Experiment.safety_layers.through
@@ -127,6 +130,9 @@ class ConsentFormAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("is_default",)
     list_filter = ("team",)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return models.ConsentForm.objects.get_all()
 
 
 @admin.register(models.SyntheticVoice)
