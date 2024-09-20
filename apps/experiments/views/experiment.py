@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
+from typing import TypedDict
 from urllib.parse import quote
 
 from celery.result import AsyncResult
@@ -55,6 +56,7 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
+    ExperimentDetail,
     ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
@@ -78,6 +80,12 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.prompt import validate_prompt_variables
+
+
+class ExperimentVersionFieldDetail(TypedDict):
+    current_version: ExperimentDetail
+    changed: bool = False
+    previous_version: ExperimentDetail | None = None
 
 
 @login_and_team_required
@@ -503,10 +511,25 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        context["current_version"] = working_experiment
-        if working_experiment.latest_version:
+        current_version_details = working_experiment.version_details
+        has_versions = bool(working_experiment.has_versions)
+        context["has_versions"] = has_versions
+        if has_versions:
+            previous_version_details = working_experiment.latest_version.version_details
+            version_fields = []
+            changed_fields = working_experiment.get_changed_fields(working_experiment.latest_version)
+            context["fields_changed"] = bool(changed_fields)
+            for key, value in current_version_details.items():
+                version_fields.append(
+                    ExperimentVersionFieldDetail(
+                        changed=key in changed_fields,
+                        previous_version=previous_version_details[key],
+                        current_version=value,
+                    )
+                )
+
             context["previous_version"] = working_experiment.latest_version
-            context["changed_fields"] = working_experiment.get_changed_fields(working_experiment.latest_version)
+            context["version_fields"] = version_fields
         return context
 
     def form_valid(self, form):
@@ -1247,6 +1270,10 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     experiment_version = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    return render(
-        request, "experiments/components/experiment_version_details_content.html", {"experiment": experiment_version}
-    )
+    version_fields = []
+    for key, value in experiment_version.version_details.items():
+        version_fields.append(ExperimentVersionFieldDetail(current_version=value))
+
+    context = {"version_fields": version_fields, "experiment": experiment_version}
+
+    return render(request, "experiments/components/experiment_version_details_content.html", context)
