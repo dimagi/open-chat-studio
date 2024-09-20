@@ -23,6 +23,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
+from apps.experiments.helpers import differs
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
@@ -148,6 +149,8 @@ class PromptBuilderHistory(BaseTeamModel):
 
 
 class VersionsMixin:
+    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version_id"]
+
     @transaction.atomic()
     def create_new_version(self, save=True):
         """
@@ -689,9 +692,22 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
+
+
+        If the related field's version matches the current value, link it to the new experiment version; otherwise,
+        create a new version of it.
         """
-        if instance := getattr(self, attr_name):
-            setattr(new_version, attr_name, instance.create_new_version())
+        attr_instance = getattr(self, attr_name)
+        if not attr_instance:
+            return
+
+        latest_attr_version = attr_instance.latest_version
+        if latest_attr_version and not differs(
+            attr_instance, latest_attr_version, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS
+        ):
+            setattr(new_version, attr_name, latest_attr_version)
+        else:
+            setattr(new_version, attr_name, attr_instance.create_new_version())
 
     def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
@@ -753,7 +769,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 experiment=self, label="Max Token Limit", raw_value=self.max_token_limit
             ),
             "voice_response_behaviours": ExperimentDetail(
-                experiment=self, label="Voice Response Behaviour", raw_value=self.get_voice_response_behaviour_display
+                experiment=self,
+                label="Voice Response Behaviour",
+                raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
             ),
             "tracing_provider": ExperimentDetail(
                 experiment=self, label="Trace Provider", raw_value=self.trace_provider
@@ -772,12 +790,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_changed_fields(self, target_experiment: "Experiment") -> list[str]:
         """Returns a list of fields that changed between this experiment and `target_experiment`"""
-        # TODO: Test
         current_details = self.version_details
         version_details = target_experiment.version_details
         label_diffs = []
         for key, val in current_details.items():
-            if version_details[key].raw_value != val.raw_value:
+            current_value = val.raw_value
+            version_value = version_details[key].raw_value
+            if differs(current_value, version_value, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS):
                 label_diffs.append(key)
         return label_diffs
 

@@ -8,6 +8,7 @@ from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
+from apps.experiments.helpers import compare_models
 from apps.experiments.models import Experiment, ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -635,6 +636,40 @@ class TestExperimentModel:
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
 
+    def test_copy_attr_to_new_version(self):
+        """
+        Copying an attribute to the a version should only create a new version of the attribute (or related model) when
+        the attribute 1. is not versioned or 2. the instance differs from the latest version of itself. If there's no
+        difference between the working and latest version of the attribute, the latest version should be linked to the
+        new experiment version.
+        """
+        original_experiment = self._setup_original_experiment()
+        # Choose source_material as the attribute / related model
+        original_related_instance = original_experiment.source_material
+
+        # The original related object has not versions, so we expeect a new version to be created
+        experiment_version1 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version1)
+        assert original_related_instance.versions.count() == 1
+        assert experiment_version1.source_material != original_related_instance
+        assert experiment_version1.source_material.working_version == original_related_instance
+
+        # No change between the original and versioned instances, so we don't want yet another version to be made
+        experiment_version2 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version2)
+        assert original_related_instance.versions.count() == 1
+        # The new instance version should be the same as the previous one
+        assert experiment_version2.source_material == experiment_version1.source_material
+
+        # Changing the working instance causes a new version to be made
+        original_experiment.source_material.material = "Saucy Sauceness"
+        original_experiment.source_material.save()
+        experiment_version3 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version3)
+        assert original_related_instance.versions.count() == 2
+        assert experiment_version3.source_material != experiment_version2.source_material
+        assert experiment_version3.source_material.working_version == original_experiment.source_material
+
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
             assert layer.working_version is None
@@ -724,24 +759,7 @@ class TestExperimentObjectManager:
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    """
-    Compares the field values of between `original` and `new`, excluding those in `excluded_keys`.
-    `expected_changed_fields` specifies what fields we expect there to be differences in
-    """
-    excluded_keys = ["created_at", "updated_at"]
-    model_fields = [field.attname for field in original._meta.fields]
-    original_dict, new_dict = original.__dict__, new.__dict__
-    changed_fields = set([])
-    for field_name, field_value in original_dict.items():
-        if field_name not in model_fields:
-            continue
-
-        if field_name in excluded_keys:
-            continue
-        if field_value != new_dict[field_name]:
-            changed_fields.add(field_name)
-
-    field_difference = changed_fields.difference(set(expected_changed_fields))
+    field_difference = compare_models(original, new).difference(set(expected_changed_fields))
     assert (
         field_difference == set()
     ), f"These fields differ between the experiment versions, but should not: {field_difference}"
