@@ -1,20 +1,16 @@
 <div class="modal-header">
-    <div class="modal-title" id="detailsModalLabel">
+    <div class="modal-title mb-5" id="detailsModalLabel">
         <h3 class="text-base text-xl font-bold">Details for {{ experiment }}</h3>
     </div>
-</div>
-
-<div class="modal-body" id="versionDetails">
-    {% include 'experiments/components/versions/version_details.html' with version_details=experiment.version_details %}
-</div>
-
-
-<div class="modal-footer">
     {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as form_action_url%}
     <form method="post" action="{{ form_action_url }}">
         {% csrf_token %}
-        <button type="submit" class="btn btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
+        <button type="submit" class="btn btn-sm btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
             Set as Default
         </button>
     </form>
+</div>
+
+<div class="modal-body" id="versionDetails">
+    {% include 'experiments/components/versions/compare.html' %}
 </div>
