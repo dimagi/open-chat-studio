@@ -737,6 +737,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
+    def _get_version_detail(self, *args, **kwargs) -> ExperimentDetail:
+        return ExperimentDetail(experiment=self, *args, **kwargs)
+
     @property
     def version_details(self) -> list[ExperimentDetail]:
         """
@@ -747,44 +750,39 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def yes_no(value: bool):
             return "Yes" if value else "No"
 
+        def format_tools(tools: set):
+            return ", ".join([AgentTools(tool).label for tool in tools])
+
         return {
-            "description": ExperimentDetail(experiment=self, label="Description", raw_value=self.description),
-            "prompt_text": ExperimentDetail(experiment=self, label="Prompt Text", raw_value=self.prompt_text),
-            "llm_model": ExperimentDetail(experiment=self, label="LLM Model", raw_value=self.llm),
-            "llm_provider": ExperimentDetail(experiment=self, label="LLM Provider", raw_value=self.llm_provider),
-            "assistant": ExperimentDetail(experiment=self, label="Assistant", raw_value=self.assistant),
-            "pipeline": ExperimentDetail(experiment=self, label="Pipeline", raw_value=self.pipeline),
-            "temperature": ExperimentDetail(experiment=self, label="Temperature", raw_value=self.temperature),
-            "source_material": ExperimentDetail(
-                experiment=self, label="Source Material", raw_value=self.source_material
-            ),
-            "pre-survey": ExperimentDetail(experiment=self, label="Pre-Survey", raw_value=self.pre_survey),
-            "post_survey": ExperimentDetail(experiment=self, label="Post-Survey", raw_value=self.post_survey),
-            "safety_violation_emails": ExperimentDetail(
-                experiment=self,
+            "description": self._get_version_detail(label="Description", raw_value=self.description),
+            "prompt_text": self._get_version_detail(label="Prompt Text", raw_value=self.prompt_text),
+            "llm_model": self._get_version_detail(label="LLM Model", raw_value=self.llm),
+            "llm_provider": self._get_version_detail(label="LLM Provider", raw_value=self.llm_provider),
+            "tools": self._get_version_detail(label="Tools", raw_value=set(self.tools), to_display=format_tools),
+            "assistant": self._get_version_detail(label="Assistant", raw_value=self.assistant),
+            "pipeline": self._get_version_detail(label="Pipeline", raw_value=self.pipeline),
+            "temperature": self._get_version_detail(label="Temperature", raw_value=self.temperature),
+            "source_material": self._get_version_detail(label="Source Material", raw_value=self.source_material),
+            "pre-survey": self._get_version_detail(label="Pre-Survey", raw_value=self.pre_survey),
+            "post_survey": self._get_version_detail(label="Post-Survey", raw_value=self.post_survey),
+            "safety_violation_emails": self._get_version_detail(
                 label="Safety Violation Notification Emails",
                 raw_value=", ".join(self.safety_violation_notification_emails),
             ),
-            "max_token_limit": ExperimentDetail(
-                experiment=self, label="Max Token Limit", raw_value=self.max_token_limit
-            ),
-            "voice_response_behaviours": ExperimentDetail(
-                experiment=self,
+            "max_token_limit": self._get_version_detail(label="Max Token Limit", raw_value=self.max_token_limit),
+            "voice_response_behaviours": self._get_version_detail(
                 label="Voice Response Behaviour",
                 raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
             ),
-            "tracing_provider": ExperimentDetail(
-                experiment=self, label="Trace Provider", raw_value=self.trace_provider
-            ),
-            "consent_form": ExperimentDetail(experiment=self, label="Consent Form", raw_value=self.consent_form),
-            "conversational_consent_enabled": ExperimentDetail(
-                experiment=self,
+            "tracing_provider": self._get_version_detail(label="Trace Provider", raw_value=self.trace_provider),
+            "consent_form": self._get_version_detail(label="Consent Form", raw_value=self.consent_form),
+            "conversational_consent_enabled": self._get_version_detail(
                 label="Conversational Consent Enabled",
                 raw_value=self.conversational_consent_enabled,
                 to_display=yes_no,
             ),
-            "echo_transcript": ExperimentDetail(
-                experiment=self, label="Echo Transcript", raw_value=self.echo_transcript, to_display=yes_no
+            "echo_transcript": self._get_version_detail(
+                label="Echo Transcript", raw_value=self.echo_transcript, to_display=yes_no
             ),
         }
 
