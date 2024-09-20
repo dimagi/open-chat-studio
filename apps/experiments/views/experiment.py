@@ -493,6 +493,13 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     permission_required = "experiments.add_experiment"
     pk_url_kwarg = "experiment_id"
 
+    def get_form_kwargs(self) -> dict:
+        form_kwargs = super().get_form_kwargs()
+        experiment = self.get_object()
+        if not experiment.has_versions:
+            form_kwargs["initial"] = {"is_default_version": True}
+        return form_kwargs
+
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
