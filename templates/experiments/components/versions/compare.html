@@ -1,0 +1,6 @@
+<div class="flex flex-row gap-10">
+    {% include 'experiments/components/versions/version_details.html' with version_details=base_version.version_details changed_fields=changed_fields|default:'[]' diff_color='bg-red-400' %}
+    {% if new_version %}
+        {% include 'experiments/components/versions/version_details.html' with version_details=new_version.version_details changed_fields=changed_fields|default:'[]' diff_color='bg-emerald-400' %}
+    {% endif %}
+</div>

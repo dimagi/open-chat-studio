@@ -1,8 +1,8 @@
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
-from typing import TypedDict
 from uuid import uuid4
 
 import markdown
@@ -30,11 +30,20 @@ from apps.web.meta import absolute_url
 log = logging.getLogger(__name__)
 
 
-class ExperimentDetail(TypedDict):
+@dataclass
+class ExperimentDetail:
     """Represents a specific detail about an experiment. The label is the user friendly name"""
 
+    experiment: "Experiment"
     label: str
-    value: str | int
+    raw_value: any
+    to_display: callable = None
+
+    @property
+    def display_value(self) -> any:
+        if self.to_display:
+            return self.to_display(self.raw_value)
+        return self.raw_value or ""
 
 
 class PromptObjectManager(AuditingManager):
@@ -699,41 +708,65 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
-    def version_details_for_display(self) -> list[ExperimentDetail]:
+    @property
+    def version_details(self) -> list[ExperimentDetail]:
         """
         Returns a list of dictionaries, each representing a specific detail of this the current experiment.
         Each dictionary should have a `name` and `value` key.
         """
 
-        def name_or_none(attr_name):
-            return getattr(self, attr_name) or ""
+        def yes_no(value: bool):
+            return "Yes" if value else "No"
 
-        def yes_no(condition):
-            return "Yes" if condition else "No"
-
-        return [
-            ExperimentDetail(label="Description", value=self.description),
-            ExperimentDetail(label="Version", value=self.version_number),
-            ExperimentDetail(label="Version Description", value=self.version_description),
-            ExperimentDetail(label="LLM Model", value=self.llm),
-            ExperimentDetail(label="LLM Provider", value=self.llm_provider.name),
-            ExperimentDetail(label="Assistant", value=name_or_none("assistant")),
-            ExperimentDetail(label="Pipeline", value=name_or_none("pipeline")),
-            ExperimentDetail(label="Temperature", value=self.temperature),
-            ExperimentDetail(label="Source Material", value=name_or_none("source_material")),
-            ExperimentDetail(label="Pre-Survey", value=name_or_none("pre_survey")),
-            ExperimentDetail(label="Post-Survey", value=name_or_none("post_survey")),
-            ExperimentDetail(
-                label="Safety Violation Notification Emails",
-                value=", ".join(self.safety_violation_notification_emails),
+        return {
+            "description": ExperimentDetail(experiment=self, label="Description", raw_value=self.description),
+            "prompt_text": ExperimentDetail(experiment=self, label="Prompt Text", raw_value=self.prompt_text),
+            "llm_model": ExperimentDetail(experiment=self, label="LLM Model", raw_value=self.llm),
+            "llm_provider": ExperimentDetail(experiment=self, label="LLM Provider", raw_value=self.llm_provider),
+            "assistant": ExperimentDetail(experiment=self, label="Assistant", raw_value=self.assistant),
+            "pipeline": ExperimentDetail(experiment=self, label="Pipeline", raw_value=self.pipeline),
+            "temperature": ExperimentDetail(experiment=self, label="Temperature", raw_value=self.temperature),
+            "source_material": ExperimentDetail(
+                experiment=self, label="Source Material", raw_value=self.source_material
             ),
-            ExperimentDetail(label="Max Token Limit", value=self.max_token_limit),
-            ExperimentDetail(label="Voice Response Behaviour", value=self.get_voice_response_behaviour_display),
-            ExperimentDetail(label="Trace Provider", value=name_or_none("trace_provider")),
-            ExperimentDetail(label="Consent Form", value=name_or_none("consent_form")),
-            ExperimentDetail(label="Conversational Consent Enabled", value=yes_no(self.conversational_consent_enabled)),
-            ExperimentDetail(label="Echo Transcript", value=yes_no(self.echo_transcript)),
-        ]
+            "pre-survey": ExperimentDetail(experiment=self, label="Pre-Survey", raw_value=self.pre_survey),
+            "post_survey": ExperimentDetail(experiment=self, label="Post-Survey", raw_value=self.post_survey),
+            "safety_violation_emails": ExperimentDetail(
+                experiment=self,
+                label="Safety Violation Notification Emails",
+                raw_value=", ".join(self.safety_violation_notification_emails),
+            ),
+            "max_token_limit": ExperimentDetail(
+                experiment=self, label="Max Token Limit", raw_value=self.max_token_limit
+            ),
+            "voice_response_behaviours": ExperimentDetail(
+                experiment=self, label="Voice Response Behaviour", raw_value=self.get_voice_response_behaviour_display
+            ),
+            "tracing_provider": ExperimentDetail(
+                experiment=self, label="Trace Provider", raw_value=self.trace_provider
+            ),
+            "consent_form": ExperimentDetail(experiment=self, label="Consent Form", raw_value=self.consent_form),
+            "conversational_consent_enabled": ExperimentDetail(
+                experiment=self,
+                label="Conversational Consent Enabled",
+                raw_value=self.conversational_consent_enabled,
+                to_display=yes_no,
+            ),
+            "echo_transcript": ExperimentDetail(
+                experiment=self, label="Echo Transcript", raw_value=self.echo_transcript, to_display=yes_no
+            ),
+        }
+
+    def get_changed_fields(self, target_experiment: "Experiment") -> list[str]:
+        """Returns a list of fields that changed between this experiment and `target_experiment`"""
+        # TODO: Test
+        current_details = self.version_details
+        version_details = target_experiment.version_details
+        label_diffs = []
+        for key, val in current_details.items():
+            if version_details[key].raw_value != val.raw_value:
+                label_diffs.append(key)
+        return label_diffs
 
 
 class ExperimentRouteType(models.TextChoices):
