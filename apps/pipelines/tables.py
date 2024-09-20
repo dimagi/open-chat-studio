@@ -13,17 +13,14 @@ class PipelineTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="pipelines:edit"),
-                actions.delete_action(
-                    url_name="pipelines:delete",
-                    confirm_message="This will delete the pipeline and any associated logs. Are you sure?",
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="pipelines:edit"),
+            actions.delete_action(
+                url_name="pipelines:delete",
+                confirm_message="This will delete the pipeline and any associated logs. Are you sure?",
+            ),
+        ]
     )
     runs = columns.Column(accessor="run_count")
 
@@ -48,7 +45,7 @@ class PipelineRunTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(template_name="pipelines/components/experiment_session_view_button.html")
+    actions = actions.chip_column(label="Session Details")
 
     class Meta:
         model = PipelineRun

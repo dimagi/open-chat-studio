@@ -1,4 +1,6 @@
-<a href="{{ action_url }}" class="btn btn-sm join-item {{ button_style|default:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}>
-  <i class="{{ icon_class }}"></i>
-  {{ label }}
-</a>
+{% if action_url %}
+  <a href="{{ action_url }}" class="btn btn-sm join-item {{ button_style|default_if_none:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}>
+    {{ label }}
+    <i class="{{ icon_class }}"></i>
+  </a>
+{% endif %}

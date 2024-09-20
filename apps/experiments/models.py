@@ -24,6 +24,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.helpers import differs
 from apps.experiments.versioning import ExperimentDetail
+from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
@@ -867,6 +868,8 @@ class Participant(BaseTeamModel):
         return {}
 
     def __str__(self):
+        if self.name:
+            return f"{self.name} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):
@@ -1103,13 +1106,11 @@ class ExperimentSession(BaseTeamModel):
         else:
             return self.chat.messages.all()
 
-    def get_participant_display(self) -> str:
+    def get_participant_chip(self) -> Chip:
         if self.participant:
-            return str(self.participant)
-        elif self.user:
-            return str(self.user)
+            return Chip(label=str(self.participant), url=self.participant.get_absolute_url())
         else:
-            return "Anonymous"
+            return Chip(label="Anonymous", url="")
 
     def get_invite_url(self) -> str:
         return absolute_url(
@@ -1149,7 +1150,7 @@ class ExperimentSession(BaseTeamModel):
         if commit:
             self.save()
 
-    def get_absolute_edit_url(self):
+    def get_absolute_url(self):
         return reverse(
             "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
         )

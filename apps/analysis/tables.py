@@ -13,26 +13,23 @@ class AnalysisTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.Action(
-                    "analysis:create_run",
-                    icon_class="fa-solid fa-play",
-                    required_permissions=["analysis.add_analysisrun"],
-                    enabled_condition=lambda request, record: not record.needs_configuration(),
-                ),
-                actions.edit_action(
-                    "analysis:edit",
-                    required_permissions=["analysis.change_analysis"],
-                ),
-                actions.delete_action(
-                    "analysis:delete",
-                    required_permissions=["analysis.delete_analysis"],
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                "analysis:create_run",
+                icon_class="fa-solid fa-play",
+                required_permissions=["analysis.add_analysisrun"],
+                enabled_condition=lambda request, record: not record.needs_configuration(),
+            ),
+            actions.edit_action(
+                "analysis:edit",
+                required_permissions=["analysis.change_analysis"],
+            ),
+            actions.delete_action(
+                "analysis:delete",
+                required_permissions=["analysis.delete_analysis"],
+            ),
+        ]
     )
 
     class Meta:
@@ -81,19 +78,15 @@ class RunGroupTable(tables.Table):
         orderable=False,
         attrs={"th": {"class": "text-center"}, "td": {"class": "text-center"}},
     )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        attrs={"th": {"class": "text-center"}, "td": {"class": "text-center"}},
-        extra_context={
-            "actions": [
-                actions.Action(
-                    "analysis:replay_run",
-                    icon_class="fa-solid fa-arrow-rotate-left",
-                    required_permissions=["analysis.add_rungroup"],
-                ),
-                actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.Action(
+                "analysis:replay_run",
+                icon_class="fa-solid fa-arrow-rotate-left",
+                required_permissions=["analysis.add_rungroup"],
+            ),
+            actions.delete_action("analysis:delete_group", required_permissions=["analysis.delete_rungroup"]),
+        ]
     )
 
     class Meta:

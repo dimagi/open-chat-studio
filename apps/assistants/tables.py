@@ -13,35 +13,32 @@ class OpenAiAssistantTable(tables.Table):
         },
         orderable=True,
     )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(
-                    "assistants:edit",
-                    required_permissions=["assistants.change_openaiassistant"],
-                ),
-                actions.AjaxAction(
-                    "assistants:sync",
-                    title="Update from OpenAI",
-                    icon_class="fa-solid fa-rotate",
-                    required_permissions=["assistants.change_openaiassistant"],
-                ),
-                actions.delete_action(
-                    "assistants:delete_local",
-                    required_permissions=["assistants.delete_openaiassistant"],
-                    confirm_message="This will only delete the assistant from the local system.",
-                ),
-                actions.AjaxAction(
-                    "assistants:delete",
-                    title="Delete from OpenAI",
-                    icon_class="fa-solid fa-trash-arrow-up",
-                    required_permissions=["assistants.delete_openaiassistant"],
-                    confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
-                    hx_method="delete",
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                "assistants:edit",
+                required_permissions=["assistants.change_openaiassistant"],
+            ),
+            actions.AjaxAction(
+                "assistants:sync",
+                title="Update from OpenAI",
+                icon_class="fa-solid fa-rotate",
+                required_permissions=["assistants.change_openaiassistant"],
+            ),
+            actions.delete_action(
+                "assistants:delete_local",
+                required_permissions=["assistants.delete_openaiassistant"],
+                confirm_message="This will only delete the assistant from the local system.",
+            ),
+            actions.AjaxAction(
+                "assistants:delete",
+                title="Delete from OpenAI",
+                icon_class="fa-solid fa-trash-arrow-up",
+                required_permissions=["assistants.delete_openaiassistant"],
+                confirm_message="This will also delete the assistant from OpenAI. Are you sure?",
+                hx_method="delete",
+            ),
+        ]
     )
 
     class Meta:

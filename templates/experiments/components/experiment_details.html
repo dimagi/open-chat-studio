@@ -3,10 +3,12 @@
 <div>
   <div class="pl-4">
     <dl class="divide-y divide-gray-100">
-      {% for label, detail in details %}
+      {% for label, chip in details %}
         <div class="py-3 grid grid-cols-3 sm:gap-4">
           <dt class="text-sm font-medium leading-6">{{ label }}</dt>
-          <dd class="text-sm col-span-2">{{ detail }}</dd>
+          <dd class="text-sm col-span-2">
+            {% include "generic/chip.html" %}
+          </dd>
         </div>
       {% endfor %}
       <div class="py-3 grid grid-cols-3">

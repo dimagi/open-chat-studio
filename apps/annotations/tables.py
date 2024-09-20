@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.http import HttpRequest
 from django.template import Context
-from django_tables2 import columns, tables
+from django_tables2 import tables
 
 from apps.generics import actions
 
@@ -13,18 +13,15 @@ def display_condition(request: HttpRequest, record: Context) -> bool:
 
 
 class TagTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="annotations:tag_edit", display_condition=display_condition),
-                actions.delete_action(
-                    url_name="annotations:tag_delete",
-                    confirm_message="Continuing with this action will remove this tag from any tagged entity",
-                    display_condition=display_condition,
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="annotations:tag_edit", display_condition=display_condition),
+            actions.delete_action(
+                url_name="annotations:tag_delete",
+                confirm_message="Continuing with this action will remove this tag from any tagged entity",
+                display_condition=display_condition,
+            ),
+        ]
     )
 
     class Meta:
