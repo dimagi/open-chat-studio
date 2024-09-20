@@ -10,6 +10,7 @@ import {
   KeywordsWidget,
   LlmModelWidget,
   LlmProviderIdWidget,
+  MaxTokenLimitWidget,
   SourceMaterialIdWidget,
 } from "./widgets";
 import { NodeParameterValues } from "./types/nodeParameterValues";
@@ -71,6 +72,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           <>
             <div className="m-1 font-medium text-center">Temperature</div>
             <input
+              className="input input-bordered w-full"
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name]}
@@ -183,6 +185,23 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
               inputParam={inputParam}
               value={params[inputParam.name]}
             ></HistoryNameWidget>
+          </>
+        );
+      }
+      case "MaxTokenLimit": {
+        if (params["history_type"] != "global") {
+          return <></>;
+        }
+        return (
+          <>
+            <div className="m-1 font-medium text-center">
+              Maximum Token Limit
+            </div>
+            <MaxTokenLimitWidget
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={params[inputParam.name]}
+            ></MaxTokenLimitWidget>
           </>
         );
       }

@@ -6,13 +6,14 @@ from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.conversation import compress_chat_history
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
@@ -24,6 +25,7 @@ from apps.pipelines.nodes.types import (
     LlmModel,
     LlmProviderId,
     LlmTemperature,
+    MaxTokenLimit,
     NumOutputs,
     PipelineJinjaTemplate,
     SourceMaterialId,
@@ -65,6 +67,7 @@ class LLMResponseMixin(BaseModel):
     llm_temperature: LlmTemperature = 1.0
     history_type: HistoryType = None
     history_name: HistoryName | None = None
+    max_token_limit: MaxTokenLimit = 8192
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -112,7 +115,7 @@ class LLMResponseWithPrompt(LLMResponse):
         context = {"input": input}
 
         if self.history_type is not None:
-            context["history"] = self._get_history(session, node_id)
+            context["history"] = self._get_history(session, node_id, input)
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")
@@ -127,9 +130,14 @@ class LLMResponseWithPrompt(LLMResponse):
 
         return context
 
-    def _get_history(self, session: ExperimentSession, node_id: str):
+    def _get_history(self, session: ExperimentSession, node_id: str, input):
         if self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            return session.chat.get_langchain_messages_until_summary()
+            return compress_chat_history(
+                chat=session.chat,
+                llm=self.get_chat_model(),
+                max_token_limit=self.max_token_limit,
+                input_messages=[HumanMessage(content=input)],
+            )
 
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             history_name = self.history_name

@@ -206,3 +206,24 @@ export function HistoryNameWidget({
     ></textarea>
   );
 }
+
+export function MaxTokenLimitWidget({
+  inputParam,
+  value,
+  onChange,
+}: {
+  inputParam: InputParam;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <input
+      className="input input-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+      type="number"
+      step="1"
+    ></input>
+  );
+}
