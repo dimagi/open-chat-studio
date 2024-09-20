@@ -497,11 +497,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
         context["current_version"] = working_experiment
-        if prev_version := working_experiment.versions.filter(
-            version_number=working_experiment.version_number - 1
-        ).first():
-            context["previous_version"] = prev_version
-            context["changed_fields"] = working_experiment.get_changed_fields(prev_version)
+        if working_experiment.latest_version:
+            context["previous_version"] = working_experiment.latest_version
+            context["changed_fields"] = working_experiment.get_changed_fields(working_experiment.latest_version)
         return context
 
     def form_valid(self, form):

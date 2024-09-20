@@ -175,6 +175,10 @@ class VersionsMixin:
     def is_working_version(self):
         return self.working_version is None
 
+    @property
+    def latest_version(self):
+        return self.versions.order_by("-created_at").first()
+
     def get_working_version(self) -> "Experiment":
         """Returns the working version of this experiment family"""
         if self.is_working_version:
