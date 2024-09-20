@@ -1,20 +1,16 @@
-<div class="flex flex-row gap-10">
-    <div class="my-4 space-y-2">
-        {% if previous_version|default:None %}
-            {% for field in version_fields %}
-                <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                    {% include 'experiments/components/versions/version_field_details.html' with display_value=field.previous_version.display_value label=field.previous_version.label field_changed=field.changed diff_color='bg-red-400' %}
-                    {% include 'experiments/components/versions/version_field_details.html' with display_value=field.current_version.display_value label=field.current_version.label field_changed=field.changed diff_color='bg-emerald-400' %}
-                </div>
-            {% endfor %}
-        {% else %}
-            {% for field in version_fields %}
-                <div class="max-h-64 overflow-y-auto">
-                    {% include 'experiments/components/versions/version_field_details.html' with display_value=field.current_version.display_value label=field.current_version.label field_changed=field.changed diff_color='bg-emerald-400' %}
-                </div>
-            {% endfor %}
-
-        {% endif %}
-    </div>
-
+<div class="my-2">
+    {% if previous_version|default:None %}
+        {% for field in version_fields %}
+            <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                {% include 'experiments/components/versions/version_field_details.html' with display_value=field.previous_version.display_value label=field.previous_version.label field_changed=field.changed diff_color='bg-red-400' %}
+                {% include 'experiments/components/versions/version_field_details.html' with display_value=field.current_version.display_value label=field.current_version.label field_changed=field.changed diff_color='bg-emerald-400' %}
+            </div>
+        {% endfor %}
+    {% else %}
+        {% for field in version_fields %}
+            <div class="max-h-64 overflow-y-auto">
+                {% include 'experiments/components/versions/version_field_details.html' with display_value=field.current_version.display_value label=field.current_version.label field_changed=field.changed diff_color='bg-emerald-400' %}
+            </div>
+        {% endfor %}
+    {% endif %}
 </div>
