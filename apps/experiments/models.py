@@ -1,6 +1,5 @@
 import logging
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 from uuid import uuid4
@@ -24,27 +23,12 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.helpers import differs
+from apps.experiments.versioning import ExperimentDetail
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class ExperimentDetail:
-    """Represents a specific detail about an experiment. The label is the user friendly name"""
-
-    experiment: "Experiment"
-    label: str
-    raw_value: any
-    to_display: callable = None
-
-    @property
-    def display_value(self) -> any:
-        if self.to_display:
-            return self.to_display(self.raw_value)
-        return self.raw_value or ""
 
 
 class PromptObjectManager(AuditingManager):

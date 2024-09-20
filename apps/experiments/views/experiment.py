@@ -1,7 +1,6 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import TypedDict
 from urllib.parse import quote
 
 from celery.result import AsyncResult
@@ -56,7 +55,6 @@ from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
-    ExperimentDetail,
     ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
@@ -72,6 +70,7 @@ from apps.experiments.tables import (
     TerminalBotsTable,
 )
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.versioning import ExperimentVersionFieldDetail
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -80,12 +79,6 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.prompt import validate_prompt_variables
-
-
-class ExperimentVersionFieldDetail(TypedDict):
-    current_version: ExperimentDetail
-    changed: bool = False
-    previous_version: ExperimentDetail | None = None
 
 
 @login_and_team_required
