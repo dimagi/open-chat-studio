@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class ExperimentDetail:
+class VersionField:
     """Represents a specific detail about an experiment. The label is the user friendly name"""
 
     experiment: "Experiment"
@@ -22,6 +22,6 @@ class ExperimentDetail:
 
 
 class ExperimentVersionFieldDetail(TypedDict):
-    current_version: ExperimentDetail
+    current_version: VersionField
     changed: bool = False
-    previous_version: ExperimentDetail | None = None
+    previous_version: VersionField | None = None
