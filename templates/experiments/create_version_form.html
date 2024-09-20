@@ -14,7 +14,7 @@
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">Create New Version</h1>
-    {% if not has_versions or fields_changed %}
+    {% if not version_details.experiment.has_versions or version_details.fields_changed %}
       <form method="post">
         {% csrf_token %}
         {% render_form_fields form %}
@@ -25,14 +25,14 @@
         </div>
       </form>
     {% endif %}
-    {% if has_versions %}
-      {% if fields_changed %}
-        <h1 class="pg-subtitle pb-5">Changes since version {{ previous_version.version_number }}</h1>
+    {% if version_details.experiment.has_versions %}
+      {% if version_details.fields_changed %}
+        <h1 class="pg-subtitle pb-5">Changes since version {{ version_details.previous_experiment.version_number }}</h1>
         <div class="p-5 border border-white rounded-lg">
-          {% include 'experiments/components/versions/compare.html' with base_version=previous_version new_version=current_version %}
+          {% include 'experiments/components/versions/compare.html' %}
         </div>
       {% else %}
-        <h1 class="pg-subtitle pb-5">No changes since version {{ previous_version.version_number }}</h1>
+        <h1 class="pg-subtitle pb-5">No changes since version {{ version_details.previous_experiment.version_number }}</h1>
       {% endif %}
     {% endif %}
   </div>

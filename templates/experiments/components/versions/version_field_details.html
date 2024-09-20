@@ -1,8 +1,8 @@
-{% if field_changed or display_value %}
+{% if field_changed or field.display_value %}
     <div class="my-1">
         <div class="grid grid-cols-3">
-            <dt class="text-sm font-medium leading-6">{{ label }}</dt>
-            <dd class="text-sm col-span-2 {% if field_changed|default:False %}rounded text-slate-950 {{ diff_color }}{% endif %}">{{ display_value }}</dd>
+            <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
+            <dd class="text-sm col-span-2 {% if field_changed|default:False %}rounded text-slate-950 {{ diff_color }}{% endif %}">{{ field.display_value }}</dd>
         </div>
     </div>
 {% endif %}

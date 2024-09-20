@@ -23,7 +23,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.helpers import differs
-from apps.experiments.versioning import VersionField
+from apps.experiments.versioning import VersionDetails, VersionField
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -722,11 +722,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
-    def _get_version_field(self, *args, **kwargs) -> VersionField:
-        return VersionField(experiment=self, *args, **kwargs)
-
     @property
-    def version_details(self) -> list[VersionField]:
+    def version_details(self) -> VersionDetails:
         """
         Returns a list of dictionaries, each representing a specific detail of this the current experiment.
         Each dictionary should have a `name` and `value` key.
@@ -738,50 +735,61 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_tools(tools: set):
             return ", ".join([AgentTools(tool).label for tool in tools])
 
-        return {
-            "description": self._get_version_field(label="Description", raw_value=self.description),
-            "prompt_text": self._get_version_field(label="Prompt Text", raw_value=self.prompt_text),
-            "llm_model": self._get_version_field(label="LLM Model", raw_value=self.llm),
-            "llm_provider": self._get_version_field(label="LLM Provider", raw_value=self.llm_provider),
-            "tools": self._get_version_field(label="Tools", raw_value=set(self.tools), to_display=format_tools),
-            "assistant": self._get_version_field(label="Assistant", raw_value=self.assistant),
-            "pipeline": self._get_version_field(label="Pipeline", raw_value=self.pipeline),
-            "temperature": self._get_version_field(label="Temperature", raw_value=self.temperature),
-            "source_material": self._get_version_field(label="Source Material", raw_value=self.source_material),
-            "pre-survey": self._get_version_field(label="Pre-Survey", raw_value=self.pre_survey),
-            "post_survey": self._get_version_field(label="Post-Survey", raw_value=self.post_survey),
-            "safety_violation_emails": self._get_version_field(
-                label="Safety Violation Notification Emails",
-                raw_value=", ".join(self.safety_violation_notification_emails),
-            ),
-            "max_token_limit": self._get_version_field(label="Max Token Limit", raw_value=self.max_token_limit),
-            "voice_response_behaviours": self._get_version_field(
-                label="Voice Response Behaviour",
-                raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
-            ),
-            "tracing_provider": self._get_version_field(label="Trace Provider", raw_value=self.trace_provider),
-            "consent_form": self._get_version_field(label="Consent Form", raw_value=self.consent_form),
-            "conversational_consent_enabled": self._get_version_field(
-                label="Conversational Consent Enabled",
-                raw_value=self.conversational_consent_enabled,
-                to_display=yes_no,
-            ),
-            "echo_transcript": self._get_version_field(
-                label="Echo Transcript", raw_value=self.echo_transcript, to_display=yes_no
-            ),
-        }
-
-    def get_changed_fields(self, target_experiment: "Experiment") -> list[str]:
-        """Returns a list of fields that changed between this experiment and `target_experiment`"""
-        current_details = self.version_details
-        version_details = target_experiment.version_details
-        label_diffs = []
-        for key, val in current_details.items():
-            current_value = val.raw_value
-            version_value = version_details[key].raw_value
-            if differs(current_value, version_value, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS):
-                label_diffs.append(key)
-        return label_diffs
+        return VersionDetails(
+            experiment=self,
+            fields=[
+                # TODO: Derive label from name i.e. capitalize and remove underscores
+                VersionField(group_name="Group 1", name="description", raw_value=self.description),
+                VersionField(group_name="Group 1", name="prompt_text", raw_value=self.prompt_text),
+                VersionField(group_name="Group 1", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Group 1", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(
+                    group_name="Group 1",
+                    name="tools",
+                    raw_value=set(self.tools),
+                    to_display=format_tools,
+                ),
+                VersionField(group_name="Group 1", name="assistant", raw_value=self.assistant),
+                VersionField(group_name="Group 1", name="pipeline", raw_value=self.pipeline),
+                VersionField(group_name="Group 1", name="temperature", raw_value=self.temperature),
+                VersionField(
+                    group_name="Group 1",
+                    name="source_material",
+                    raw_value=self.source_material,
+                ),
+                VersionField(group_name="Group 1", name="pre-survey", raw_value=self.pre_survey),
+                VersionField(group_name="Group 1", name="post_survey", raw_value=self.post_survey),
+                VersionField(
+                    group_name="Group 2",
+                    name="safety_violation_emails",
+                    raw_value=", ".join(self.safety_violation_notification_emails),
+                ),
+                VersionField(
+                    group_name="Group 2",
+                    name="max_token_limit",
+                    raw_value=self.max_token_limit,
+                ),
+                VersionField(
+                    group_name="Group 2",
+                    name="voice_response_behaviours",
+                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
+                ),
+                VersionField(group_name="Group 2", name="tracing_provider", raw_value=self.trace_provider),
+                VersionField(group_name="Group 2", name="consent_form", raw_value=self.consent_form),
+                VersionField(
+                    group_name="Group 2",
+                    name="conversational_consent_enabled",
+                    raw_value=self.conversational_consent_enabled,
+                    to_display=yes_no,
+                ),
+                VersionField(
+                    group_name="Group 2",
+                    name="echo_transcript",
+                    raw_value=self.echo_transcript,
+                    to_display=yes_no,
+                ),
+            ],
+        )
 
 
 class ExperimentRouteType(models.TextChoices):

@@ -70,7 +70,6 @@ from apps.experiments.tables import (
     TerminalBotsTable,
 )
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.experiments.versioning import ExperimentVersionFieldDetail
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -504,25 +503,13 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        current_version_details = working_experiment.version_details
-        has_versions = bool(working_experiment.has_versions)
-        context["has_versions"] = has_versions
-        if has_versions:
-            previous_version_details = working_experiment.latest_version.version_details
-            version_fields = []
-            changed_fields = working_experiment.get_changed_fields(working_experiment.latest_version)
-            context["fields_changed"] = bool(changed_fields)
-            for key, value in current_version_details.items():
-                version_fields.append(
-                    ExperimentVersionFieldDetail(
-                        changed=key in changed_fields,
-                        previous_version=previous_version_details[key],
-                        current_version=value,
-                    )
-                )
+        version_details = working_experiment.version_details
+        if prev_version := working_experiment.latest_version:
+            context["previous_experiment_version"] = prev_version
+            # Populate diffs
+            version_details.compare(prev_version.version_details)
 
-            context["previous_version"] = working_experiment.latest_version
-            context["version_fields"] = version_fields
+        context["version_details"] = version_details
         return context
 
     def form_valid(self, form):
@@ -1263,10 +1250,6 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     experiment_version = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    version_fields = []
-    for key, value in experiment_version.version_details.items():
-        version_fields.append(ExperimentVersionFieldDetail(current_version=value))
 
-    context = {"version_fields": version_fields, "experiment": experiment_version}
-
+    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
