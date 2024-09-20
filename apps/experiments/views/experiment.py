@@ -151,7 +151,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     def get_queryset(self):
         return (
             Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
-            .order_by("version_number")
+            .order_by("-version_number")
             .all()
         )
 
