@@ -5,6 +5,8 @@ import usePipelineStore from "./stores/pipelineStore";
 import { InputParam } from "./types/nodeInputTypes";
 import { NodeParams } from "./types/nodeParams";
 import {
+  HistoryNameWidget,
+  HistoryTypeWidget,
   KeywordsWidget,
   LlmModelWidget,
   LlmProviderIdWidget,
@@ -154,6 +156,33 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
                 ></KeywordsWidget>
               );
             })}
+          </>
+        );
+      }
+      case "HistoryType": {
+        return (
+          <>
+            <div className="m-1 font-medium text-center">History Type</div>
+            <HistoryTypeWidget
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={params[inputParam.name]}
+            ></HistoryTypeWidget>
+          </>
+        );
+      }
+      case "HistoryName": {
+        if (params["history_type"] != "named") {
+          return <></>;
+        }
+        return (
+          <>
+            <div className="m-1 font-medium text-center">History Name</div>
+            <HistoryNameWidget
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={params[inputParam.name]}
+            ></HistoryNameWidget>
           </>
         );
       }

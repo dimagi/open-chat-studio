@@ -164,3 +164,45 @@ export function SourceMaterialIdWidget({
     </select>
   );
 }
+
+export function HistoryTypeWidget({
+  inputParam,
+  value,
+  onChange,
+}: {
+  inputParam: InputParam;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <select
+      className="select select-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+    >
+      <option value="node">Node</option>
+      <option value="global">Global</option>
+      <option value="named">Named</option>
+    </select>
+  );
+}
+
+export function HistoryNameWidget({
+  inputParam,
+  value,
+  onChange,
+}: {
+  inputParam: InputParam;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <textarea
+      className="textarea textarea-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+    ></textarea>
+  );
+}
