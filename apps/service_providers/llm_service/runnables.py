@@ -336,8 +336,11 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         client = self.state.raw_client
         generated_files = []
 
-        # This output is a concatanation of all messages in this run
-        output_message = output
+        if isinstance(output, str):
+            output_message = output
+        else:
+            output_message = "\n".join(content.text.value for content in output if content.type == "text")
+
         team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
