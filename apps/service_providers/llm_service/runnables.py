@@ -349,38 +349,43 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         file_ids = set()
         for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
-                annotations = message_content.text.annotations
-                for idx, annotation in enumerate(annotations):
-                    file_id = None
-                    file_ref_text = annotation.text
-                    if annotation.type == "file_citation":
-                        file_citation = annotation.file_citation
-                        file_id = file_citation.file_id
-                        file_name, file_link = self._get_file_name_and_link_for_citation(
-                            file_id=file_id, forbidden_file_ids=assistant_files_ids
-                        )
+                if message_content.type == "image_file":
+                    # Ignore these for now. Typically, they are also referenced in the text content
+                    pass
+                elif message_content.type == "text":
+                    annotations = message_content.text.annotations
+                    for idx, annotation in enumerate(annotations):
+                        file_id = None
+                        file_ref_text = annotation.text
+                        if annotation.type == "file_citation":
+                            file_citation = annotation.file_citation
+                            file_id = file_citation.file_id
+                            file_name, file_link = self._get_file_name_and_link_for_citation(
+                                file_id=file_id, forbidden_file_ids=assistant_files_ids
+                            )
 
-                        # Original citation text example:【6:0†source】
-                        output_message = output_message.replace(file_ref_text, f" [{file_name}]({file_link})")
+                            # Original citation text example:【6:0†source】
+                            output_message = output_message.replace(file_ref_text, f" [{file_name}]({file_link})")
 
-                    elif annotation.type == "file_path":
-                        file_path = annotation.file_path
-                        file_id = file_path.file_id
-                        created_file = get_and_store_openai_file(
-                            client=client,
-                            file_name=annotation.text.split("/")[-1],
-                            file_id=file_id,
-                            team_id=self.state.experiment.team_id,
-                        )
-                        # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
-                        # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                        session_id = self.state.session.id
-                        output_message = output_message.replace(
-                            file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
-                        )
-                        generated_files.append(created_file)
+                        elif annotation.type == "file_path":
+                            file_path = annotation.file_path
+                            file_id = file_path.file_id
+                            created_file = get_and_store_openai_file(
+                                client=client,
+                                file_name=annotation.text.split("/")[-1],
+                                file_id=file_id,
+                                team_id=self.state.experiment.team_id,
+                            )
+                            # Original citation text example: sandbox:/mnt/data/the_file.csv.
+                            # This is the link part in what looks like
+                            # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                            session_id = self.state.session.id
+                            output_message = output_message.replace(
+                                file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
+                            )
+                            generated_files.append(created_file)
 
-                    file_ids.add(file_id)
+                        file_ids.add(file_id)
 
         # Attach the generated files to the chat object as an annotation
         if generated_files:
