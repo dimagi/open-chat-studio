@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 
 import openai
 import pytest
+from openai.types.beta.threads import ImageFile, ImageFileContentBlock, Run
 from openai.types.beta.threads import Message as ThreadMessage
-from openai.types.beta.threads import Run
 from openai.types.beta.threads.file_citation_annotation import FileCitation, FileCitationAnnotation
 from openai.types.beta.threads.file_path_annotation import FilePath, FilePathAnnotation
 from openai.types.beta.threads.text import Text
@@ -493,10 +493,14 @@ def _create_thread_messages(
             metadata={},
             created_at=0,
             content=[
+                ImageFileContentBlock(
+                    type="image_file",
+                    image_file=ImageFile(file_id="test_file_id"),
+                ),
                 TextContentBlock(
                     text=Text(annotations=annotations if annotations else [], value=list(message.values())[0]),
                     type="text",
-                )
+                ),
             ],
             object="thread.message",
             role=list(message)[0],
