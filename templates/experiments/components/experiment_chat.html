@@ -13,16 +13,6 @@
       <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
         <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
           <table class="min-w-full divide-y divide-gray-300 ">
-            <thead>
-              <tr class="align-top">
-                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold">#</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Details</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Message Text</th>
-                {% if perms.annotations.view_customtaggeditem %}
-                  <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Tags</th>
-                {% endif %}
-              </tr>
-            </thead>
             <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
               {% for message in experiment_session.get_messages_for_display %}
                 <tr
