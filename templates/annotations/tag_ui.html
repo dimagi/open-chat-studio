@@ -11,6 +11,7 @@
               hx-get="{% url "annotations:tag_ui" request.team.slug %}?edit=1"
               hx-vals='{{ object.object_info }}'
               hx-target="#tag-ui-{{ object.id }}"
+              hx-swap="outerHTML"
       >
         <i class="fa-solid fa-pencil"></i>
       </button>
@@ -23,7 +24,7 @@
           <option value="{{ tag }}" {% if tag in object.user_tag_names %}selected{% endif %}>{{ tag }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-ghost !text-success"
+      <button class="btn btn-ghost btn-sm !text-success"
               hx-get="{% url "annotations:tag_ui" request.team.slug %}"
               hx-vals='{{ object.object_info }}'
               hx-target="#tag-ui-{{ object.id }}"
