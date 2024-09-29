@@ -27,15 +27,10 @@
                           return a.length > 0;
                           },
                           }'
-                  class="cursor-pointer"
                   x-show="searchMatch"
-                  x-bind:class="isSelected ? 'bg-gray-300' : ''"
-                  x-on:click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
                 >
                   <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ forloop.counter }}</td>
-                  <td class="px-3 py-4 text-sm flex flex-col gap-2"
-                      x-bind:class="isSelected ? 'text-neutral' : ''"
-                  >
+                  <td class="px-3 py-4 text-sm flex flex-col gap-2">
                     <div class="flex place-items-center">
                       {% if message.is_ai_message %}
                         {% include "experiments/chat/components/system_icon.html" %}
@@ -65,24 +60,30 @@
                           {% endif %}
                         </div>
                       </div>
+                      {% if perms.annotations.add_usercomment %}
+                        <div class="text-gray-500 min-w-fit">
+                          <button class="whitespace-nowrap btn btn-ghost" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
+                            <i class="fa-regular fa-comment"></i>
+                            <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
+                          </button>
+                        </div>
+                      {% endif %}
                     </div>
+                    {% if perms.annotations.add_usercomment %}
+                      <div
+                        x-show="commentsRow === {{ forloop.counter }}"
+                        x-cloak>
+                        <div class="flex justify-between">
+                          <h3 class="font-medium">Message Comments</h3>
+                          <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
+                            <i class="fa-solid fa-close"></i>
+                          </button>
+                        </div>
+                        {% include "experiments/components/user_comments.html" with object=message %}
+                      </div>
+                    {% endif %}
                   </td>
-                  {% if perms.annotations.add_usercomment %}
-                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                      <i class="fa-regular fa-comment"></i> <span
-                        id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
-                    </td>
-                  {% endif %}
                 </tr>
-                {% if perms.annotations.add_usercomment %}
-                  <tr
-                    x-show="commentsRow === {{ forloop.counter }}"
-                    x-cloak>
-                    <td colspan="100%" class="px-3 py-2">
-                      {% include "experiments/components/user_comments.html" with object=message %}
-                    </td>
-                  </tr>
-                {% endif %}
               {% endfor %}
             </tbody>
           </table>
