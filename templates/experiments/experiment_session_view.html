@@ -75,9 +75,7 @@
 
     {% endif %}
     <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment chat</h3>
-    <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "experiments/components/experiment_chat.html" %}
-    </div>
+    {% include "experiments/components/experiment_chat.html" %}
     {% if perms.events.view_eventlog %}
       <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment Events</h3>
       {% for event_trigger in event_triggers %}
