@@ -16,6 +16,7 @@
             <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
               {% for message in experiment_session.get_messages_for_display %}
                 <tr
+                  class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
                   x-data='{
                           tags: {{ message.all_tag_names|to_json }},
                           get isSelected() { return commentsRow === {{ forloop.counter }} },
