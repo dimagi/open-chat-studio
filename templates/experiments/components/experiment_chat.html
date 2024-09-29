@@ -2,101 +2,98 @@
 {% load chat_tags %}
 {% load waffle_tags %}
 
-<div x-data="{search: null}">
-  {% if perms.annotations.view_customtaggeditem %}
-    <div class="mt-1 pl-4 max-w-5xl">
-      <input type="text" x-model="search" class="input input-bordered input-sm w-1/2" placeholder="Search tags...">
-    </div>
-  {% endif %}
-  <div class="max-w-5xl mt-4 border rounded-2xl">
-    <div class="flow-root">
-      <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-        <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-          <table class="min-w-full divide-y divide-gray-300 ">
-            <thead>
-              <tr class="align-top">
-                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold">#</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Details</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Message Text</th>
-                {% if perms.annotations.view_customtaggeditem %}
-                  <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Tags</th>
+<div class="max-w-5xl mt-4 border rounded-2xl">
+  <div class="flow-root" x-data="{search: null}">
+    <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+      <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+        <table class="min-w-full divide-y divide-gray-300 ">
+          <thead>
+            <tr class="align-top">
+              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold">#</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Details</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Message Text</th>
+              {% if perms.annotations.view_customtaggeditem %}
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">
+                  Tags
+                  <input type="text" x-model="search" class="input input-bordered input-sm"
+                         placeholder="Search...">
+                </th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
+            {% for message in experiment_session.get_messages_for_display %}
+              <tr
+                x-data='{
+                        tags: {{ message.all_tag_names|to_json }},
+                        get isSelected() { return commentsRow === {{ forloop.counter }} },
+                        get searchMatch() {
+                        if (!this.search) {
+                        return true;
+                        }
+                        let a = this.tags.filter(tag => tag.toLowerCase().includes(this.search.toLowerCase()));
+                        return a.length > 0;
+                        },
+                        }'
+                class="cursor-pointer"
+                x-show="searchMatch"
+                x-bind:class="isSelected ? 'bg-gray-300' : ''"
+                x-on:click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
+              >
+                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">{{ forloop.counter }}</td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <div>
+                    {% if message.is_ai_message %}
+                      {% include "experiments/chat/components/system_icon.html" %}
+                    {% else %}
+                      {% include "experiments/chat/components/user_icon.html" %}
+                    {% endif %}
+                    <small>
+                      <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
+                        {{ message.created_at|date:"DATETIME_FORMAT" }}
+                      </time>
+                    </small>
+                  </div>
+                </td>
+                <td class="px-3 py-4 text-sm flex flex-col gap-2"
+                    x-bind:class="isSelected ? 'text-neutral' : ''"
+                >
+                  <div>
+                    {{ message.content|render_markdown }}
+                  </div>
+                  <div class="flex flex-col">
+                    {% for file in message.get_attached_files %}
+                      <div class="inline text-sm p-1">
+                        <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
+                      </div>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td class="w-1/4 overflow-y-visible">
+                  <div class="my-2 mr-2">
+                    {% include "annotations/tag_ui.html" with object=message %}
+                  </div>
+
+                </td>
+                {% if perms.annotations.add_usercomment %}
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    <i class="fa-regular fa-comment"></i> <span
+                      id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
+                  </td>
                 {% endif %}
               </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
-              {% for message in experiment_session.get_messages_for_display %}
+              {% if perms.annotations.add_usercomment %}
                 <tr
-                  x-data='{
-                          tags: {{ message.all_tag_names|to_json }},
-                          get isSelected() { return commentsRow === {{ forloop.counter }} },
-                          get searchMatch() {
-                          if (!this.search) {
-                          return true;
-                          }
-                          let a = this.tags.filter(tag => tag.toLowerCase().includes(this.search.toLowerCase()));
-                          return a.length > 0;
-                          },
-                          }'
-                  class="cursor-pointer"
-                  x-show="searchMatch"
-                  x-bind:class="isSelected ? 'bg-gray-300' : ''"
-                  x-on:click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})"
-                >
-                  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">{{ forloop.counter }}</td>
-                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                    <div>
-                      {% if message.is_ai_message %}
-                        {% include "experiments/chat/components/system_icon.html" %}
-                      {% else %}
-                        {% include "experiments/chat/components/user_icon.html" %}
-                      {% endif %}
-                      <small>
-                        <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
-                          {{ message.created_at|date:"DATETIME_FORMAT" }}
-                        </time>
-                      </small>
-                    </div>
+                  x-show="commentsRow === {{ forloop.counter }}"
+                  x-cloak>
+                  <td colspan="100%" class="px-3 py-2">
+                    {% include "experiments/components/user_comments.html" with object=message %}
                   </td>
-                  <td class="px-3 py-4 text-sm flex flex-col gap-2"
-                      x-bind:class="isSelected ? 'text-neutral' : ''"
-                  >
-                    <div>
-                      {{ message.content|render_markdown }}
-                    </div>
-                    <div class="flex flex-col">
-                      {% for file in message.get_attached_files %}
-                        <div class="inline text-sm p-1">
-                          <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
-                        </div>
-                      {% endfor %}
-                    </div>
-                  </td>
-                  <td class="w-1/4 overflow-y-visible">
-                    <div class="my-2 mr-2">
-                      {% include "annotations/tag_ui.html" with object=message %}
-                    </div>
-
-                  </td>
-                  {% if perms.annotations.add_usercomment %}
-                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                      <i class="fa-regular fa-comment"></i> <span
-                        id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
-                    </td>
-                  {% endif %}
                 </tr>
-                {% if perms.annotations.add_usercomment %}
-                  <tr
-                    x-show="commentsRow === {{ forloop.counter }}"
-                    x-cloak>
-                    <td colspan="100%" class="px-3 py-2">
-                      {% include "experiments/components/user_comments.html" with object=message %}
-                    </td>
-                  </tr>
-                {% endif %}
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
