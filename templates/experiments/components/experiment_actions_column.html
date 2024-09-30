@@ -1,4 +1,4 @@
-<form method="post" action="{% url 'experiments:start_authed_web_session' record.team.slug record.id %}" class="inline">
+<form method="post" action="{% url 'experiments:start_authed_web_session' record.team.slug record.id experiment_version|default:0 %}" class="inline">
   {% csrf_token %}
   <button type="submit" class="btn btn-sm" title="New Session">
     <i class="fa-solid fa-file-circle-plus"></i>

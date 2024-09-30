@@ -594,6 +594,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
+    def get_version(self, version: int) -> "Experiment":
+        # TODO: Test
+        working_version = self.get_working_version()
+        return working_version.versions.get(version_number=version)
+
     @property
     def tools_enabled(self):
         return len(self.tools) > 0

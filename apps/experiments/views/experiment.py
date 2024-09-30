@@ -693,7 +693,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 
 @require_POST
 @login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int):
+def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
     """Start an authed web session with the chosen experiment, be it a specific version or not"""
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
@@ -704,20 +704,23 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
         timezone=request.session.get("detected_tz", None),
     )
     return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
+        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
 
 
 @login_and_team_required
-def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
+def experiment_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    experiment_version = experiment.default_version
+    experiment_version = (
+        experiment.get_version(version=version_number) if version_number else experiment.default_version
+    )
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
+        "experiment_version": version_number,
     }
     return TemplateResponse(
         request,
@@ -727,7 +730,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
+def experiment_session_message(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
@@ -752,16 +755,18 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
-    experiment_version = experiment.default_version
+    experiment_version = (
+        experiment.get_version(version=version_number) if version_number else experiment.default_version
+    )
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachments,
     )
-
     version_specific_vars = {
         "assistant": experiment_version.assistant,
+        "experiment_version": version_number,
     }
     return TemplateResponse(
         request,
