@@ -553,7 +553,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
-    version_number = models.PositiveIntegerField(default=1)
+    version_number = models.PositiveIntegerField(default=0)
     is_default_version = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     version_description = models.TextField(
@@ -636,9 +636,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         Creates a copy of an experiment as a new version of the original experiment.
         """
-        version_number = self.version_number
-        self.version_number = version_number + 1
-        self.save()
+        if self.versions.count() > 0:
+            version_number = self.versions.order_by("-created_at").first().version_number + 1
+        else:
+            version_number = 1
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
