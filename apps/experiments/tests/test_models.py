@@ -592,13 +592,13 @@ class TestExperimentModel:
     def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
-        assert original_experiment.version_number == 0
+        assert original_experiment.version_number == 1
 
         new_version = original_experiment.create_new_version("tis a new version")
         original_experiment.refresh_from_db()
 
         assert new_version != original_experiment
-        assert original_experiment.version_number == 0
+        assert original_experiment.version_number == 2
         assert original_experiment.working_version is None
         assert new_version.version_number == 1
         assert new_version.is_default_version is True
@@ -631,8 +631,7 @@ class TestExperimentModel:
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
-        # working experiment's version should be unchanged
-        assert original_experiment.version_number == 0
+        assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
 
