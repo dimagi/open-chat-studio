@@ -16,8 +16,9 @@
 {% block app %}
   <div class="app-card">
     <div class="flex">
-      <div class="flex-1">
+      <div class="flex-1 flex flex-row">
         <h1 class="pg-title">{{ experiment.name }}</h1>
+        <span class="badge badge-success badge-sm">Deployed Version is v{{ experiment.default_version.version_number }}</span>
       </div>
       <div class="justify-self-end">
         <div class="join">
