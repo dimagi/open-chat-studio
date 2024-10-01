@@ -710,24 +710,20 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 
 
 @login_and_team_required
-def experiment_chat_session(
-    request, team_slug: str, experiment_id: int, session_id: int, version_number: int | None = None
-):
+def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    if version_number is None:
+    if version == "default":
         experiment_version = experiment.default_version
-        experiment_version_number = None
     else:
-        experiment_version = experiment.get_version(version=version_number)
-        experiment_version_number = version_number
+        experiment_version = experiment.get_version(version=version)
 
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
-        "experiment_version_number": experiment_version_number,
+        "experiment_version_number": version,
     }
     return TemplateResponse(
         request,
@@ -737,25 +733,16 @@ def experiment_chat_session(
 
 
 @require_POST
-def default_experiment_message(request, team_slug: str, experiment_id: int, session_id: int):
+def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version: str):
     working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_version = working_experiment.default_version
-    return _experiment_session_message(request, session_id, working_experiment, experiment_version)
-
-
-@require_POST
-def versioned_experiment_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
-    working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_version = working_experiment.get_version(version=version_number)
-    return _experiment_session_message(request, session_id, working_experiment, experiment_version)
-
-
-def _experiment_session_message(
-    request, session_id: int, working_experiment: Experiment, experiment_version: Experiment
-):
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
+
+    if version == "default":
+        experiment_version = working_experiment.default_version
+    else:
+        experiment_version = working_experiment.get_version(version=version)
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES

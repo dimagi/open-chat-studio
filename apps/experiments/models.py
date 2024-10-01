@@ -594,10 +594,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
-    def get_version(self, version: int) -> "Experiment":
+    def get_version(self, version: int | str) -> "Experiment":
+        version = int(version)
         working_version = self.get_working_version()
-        if version == 0:
-            # Working version will never have a version with version_number = 0, since it is that version
+        if working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
 
@@ -1193,12 +1193,7 @@ class ExperimentSession(BaseTeamModel):
     @property
     def experiment_version_for_display(self):
         version_number = self.get_experiment_version_number()
-        if version_number is None:
-            return "Default version"
-        elif version_number == 0:
-            return "Working version"
-        else:
-            return f"v{version_number}"
+        return "Default version" if version_number == "default" else f"v{version_number}"
 
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
@@ -1222,4 +1217,4 @@ class ExperimentSession(BaseTeamModel):
         Returns the version that is being chatted to. If it's the default version, return 0 which is the default
         experiment's version number
         """
-        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, "default")

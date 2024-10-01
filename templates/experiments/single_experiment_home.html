@@ -31,7 +31,7 @@
             </div>
           {% endif %}
           <div class="tooltip" data-tip="Start Web Session">
-            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id 0 %}" class="inline">
+            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
                 <i class="fas fa-comment"></i>
@@ -254,11 +254,7 @@
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         {% if session.get_experiment_version_number is not None %}
-                           href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
-                         {% else %}
-                           href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link"
-                         {% endif %}
+                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
                       >
                         Continue Chat
                       </a>

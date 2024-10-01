@@ -17,7 +17,6 @@ from .experiment import (  # noqa: F401
     ExperimentTableView,
     ExperimentVersionsTableView,
     create_channel,
-    default_experiment_message,
     delete_experiment,
     download_experiment_chats,
     download_file,
@@ -29,6 +28,7 @@ from .experiment import (  # noqa: F401
     experiment_pre_survey,
     experiment_review,
     experiment_session_details_view,
+    experiment_session_message,
     experiment_session_pagination_view,
     experiment_version_details,
     experiments_home,
@@ -41,7 +41,6 @@ from .experiment import (  # noqa: F401
     start_session_from_invite,
     start_session_public,
     update_delete_channel,
-    versioned_experiment_message,
 )
 from .experiment_routes import (  # noqa: F401
     CreateExperimentRoute,

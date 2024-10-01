@@ -355,27 +355,21 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("url_name", "version"), [("versioned_experiment_session_message", 0), ("default_experiment_session_message", None)]
-)
+@pytest.mark.parametrize("version", ["default", 1])
 @mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
 @mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
-def test_experiment_session_message_view_creates_files(delay_mock, url_name, version, experiment, client):
+def test_experiment_session_message_view_creates_files(delay_mock, version, experiment, client):
     task = mock.Mock()
     task.task_id = 1
     delay_mock.return_value = task
     session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
-    if version is not None:
-        url_kwargs = {
-            "team_slug": experiment.team.slug,
-            "experiment_id": experiment.id,
-            "session_id": session.id,
-            "version_number": version,
-        }
-    else:
-        url_kwargs = {"team_slug": experiment.team.slug, "experiment_id": experiment.id, "session_id": session.id}
-
-    url = reverse(f"experiments:{url_name}", kwargs=url_kwargs)
+    url_kwargs = {
+        "team_slug": experiment.team.slug,
+        "experiment_id": experiment.id,
+        "session_id": session.id,
+        "version": version,
+    }
+    url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
 
     client.force_login(experiment.owner)
     file_search_file = BytesIO(b"some content")
