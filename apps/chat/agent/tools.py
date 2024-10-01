@@ -227,10 +227,9 @@ TOOL_CLASS_MAP = {
 }
 
 
-def get_tools(experiment_session, for_assistant=False) -> list[BaseTool]:
+def get_tools(experiment_session, experiment) -> list[BaseTool]:
     tools = []
-    experiment = experiment_session.experiment
-    tool_names = experiment.assistant.tools if for_assistant else experiment.tools
+    tool_names = experiment.assistant.tools if experiment.assistant else experiment.tools
     for tool_name in tool_names:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
