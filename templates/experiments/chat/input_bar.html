@@ -10,7 +10,11 @@
 </script>
 
 <form class="w-full p-2 bg-gray-300"
-      hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id experiment_version_number|default:0 session.id %}"
+      {% if experiment_version_number is not None %}
+        hx-post="{% url 'experiments:versioned_experiment_session_message' request.team.slug experiment.id experiment_version_number|default:0 session.id %}"
+      {% else %}
+        hx-post="{% url 'experiments:default_experiment_session_message' request.team.slug experiment.id session.id %}"
+      {% endif %}
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
       {% if assistant %}enctype="multipart/form-data"{% endif %}

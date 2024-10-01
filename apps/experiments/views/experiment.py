@@ -729,11 +729,25 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, version
 
 
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+def default_experiment_message(request, team_slug: str, experiment_id: int, session_id: int):
+    working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment_version = working_experiment.default_version
+    return _experiment_session_message(request, session_id, working_experiment, experiment_version)
+
+
+@require_POST
+def versioned_experiment_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+    working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment_version = working_experiment.get_version(version=version_number)
+    return _experiment_session_message(request, session_id, working_experiment, experiment_version)
+
+
+def _experiment_session_message(
+    request, session_id: int, working_experiment: Experiment, experiment_version: Experiment
+):
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
@@ -754,7 +768,6 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, vers
 
         tool_resource.files.add(*created_files)
 
-    experiment_version = experiment.get_version(version=version_number) if version_number else experiment
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
@@ -763,13 +776,13 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, vers
     )
     version_specific_vars = {
         "assistant": experiment_version.assistant,
-        "experiment_version_number": version_number,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
         {
-            "experiment": experiment,
+            "experiment": working_experiment,
             "session": session,
             "message_text": message_text,
             "task_id": result.task_id,
@@ -1066,6 +1079,9 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
+    version_specific_vars = {
+        "experiment_name": request.experiment.default_version.name,
+    }
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
@@ -1073,6 +1089,7 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
             "experiment": request.experiment,
             "session": request.experiment_session,
             "active_tab": "experiments",
+            **version_specific_vars,
         },
     )
 
