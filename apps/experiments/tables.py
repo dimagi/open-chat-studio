@@ -156,7 +156,7 @@ class ExperimentVersionsTable(tables.Table):
         template_code="""{% if record.is_default_version %}
         <span aria-label="true">✓</span>
         {% endif %}""",
-        verbose_name="Default Version",
+        verbose_name="Deployed",
     )
     details = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_details_button.html",
