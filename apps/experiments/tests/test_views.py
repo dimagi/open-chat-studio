@@ -404,7 +404,7 @@ class TestExperimentTableView:
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("version_number", [0, 1])
+@pytest.mark.parametrize("version_number", [1, 2])
 def test_start_authed_web_session_with_version(version_number, client):
     team = TeamWithUsersFactory()
     working_experiment = ExperimentFactory(team=team)

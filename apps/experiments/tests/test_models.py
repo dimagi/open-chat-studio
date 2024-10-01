@@ -687,11 +687,11 @@ class TestExperimentModel:
         working_version = experiment
         new_version = working_version.create_new_version()
 
-        assert working_version.get_version(version=0) == working_version
-        assert new_version.get_version(version=0) == working_version
+        assert working_version.get_version(version=working_version.version_number) == working_version
+        assert new_version.get_version(version=working_version.version_number) == working_version
 
-        assert working_version.get_version(version=1) == new_version
-        assert new_version.get_version(version=1) == new_version
+        assert working_version.get_version(version=new_version.version_number) == new_version
+        assert new_version.get_version(version=new_version.version_number) == new_version
 
 
 @pytest.mark.django_db()
