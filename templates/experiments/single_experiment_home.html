@@ -251,7 +251,7 @@
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id 0 %}" class="link">
+                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link">
                         Continue Chat
                       </a>
                     {% endif %}

@@ -543,12 +543,20 @@ class WebChannel(ChannelBase):
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
+        version: int | None = None,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
             working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session, working_experiment.default_version)
+
+        if version is not None:
+            experiment_version = working_experiment.get_version(version)
+        else:
+            experiment_version = working_experiment.default_version
+
+        # session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
+        WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
 
     @classmethod

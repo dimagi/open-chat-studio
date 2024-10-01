@@ -10,7 +10,7 @@
 </script>
 
 <form class="w-full p-2 bg-gray-300"
-      hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id experiment_version|default:0 session.id %}"
+      hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id experiment_version_number|default:0 session.id %}"
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
       {% if assistant %}enctype="multipart/form-data"{% endif %}

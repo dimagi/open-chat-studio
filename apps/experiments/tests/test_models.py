@@ -683,6 +683,17 @@ class TestExperimentModel:
             expected_changed_fields=["id", "working_version_id"],
         )
 
+    def test_get_version(self, experiment):
+        """Test that we are able to find a specific experiment version using any experiment in the version family"""
+        working_version = experiment
+        new_version = working_version.create_new_version()
+
+        assert working_version.get_version(version=0) == working_version
+        assert new_version.get_version(version=0) == working_version
+
+        assert working_version.get_version(version=1) == new_version
+        assert new_version.get_version(version=1) == new_version
+
 
 @pytest.mark.django_db()
 class TestExperimentObjectManager:

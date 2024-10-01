@@ -595,8 +595,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
     def get_version(self, version: int) -> "Experiment":
-        # TODO: Test
         working_version = self.get_working_version()
+        if version == 0:
+            # Working version will never have a version with version_number = 0, since it is that version
+            return working_version
         return working_version.versions.get(version_number=version)
 
     @property
@@ -1205,3 +1207,11 @@ class ExperimentSession(BaseTeamModel):
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return self.participant.global_data | participant_data
+
+    def get_experiment_version_number(self) -> int:
+        """
+        Returns the version that is being chatted to. If it's the default version, return 0 which is the default
+        experiment's version number
+        """
+        # return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, 0)
+        return 0

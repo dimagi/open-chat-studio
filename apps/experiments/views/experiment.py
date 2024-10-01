@@ -702,6 +702,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
+        version=version_number,
     )
     return HttpResponseRedirect(
         reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
@@ -714,13 +715,11 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, version
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    experiment_version = (
-        experiment.get_version(version=version_number) if version_number else experiment.default_version
-    )
+    experiment_version = experiment.get_version(version=version_number) if version_number else experiment
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
-        "experiment_version": version_number,
+        "experiment_version_number": version_number,
     }
     return TemplateResponse(
         request,
@@ -755,9 +754,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, vers
 
         tool_resource.files.add(*created_files)
 
-    experiment_version = (
-        experiment.get_version(version=version_number) if version_number else experiment.default_version
-    )
+    experiment_version = experiment.get_version(version=version_number) if version_number else experiment
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
@@ -766,7 +763,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, vers
     )
     version_specific_vars = {
         "assistant": experiment_version.assistant,
-        "experiment_version": version_number,
+        "experiment_version_number": version_number,
     }
     return TemplateResponse(
         request,
