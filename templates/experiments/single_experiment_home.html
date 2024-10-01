@@ -237,6 +237,7 @@
               <tr>
                 <th class="px-3 py-3 text-left">Started</th>
                 <th class="px-3 py-3 text-left">Last Message</th>
+                <th class="px-3 py-3 text-left">Version</th>
                 <th class="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
@@ -245,6 +246,7 @@
                 <tr class="text-sm">
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
@@ -252,7 +254,12 @@
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link">
+                         {% if session.get_experiment_version_number is not None %}
+                           href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
+                         {% else %}
+                           href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link"
+                         {% endif %}
+                      >
                         Continue Chat
                       </a>
                     {% endif %}

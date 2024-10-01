@@ -1191,6 +1191,16 @@ class ExperimentSession(BaseTeamModel):
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
 
+    @property
+    def experiment_version_for_display(self):
+        version_number = self.get_experiment_version_number()
+        if version_number is None:
+            return "Default version"
+        elif version_number == 0:
+            return "Working version"
+        else:
+            return f"v{version_number}"
+
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
         return participant_data.get("timezone")
@@ -1213,4 +1223,4 @@ class ExperimentSession(BaseTeamModel):
         Returns the version that is being chatted to. If it's the default version, return 0 which is the default
         experiment's version number
         """
-        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, 0)
+        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION)

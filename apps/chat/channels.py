@@ -552,10 +552,10 @@ class WebChannel(ChannelBase):
 
         if version is not None:
             experiment_version = working_experiment.get_version(version)
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
         else:
             experiment_version = working_experiment.default_version
 
-        session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
         WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
 

@@ -60,14 +60,20 @@ urlpatterns = [
     path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
     path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
-        "e/<int:experiment_id>/<int:version_number>/start_authed_web_session/",
+        "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,
         name="start_authed_web_session",
     ),
     path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
     path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
-        "e/<int:experiment_id>/<int:version_number>/session/<int:session_id>/",
+        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
+        views.experiment_chat_session,
+        name="experiment_chat_session",
+    ),
+    # TODO: See if we can't use regex here. Or maybe even a slug with the default version being "default"
+    path(
+        "e/<int:experiment_id>/session/<int:session_id>/",
         views.experiment_chat_session,
         name="experiment_chat_session",
     ),

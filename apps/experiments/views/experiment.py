@@ -710,16 +710,24 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 
 
 @login_and_team_required
-def experiment_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
+def experiment_chat_session(
+    request, team_slug: str, experiment_id: int, session_id: int, version_number: int | None = None
+):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    experiment_version = experiment.get_version(version=version_number) if version_number else experiment
+    if version_number is None:
+        experiment_version = experiment.default_version
+        experiment_version_number = None
+    else:
+        experiment_version = experiment.get_version(version=version_number)
+        experiment_version_number = version_number
+
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
-        "experiment_version_number": version_number,
+        "experiment_version_number": experiment_version_number,
     }
     return TemplateResponse(
         request,
