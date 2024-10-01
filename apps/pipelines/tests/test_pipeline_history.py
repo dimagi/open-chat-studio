@@ -478,3 +478,53 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     assert [
         [(message.type, message.content) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session):
+    llm = FakeLlmEcho()
+    service = build_fake_llm_service(None, [0], llm)
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "history_type": "none",
+                        "prompt": "Node 1:",
+                    },
+                },
+                "id": "llm-1",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    user_input = "The User Input"
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][-1]
+    user_input_2 = "Second User Input"
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))["messages"][-1]
+
+    expected_call_messages = [
+        # First call to Node 1
+        [("system", "Node 1:"), ("human", user_input)],
+        # Second call to Node 1. Includes no history.
+        [
+            ("system", "Node 1:"),
+            ("human", user_input_2),  # The second input to Node 1
+        ],
+    ]
+    assert [
+        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+    ] == expected_call_messages

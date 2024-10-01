@@ -186,6 +186,7 @@ class PipelineChatHistoryTypes(models.TextChoices):
     NODE = "node", "Node History"
     NAMED = "named", "Named History"
     GLOBAL = "global", "Global History"
+    NONE = "none", "No History"
 
 
 class PipelineChatHistory(BaseModel):

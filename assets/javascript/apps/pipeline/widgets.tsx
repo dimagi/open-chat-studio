@@ -181,6 +181,7 @@ export function HistoryTypeWidget({
       onChange={onChange}
       value={value}
     >
+      <option value="none">No History</option>
       <option value="node">Node</option>
       <option value="global">Global</option>
       <option value="named">Named</option>

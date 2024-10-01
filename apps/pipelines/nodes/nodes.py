@@ -65,7 +65,7 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
-    history_type: HistoryType = None
+    history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
     max_token_limit: MaxTokenLimit = 8192
 
@@ -106,15 +106,14 @@ class LLMResponseWithPrompt(LLMResponse):
         context = self._get_context(input, state, prompt, node_id)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
-        if self.history_type is not None:
-            self._save_history(state["experiment_session"], node_id, input, output.content)
+        self._save_history(state["experiment_session"], node_id, input, output.content)
         return output.content
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
         session: ExperimentSession = state["experiment_session"]
         context = {"input": input}
 
-        if self.history_type is not None:
+        if self.history_type != PipelineChatHistoryTypes.NONE:
             context["history"] = self._get_history(session, node_id, input)
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
@@ -130,7 +129,10 @@ class LLMResponseWithPrompt(LLMResponse):
 
         return context
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input):
+    def _get_history(self, session: ExperimentSession, node_id: str, input) -> list:
+        if self.history_type == PipelineChatHistoryTypes.NONE:
+            return []
+
         if self.history_type == PipelineChatHistoryTypes.GLOBAL:
             return compress_chat_history(
                 chat=session.chat,
@@ -152,7 +154,11 @@ class LLMResponseWithPrompt(LLMResponse):
         return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
 
     def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
+        if self.history_type == PipelineChatHistoryTypes.NONE:
+            return
+
         if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+            # Global History is saved outside of the node
             return
 
         if self.history_type == PipelineChatHistoryTypes.NAMED:
