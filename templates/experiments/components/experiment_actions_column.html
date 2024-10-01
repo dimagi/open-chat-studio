@@ -1,7 +1,7 @@
 <form method="post" action="{% url 'experiments:start_authed_web_session' record.team.slug record.id experiment_version|default:0 %}" class="inline">
   {% csrf_token %}
   <button type="submit" class="btn btn-sm" title="New Session">
-    <i class="fa-solid fa-file-circle-plus"></i>
+    <i class="fas fa-comment"></i>
   </button>
 </form>
 <a class="btn btn-sm"
