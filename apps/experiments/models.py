@@ -1213,5 +1213,4 @@ class ExperimentSession(BaseTeamModel):
         Returns the version that is being chatted to. If it's the default version, return 0 which is the default
         experiment's version number
         """
-        # return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, 0)
-        return 0
+        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, 0)

@@ -21,7 +21,7 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -555,7 +555,7 @@ class WebChannel(ChannelBase):
         else:
             experiment_version = working_experiment.default_version
 
-        # session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
+        session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
         WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
 
