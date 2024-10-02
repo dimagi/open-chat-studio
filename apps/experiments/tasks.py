@@ -18,7 +18,7 @@ from apps.utils.taskbadger import update_taskbadger_data
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
     self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
-) -> str:
+) -> tuple[str, int]:
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
         id=experiment_session_id
     )
@@ -27,7 +27,6 @@ def get_response_for_webchat_task(
         experiment,
         experiment_session.experiment_channel,
         experiment_session=experiment_session,
-        include_message_id=True,
     )
     message_attachments = []
     for file_entry in attachments:
@@ -41,7 +40,10 @@ def get_response_for_webchat_task(
     )
     update_taskbadger_data(self, web_channel, message)
     with current_team(experiment_session.team):
-        return web_channel.new_user_message(message)
+        return {
+            "response": web_channel.new_user_message(message),
+            "message_id": web_channel.bot.get_ai_message_id(),
+        }
 
 
 @shared_task

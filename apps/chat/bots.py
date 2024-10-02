@@ -85,6 +85,8 @@ class TopicBot:
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
+
+        self._ai_message = None
         self._initialize()
 
     def _initialize(self):
@@ -132,7 +134,8 @@ class TopicBot:
         )
 
         if self.terminal_chain:
-            result = self.terminal_chain.invoke(
+            chain = self.terminal_chain
+            result = chain.invoke(
                 result.output,
                 config={
                     "run_name": "terminal_chain",
@@ -144,10 +147,12 @@ class TopicBot:
                 },
             )
 
+        self._ai_message = chain.state.ai_message
+
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
-        return result.output, result.message_id
+        return result.output
 
     def _get_child_chain(self, input_str: str, attachments: list["Attachment"] | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(
@@ -207,6 +212,9 @@ class TopicBot:
                 },
             }
         return main_bot_chain.invoke(user_input, config=config)
+
+    def get_ai_message_id(self) -> int | None:
+        return self._ai_message.id
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:

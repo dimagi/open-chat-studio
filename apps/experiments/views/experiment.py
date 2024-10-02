@@ -792,8 +792,8 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # TODO: use some struct like a typed dict or something
     message_details = {"message": None, "error": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
-        _message, message_id = progress["result"]
-        message_details["message"] = ChatMessage.objects.get(id=message_id)
+        result = progress["result"]
+        message_details["message"] = ChatMessage.objects.get(id=result["message_id"])
     elif progress["complete"]:
         message_details["error"] = True
 

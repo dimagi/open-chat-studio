@@ -15,6 +15,8 @@ from apps.utils.time import pretty_date
 
 
 class RunnableState(metaclass=ABCMeta):
+    ai_message: ChatMessage | None = None
+
     @abstractmethod
     def get_llm_service(self):
         pass
@@ -108,7 +110,7 @@ class ChatRunnableState(RunnableState):
         pass
 
     @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None) -> ChatMessage:
+    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         pass
 
     @abstractmethod
@@ -147,11 +149,12 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
-        if type_ == ChatMessageType.AI and not self.experiment.is_working_version:
-            chat_message.add_system_tag(
-                tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
-            )
-        return chat_message
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            if not self.experiment.is_working_version:
+                chat_message.add_system_tag(
+                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                )
 
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
@@ -271,10 +274,12 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
-        if type_ == ChatMessageType.AI and not self.experiment.is_working_version:
-            chat_message.add_system_tag(
-                tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
-            )
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            if not self.experiment.is_working_version:
+                chat_message.add_system_tag(
+                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                )
 
         return chat_message
 
