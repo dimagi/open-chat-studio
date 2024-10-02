@@ -8,8 +8,8 @@ import {
   KeywordsWidget,
   LlmModelWidget,
   LlmProviderIdWidget,
-  PromptWidget,
   SourceMaterialIdWidget,
+  TextWidget,
 } from "./widgets";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 
@@ -126,6 +126,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           <>
             <div className="m-1 font-medium text-center">Number of Outputs</div>
             <input
+              className="input input-bordered w-full"
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name] || 1}
@@ -159,37 +160,26 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           </>
         );
       }
-      case "Prompt": {
+      default: {
+        const humanName = inputParam.human_name
+          ? inputParam.human_name
+          : inputParam.name.replace(/_/g, " ");
         return (
           <>
-            <div className="m-1 font-medium text-center">Prompt</div>
-            <PromptWidget
+            <div className="m-1 font-medium text-center capitalize">
+              {humanName}
+            </div>
+            <TextWidget
+              humanName={humanName}
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name] || ""}
-            ></PromptWidget>
+            ></TextWidget>
           </>
         );
       }
-      default:
-        return (
-          <>
-            <div className="m-1 font-medium text-center">
-              {inputParam.human_name
-                ? inputParam.human_name
-                : inputParam.name.replace(/_/g, " ")}
-            </div>
-            <textarea
-              className="textarea textarea-bordered w-full"
-              name={inputParam.name}
-              onChange={updateParamValue}
-              value={params[inputParam.name] || ""}
-            ></textarea>
-          </>
-        );
     }
   };
-
   const getOuputHandles = () => {
     const numberOfOutputs =
       parseInt(

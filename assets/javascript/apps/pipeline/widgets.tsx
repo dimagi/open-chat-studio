@@ -12,10 +12,12 @@ import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
 
 export function TextModal({
+  humanName,
   name,
   value,
   onChange,
 }: {
+  humanName: string;
   name: string;
   value: string | string[];
   onChange: ChangeEventHandler;
@@ -23,23 +25,30 @@ export function TextModal({
   const modalId = useId();
   return (
     <>
-      <dialog id={modalId} className="modal">
-        <div className="modal-box">
+      <dialog
+        id={modalId}
+        className="modal nopan nodelete nodrag noflow nowheel"
+      >
+              <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
           <form method="dialog">
             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
               ✕
             </button>
           </form>
-          <h4 className="font-bold text-lg">Edit "{name}"</h4>
-          <textarea
-            className="textarea textarea-bordered textarea-md w-full"
-            name={name}
-            onChange={onChange}
-            value={value}
-          ></textarea>
-          <form method="dialog" className="modal-backdrop">
-            <button className="pg-button-primary mt-2">Save</button>
-          </form>
+          <div className="flex-grow h-full w-full">
+            <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+              {humanName}
+            </h4>
+            <textarea
+              className="textarea textarea-bordered textarea-lg h-[80%] w-full"
+              name={name}
+              onChange={onChange}
+              value={value}
+            ></textarea>
+            <form method="dialog" className="modal-backdrop">
+              <button className="pg-button-primary mt-2">Save</button>
+            </form>
+          </div>
         </div>
         <form method="dialog" className="modal-backdrop">
           {/* Allows closing the modal by clicking outside of it */}
@@ -58,27 +67,32 @@ export function TextModal({
   );
 }
 
-export function PromptWidget({
+export function TextWidget({
+  humanName,
   name,
   onChange,
   value,
 }: {
+  humanName: string;
   name: string;
   value: string | string[];
   onChange: ChangeEventHandler;
 }) {
   return (
     <div className="join">
-      <input
-        className="w-full input input-bordered join-item"
+      <textarea
+        className="input input-bordered join-item nopan nodelete nodrag noflow textarea nowheel w-full resize-none"
         name={name}
         onChange={onChange}
         value={value}
-        type="text"
-        disabled
-      ></input>
+      ></textarea>
       <div className="join-item">
-        <TextModal name={name} value={value} onChange={onChange}></TextModal>
+        <TextModal
+          humanName={humanName}
+          name={name}
+          value={value}
+          onChange={onChange}
+        ></TextModal>
       </div>
     </div>
   );
@@ -112,17 +126,16 @@ export function KeywordsWidget({
       return newParams;
     });
   };
+  const humanName = `Keyword ${index + 1}`;
   return (
     <>
-      <div className="m-1 font-medium text-center">
-        {`Keyword ${index + 1}`}
-      </div>
-      <textarea
-        className="textarea textarea-bordered w-full"
+      <div className="m-1 font-medium text-center">{humanName}</div>
+      <TextWidget
+        humanName={humanName}
         name="keywords"
         onChange={updateParamValue}
         value={keywords ? keywords[index] : ""}
-      ></textarea>
+      ></TextWidget>
     </>
   );
 }
