@@ -1,9 +1,10 @@
 from typing_extensions import TypeAliasType
 
+Keywords = TypeAliasType("Keywords", list)
 LlmProviderId = TypeAliasType("LlmProviderId", int)
 LlmModel = TypeAliasType("LlmModel", str)
 LlmTemperature = TypeAliasType("LlmTemperature", float)
-PipelineJinjaTemplate = TypeAliasType("PipelineJinjaTemplate", str)
-SourceMaterialId = TypeAliasType("SourceMaterialId", int)
 NumOutputs = TypeAliasType("NumOutputs", int)
-Keywords = TypeAliasType("Keywords", list)
+PipelineJinjaTemplate = TypeAliasType("PipelineJinjaTemplate", str)
+Prompt = TypeAliasType("Prompt", str)
+SourceMaterialId = TypeAliasType("SourceMaterialId", int)

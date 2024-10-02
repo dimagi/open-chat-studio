@@ -8,6 +8,7 @@ import {
   KeywordsWidget,
   LlmModelWidget,
   LlmProviderIdWidget,
+  PromptWidget,
   SourceMaterialIdWidget,
 } from "./widgets";
 import { NodeParameterValues } from "./types/nodeParameterValues";
@@ -69,6 +70,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           <>
             <div className="m-1 font-medium text-center">Temperature</div>
             <input
+              className="input input-bordered w-full"
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name]}
@@ -154,6 +156,18 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
                 ></KeywordsWidget>
               );
             })}
+          </>
+        );
+      }
+      case "Prompt": {
+        return (
+          <>
+            <div className="m-1 font-medium text-center">Prompt</div>
+            <PromptWidget
+              name={inputParam.name}
+              onChange={updateParamValue}
+              value={params[inputParam.name] || ""}
+            ></PromptWidget>
           </>
         );
       }

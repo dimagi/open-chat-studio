@@ -3,12 +3,86 @@ import React, {
   ChangeEventHandler,
   Dispatch,
   SetStateAction,
+  useId,
 } from "react";
 import { InputParam } from "./types/nodeInputTypes";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
+
+export function TextModal({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  const modalId = useId();
+  return (
+    <>
+      <dialog id={modalId} className="modal">
+        <div className="modal-box">
+          <form method="dialog">
+            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+              ✕
+            </button>
+          </form>
+          <h4 className="font-bold text-lg">Edit "{name}"</h4>
+          <textarea
+            className="textarea textarea-bordered textarea-md w-full"
+            name={name}
+            onChange={onChange}
+            value={value}
+          ></textarea>
+          <form method="dialog" className="modal-backdrop">
+            <button className="pg-button-primary mt-2">Save</button>
+          </form>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          {/* Allows closing the modal by clicking outside of it */}
+          <button>close</button>
+        </form>
+      </dialog>
+      <button
+        className="btn btn-ghost"
+        onClick={() =>
+          (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
+        }
+      >
+        <i className="fa-solid fa-pencil"></i>
+      </button>
+    </>
+  );
+}
+
+export function PromptWidget({
+  name,
+  onChange,
+  value,
+}: {
+  name: string;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <div className="join">
+      <input
+        className="w-full input input-bordered join-item"
+        name={name}
+        onChange={onChange}
+        value={value}
+        type="text"
+        disabled
+      ></input>
+      <div className="join-item">
+        <TextModal name={name} value={value} onChange={onChange}></TextModal>
+      </div>
+    </div>
+  );
+}
 
 export function KeywordsWidget({
   index,
