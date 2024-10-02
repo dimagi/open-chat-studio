@@ -4,6 +4,7 @@ from mock.mock import Mock, patch
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
+from apps.chat.models import Chat
 
 
 @pytest.mark.django_db()
@@ -51,3 +52,15 @@ class TestVersioning:
         _session_used, experiment_used = check_and_process_seed_message.call_args[0]
         assert experiment_used == new_version
         assert session.experiment == experiment
+        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == "default"
+
+    @patch("apps.events.tasks.enqueue_static_triggers", Mock())
+    @patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
+    def test_start_new_session_uses_specified_version(self, check_and_process_seed_message, experiment):
+        new_version = experiment.create_new_version()
+        session = WebChannel.start_new_session(experiment, "jack@titanic.com", version=1)
+
+        _session_used, experiment_used = check_and_process_seed_message.call_args[0]
+        assert experiment_used == new_version
+        assert session.experiment == experiment
+        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == 1
