@@ -2,7 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
+from apps.annotations.models import TagCategories
 from apps.chat.bots import TopicBot
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentRoute, ExperimentRouteType, SafetyLayer
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
@@ -51,3 +53,16 @@ def test_bot_with_terminal_bot(get_output_check_cancellation):
     assert session.chat.messages.count() == 2
     assert session.chat.messages.get(message_type="human").content == "What are we going to do?"
     assert session.chat.messages.get(message_type="ai").content == "kom ons braai!"
+
+
+@pytest.mark.django_db()
+def test_get_safe_response_creates_ai_message_for_default_messages():
+    session = ExperimentSessionFactory()
+    layer = SafetyLayer.objects.create(prompt_text="Is this message safe?", team=session.experiment.team)
+    session.experiment.safety_layers.add(layer)
+
+    bot = TopicBot(session)
+    bot._get_safe_response(layer)
+    message = ChatMessage.objects.get(message_type=ChatMessageType.AI)
+    assert message.content == "Sorry, I can't answer that. Please try something else."
+    assert message.tags.get(category=TagCategories.SAFETY_LAYER_RESPONSE) is not None

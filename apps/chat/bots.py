@@ -232,9 +232,9 @@ class TopicBot:
             self.chain.state.save_message_to_history(bot_response, type_=ChatMessageType.AI)
             self.generator_chain = self.chain
 
-            self.generator_chain.state.ai_message.add_system_tag(
-                safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
-            )
+        self.generator_chain.state.ai_message.add_system_tag(
+            safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
+        )
         return bot_response
 
 
