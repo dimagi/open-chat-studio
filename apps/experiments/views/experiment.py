@@ -225,6 +225,10 @@ class ExperimentForm(forms.ModelForm):
             "participant_allowlist": (
                 "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
             ),
+            "debug_mode_enabled": (
+                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
+                "This is applicable only for router bots."
+            ),
         }
 
     def __init__(self, request, *args, **kwargs):
