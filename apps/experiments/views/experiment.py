@@ -793,7 +793,6 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
 
-    # TODO: use some struct like a typed dict or something
     message_details = {"message": None, "error": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
         result = progress["result"]
