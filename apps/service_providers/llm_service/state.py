@@ -108,7 +108,7 @@ class ChatRunnableState(RunnableState):
         pass
 
     @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
+    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None) -> ChatMessage:
         pass
 
     @abstractmethod
@@ -151,6 +151,7 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
             chat_message.add_system_tag(
                 tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
             )
+        return chat_message
 
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
@@ -177,7 +178,9 @@ class AssistantState(RunnableState):
         pass
 
     @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, resource_file_ids: dict | None = None):
+    def save_message_to_history(
+        self, message: str, type_: ChatMessageType, resource_file_ids: dict | None = None
+    ) -> ChatMessage:
         pass
 
     @abstractmethod

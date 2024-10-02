@@ -27,6 +27,7 @@ def get_response_for_webchat_task(
         experiment,
         experiment_session.experiment_channel,
         experiment_session=experiment_session,
+        include_message_id=True,
     )
     message_attachments = []
     for file_entry in attachments:

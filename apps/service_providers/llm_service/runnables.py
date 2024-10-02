@@ -75,6 +75,7 @@ class ChainOutput(Serializable):
     """Number of tokens in the prompt."""
     completion_tokens: int
     """Number of tokens in the completion."""
+    message_id: int | None = None
 
     type: Literal["OcsChainOutput"] = "ChainOutput"
 
@@ -128,7 +129,8 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 
         if save_output_to_history:
             experiment_tag = configurable.get("experiment_tag")
-            self.state.save_message_to_history(output, ChatMessageType.AI, experiment_tag)
+            message = self.state.save_message_to_history(output, ChatMessageType.AI, experiment_tag)
+            result.message_id = message.id
         return result
 
     def _get_input(self, input: str):
@@ -293,10 +295,10 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
-        self.state.save_message_to_history(
+        message = self.state.save_message_to_history(
             output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids, experiment_tag=experiment_tag
         )
-        return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
+        return ChainOutput(output=output, message_id=message.id, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
         """Sync any messages that need to be sent to the thread. Create a new thread if necessary

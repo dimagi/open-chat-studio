@@ -147,7 +147,7 @@ class TopicBot:
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
         self.output_tokens = self.output_tokens + result.completion_tokens
-        return result.output
+        return result.output, result.message_id
 
     def _get_child_chain(self, input_str: str, attachments: list["Attachment"] | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(

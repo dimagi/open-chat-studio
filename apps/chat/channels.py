@@ -80,6 +80,8 @@ class ChannelBase(ABC):
         experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
         experiment_session: An optional ExperimentSession object representing the experiment session associated
             with the handler.
+        include_message_id (default False): An optional setting to indicate if the output message ID should also be
+            included in the response. If `True`, a tuple will be returned
     Raises:
         MessageHandlerException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
@@ -107,12 +109,14 @@ class ChannelBase(ABC):
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession | None = None,
+        include_message_id: bool = False,
     ):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
         self.experiment_session = experiment_session
         self.message = None
         self._user_query = None
+        self.include_message_id = include_message_id
         self.bot = get_bot(experiment_session, experiment=experiment) if experiment_session else None
 
     @classmethod
@@ -420,7 +424,9 @@ class ChannelBase(ABC):
 
     def _get_bot_response(self, message: str) -> str:
         self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        answer = self.bot.process_input(message, attachments=self.message.attachments)
+        answer, message_id = self.bot.process_input(message, attachments=self.message.attachments)
+        if self.include_message_id:
+            return answer, message_id
         return answer
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):

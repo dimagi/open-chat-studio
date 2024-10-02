@@ -792,12 +792,8 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # TODO: use some struct like a typed dict or something
     message_details = {"message": None, "error": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
-        # TODO: Not super robust. The task needs to return the chat message ID.
-        message_details["message"] = (
-            ChatMessage.objects.filter(chat=session.chat, message_type=ChatMessageType.AI)
-            .order_by("-created_at")
-            .first()
-        )
+        _message, message_id = progress["result"]
+        message_details["message"] = ChatMessage.objects.get(id=message_id)
     elif progress["complete"]:
         message_details["error"] = True
 
