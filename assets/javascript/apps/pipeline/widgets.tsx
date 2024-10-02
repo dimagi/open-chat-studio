@@ -61,7 +61,7 @@ export function TextModal({
           (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
         }
       >
-        <i className="fa-solid fa-pencil"></i>
+        <i className="fa-solid fa-expand-alt"></i>
       </button>
     </>
   );
