@@ -43,6 +43,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((updatedFlow) => {
           if (updatedFlow) {
+            set({currentPipeline: pipeline});
             resolve();
           }
         })
