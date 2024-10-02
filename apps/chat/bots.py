@@ -214,6 +214,7 @@ class TopicBot:
         return main_bot_chain.invoke(user_input, config=config)
 
     def get_ai_message_id(self) -> int | None:
+        """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
         return self._ai_message.id
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
