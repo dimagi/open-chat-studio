@@ -212,6 +212,7 @@ class ExperimentForm(forms.ModelForm):
             "use_processor_bot_voice",
             "trace_provider",
             "participant_allowlist",
+            "debug_mode_enabled",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
