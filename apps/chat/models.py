@@ -197,6 +197,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
 
+    def get_processor_bot_tag_name(self) -> str | None:
+        """Returns the tag of the bot that generated this message"""
+        if self.message_type != ChatMessageType.AI:
+            return
+        if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
+            return tag.name
+
 
 class ChatAttachment(BaseModel):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="attachments")

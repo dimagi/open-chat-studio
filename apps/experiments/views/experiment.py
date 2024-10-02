@@ -788,6 +788,18 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
 
+    # TODO: use some struct like a typed dict or something
+    message_details = {"message": None, "error": False, "complete": progress["complete"]}
+    if progress["complete"] and progress["success"]:
+        # TODO: Not super robust. The task needs to return the chat message ID.
+        message_details["message"] = (
+            ChatMessage.objects.filter(chat=session.chat, message_type=ChatMessageType.AI)
+            .order_by("-created_at")
+            .first()
+        )
+    elif progress["complete"]:
+        message_details["error"] = True
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -795,7 +807,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
             "experiment": experiment,
             "session": session,
             "task_id": task_id,
-            "progress": progress,
+            "message_details": message_details,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
         },
