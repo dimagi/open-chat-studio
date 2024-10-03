@@ -22,6 +22,7 @@ from apps.pipelines.nodes.types import (
     LlmTemperature,
     NumOutputs,
     PipelineJinjaTemplate,
+    Prompt,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -88,7 +89,7 @@ class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: str = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
     def _process(self, input, state: PipelineState) -> PipelineState:
         prompt = PromptTemplate.from_template(template=self.prompt)
@@ -169,7 +170,7 @@ class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
-    prompt: str = "You are an extremely helpful router {input}"
+    prompt: Prompt = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
