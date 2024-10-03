@@ -426,6 +426,51 @@ def test_assistant_response_with_annotations(
     assert "openai-file-2" in message.metadata["openai_file_ids"]
 
 
+@pytest.mark.django_db()
+@patch("openai.resources.files.Files.retrieve")
+@patch("apps.assistants.sync.get_and_store_openai_file")
+@patch("openai.resources.beta.threads.runs.Runs.retrieve")
+@patch("openai.resources.beta.Threads.create_and_run")
+@patch("openai.resources.beta.threads.messages.Messages.list")
+def test_assistant_response_with_image_file_content_block(
+    list_messages,
+    create_and_run,
+    retrieve_run,
+    get_and_store_openai_file,
+    retrieve_openai_file,
+    db_session,
+):
+    """
+    Test that ImageFileContentBlock entries in the content array in an OpenAI message response saves the file to a new
+    "image_file" tool type
+    """
+    retrieve_openai_file.return_value = FileObject(
+        id="local_file_openai_id",
+        bytes=1,
+        created_at=1,
+        filename="3fac0517-6367-4f92-a1f3-c9d9087c9085",
+        object="file",
+        purpose="assistants",
+        status="processed",
+        status_details=None,
+    )
+    openai_generated_file = FileFactory(external_id="openai-file-1", id=10)
+    get_and_store_openai_file.return_value = openai_generated_file
+
+    thread_id = "test_thread_id"
+    run = _create_run(ASSISTANT_ID, thread_id)
+    list_messages.return_value = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
+    create_and_run.return_value = run
+    retrieve_run.return_value = run
+    assistant = create_experiment_runnable(db_session.experiment, db_session)
+
+    # Run assistant
+    result = assistant.invoke("test", attachments=[])
+    assert result.output == "Ola"
+    assert db_session.chat.attachments.filter(tool_type="image_file").exists() is True
+    db_session.chat.attachments.get(tool_type="image_file")
+
+
 @pytest.mark.parametrize(
     ("messages", "thread_id", "thread_created", "messages_created"),
     [

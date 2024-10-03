@@ -334,7 +334,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.state.raw_client
-        generated_files = []
+        chat = self.state.session.chat
+        session_id = self.state.session.id
 
         if isinstance(output, str):
             output_message = output
@@ -350,11 +351,15 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         ).values_list("external_id", flat=True)
 
         file_ids = set()
+        image_file_attachments = []
+        file_path_attachments = []
         for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
                 if message_content.type == "image_file":
-                    # Ignore these for now. Typically, they are also referenced in the text content
-                    pass
+                    if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
+                        image_file_attachments.append(created_file)
+                        file_ids.add(created_file.external_id)
+
                 elif message_content.type == "text":
                     annotations = message_content.text.annotations
                     for idx, annotation in enumerate(annotations):
@@ -382,21 +387,55 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             # Original citation text example: sandbox:/mnt/data/the_file.csv.
                             # This is the link part in what looks like
                             # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                            session_id = self.state.session.id
                             output_message = output_message.replace(
                                 file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
                             )
-                            generated_files.append(created_file)
-
+                            file_path_attachments.append(created_file)
                         file_ids.add(file_id)
+                else:
+                    # Ignore any other type for now
+                    pass
 
         # Attach the generated files to the chat object as an annotation
-        if generated_files:
-            chat = self.state.session.chat
+        if file_path_attachments:
             resource, _created = chat.attachments.get_or_create(tool_type="file_path")
-            resource.files.add(*generated_files)
+            resource.files.add(*file_path_attachments)
+
+        if image_file_attachments:
+            resource, _created = chat.attachments.get_or_create(tool_type="image_file")
+            resource.files.add(*image_file_attachments)
 
         return output_message, list(file_ids)
+
+    def _create_image_file_from_image_message(self, client, image_file_message) -> File | None:
+        """
+        Creates a File record from `image_file_message` by pulling the data from OpenAI. Typically, these files don't
+        have extentions, so we'll need to guess it based on the content. We know it will be an image, but not which
+        extention to use.
+        """
+        from mimetypes import guess_extension
+
+        import magic
+
+        from apps.assistants.sync import get_and_store_openai_file
+
+        try:
+            file_id = image_file_message.file_id
+            openai_file = client.files.retrieve(file_id=file_id)
+            created_file = get_and_store_openai_file(
+                client=client,
+                file_name=f"{openai_file.filename}",
+                file_id=file_id,
+                team_id=self.state.experiment.team_id,
+            )
+            mimetype = magic.from_buffer(created_file.file.open().read(), mime=True)
+            extention = guess_extension(mimetype)
+            # extention looks like '.png'
+            created_file.name = f"{created_file.name}{extention}"
+            created_file.save()
+            return created_file
+        except Exception as ex:
+            logger.exception(ex)
 
     def _get_file_name_and_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
