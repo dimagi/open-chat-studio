@@ -184,6 +184,7 @@ class TopicBot:
             # human safety layers
             for safety_bot in self.safety_bots:
                 if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
+                    self._save_message_to_history(user_input, ChatMessageType.HUMAN)
                     enqueue_static_triggers.delay(self.session.id, StaticTriggerType.HUMAN_SAFETY_LAYER_TRIGGERED)
                     notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                     return self._get_safe_response(safety_bot.safety_layer)
@@ -229,13 +230,16 @@ class TopicBot:
             bot_response = safety_layer.default_response_to_user or no_answer
             # This is a bit of a hack to store the bot's response, since it didn't really generate it, but we still
             # need to save it
-            self.chain.state.save_message_to_history(bot_response, type_=ChatMessageType.AI)
+            self._save_message_to_history(bot_response, ChatMessageType.AI)
             self.generator_chain = self.chain
 
         self.generator_chain.state.ai_message.add_system_tag(
             safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
         )
         return bot_response
+
+    def _save_message_to_history(self, message: str, message_type: ChatMessageType):
+        self.chain.state.save_message_to_history(message, type_=message_type)
 
 
 class SafetyBot:
