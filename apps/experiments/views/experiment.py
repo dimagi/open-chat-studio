@@ -532,6 +532,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         if platform.form(**form_kwargs):
             platform_forms[platform] = platform.form(**form_kwargs)
 
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -543,6 +547,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platform_forms": platform_forms,
             "channels": channels,
             "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
+            "deployed_version": deployed_version,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
             **_get_terminal_bots_context(experiment, team_slug),

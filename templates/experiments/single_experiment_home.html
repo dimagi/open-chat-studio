@@ -18,7 +18,13 @@
     <div class="flex">
       <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
-        <span class="badge badge-success badge-sm">Deployed Version is v{{ experiment.default_version.version_number }}</span>
+        {% flag "experiment_versions" %}
+          {% if deployed_version %}
+            <div>
+              <span class="badge badge-success badge-sm">Deployed Version is v{{ deployed_version }}</span>
+            </div>
+          {% endif %}
+        {% endflag %}
       </div>
       <div class="justify-self-end">
         <div class="join">
