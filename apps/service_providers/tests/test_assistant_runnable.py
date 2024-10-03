@@ -468,7 +468,7 @@ def test_assistant_response_with_image_file_content_block(
     result = assistant.invoke("test", attachments=[])
     assert result.output == "Ola"
     assert db_session.chat.attachments.filter(tool_type="image_file").exists() is True
-    db_session.chat.attachments.get(tool_type="image_file")
+    assert db_session.chat.attachments.get(tool_type="image_file").files.count() == 1
 
 
 @pytest.mark.parametrize(
