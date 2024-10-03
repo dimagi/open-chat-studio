@@ -5,8 +5,10 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.runnables import chain
 from pydantic import ValidationError
 
+from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
+from apps.chat.models import ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -85,6 +87,9 @@ class TopicBot:
         self.trace_service = None
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
+
+        # The chain that generated the AI message
+        self.generator_chain = None
         self._initialize()
 
     def _initialize(self):
@@ -132,7 +137,8 @@ class TopicBot:
         )
 
         if self.terminal_chain:
-            result = self.terminal_chain.invoke(
+            chain = self.terminal_chain
+            result = chain.invoke(
                 result.output,
                 config={
                     "run_name": "terminal_chain",
@@ -143,6 +149,8 @@ class TopicBot:
                     },
                 },
             )
+
+        self.generator_chain = chain
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
@@ -208,13 +216,26 @@ class TopicBot:
             }
         return main_bot_chain.invoke(user_input, config=config)
 
+    def get_ai_message_id(self) -> int | None:
+        """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
+        if self.generator_chain and self.generator_chain.state.ai_message:
+            return self.generator_chain.state.ai_message.id
+
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
-            safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
-            return safety_response
+            bot_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
         else:
             no_answer = "Sorry, I can't answer that. Please try something else."
-            return safety_layer.default_response_to_user or no_answer
+            bot_response = safety_layer.default_response_to_user or no_answer
+            # This is a bit of a hack to store the bot's response, since it didn't really generate it, but we still
+            # need to save it
+            self.chain.state.save_message_to_history(bot_response, type_=ChatMessageType.AI)
+            self.generator_chain = self.chain
+
+        self.generator_chain.state.ai_message.add_system_tag(
+            safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
+        )
+        return bot_response
 
 
 class SafetyBot:
