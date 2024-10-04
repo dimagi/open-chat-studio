@@ -766,7 +766,7 @@ class TestExperimentObjectManager:
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    field_difference = compare_models(original, new, VersionsMixin.DEFAULT_EXCLUDED_KEYS).difference(
+    field_difference = compare_models(original, new, original.DEFAULT_EXCLUDED_KEYS).difference(
         set(expected_changed_fields)
     )
     assert (
