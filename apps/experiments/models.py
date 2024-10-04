@@ -740,7 +740,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return ", ".join([AgentTools(tool).label for tool in tools])
 
         # TODO: Add more fields
-        # TODO: Update Grouping
         return Version(
             instance=self,
             fields=[

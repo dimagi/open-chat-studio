@@ -95,7 +95,6 @@ class Version:
             group_info = groups.get(group_name, FieldGroup(name=group_name))
             group_info.show = group_info.show or bool(field.raw_value) or bool(field.changed)
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
-            # We need to always include the field
             group_info.fields.append(field)
             groups[group_name] = group_info
         return groups.items()
