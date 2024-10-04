@@ -370,12 +370,11 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         if annotation.type == "file_citation":
                             file_citation = annotation.file_citation
                             file_id = file_citation.file_id
-                            file_name, file_link = self._get_file_name_and_link_for_citation(
+                            file_link = self._get_file_link_for_citation(
                                 file_id=file_id, forbidden_file_ids=assistant_files_ids
                             )
 
                             # Original citation text example:【6:0†source】
-                            file_link = f" [{file_name}]({file_link})"
                             message_content_value = message_content_value.replace(file_ref_text, file_link)
 
                         elif annotation.type == "file_path":
@@ -429,7 +428,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         except Exception as ex:
             logger.exception(ex)
 
-    def _get_file_name_and_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str]:
+    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> str:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
@@ -448,7 +447,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 client = self.state.raw_client
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
-        return file_name, file_link
+        return f" [{file_name}]({file_link})"
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
