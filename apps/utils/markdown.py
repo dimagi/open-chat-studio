@@ -26,7 +26,7 @@ class ResourceImageInlineProcessor(ImageInlineProcessor):
 class FileLinkInlineProcessor(LinkInlineProcessor):
     def getLink(self, data, index):
         href, title, index, handled = super().getLink(data, index)
-        if href.startswith("file"):
+        if href.startswith("file:"):
             _, team_slug, session_id, file_id = href.split(":")
             relative_url = reverse("experiments:download_file", args=[team_slug, session_id, file_id])
             href = relative_url
@@ -36,7 +36,7 @@ class FileLinkInlineProcessor(LinkInlineProcessor):
 class FileImageInlineProcessor(ImageInlineProcessor):
     def getLink(self, data, index):
         href, title, index, handled = super().getLink(data, index)
-        if href.startswith("file"):
+        if href.startswith("file:"):
             _, team_slug, session_id, file_id = href.split(":")
             relative_url = reverse("experiments:download_file", args=[team_slug, session_id, file_id])
             href = relative_url
