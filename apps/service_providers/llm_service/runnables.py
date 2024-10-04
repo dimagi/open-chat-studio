@@ -409,7 +409,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             resource, _created = chat.attachments.get_or_create(tool_type="image_file")
             resource.files.add(*image_file_attachments)
 
-        return output_message, list(file_ids)
+        return output_message.strip(), list(file_ids)
 
     def _create_image_file_from_image_message(self, client, image_file_message) -> File | None:
         """
