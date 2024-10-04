@@ -63,7 +63,7 @@ def db_session(request):
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -96,7 +96,7 @@ def test_assistant_conversation_new_chat(
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
@@ -129,7 +129,7 @@ def test_assistant_conversation_existing_chat(
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -164,7 +164,7 @@ def test_assistant_conversation_input_formatting(
     Mock(return_value=[]),
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -268,7 +268,7 @@ def test_assistant_runnable_handles_cancellation_status(session):
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._save_response_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
 def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
     save_response_annotations.return_value = ("normal response", {})
     thread_id = "thread_abc"
@@ -348,7 +348,7 @@ def test_assistant_response_with_annotations(
     session.team.save()
     chat = session.chat
     openai_generated_file_id = "openai-file-1"
-    openai_generated_file = FileFactory(external_id=openai_generated_file_id, id=10)
+    openai_generated_file = FileFactory(external_id=openai_generated_file_id, id=10, name="test.png")
     get_and_store_openai_file.return_value = openai_generated_file
 
     thread_id = "test_thread_id"
@@ -409,11 +409,13 @@ def test_assistant_response_with_annotations(
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
+            "![test.png](file:dimagi-test:1:10)\n"
             "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
             " tree stuff [existing.txt]()."
         )
     else:
         expected_output_message = (
+            "![test.png](file:dimagi-test:1:10)\n"
             "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
             " tree stuff [existing.txt](file:dimagi-test:1:9)."
         )
@@ -454,7 +456,7 @@ def test_assistant_response_with_image_file_content_block(
         status="processed",
         status_details=None,
     )
-    openai_generated_file = FileFactory(external_id="openai-file-1", id=10)
+    openai_generated_file = FileFactory(external_id="openai-file-1", id=10, team=db_session.team)
     get_and_store_openai_file.return_value = openai_generated_file
 
     thread_id = "test_thread_id"
@@ -466,7 +468,7 @@ def test_assistant_response_with_image_file_content_block(
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
-    assert result.output == "Ola"
+    assert result.output == f"![{openai_generated_file.name}](file:{db_session.team.slug}:1:10)\nOla"
     assert db_session.chat.attachments.filter(tool_type="image_file").exists() is True
     assert db_session.chat.attachments.get(tool_type="image_file").files.count() == 1
 
