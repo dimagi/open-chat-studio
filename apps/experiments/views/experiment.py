@@ -508,11 +508,11 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
         working_experiment = self.get_object()
-        version_details = working_experiment.version_details
+        version_details = working_experiment.version
         if prev_version := working_experiment.latest_version:
             context["previous_experiment_version"] = prev_version
             # Populate diffs
-            version_details.compare(prev_version.version_details)
+            version_details.compare(prev_version.version)
 
         context["version_details"] = version_details
         return context
@@ -1263,5 +1263,5 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
 
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
+    context = {"version_details": experiment_version.version, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)

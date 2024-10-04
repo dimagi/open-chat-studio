@@ -62,7 +62,7 @@ class VersionField:
 
 
 @dataclass
-class VersionDetails:
+class Version:
     instance: any
     fields: list[VersionField]
     fields_changed: bool = False
@@ -79,7 +79,7 @@ class VersionDetails:
         # TODO: Return fields with group info for display purposes
         pass
 
-    def compare(self, previous_version_details: "VersionDetails") -> list[str]:
+    def compare(self, previous_version_details: "Version"):
         """Returns a list of fields that changed between this instance and `previous_version_details.instance`"""
         self.previous_instance = previous_version_details.instance
 

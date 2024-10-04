@@ -22,7 +22,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
-from apps.experiments.versioning import VersionDetails, VersionField, differs
+from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -728,10 +728,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
     @property
-    def version_details(self) -> VersionDetails:
+    def version(self) -> Version:
         """
-        Returns a list of dictionaries, each representing a specific detail of this the current experiment.
-        Each dictionary should have a `name` and `value` key.
+        Returns a `Version` instance representing the experiment version.
         """
 
         def yes_no(value: bool):
@@ -742,7 +741,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         # TODO: Add more fields
         # TODO: Update Grouping
-        return VersionDetails(
+        return Version(
             instance=self,
             fields=[
                 VersionField(group_name="Group 1", name="description", raw_value=self.description),

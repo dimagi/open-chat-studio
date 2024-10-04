@@ -2,7 +2,7 @@ import pytest
 from django.db import models
 
 from apps.experiments.models import VersionsMixin
-from apps.experiments.versioning import VersionDetails, VersionField, compare_models, differs
+from apps.experiments.versioning import Version, VersionField, compare_models, differs
 from apps.utils.models import BaseModel
 
 
@@ -57,24 +57,24 @@ def test_differs(test_model):
     assert differs(True, False) is True
 
 
-class TestVersionDetails:
+class TestVersion:
     def test_compare(self, test_model):
         instance1 = test_model(value="1", working_version_id=None)
-        version1 = VersionDetails(
+        version1 = Version(
             instance=instance1,
             fields=[
                 VersionField(group_name="G1", name="the_value", raw_value=instance1.value),
             ],
         )
         similar_instance = test_model(value="1", working_version_id=None)
-        similar_version2 = VersionDetails(
+        similar_version2 = Version(
             instance=similar_instance,
             fields=[
                 VersionField(group_name="G1", name="the_value", raw_value=similar_instance.value),
             ],
         )
         different_instance = test_model(value="2", working_version_id=None)
-        different_version2 = VersionDetails(
+        different_version2 = Version(
             instance=different_instance,
             fields=[
                 VersionField(group_name="G1", name="the_value", raw_value=different_instance.value),
@@ -96,12 +96,12 @@ class TestVersionDetails:
     def test_type_error_raised(self, test_model):
         """A type error should be raised when comparing versions of differing types"""
         instance1 = test_model(value="1", working_version_id=None)
-        version1 = VersionDetails(
+        version1 = Version(
             instance=instance1,
             fields=[],
         )
 
-        version2 = VersionDetails(
+        version2 = Version(
             instance="String type",
             fields=[],
         )
