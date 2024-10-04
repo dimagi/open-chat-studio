@@ -98,20 +98,29 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def get_linked_tags(self):
-        return self.tags.all()
+        tags = []
+        for tag in self.tags.all():
+            bage_color = "badge-neutral"
+            if tag.is_system_tag:
+                bage_color = "badge-error" if tag.category == TagCategories.SAFETY_LAYER_RESPONSE else "badge-warning"
+            tags.append((tag, bage_color))
+        return tags
 
     def user_tag_names(self):
         return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
 
     def system_tags_names(self):
-        return {tag["name"] for tag in self.tags_json if tag["is_system_tag"]}
+        return {(tag["name"], tag["category"]) for tag in self.tags_json if tag["is_system_tag"]}
 
     def all_tag_names(self):
         return [tag["name"] for tag in self.tags_json]
 
     @cached_property
     def tags_json(self):
-        return [{"name": tag.name, "id": tag.id, "is_system_tag": tag.is_system_tag} for tag in self.tags.all()]
+        return [
+            {"name": tag.name, "id": tag.id, "is_system_tag": tag.is_system_tag, "category": tag.category}
+            for tag in self.tags.all()
+        ]
 
 
 class UserComment(BaseTeamModel):

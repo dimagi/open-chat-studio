@@ -1,8 +1,8 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
-    {% for tag in object.get_linked_tags %}
-      <div class="badge {% if tag.is_system_tag %}badge-warning{% else %}badge-neutral{% endif %}"
+    {% for tag, badge_color in object.get_linked_tags %}
+      <div class="badge {{ badge_color }}"
            title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
       >{{ tag.name }}</div>
     {% endfor %}
@@ -35,8 +35,12 @@
     <div class="flex place-items-center">
       {% if object.system_tags_names %}
         <span class="text-gray-500 text-sm">System tags: </span>
-        {% for tag in object.system_tags_names %}
-          <div class="badge badge-warning">{{ tag }}</div>
+        {% for tag, category in object.system_tags_names %}
+          {% if category == 'safety_layer_response' %}
+            <div class="badge badge-error">{{ tag }}</div>
+          {% else %}
+            <div class="badge badge-warning">{{ tag }}</div>
+          {% endif %}
         {% endfor %}
       {% endif %}
     </div>
