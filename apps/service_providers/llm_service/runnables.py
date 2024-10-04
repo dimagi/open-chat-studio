@@ -287,7 +287,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             input_dict["thread_id"] = current_thread_id
         input_dict["instructions"] = self.state.get_assistant_instructions()
         thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
-        output, annotation_file_ids = self._save_response_annotations(thread_id, run_id)
+        output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
 
         if not current_thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
@@ -322,7 +322,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return current_thread_id
 
     @transaction.atomic()
-    def _save_response_annotations(self, thread_id, run_id) -> tuple[str, list[str]]:
+    def _get_output_with_annotations(self, thread_id, run_id) -> tuple[str, list[str]]:
         """
         This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
         message, specifically regarding annotations.
