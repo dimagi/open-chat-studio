@@ -1,6 +1,7 @@
 import pytest
 
-from apps.chat.models import ChatMessage
+from apps.annotations.models import TagCategories
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -32,3 +33,19 @@ def test_get_attached_files():
     assert chat_file1 in files
     assert assistant_file1 not in files
     assert assistant_file2 not in files
+
+
+@pytest.mark.django_db()
+class TestChatMessage:
+    def test_get_processor_bot_tag_name(self):
+        session = ExperimentSessionFactory()
+        human_message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+        ai_message_wo_tag = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
+        ai_message_with_tag = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.AI, content="Hi"
+        )
+        ai_message_with_tag.add_system_tag(tag="some-bot", tag_category=TagCategories.BOT_RESPONSE)
+
+        assert human_message.get_processor_bot_tag_name() is None
+        assert ai_message_wo_tag.get_processor_bot_tag_name() is None
+        assert ai_message_with_tag.get_processor_bot_tag_name() == "some-bot"

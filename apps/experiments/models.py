@@ -569,6 +569,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         default="",
     )
+    debug_mode_enabled = models.BooleanField(default=False)
     objects = ExperimentObjectManager()
 
     class Meta:

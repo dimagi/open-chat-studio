@@ -212,6 +212,7 @@ class ExperimentForm(forms.ModelForm):
             "use_processor_bot_voice",
             "trace_provider",
             "participant_allowlist",
+            "debug_mode_enabled",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -223,6 +224,10 @@ class ExperimentForm(forms.ModelForm):
             ),
             "participant_allowlist": (
                 "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
+            ),
+            "debug_mode_enabled": (
+                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
+                "This is applicable only for router bots."
             ),
         }
 
@@ -807,6 +812,13 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
 
+    message_details = {"message": None, "error": False, "complete": progress["complete"]}
+    if progress["complete"] and progress["success"]:
+        result = progress["result"]
+        message_details["message"] = ChatMessage.objects.get(id=result["message_id"])
+    elif progress["complete"]:
+        message_details["error"] = True
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -814,7 +826,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
             "experiment": experiment,
             "session": session,
             "task_id": task_id,
-            "progress": progress,
+            "message_details": message_details,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
         },
