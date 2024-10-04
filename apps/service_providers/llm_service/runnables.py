@@ -286,8 +286,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
         input_dict["instructions"] = self.state.get_assistant_instructions()
-        output, thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
-        output, annotation_file_ids = self._save_response_annotations(output, thread_id, run_id)
+        thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
+        output, annotation_file_ids = self._save_response_annotations(thread_id, run_id)
 
         if not current_thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
@@ -322,7 +322,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return current_thread_id
 
     @transaction.atomic()
-    def _save_response_annotations(self, output, thread_id, run_id) -> tuple[str, dict]:
+    def _save_response_annotations(self, thread_id, run_id) -> tuple[str, list[str]]:
         """
         This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
         message, specifically regarding annotations.
@@ -337,11 +337,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         chat = self.state.session.chat
         session_id = self.state.session.id
 
-        if isinstance(output, str):
-            output_message = output
-        else:
-            output_message = "\n".join(content.text.value for content in output if content.type == "text")
-
         team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
@@ -353,6 +348,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         file_ids = set()
         image_file_attachments = []
         file_path_attachments = []
+        output_message = ""
         for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
                 if message_content.type == "image_file":
@@ -360,7 +356,13 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         image_file_attachments.append(created_file)
                         file_ids.add(created_file.external_id)
 
+                        team_slug = self.state.session.team.slug
+                        file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
+                        output_message += f"![{created_file.name}]({file_link})\n"
+
                 elif message_content.type == "text":
+                    message_content_value = message_content.text.value
+
                     annotations = message_content.text.annotations
                     for idx, annotation in enumerate(annotations):
                         file_id = None
@@ -373,7 +375,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             )
 
                             # Original citation text example:【6:0†source】
-                            output_message = output_message.replace(file_ref_text, f" [{file_name}]({file_link})")
+                            file_link = f" [{file_name}]({file_link})"
+                            message_content_value = message_content_value.replace(file_ref_text, file_link)
 
                         elif annotation.type == "file_path":
                             file_path = annotation.file_path
@@ -387,11 +390,13 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             # Original citation text example: sandbox:/mnt/data/the_file.csv.
                             # This is the link part in what looks like
                             # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                            output_message = output_message.replace(
+                            message_content_value = message_content_value.replace(
                                 file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
                             )
                             file_path_attachments.append(created_file)
                         file_ids.add(file_id)
+
+                    output_message += message_content_value + "\n"
                 else:
                     # Ignore any other type for now
                     pass
@@ -485,7 +490,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 resource_file_ids[resource_name] = openai_file_ids
         return resource_file_ids
 
-    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
+    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.state.get_openai_assistant()
 
         for i in range(3):
@@ -527,11 +532,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     def experiment(self) -> Experiment:
         return self.state.experiment
 
-    def _get_response(
-        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
-    ) -> tuple[str, str, str]:
+    def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
-        return response.return_values["output"], response.thread_id, response.run_id
+        return response.thread_id, response.run_id
 
     def _extra_input_configs(self) -> dict:
         # Allow builtin tools but not custom tools when not running as an agent
@@ -550,13 +553,11 @@ class AssistantAgentRunnable(AssistantExperimentRunnable):
     def _extra_input_configs(self) -> dict:
         return {}
 
-    def _get_response(
-        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
-    ) -> tuple[str, str, str]:
+    def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         agent = AgentExecutor.from_agent_and_tools(
             agent=assistant_runnable,
             tools=self.state.get_tools(),
             max_execution_time=120,
         )
         response: dict = agent.invoke(input, config)
-        return response["output"], response["thread_id"], response["run_id"]
+        return response["thread_id"], response["run_id"]
