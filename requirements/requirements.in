@@ -53,3 +53,4 @@ twilio
 whitenoise[brotli]
 phonenumberslite
 emoji
+python-magic
