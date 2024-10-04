@@ -6,15 +6,19 @@ from apps.experiments.versioning import compare_models, differs
 from apps.utils.models import BaseModel
 
 
-class TestModel(BaseModel):
-    value = models.CharField()
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
+@pytest.fixture()
+def test_model():
+    class TestModel(BaseModel):
+        value = models.CharField()
+        working_version = models.ForeignKey(
+            "self",
+            on_delete=models.CASCADE,
+            null=True,
+            blank=True,
+            related_name="versions",
+        )
+
+    return TestModel
 
 
 @pytest.mark.parametrize(
@@ -25,26 +29,26 @@ class TestModel(BaseModel):
         ("1", "2", VersionsMixin.DEFAULT_EXCLUDED_KEYS, ["value"]),
     ],
 )
-def test_compare_models(value1, value2, exclude_fields, changed_fields):
-    instance1 = TestModel(value=value1, working_version_id=None)
-    instance2 = TestModel(value=value2, working_version_id=1)
+def test_compare_models(value1, value2, exclude_fields, changed_fields, test_model):
+    instance1 = test_model(value=value1, working_version_id=None)
+    instance2 = test_model(value=value2, working_version_id=1)
     changed_fields = compare_models(instance1, instance2, exclude_fields=exclude_fields)
     assert changed_fields == set(changed_fields)
 
 
-def test_differs():
+def test_differs(test_model):
     assert (
         differs(
-            TestModel(value="1", working_version_id=None),
-            TestModel(value="1", working_version_id=1),
+            test_model(value="1", working_version_id=None),
+            test_model(value="1", working_version_id=1),
             exclude_model_fields=VersionsMixin.DEFAULT_EXCLUDED_KEYS,
         )
         is False
     )
     assert (
         differs(
-            TestModel(value="1", working_version_id=None),
-            TestModel(value="2", working_version_id=1),
+            test_model(value="1", working_version_id=None),
+            test_model(value="2", working_version_id=1),
             exclude_model_fields=VersionsMixin.DEFAULT_EXCLUDED_KEYS,
         )
         is True

@@ -678,9 +678,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
-
         If the related field's version matches the current value, link it to the new experiment version; otherwise,
         create a new version of it.
+        Q: Why?
+        A: When a new experiment version is created, the a new version is also created for the related field. If no
+        new changes was made to this new version by the time we want to create another version of the experiment, it
+        would make sense to add the already versioned related field to the versioned experiment instead of creating yet
+        another version of it.
         """
         attr_instance = getattr(self, attr_name)
         if not attr_instance:
