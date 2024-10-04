@@ -693,7 +693,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         latest_attr_version = attr_instance.latest_version
 
         if latest_attr_version and not differs(
-            attr_instance, latest_attr_version, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS
+            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.DEFAULT_EXCLUDED_KEYS
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
