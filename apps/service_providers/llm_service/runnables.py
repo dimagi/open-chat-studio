@@ -383,7 +383,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             file_id = file_path.file_id
                             created_file = get_and_store_openai_file(
                                 client=client,
-                                file_name=annotation.text.split("/")[-1],
                                 file_id=file_id,
                                 team_id=self.state.experiment.team_id,
                             )
@@ -418,27 +417,15 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         have extentions, so we'll need to guess it based on the content. We know it will be an image, but not which
         extension to use.
         """
-        from mimetypes import guess_extension
-
-        import magic
-
         from apps.assistants.sync import get_and_store_openai_file
 
         try:
             file_id = image_file_message.file_id
-            openai_file = client.files.retrieve(file_id=file_id)
-            created_file = get_and_store_openai_file(
+            return get_and_store_openai_file(
                 client=client,
-                file_name=f"{openai_file.filename}",
                 file_id=file_id,
                 team_id=self.state.experiment.team_id,
             )
-            mimetype = magic.from_buffer(created_file.file.open().read(), mime=True)
-            extension = guess_extension(mimetype)
-            # extension looks like '.png'
-            created_file.name = f"{created_file.name}{extension}"
-            created_file.save()
-            return created_file
         except Exception as ex:
             logger.exception(ex)
 
