@@ -420,8 +420,7 @@ class ChannelBase(ABC):
 
     def _get_bot_response(self, message: str) -> str:
         self.bot = self.bot or get_bot(self.experiment_session, experiment=self.experiment)
-        answer = self.bot.process_input(message, attachments=self.message.attachments)
-        return answer
+        return self.bot.process_input(message, attachments=self.message.attachments)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""

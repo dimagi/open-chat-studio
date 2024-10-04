@@ -10,6 +10,7 @@
 </script>
 
 <form class="w-full p-2 bg-gray-300"
+      autocomplete="off"
       hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id session.get_experiment_version_number session.id %}"
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
@@ -69,7 +70,7 @@
           />
         </div>
       {% endif %}
-      <input name="message" type="text" placeholder="Type your message..." aria-label="Message" class="input input-bordered input-primary w-full" oninput="checkInput()">
+      <input name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full" oninput="checkInput()">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
     <div class="flex flex-col gap-2 text-slate-500">

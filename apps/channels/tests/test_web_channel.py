@@ -11,9 +11,12 @@ from apps.chat.models import Chat
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.parametrize("with_seed_message", [True, False])
 @patch("apps.events.tasks.enqueue_static_triggers", Mock())
+@patch("apps.chat.bots.TopicBot.get_ai_message_id")
 @patch("apps.chat.channels.WebChannel.new_user_message")
-def test_start_new_session(new_user_message, with_seed_message, experiment):
+def test_start_new_session(new_user_message, get_ai_message_id, with_seed_message, experiment):
     """A simple test to make sure we create a session and send a session message"""
+    get_ai_message_id.return_value = 1
+
     if with_seed_message:
         experiment.seed_message = "Tell a joke"
         experiment.save()

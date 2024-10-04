@@ -24,22 +24,18 @@
                 <!-- token display -->
                 <div class="flex flex-row">
                     <span class="flex-1 mr-2 my-auto font-semibold">Tokens</span>
-                    <ul class="flex flex-grow bg-base-100 rounded-lg mt-2 py-2 px-6 justify-between border">
-                        <li>
-                            <div>
-                                <i class="fa-solid fa-arrow-up-from-bracket" title="Output Token Count"></i>
-                                <span class="badge badge-sm" title="Output Token Count"
-                                      x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
-                            </div>
-                        </li>
-                        <li>
-                            <div>
-                                <span class="badge badge-sm" title="Input Token Count"
-                                      x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.input_tokens : acc, 0)"></span>
-                                <i class="fa-solid fa-arrow-right-to-bracket fa-rotate-90" title="Input Token Count"></i>
-                            </div>
-                        </li>
-                    </ul>
+                    <div class="flex flex-grow bg-base-100 rounded-lg mt-2 py-2 px-6 justify-between border">
+                        <div class="flex flex-row">
+                            <i class="fa-solid fa-arrow-up-from-bracket" title="Output Token Count"></i>
+                            <span class="badge badge-sm" title="Output Token Count"
+                                  x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.output_tokens : acc, 0)"></span>
+                        </div>
+                        <div class="flex flex-row">
+                            <span class="badge badge-sm" title="Input Token Count"
+                                  x-text="$store.promptBuilder.currentState.messages.reduce((acc, message) => message.author === 'Assistant' ? acc + message.input_tokens : acc, 0)"></span>
+                            <i class="fa-solid fa-arrow-right-to-bracket fa-rotate-90" title="Input Token Count"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
 
