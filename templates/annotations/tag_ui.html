@@ -1,8 +1,8 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
-    {% for tag, badge_color in object.get_linked_tags %}
-      <div class="badge {{ badge_color }}"
+    {% for tag in object.tags_json %}
+      <div class="badge {% if not tag.is_system_tag %}badge-neutral{% elif tag.category == 'safety_layer_response' %}badge-error{% else %}badge-warning{% endif %}"
            title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
       >{{ tag.name }}</div>
     {% endfor %}

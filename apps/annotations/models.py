@@ -97,15 +97,6 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
-    def get_linked_tags(self):
-        tags = []
-        for tag in self.tags.all():
-            bage_color = "badge-neutral"
-            if tag.is_system_tag:
-                bage_color = "badge-error" if tag.category == TagCategories.SAFETY_LAYER_RESPONSE else "badge-warning"
-            tags.append((tag, bage_color))
-        return tags
-
     def user_tag_names(self):
         return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
 
