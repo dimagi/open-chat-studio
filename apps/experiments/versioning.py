@@ -1,4 +1,6 @@
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass
+from dataclasses import field as data_field
 from typing import TYPE_CHECKING
 
 from django.db.models import Model
@@ -48,9 +50,9 @@ class VersionField:
     raw_value: any
     group_name: str
     to_display: callable = None
-    previous_field_version: "VersionField" = field(default=None)
+    previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
-    label: str = field(default="")
+    label: str = data_field(default="")
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
@@ -62,12 +64,21 @@ class VersionField:
 
 
 @dataclass
+class FieldGroup:
+    name: str
+    fields: list[VersionField] = data_field(default_factory=list)
+    show: bool = data_field(default=False)
+    # Indicates whether a field in this group changed
+    has_changed_fields: bool = data_field(default=False)
+
+
+@dataclass
 class Version:
     instance: any
     fields: list[VersionField]
     fields_changed: bool = False
-    previous_instance: any = field(default=None)
-    _fields_dict: dict = field(default_factory=dict)
+    previous_instance: any = data_field(default=None)
+    _fields_dict: dict = data_field(default_factory=dict)
 
     def __post_init__(self):
         for version_field in self.fields:
@@ -78,8 +89,16 @@ class Version:
 
     @property
     def fields_grouped(self):
-        # TODO: Return fields with group info for display purposes
-        pass
+        groups = defaultdict(dict)
+        for field in self.fields:
+            group_name = field.group_name
+            group_info = groups.get(group_name, FieldGroup(name=group_name))
+            group_info.show = group_info.show or bool(field.raw_value) or bool(field.changed)
+            group_info.has_changed_fields = group_info.has_changed_fields or field.changed
+            # We need to always include the field
+            group_info.fields.append(field)
+            groups[group_name] = group_info
+        return groups.items()
 
     def compare(self, previous_version_details: "Version"):
         """Returns a list of fields that changed between this instance and `previous_version_details.instance`"""

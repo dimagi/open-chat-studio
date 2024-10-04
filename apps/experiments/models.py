@@ -744,55 +744,81 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return Version(
             instance=self,
             fields=[
-                VersionField(group_name="Group 1", name="description", raw_value=self.description),
-                VersionField(group_name="Group 1", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Group 1", name="llm_model", raw_value=self.llm),
-                VersionField(group_name="Group 1", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="General", name="description", raw_value=self.description),
                 VersionField(
-                    group_name="Group 1",
-                    name="tools",
-                    raw_value=set(self.tools),
+                    group_name="General",
+                    name="allowlist",
+                    raw_value=self.participant_allowlist,
                     to_display=format_tools,
                 ),
-                VersionField(group_name="Group 1", name="assistant", raw_value=self.assistant),
-                VersionField(group_name="Group 1", name="pipeline", raw_value=self.pipeline),
-                VersionField(group_name="Group 1", name="temperature", raw_value=self.temperature),
+                # Language Model
+                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
+                VersionField(group_name="Language Model", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                # Safety
                 VersionField(
-                    group_name="Group 1",
-                    name="source_material",
-                    raw_value=self.source_material,
-                ),
-                VersionField(group_name="Group 1", name="pre-survey", raw_value=self.pre_survey),
-                VersionField(group_name="Group 1", name="post_survey", raw_value=self.post_survey),
-                VersionField(
-                    group_name="Group 2",
+                    group_name="Safety",
                     name="safety_violation_emails",
                     raw_value=", ".join(self.safety_violation_notification_emails),
                 ),
                 VersionField(
-                    group_name="Group 2",
+                    group_name="Safety",
+                    name="input_formatter",
+                    raw_value=self.input_formatter,
+                ),
+                VersionField(
+                    group_name="Safety",
                     name="max_token_limit",
                     raw_value=self.max_token_limit,
                 ),
+                # Consent
+                VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
                 VersionField(
-                    group_name="Group 2",
-                    name="voice_response_behaviours",
-                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
-                ),
-                VersionField(group_name="Group 2", name="tracing_provider", raw_value=self.trace_provider),
-                VersionField(group_name="Group 2", name="consent_form", raw_value=self.consent_form),
-                VersionField(
-                    group_name="Group 2",
+                    group_name="Consent",
                     name="conversational_consent_enabled",
                     raw_value=self.conversational_consent_enabled,
                     to_display=yes_no,
                 ),
+                # Surveys
+                VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
+                VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
+                # Voice
+                VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
+                VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
                 VersionField(
-                    group_name="Group 2",
+                    group_name="Voice",
+                    name="voice_response_behaviours",
+                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
+                ),
+                VersionField(
+                    group_name="Voice",
                     name="echo_transcript",
                     raw_value=self.echo_transcript,
                     to_display=yes_no,
                 ),
+                VersionField(
+                    group_name="Voice",
+                    name="use_processor_bot_voice",
+                    raw_value=self.use_processor_bot_voice,
+                    to_display=yes_no,
+                ),
+                # Source material
+                VersionField(
+                    group_name="Source Material",
+                    name="source_material",
+                    raw_value=self.source_material,
+                ),
+                # Tools
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=set(self.tools),
+                    to_display=format_tools,
+                ),
+                VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
+                VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
+                VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
             ],
         )
 

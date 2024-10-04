@@ -1,16 +1,42 @@
 <div class="my-2">
     {% if version_details.fields_changed %}
-        {% for field in version_details.fields %}
-            <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed diff_color='bg-red-400' %}
-                {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed diff_color='bg-emerald-400' %}
-            </div>
+        {% for group_name, group in version_details.fields_grouped %}
+            {% if group.show %}
+                <div x-data="{ isOpen: {{ group.has_changed_fields|yesno:'true,false' }} }" class="mb-2">
+                    <div :class="isOpen ? 'collapse collapse-open collapse-plus bg-base-200' : 'collapse collapse-close collapse-plus bg-base-200'">
+                        <div class="collapse-title text-xl font-medium cursor-pointer hover:text-white" @click="isOpen = !isOpen">
+                            {{ group_name }}
+                        </div>
+                        <div class="collapse-content" x-show="isOpen">
+                            {% for field in group.fields %}
+                                <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                                    {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed diff_color='bg-red-400' %}
+                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed diff_color='bg-emerald-400' %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
         {% endfor %}
     {% else %}
-        {% for field in version_details.fields %}
-            <div class="max-h-64 overflow-y-auto">
-                {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
-            </div>
+        {% for group_name, group in version_details.fields_grouped %}
+            {% if group.show %}
+                <div x-data="{ isOpen: {{ group.has_changed_fields|yesno:'true,false' }} }" class="mb-2">
+                    <div :class="isOpen ? 'collapse collapse-open collapse-plus bg-base-200' : 'collapse collapse-close collapse-plus bg-base-200'">
+                        <div class="collapse-title text-xl font-medium cursor-pointer hover:text-white" @click="isOpen = !isOpen">
+                            {{ group_name }}
+                        </div>
+                        <div class="collapse-content" x-show="isOpen">
+                            {% for field in group.fields %}
+                                <div class="max-h-64 overflow-y-auto">
+                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
         {% endfor %}
     {% endif %}
 </div>
