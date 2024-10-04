@@ -22,8 +22,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
-from apps.experiments.helpers import differs
-from apps.experiments.versioning import VersionDetails, VersionField
+from apps.experiments.versioning import VersionDetails, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel

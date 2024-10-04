@@ -8,8 +8,8 @@ from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.experiments.helpers import compare_models
 from apps.experiments.models import Experiment, ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
+from apps.experiments.versioning import compare_models
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,

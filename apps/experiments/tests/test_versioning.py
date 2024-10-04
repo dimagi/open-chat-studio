@@ -1,8 +1,8 @@
 import pytest
 from django.db import models
 
-from apps.experiments.helpers import compare_models, differs
 from apps.experiments.models import VersionsMixin
+from apps.experiments.versioning import compare_models, differs
 from apps.utils.models import BaseModel
 
 
