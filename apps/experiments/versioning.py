@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Model
 
 if TYPE_CHECKING:
-    from apps.experiments.models import Experiment
+    pass
 
 
 def differs(original: any, new: any, exclude_model_fields: list[str] | None = None) -> bool:
@@ -42,7 +42,7 @@ def compare_models(original: Model, new: Model, exclude_fields: list[str]) -> se
 
 @dataclass
 class VersionField:
-    """Represents a specific detail about an experiment. The label is the user friendly name"""
+    """Represents a specific detail about the instance. The label is the user friendly name"""
 
     name: str
     raw_value: any
@@ -64,10 +64,10 @@ class VersionField:
 @dataclass
 class VersionDetails:
     # TODO: Test
-    experiment: "Experiment"
+    instance: any
     fields: list[VersionField]
     fields_changed: bool = False
-    previous_experiment: "Experiment" = field(default=None)
+    previous_instance: any = field(default=None)
 
     def get_field(self, field_name: str) -> VersionField:
         # TODO: Use dict to make it faster
@@ -81,14 +81,12 @@ class VersionDetails:
         pass
 
     def compare(self, previous_version_details: "VersionDetails") -> list[str]:
-        """Returns a list of fields that changed between this experiment and `target_experiment`"""
-        self.previous_experiment = previous_version_details.experiment
+        """Returns a list of fields that changed between this instance and `previous_version_details.instance`"""
+        self.previous_instance = previous_version_details.instance
         for version_field in self.fields:
             current_value = version_field.raw_value
             previous_field_version = previous_version_details.get_field(version_field.name)
-            prev_version_raw_value = previous_field_version.raw_value
             version_field.previous_field_version = previous_field_version
-            if differs(
-                current_value, prev_version_raw_value, exclude_model_fields=self.experiment.DEFAULT_EXCLUDED_KEYS
-            ):
+            prev_version_raw_value = previous_field_version.raw_value
+            if differs(current_value, prev_version_raw_value, exclude_model_fields=self.instance.DEFAULT_EXCLUDED_KEYS):
                 self.fields_changed = version_field.changed = True

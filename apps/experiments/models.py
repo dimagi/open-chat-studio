@@ -691,7 +691,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return
 
         latest_attr_version = attr_instance.latest_version
-        # TODO: make VersionDetails universal and use it here instead
+
         if latest_attr_version and not differs(
             attr_instance, latest_attr_version, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS
         ):
@@ -744,7 +744,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         # TODO: Update Grouping
         # TODO: Derive labels from the names i.e. capitalize and remove underscores
         return VersionDetails(
-            experiment=self,
+            instance=self,
             fields=[
                 VersionField(group_name="Group 1", name="description", raw_value=self.description),
                 VersionField(group_name="Group 1", name="prompt_text", raw_value=self.prompt_text),
