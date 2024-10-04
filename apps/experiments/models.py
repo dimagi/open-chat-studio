@@ -742,7 +742,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         # TODO: Add more fields
         # TODO: Update Grouping
-        # TODO: Derive labels from the names i.e. capitalize and remove underscores
         return VersionDetails(
             instance=self,
             fields=[

@@ -63,7 +63,6 @@ class VersionField:
 
 @dataclass
 class VersionDetails:
-    # TODO: Test
     instance: any
     fields: list[VersionField]
     fields_changed: bool = False

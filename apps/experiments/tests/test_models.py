@@ -8,7 +8,14 @@ from freezegun import freeze_time
 
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.experiments.models import Experiment, ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
+from apps.experiments.models import (
+    Experiment,
+    ExperimentRoute,
+    ParticipantData,
+    SafetyLayer,
+    SyntheticVoice,
+    VersionsMixin,
+)
 from apps.experiments.versioning import compare_models
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -759,7 +766,9 @@ class TestExperimentObjectManager:
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    field_difference = compare_models(original, new).difference(set(expected_changed_fields))
+    field_difference = compare_models(original, new, VersionsMixin.DEFAULT_EXCLUDED_KEYS).difference(
+        set(expected_changed_fields)
+    )
     assert (
         field_difference == set()
     ), f"These fields differ between the experiment versions, but should not: {field_difference}"

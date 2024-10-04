@@ -2,13 +2,13 @@ import pytest
 from django.db import models
 
 from apps.experiments.models import VersionsMixin
-from apps.experiments.versioning import compare_models, differs
+from apps.experiments.versioning import VersionDetails, VersionField, compare_models, differs
 from apps.utils.models import BaseModel
 
 
 @pytest.fixture()
 def test_model():
-    class TestModel(BaseModel):
+    class TestModel(BaseModel, VersionsMixin):
         value = models.CharField()
         working_version = models.ForeignKey(
             "self",
@@ -55,3 +55,40 @@ def test_differs(test_model):
     )
     assert differs(1, 2) is True
     assert differs(True, False) is True
+
+
+class TestVersionDetails:
+    def test_compare(self, test_model):
+        instance1 = test_model(value="1", working_version_id=None)
+        version1 = VersionDetails(
+            instance=instance1,
+            fields=[
+                VersionField(group_name="G1", name="the_value", raw_value=instance1.value),
+            ],
+        )
+        similar_instance = test_model(value="1", working_version_id=None)
+        similar_version2 = VersionDetails(
+            instance=similar_instance,
+            fields=[
+                VersionField(group_name="G1", name="the_value", raw_value=similar_instance.value),
+            ],
+        )
+        different_instance = test_model(value="2", working_version_id=None)
+        different_version2 = VersionDetails(
+            instance=different_instance,
+            fields=[
+                VersionField(group_name="G1", name="the_value", raw_value=different_instance.value),
+            ],
+        )
+        version1.compare(similar_version2)
+        assert version1.fields_changed is False
+
+        version1.compare(different_version2)
+        assert version1.fields_changed is True
+
+        changed_field = version1.fields[0]
+        assert changed_field.name == "the_value"
+        assert changed_field.label == "The Value"
+        assert changed_field.raw_value == "1"
+        assert changed_field.changed is True
+        assert changed_field.previous_field_version.raw_value == "2"
