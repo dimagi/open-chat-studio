@@ -691,6 +691,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return
 
         latest_attr_version = attr_instance.latest_version
+        # TODO: make VersionDetails universal and use it here instead
         if latest_attr_version and not differs(
             attr_instance, latest_attr_version, exclude_model_fields=self.DEFAULT_EXCLUDED_KEYS
         ):
@@ -739,10 +740,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_tools(tools: set):
             return ", ".join([AgentTools(tool).label for tool in tools])
 
+        # TODO: Add more fields
+        # TODO: Update Grouping
+        # TODO: Derive labels from the names i.e. capitalize and remove underscores
         return VersionDetails(
             experiment=self,
             fields=[
-                # TODO: Derive label from name i.e. capitalize and remove underscores
                 VersionField(group_name="Group 1", name="description", raw_value=self.description),
                 VersionField(group_name="Group 1", name="prompt_text", raw_value=self.prompt_text),
                 VersionField(group_name="Group 1", name="llm_model", raw_value=self.llm),
