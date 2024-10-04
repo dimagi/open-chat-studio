@@ -92,3 +92,19 @@ class TestVersionDetails:
         assert changed_field.raw_value == "1"
         assert changed_field.changed is True
         assert changed_field.previous_field_version.raw_value == "2"
+
+    def test_type_error_raised(self, test_model):
+        """A type error should be raised when comparing versions of differing types"""
+        instance1 = test_model(value="1", working_version_id=None)
+        version1 = VersionDetails(
+            instance=instance1,
+            fields=[],
+        )
+
+        version2 = VersionDetails(
+            instance="String type",
+            fields=[],
+        )
+
+        with pytest.raises(TypeError, match=r"Cannot compare instances of different types."):
+            version1.compare(version2)
