@@ -14,7 +14,6 @@ from apps.experiments.models import (
     ParticipantData,
     SafetyLayer,
     SyntheticVoice,
-    VersionsMixin,
 )
 from apps.experiments.versioning import compare_models
 from apps.utils.factories.events import (

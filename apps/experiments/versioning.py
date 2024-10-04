@@ -67,12 +67,14 @@ class Version:
     fields: list[VersionField]
     fields_changed: bool = False
     previous_instance: any = field(default=None)
+    _fields_dict: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        for version_field in self.fields:
+            self._fields_dict[version_field.name] = version_field
 
     def get_field(self, field_name: str) -> VersionField:
-        # TODO: Use dict to make it faster
-        for version_field in self.fields:
-            if version_field.name == field_name:
-                return version_field
+        return self._fields_dict[field_name]
 
     @property
     def fields_grouped(self):
