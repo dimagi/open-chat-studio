@@ -416,7 +416,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         """
         Creates a File record from `image_file_message` by pulling the data from OpenAI. Typically, these files don't
         have extentions, so we'll need to guess it based on the content. We know it will be an image, but not which
-        extention to use.
+        extension to use.
         """
         from mimetypes import guess_extension
 
@@ -434,9 +434,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 team_id=self.state.experiment.team_id,
             )
             mimetype = magic.from_buffer(created_file.file.open().read(), mime=True)
-            extention = guess_extension(mimetype)
-            # extention looks like '.png'
-            created_file.name = f"{created_file.name}{extention}"
+            extension = guess_extension(mimetype)
+            # extension looks like '.png'
+            created_file.name = f"{created_file.name}{extension}"
             created_file.save()
             return created_file
         except Exception as ex:
