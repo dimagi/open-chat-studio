@@ -1,54 +1,36 @@
 import pytest
-from django.db import models
 
-from apps.experiments.models import VersionsMixin
+from apps.experiments.models import Experiment, VersionsMixin
 from apps.experiments.versioning import Version, VersionField, compare_models, differs
-from apps.utils.models import BaseModel
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
-@pytest.fixture()
-def test_model():
-    class TestModel(BaseModel, VersionsMixin):
-        value = models.CharField()
-        working_version = models.ForeignKey(
-            "self",
-            on_delete=models.CASCADE,
-            null=True,
-            blank=True,
-            related_name="versions",
-        )
-
-    return TestModel
+@pytest.mark.django_db()
+def test_compare_models():
+    experiment = ExperimentFactory(temperature=0.1)
+    instance1 = Experiment.objects.get(id=experiment.id)
+    instance2 = Experiment.objects.get(id=experiment.id)
+    assert compare_models(instance1, instance2, exclude_fields=[]) == set()
+    instance2.temperature = 0.2
+    assert compare_models(instance1, instance2, exclude_fields=["temperature"]) == set()
+    assert compare_models(instance1, instance2, exclude_fields=[]) == set(["temperature"])
 
 
-@pytest.mark.parametrize(
-    ("value1", "value2", "exclude_fields", "changed_fields"),
-    [
-        ("1", "1", [], ["working_version_id"]),
-        ("1", "1", VersionsMixin.DEFAULT_EXCLUDED_KEYS, []),
-        ("1", "2", VersionsMixin.DEFAULT_EXCLUDED_KEYS, ["value"]),
-    ],
-)
-def test_compare_models(value1, value2, exclude_fields, changed_fields, test_model):
-    instance1 = test_model(value=value1, working_version_id=None)
-    instance2 = test_model(value=value2, working_version_id=1)
-    changed_fields = compare_models(instance1, instance2, exclude_fields=exclude_fields)
-    assert changed_fields == set(changed_fields)
-
-
-def test_differs(test_model):
+def test_differs():
+    experiment1 = ExperimentFactory.build(temperature=0.1)
+    experiment2 = ExperimentFactory.build(temperature=0.1)
     assert (
         differs(
-            test_model(value="1", working_version_id=None),
-            test_model(value="1", working_version_id=1),
+            experiment1,
+            experiment1,
             exclude_model_fields=VersionsMixin.DEFAULT_EXCLUDED_KEYS,
         )
         is False
     )
     assert (
         differs(
-            test_model(value="1", working_version_id=None),
-            test_model(value="2", working_version_id=1),
+            experiment1,
+            experiment2,
             exclude_model_fields=VersionsMixin.DEFAULT_EXCLUDED_KEYS,
         )
         is True
@@ -58,26 +40,26 @@ def test_differs(test_model):
 
 
 class TestVersion:
-    def test_compare(self, test_model):
-        instance1 = test_model(value="1", working_version_id=None)
+    def test_compare(self):
+        instance1 = ExperimentFactory.build(temperature=0.1)
         version1 = Version(
             instance=instance1,
             fields=[
-                VersionField(group_name="G1", name="the_value", raw_value=instance1.value),
+                VersionField(group_name="G1", name="the_temperature", raw_value=instance1.temperature),
             ],
         )
-        similar_instance = test_model(value="1", working_version_id=None)
+        similar_instance = instance1
         similar_version2 = Version(
             instance=similar_instance,
             fields=[
-                VersionField(group_name="G1", name="the_value", raw_value=similar_instance.value),
+                VersionField(group_name="G1", name="the_temperature", raw_value=similar_instance.temperature),
             ],
         )
-        different_instance = test_model(value="2", working_version_id=None)
+        different_instance = ExperimentFactory.build(temperature=0.2)
         different_version2 = Version(
             instance=different_instance,
             fields=[
-                VersionField(group_name="G1", name="the_value", raw_value=different_instance.value),
+                VersionField(group_name="G1", name="the_temperature", raw_value=different_instance.temperature),
             ],
         )
         version1.compare(similar_version2)
@@ -87,22 +69,22 @@ class TestVersion:
         assert version1.fields_changed is True
 
         changed_field = version1.fields[0]
-        assert changed_field.name == "the_value"
-        assert changed_field.label == "The Value"
-        assert changed_field.raw_value == "1"
+        assert changed_field.name == "the_temperature"
+        assert changed_field.label == "The Temperature"
+        assert changed_field.raw_value == 0.1
         assert changed_field.changed is True
-        assert changed_field.previous_field_version.raw_value == "2"
+        assert changed_field.previous_field_version.raw_value == 0.2
 
-    def test_type_error_raised(self, test_model):
+    def test_type_error_raised(self):
         """A type error should be raised when comparing versions of differing types"""
-        instance1 = test_model(value="1", working_version_id=None)
+        instance1 = ExperimentFactory.build()
         version1 = Version(
             instance=instance1,
             fields=[],
         )
 
         version2 = Version(
-            instance="String type",
+            instance=ExperimentSessionFactory.build(),
             fields=[],
         )
 
