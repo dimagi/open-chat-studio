@@ -10,8 +10,8 @@
                         <div class="collapse-content" x-show="isOpen">
                             {% for field in group.fields %}
                                 <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                                    {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed diff_color='bg-red-400' %}
-                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed diff_color='bg-emerald-400' %}
+                                    {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed is_previous_value=True %}
+                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
                                 </div>
                             {% endfor %}
                         </div>
