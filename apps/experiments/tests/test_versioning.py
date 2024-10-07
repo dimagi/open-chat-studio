@@ -97,8 +97,8 @@ class TestVersion:
         original_version.compare(new_version.version)
         all_groups = set([field.group_name for field in experiment.version.fields])
         collected_group_names = []
-        for group_name, group in original_version.fields_grouped:
-            collected_group_names.append(group_name)
+        for group in original_version.fields_grouped:
+            collected_group_names.append(group.name)
             assert group.has_changed_fields is False
 
         assert all_groups - set(collected_group_names) == set()
@@ -109,6 +109,6 @@ class TestVersion:
         original_version.compare(new_version.version)
         temerature_group_name = original_version.get_field("temperature").group_name
         # Find the temperature group and check that it reports a change
-        for group_name, group in original_version.fields_grouped:
-            if group_name == temerature_group_name:
+        for group in original_version.fields_grouped:
+            if group.name == temerature_group_name:
                 assert group.has_changed_fields is True
