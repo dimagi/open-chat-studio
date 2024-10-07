@@ -787,7 +787,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
                 VersionField(
                     group_name="Voice",
-                    name="voice_response_behaviours",
+                    name="voice_response_behaviour",
                     raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
                 ),
                 VersionField(
