@@ -1,11 +1,11 @@
 <div class="my-2">
     {% if version_details.fields_changed %}
-        {% for group_name, group in version_details.fields_grouped %}
+        {% for group in version_details.fields_grouped %}
             {% if group.show %}
                 <div x-data="{ isOpen: {{ group.has_changed_fields|yesno:'true,false' }} }" class="mb-2">
                     <div :class="isOpen ? 'collapse collapse-open collapse-plus bg-base-200' : 'collapse collapse-close collapse-plus bg-base-200'">
                         <div class="collapse-title text-xl font-medium cursor-pointer hover:text-white" @click="isOpen = !isOpen">
-                            {{ group_name }}
+                            {{ group.name }}
                         </div>
                         <div class="collapse-content" x-show="isOpen">
                             {% for field in group.fields %}
@@ -20,12 +20,12 @@
             {% endif %}
         {% endfor %}
     {% else %}
-        {% for group_name, group in version_details.fields_grouped %}
+        {% for group in version_details.fields_grouped %}
             {% if group.show %}
                 <div x-data="{ isOpen: true }" class="mb-2">
                     <div :class="isOpen ? 'collapse collapse-open collapse-plus bg-base-200' : 'collapse collapse-close collapse-plus bg-base-200'">
                         <div class="collapse-title text-xl font-medium cursor-pointer hover:text-white" @click="isOpen = !isOpen">
-                            {{ group_name }}
+                            {{ group.name }}
                         </div>
                         <div class="collapse-content" x-show="isOpen">
                             {% for field in group.fields %}

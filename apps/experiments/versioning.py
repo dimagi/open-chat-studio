@@ -96,8 +96,7 @@ class Version:
             group_info.show = group_info.show or bool(field.raw_value) or bool(field.changed)
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
             group_info.fields.append(field)
-            groups[group_name] = group_info
-        return groups.items()
+        return list(groups.values())
 
     def compare(self, previous_version_details: "Version"):
         """Returns a list of fields that changed between this instance and `previous_version_details.instance`"""
