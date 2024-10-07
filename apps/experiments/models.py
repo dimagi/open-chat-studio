@@ -337,6 +337,25 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
 
+    @property
+    def version(self) -> Version:
+        """
+        Returns a `Version` instance representing the experiment version.
+        """
+
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="consent_text", raw_value=self.consent_text),
+                VersionField(name="capture_identifier", raw_value=self.capture_identifier),
+                VersionField(name="identifier_label", raw_value=self.identifier_label),
+                VersionField(name="identifier_type", raw_value=self.identifier_type),
+                VersionField(name="is_default", raw_value=self.is_default),
+                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+            ],
+        )
+
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):

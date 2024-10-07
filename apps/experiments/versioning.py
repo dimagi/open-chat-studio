@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from dataclasses import field as data_field
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Model
+from django.db.models import Model, QuerySet
 
 if TYPE_CHECKING:
     pass
@@ -48,19 +48,27 @@ class VersionField:
 
     name: str
     raw_value: Any
-    group_name: str
     to_display: callable = None
+    group_name: str = data_field(default="")
     previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
     label: str = data_field(default="")
+    is_related: bool = data_field(default=False)
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
+        if isinstance(self.raw_value, Model | QuerySet) and hasattr(self.raw_value, "version"):
+            self.is_related = True
 
     def display_value(self) -> Any:
         if self.to_display:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
+
+    def related_field_version_details(self):
+        version = self.raw_value.version
+        version.compare(self.previous_field_version.raw_value.version)
+        return version
 
 
 @dataclass
