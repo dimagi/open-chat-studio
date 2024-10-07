@@ -739,6 +739,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_tools(tools: set):
             return ", ".join([AgentTools(tool).label for tool in tools])
 
+        def format_array_field(arr: list):
+            return ", ".join([entry for entry in arr])
+
         # TODO: Add more fields
         return Version(
             instance=self,
@@ -748,7 +751,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     group_name="General",
                     name="allowlist",
                     raw_value=self.participant_allowlist,
-                    to_display=format_tools,
+                    to_display=format_array_field,
                 ),
                 # Language Model
                 VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),

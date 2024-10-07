@@ -1,22 +1,24 @@
 {% if field_changed or field.display_value %}
     <div class="my-1">
-        <div class="grid grid-cols-3">
-            <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
-            {% if field_changed|default:False %}
-                {% if is_previous_value|default:False %}
-                    <dd class="text-sm col-span-2 rounded bg-red-100 text-red-800 me-2 px-2.5 py-0.5 dark:bg-red-900 dark:text-red-300">
-                        {{ field.display_value }}
-                    </dd>
+        <dl>
+            <div class="grid grid-cols-3">
+                <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
+                {% if field_changed|default:False %}
+                    {% if is_previous_value|default:False %}
+                        <dd class="text-sm col-span-2 rounded bg-red-100 text-red-800 me-2 px-2.5 py-0.5 dark:bg-red-900 dark:text-red-300">
+                            {{ field.display_value }}
+                        </dd>
+                    {% else %}
+                        <dd class="text-sm col-span-2 rounded bg-green-100 text-green-800 me-2 px-2.5 py-0.5 dark:bg-green-900 dark:text-green-300">
+                            {{ field.display_value }}
+                        </dd>
+                    {% endif %}
                 {% else %}
-                    <dd class="text-sm col-span-2 rounded bg-green-100 text-green-800 me-2 px-2.5 py-0.5 dark:bg-green-900 dark:text-green-300">
+                    <dd class="text-sm col-span-2">
                         {{ field.display_value }}
                     </dd>
                 {% endif %}
-            {% else %}
-                <dd class="text-sm col-span-2">
-                    {{ field.display_value }}
-                </dd>
-            {% endif %}
-        </div>
+            </div>
+        </dl>
     </div>
 {% endif %}

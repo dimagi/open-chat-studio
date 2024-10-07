@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Model
 
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     pass
 
 
-def differs(original: any, new: any, exclude_model_fields: list[str] | None = None) -> bool:
+def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None) -> bool:
     """
     Compares the value (or attributes in the case of a Model) between `original` and `new`.
     Returns `True` if it differs and `False` if not.
@@ -47,7 +47,7 @@ class VersionField:
     """Represents a specific detail about the instance. The label is the user friendly name"""
 
     name: str
-    raw_value: any
+    raw_value: Any
     group_name: str
     to_display: callable = None
     previous_field_version: "VersionField" = data_field(default=None)
@@ -57,7 +57,7 @@ class VersionField:
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
 
-    def display_value(self) -> any:
+    def display_value(self) -> Any:
         if self.to_display:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
@@ -74,10 +74,10 @@ class FieldGroup:
 
 @dataclass
 class Version:
-    instance: any
+    instance: Any
     fields: list[VersionField]
     fields_changed: bool = False
-    previous_instance: any = data_field(default=None)
+    previous_instance: Any = data_field(default=None)
     _fields_dict: dict = data_field(default_factory=dict)
 
     def __post_init__(self):
@@ -99,12 +99,12 @@ class Version:
         return list(groups.values())
 
     def compare(self, previous_version_details: "Version"):
-        """Returns a list of fields that changed between this instance and `previous_version_details.instance`"""
+        """Compares the current instance with the previous version and updates the changed status of fields."""
         self.previous_instance = previous_version_details.instance
 
         if type(self.previous_instance) != type(self.instance):  # noqa: E721
             prev_instance_type = type(self.previous_instance)
-            curr_instance_type = type(self.previous_instance)
+            curr_instance_type = type(self.instance)
             raise TypeError(
                 f"Cannot compare instances of different types: {curr_instance_type} and {prev_instance_type}."
             )
