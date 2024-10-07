@@ -92,7 +92,7 @@ class Version:
         groups = defaultdict(dict)
         for field in self.fields:
             group_name = field.group_name
-            group_info = groups.get(group_name, FieldGroup(name=group_name))
+            group_info = groups.setdefault(group_name, FieldGroup(name=group_name))
             group_info.show = group_info.show or bool(field.raw_value) or bool(field.changed)
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
             group_info.fields.append(field)
