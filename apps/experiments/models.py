@@ -31,11 +31,17 @@ from apps.web.meta import absolute_url
 log = logging.getLogger(__name__)
 
 
+class VersionsObjectManagerMixin:
+    def get_all(self):
+        """A method to return all experiments whether it is deprecated or not"""
+        return super().get_queryset()
+
+
 class PromptObjectManager(AuditingManager):
     pass
 
 
-class ExperimentObjectManager(AuditingManager):
+class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_default_or_working(self, family_member: "Experiment"):
         """
         Returns the default version of the family of experiments relating to `family_member` or if there is no default,
@@ -57,12 +63,8 @@ class ExperimentObjectManager(AuditingManager):
     def get_queryset(self):
         return super().get_queryset().filter(is_archived=False)
 
-    def get_all(self):
-        """A method to return all experiments whether it is deprecated or not"""
-        return super().get_queryset()
 
-
-class SourceMaterialObjectManager(AuditingManager):
+class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -76,11 +78,8 @@ class SourceMaterialObjectManager(AuditingManager):
             )
         )
 
-    def get_all(self):
-        return super().get_queryset()
 
-
-class SafetyLayerObjectManager(AuditingManager):
+class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -94,11 +93,8 @@ class SafetyLayerObjectManager(AuditingManager):
             )
         )
 
-    def get_all(self):
-        return super().get_queryset()
 
-
-class ConsentFormObjectManager(AuditingManager):
+class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -111,9 +107,6 @@ class ConsentFormObjectManager(AuditingManager):
                 )
             )
         )
-
-    def get_all(self):
-        return super().get_queryset()
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
