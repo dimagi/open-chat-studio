@@ -40,50 +40,38 @@
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "experiments/components/experiment_details.html" %}
     </div>
-    {% if experiment_session.get_participant_data %}
 
-      <div class="app-card collapse collapse-arrow max-w-5xl">
-        <input type="checkbox" />
-        <div class="collapse-title text-xl font-medium">
-          Participant data
-        </div>
-        <div class="collapse-content">
-          <div role="tablist" class="tabs tabs-bordered">
-            <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Formatted" checked/>
-            <div role="tabpanel" class="tab-content p-10">
-              <div class="grid grid-cols-3 max-h-80 overflow-y-auto">
-                {% for k, v in experiment_session.get_participant_data.items %}
-                  <div class="p-4 col-span-1">
-                    <div class="font-semibold text-sm">{{ k }}</div>
-                    <div class="mt-2">{{ v }}</div>
-                  </div>
-                {% endfor %}
-              </div>
-            </div>
-            <input type="radio" name="my_tabs_1" role="tab" class="tab" aria-label="Raw" />
-            <div role="tabpanel" class="tab-content p-10">
-            <pre class="overflow-x-auto">
-              <div class="max-h-80 overflow-y-auto">
-                {{ experiment_session.get_participant_data_json }}
-              </div>
-            </pre>
-            </div>
+    <div role="tablist" class="mt-4 tabs tabs-bordered max-w-5xl">
+      <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
+      <div role="tabpanel" class="tab-content pt-3">
+        {% include "experiments/components/experiment_chat.html" %}
+      </div>
+      {% if perms.experiments.view_participantdata %}
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
+        <div role="tabpanel" class="tab-content pt-3">
+          <div class="p-3 border rounded-lg">
+            <pre><code>{{ participant_data }}</code></pre>
           </div>
         </div>
-      </div>
-
-
-    {% endif %}
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment chat</h3>
-    {% include "experiments/components/experiment_chat.html" %}
-    {% if perms.events.view_eventlog %}
-      <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiment Events</h3>
-      {% for event_trigger in event_triggers %}
-        <div class="max-w-5xl mt-4 border rounded-2xl">
-          {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
+        <div role="tabpanel" class="tab-content pt-3">
+          <div class="border rounded-lg divide-y">
+            {% include "participants/partials/participant_schedules.html" %}
+          </div>
         </div>
-      {% endfor %}
-    {% endif %}
+      {% endif %}
+      {% if perms.events.view_eventlog %}
+        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Experiment Events"/>
+        <div role="tabpanel" class="tab-content pt-3">
+          {% for event_trigger in event_triggers %}
+            <div class="max-w-5xl mt-4 border rounded-2xl">
+              {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
   </div>
 {% endblock %}
 
