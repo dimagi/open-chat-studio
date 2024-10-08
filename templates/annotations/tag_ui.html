@@ -19,18 +19,15 @@
   {% else %}
     <div class="flex place-items-center">
       <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple
-              placeholder="Select a tag..." autocomplete="off">
+              placeholder="Select a tag..." autocomplete="off"
+              hx-get="{% url "annotations:tag_ui" request.team.slug %}"
+              hx-vals='{{ object.object_info }}'
+              hx-target="#tag-ui-{{ object.id }}"
+              hx-trigger="ts-blur">
         {% for tag in available_tags %}
           <option value="{{ tag }}" {% if tag in object.user_tag_names %}selected{% endif %}>{{ tag }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-ghost btn-sm !text-success"
-              hx-get="{% url "annotations:tag_ui" request.team.slug %}"
-              hx-vals='{{ object.object_info }}'
-              hx-target="#tag-ui-{{ object.id }}"
-      >
-        <i class="fa-solid fa-check"></i>
-      </button>
     </div>
     <div class="flex place-items-center">
       {% if object.system_tags_names %}
