@@ -283,9 +283,6 @@ class AssistantExperimentState(ExperimentState, AssistantState):
 
         return chat_message
 
-    def get_tools(self):
-        return get_tools(self.session, self.experiment)
-
     @property
     def tools_enabled(self):
         return self.experiment.assistant.tools_enabled
