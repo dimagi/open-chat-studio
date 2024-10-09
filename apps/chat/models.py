@@ -22,6 +22,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     class MetadataKeys(StrEnum):
         OPENAI_THREAD_ID = "openai_thread_id"
+        EXPERIMENT_VERSION = "experiment_version"
 
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")

@@ -6,6 +6,7 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.chat.models import Chat
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import (
@@ -105,6 +106,7 @@ class TestSyntheticVoice:
         assert voice1 not in voices_queryset
 
 
+@pytest.mark.django_db()
 class TestExperimentSession:
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
         params = self._get_params(experiment_id, time_period, frequency, repetitions)
@@ -120,7 +122,6 @@ class TestExperimentSession:
             "experiment_id": experiment_id,
         }
 
-    @pytest.mark.django_db()
     @freeze_time("2024-01-01")
     def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
@@ -175,7 +176,6 @@ class TestExperimentSession:
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
 
-    @pytest.mark.django_db()
     @pytest.mark.parametrize(
         ("repetitions", "total_triggers", "expected_triggers_remaining"),
         [
@@ -209,7 +209,6 @@ class TestExperimentSession:
         assert schedule["total_triggers"] == total_triggers
         assert schedule["triggers_remaining"] == expected_triggers_remaining
 
-    @pytest.mark.django_db()
     @freeze_time("2024-01-01")
     @pytest.mark.parametrize(
         ("time_period", "repetitions", "total_triggers", "expected"),
@@ -288,7 +287,6 @@ class TestExperimentSession:
         next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
         assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
-    @pytest.mark.django_db()
     def test_get_participant_scheduled_messages_includes_child_experiments(self):
         session = ExperimentSessionFactory()
         team = session.team
@@ -304,7 +302,6 @@ class TestExperimentSession:
         assert len(participant.get_schedules_for_experiment(session2.experiment)) == 1
         assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
 
-    @pytest.mark.django_db()
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     def test_scheduled_message_experiment(self, use_custom_experiment):
         """ScheduledMessages should use the experiment specified in the linked action's params"""
@@ -350,7 +347,6 @@ class TestExperimentSession:
         )
         assert scheduled_message._should_mark_complete() == expected
 
-    @pytest.mark.django_db()
     def test_get_participant_data_name(self):
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
@@ -376,7 +372,6 @@ class TestExperimentSession:
             "first_name": "Jimmy",
         }
 
-    @pytest.mark.django_db()
     @freeze_time("2022-01-01 08:00:00")
     @pytest.mark.parametrize("use_participant_tz", [False, True])
     def test_get_participant_data_timezone(self, use_participant_tz):
@@ -407,7 +402,6 @@ class TestExperimentSession:
         participant_data.pop("scheduled_messages")
         assert participant_data == expected_data
 
-    @pytest.mark.django_db()
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
     @patch("apps.chat.bots.TopicBot.process_input")
@@ -431,6 +425,17 @@ class TestExperimentSession:
                 _test()
         else:
             _test()
+
+    @pytest.mark.parametrize(
+        ("chat_metadata_version", "expected_display_val"),
+        [
+            (Experiment.DEFAULT_VERSION_NUMBER, "Default version"),
+            ("1", "v1"),
+        ],
+    )
+    def test_experiment_version_for_display(self, chat_metadata_version, expected_display_val, experiment_session):
+        experiment_session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, chat_metadata_version)
+        assert experiment_session.experiment_version_for_display == expected_display_val
 
 
 class TestParticipant:
@@ -722,6 +727,25 @@ class TestExperimentModel:
             new=getattr(new_version, attr_name),
             expected_changed_fields=["id", "working_version_id"],
         )
+
+    def test_get_version(self, experiment):
+        """Test that we are able to find a specific experiment version using any experiment in the version family"""
+        first_version = experiment.create_new_version()
+        second_version = experiment.create_new_version(make_default=True)
+        experiment.refresh_from_db()
+        first_version.refresh_from_db()
+
+        # Get the default version
+        assert experiment.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
+        assert first_version.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
+
+        # Get the working version. Its version number should be 3
+        assert experiment.get_version(3) == experiment
+        assert first_version.get_version(3) == experiment
+
+        # Get a specific version
+        assert experiment.get_version(1) == first_version
+        assert first_version.get_version(1) == first_version
 
 
 @pytest.mark.django_db()

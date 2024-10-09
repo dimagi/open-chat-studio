@@ -436,6 +436,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
     Each experiment can be run as a chatbot.
     """
 
+    # 0 is a reserved version number, meaning the default version
+    DEFAULT_VERSION_NUMBER = 0
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -595,6 +598,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+    def get_version(self, version: int) -> "Experiment":
+        """
+        Returns the version of this experiment family matching `version`. If `version` is 0, the default version is
+        returned.
+        """
+        working_version = self.get_working_version()
+        if version == self.DEFAULT_VERSION_NUMBER:
+            return working_version.default_version
+        elif working_version.version_number == version:
+            return working_version
+        return working_version.versions.get(version_number=version)
 
     @property
     def tools_enabled(self):
@@ -1264,6 +1279,11 @@ class ExperimentSession(BaseTeamModel):
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
 
+    @property
+    def experiment_version_for_display(self):
+        version_number = self.get_experiment_version_number()
+        return "Default version" if version_number == Experiment.DEFAULT_VERSION_NUMBER else f"v{version_number}"
+
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
         return participant_data.get("timezone")
@@ -1280,3 +1300,10 @@ class ExperimentSession(BaseTeamModel):
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return self.participant.global_data | participant_data
+
+    def get_experiment_version_number(self) -> int:
+        """
+        Returns the version that is being chatted to. If it's the default version, return 0 which is the default
+        experiment's version number
+        """
+        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, Experiment.DEFAULT_VERSION_NUMBER)
