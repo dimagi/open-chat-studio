@@ -725,7 +725,10 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    experiment_version = experiment.get_version(version_number)
+    try:
+        experiment_version = experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404
 
     version_specific_vars = {
         "assistant": experiment_version.assistant,
@@ -746,7 +749,10 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
 
-    experiment_version = working_experiment.get_version(version_number)
+    try:
+        experiment_version = working_experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
