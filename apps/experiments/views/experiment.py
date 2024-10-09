@@ -1262,6 +1262,19 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
     return redirect(url)
 
 
+@require_POST
+@transaction.atomic
+@login_and_team_required
+def update_version_description(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
+    experiment.version_description = request.POST["description"]
+    experiment.save()
+
+    return HttpResponse()
+
+
 @login_and_team_required
 def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
     experiment_version = get_object_or_404(
