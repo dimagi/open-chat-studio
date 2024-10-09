@@ -4,7 +4,7 @@
 
 <div x-data="{search: null}">
   {% if perms.annotations.view_customtaggeditem %}
-    <div class="mt-1 pl-4 max-w-5xl">
+    <div class="mt-1 max-w-5xl">
       <input type="text" x-model="search" class="input input-bordered input-sm w-1/2" placeholder="Search tags...">
     </div>
   {% endif %}

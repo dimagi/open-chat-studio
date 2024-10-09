@@ -5,6 +5,7 @@ import TomSelect from "tom-select";
 const urlData = document.getElementById('tag-multiselect');
 const linkTagUrl = urlData.getAttribute("data-linkTagUrl");
 const unlinkTagUrl = urlData.getAttribute("data-unlinkTagUrl");
+const tsBlur = new Event("ts-blur");
 
 let controlInstances = [];
 
@@ -35,9 +36,13 @@ function configureTomSelect() {
       maxItems: null,
       create: true,
       onItemAdd: addTag('onItemAdd', objectInfo),
-      onItemRemove: removeTag('onItemRemove', objectInfo)
+      onItemRemove: removeTag('onItemRemove', objectInfo),
+      onBlur: () => {
+        el.dispatchEvent(tsBlur);
+      }
     });
     controlInstances.push(control);
+    control.focus();
   });
 }
 

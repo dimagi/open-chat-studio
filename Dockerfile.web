@@ -37,6 +37,8 @@ RUN apt-get update && apt-get install -y \
   curl \
   # mimetype detection (creates /etc/mime.types)
   mailcap \
+  # mimetype detection from content
+  libmagic1 \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*

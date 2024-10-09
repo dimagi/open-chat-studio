@@ -61,6 +61,7 @@ from functools import wraps
 from io import BytesIO
 from tempfile import TemporaryFile
 
+import magic
 import openai
 from django.core.files import File as DjangoFile
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -367,16 +368,34 @@ def _push_file_to_openai(client: OpenAiAssistant, file: File):
     file.save()
 
 
-def get_and_store_openai_file(client, file_name: str, file_id: str, team_id: int) -> File:
+def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance"""
+    file = client.files.retrieve(file_id)
+    filename = file.filename
+    try:
+        filename = pathlib.Path(file.filename).name
+    except Exception:
+        pass
+
     file_content_obj = client.files.content(file_id)
     file_content_bytes = file_content_obj.read()
 
+    content_type = mimetypes.guess_type(filename)[0]
+    if not content_type:
+        # typically means the filename doesn't have an extension
+        content_type = magic.from_buffer(file_content_bytes, mime=True)
+        extension = mimetypes.guess_extension(content_type)
+        # leading '.' is included
+        filename = f"{filename}{extension}"
+
     with TemporaryFile(mode="w+b") as file:
         file.write(file_content_bytes)
+        django_file = DjangoFile(file, name=filename)
         return File.objects.create(
-            name=file_name,
-            file=DjangoFile(file, name=file_name),
+            name=filename,
+            file=django_file,
             external_id=file_id,
             team_id=team_id,
+            content_type=content_type,
+            content_size=django_file.size,
         )

@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -1199,6 +1200,10 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 }
                 for trigger in experiment.event_triggers
             ],
+            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
+            "participant_schedules": session.participant.get_schedules_for_experiment(
+                experiment, as_dict=True, include_complete=True
+            ),
         },
     )
 

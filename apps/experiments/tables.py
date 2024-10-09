@@ -126,7 +126,7 @@ class ConsentFormTable(tables.Table):
 
 class ExperimentSessionsTable(tables.Table):
     participant = actions.chip_column(
-        accessor="participant", align="center", orderable=True, order_by="participant__identifier"
+        accessor="participant", align="left", orderable=True, order_by="participant__identifier"
     )
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
