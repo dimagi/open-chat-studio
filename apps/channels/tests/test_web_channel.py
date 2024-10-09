@@ -1,4 +1,5 @@
 import pytest
+from django.http import Http404
 from django.test import override_settings
 from mock.mock import Mock, patch
 
@@ -39,6 +40,12 @@ def test_start_new_session(new_user_message, get_ai_message_id, with_seed_messag
         assert message.message_text == "Tell a joke"
         # A seed message cannot have an attachment
         assert message.attachments == []
+
+
+@pytest.mark.django_db()
+def test_404_raised_when_version_is_not_found(experiment):
+    with pytest.raises(Http404):
+        WebChannel.start_new_session(experiment, "jack@titanic.com", version=20)
 
 
 @pytest.mark.django_db()

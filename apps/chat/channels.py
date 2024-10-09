@@ -9,6 +9,7 @@ from typing import ClassVar
 import emoji
 import requests
 from django.db import transaction
+from django.http import Http404
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
@@ -550,8 +551,11 @@ class WebChannel(ChannelBase):
         )
 
         if version:
-            experiment_version = working_experiment.get_version(version)
-            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
+            try:
+                experiment_version = working_experiment.get_version(version)
+                session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
+            except Experiment.DoesNotExist:
+                raise Http404(f"Experiment with version {version} not found")
         else:
             experiment_version = working_experiment.default_version
             session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, "default")
