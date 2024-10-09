@@ -432,21 +432,23 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
-        file_name = ""
         file_link = ""
 
-        if file_id not in forbidden_file_ids:
+        team = self.state.session.team
+        session_id = self.state.session.id
+        try:
+            file = File.objects.get(external_id=file_id, team_id=team.id)
+            file_link = f"file:{team.slug}:{session_id}:{file.id}"
+            file_name = file.name
+        except File.DoesNotExist:
+            client = self.state.raw_client
+            openai_file = client.files.retrieve(file_id=file_id)
+            file_name = openai_file.filename
+
+        if file_id in forbidden_file_ids:
             # Don't allow downloading assistant level files
-            team = self.state.session.team
-            session_id = self.state.session.id
-            try:
-                file = File.objects.get(external_id=file_id, team_id=team.id)
-                file_link = f"file:{team.slug}:{session_id}:{file.id}"
-                file_name = file.name
-            except File.DoesNotExist:
-                client = self.state.raw_client
-                openai_file = client.files.retrieve(file_id=file_id)
-                file_name = openai_file.filename
+            return f" *{file_name}*"
+
         return f" [{file_name}]({file_link})"
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
