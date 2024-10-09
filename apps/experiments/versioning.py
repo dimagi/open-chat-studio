@@ -70,6 +70,10 @@ class VersionField:
         if self.raw_value and not hasattr(self.raw_value, "version"):
             return
 
+        if self.queryset:
+            for record in self.queryset.all():
+                self.queryset_result_versions.append(VersionField(raw_value=record))
+
     @property
     def is_queryset(self) -> bool:
         return bool(self.queryset)
@@ -77,6 +81,8 @@ class VersionField:
     def display_value(self) -> Any:
         if self.to_display:
             return self.to_display(self.raw_value)
+        if self.queryset:
+            return self.queryset_result_versions
         return self.raw_value or ""
 
     def compare(self, previous_field_version: "VersionField", exclude_fields: list):
@@ -95,14 +101,13 @@ class VersionField:
         to get all items from the previous queryset that are not versions of the items in the first queryset.
         """
         previous_record_version_ids = []
-        for record in self.queryset.all():
+        for version_field in self.queryset_result_versions:
+            record = version_field.raw_value
             working_version = record.get_working_version()
             version_family_ids = [working_version.id]
             version_family_ids.extend(working_version.versions.values_list("id", flat=True))
             previous_record = previous_queryset.filter(id__in=version_family_ids).first()
 
-            version_field = VersionField(raw_value=record)
-            self.queryset_result_versions.append(version_field)
             if previous_record:
                 previous_record_version_ids.append(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record)
@@ -139,7 +144,9 @@ class Version:
         for field in self.fields:
             group_name = field.group_name
             group_info = groups.setdefault(group_name, FieldGroup(name=group_name))
-            group_info.show = group_info.show or bool(field.raw_value) or bool(field.changed)
+            group_info.show = (
+                group_info.show or bool(field.raw_value) or bool(field.changed) or bool(field.queryset_result_versions)
+            )
             group_info.has_changed_fields = group_info.has_changed_fields or field.changed
             group_info.fields.append(field)
         return list(groups.values())
