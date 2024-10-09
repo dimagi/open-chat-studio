@@ -97,8 +97,8 @@ class VersionField:
         """
         Comparing querysets does the following:
         For each item in the current queryset, we need to check if there's a version of it in the previous queryset to
-        compare the current item to. If not, we know that the current item was added. Do detect removed items, we need
-        to get all items from the previous queryset that are not versions of the items in the first queryset.
+        compare to. If not, it means that the item was added. To detect removed items, we need to get all items from the
+        previous queryset that are not versions of the items in the first queryset.
         """
         previous_record_version_ids = []
         for version_field in self.queryset_result_versions:
@@ -109,6 +109,8 @@ class VersionField:
             previous_record = previous_queryset.filter(id__in=version_family_ids).first()
 
             if previous_record:
+                # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
+                # TODO: User friendly name for static and timeout triggers
                 previous_record_version_ids.append(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record)
                 version_field.compare(prev_version_field, exclude_fields=record.get_fields_to_exclude())
