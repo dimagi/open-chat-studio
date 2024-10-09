@@ -1,54 +1,24 @@
 <div class="my-2">
-    {% if version_details.fields_changed %}
-        {% for group in version_details.fields_grouped %}
-            {% if group.show %}
-                <div class="collapse collapse-arrow bg-base-200 mb-2">
-                    <input type="checkbox" {% if group.has_changed_fields %}checked{% endif %}/>
-                    <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
-                    <div class="collapse-content">
-                        {% for field in group.fields %}
-                            <div class="flex flex-row gap-2" x-data="{showRelatedDiff: false}">
-                                <div>
-                                    {% if field.is_related and field.changed %}
-                                        <div class="flex flex-row gap-2">
-                                            <button x-on:click="showRelatedDiff = !showRelatedDiff"><i class="fas fa-xs fa-expand-alt"></i></button>
-                                            <h1 x-show="showRelatedDiff" x-cloak class="text-md font-medium leading-6">{{ field.label }}</h1>
-                                        </div>
-                                        <div x-show="showRelatedDiff" x-cloak class="bg-slate-200 dark:bg-gray-800 rounded p-2">
-                                            {% for field in field.related_field_version_details.fields %}
-                                                <div class="flex-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                                                    {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed is_previous_value=True %}
-                                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
-                                                </div>
-                                            {% endfor %}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="flex-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto" x-show="!showRelatedDiff">
-                                    {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed is_previous_value=True %}
-                                    {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
-                                </div>
+    {% for group in version_details.fields_grouped %}
+        {% if group.show %}
+            <div class="collapse collapse-arrow bg-base-200 mb-2">
+                <input type="checkbox" {% if group.has_changed_fields or not version_details.fields_changed %}checked{% endif %}/>
+                <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
+                <div class="collapse-content">
+                    {% for field in group.fields %}
+                        {% if field.changed or field.display_value %}
+                            <div class="my-1">
+                                <dl class="flex flex-col gap-2 pb-2">
+                                    <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
+                                    <dd class="pl-3 max-h-64 overflow-y-auto">
+                                        {% include 'experiments/components/versions/version_field_details.html' %}
+                                    </dd>
+                                </dl>
                             </div>
-                        {% endfor %}
-                    </div>
+                        {% endif %}
+                    {% endfor %}
                 </div>
-            {% endif %}
-        {% endfor %}
-    {% else %}
-        {% for group in version_details.fields_grouped %}
-            {% if group.show %}
-                <div class="collapse collapse-arrow bg-base-200 mb-2">
-                    <input type="checkbox" checked/>
-                    <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
-                    <div class="collapse-content">
-                        {% for field in group.fields %}
-                            <div class="max-h-64 overflow-y-auto">
-                                {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-        {% endfor %}
-    {% endif %}
+            </div>
+        {% endif %}
+    {% endfor %}
 </div>

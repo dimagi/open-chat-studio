@@ -172,6 +172,10 @@ class VersionsMixin:
     def has_versions(self):
         return self.versions.exists()
 
+    def get_fields_to_exclude(self):
+        """Returns a list of fields that should be excluded when comparing two versions."""
+        return self.DEFAULT_EXCLUDED_KEYS
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -705,7 +709,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         latest_attr_version = attr_instance.latest_version
 
         if latest_attr_version and not differs(
-            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.DEFAULT_EXCLUDED_KEYS
+            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.get_fields_to_exclude()
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
@@ -754,7 +758,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_array_field(arr: list):
             return ", ".join([entry for entry in arr])
 
-        # TODO: Add more fields
         return Version(
             instance=self,
             fields=[
@@ -771,6 +774,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
+                VersionField(
+                    group_name="Safety",
+                    name="safety_layers",
+                    queryset=self.safety_layers,
+                ),
                 VersionField(
                     group_name="Safety",
                     name="safety_violation_emails",
@@ -833,6 +841,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+                VersionField(group_name="Triggers", name="static_triggers", queryset=self.static_triggers),
+                VersionField(group_name="Triggers", name="timeout_triggers", queryset=self.timeout_triggers),
             ],
         )
 

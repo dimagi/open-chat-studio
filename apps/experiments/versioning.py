@@ -43,41 +43,79 @@ def compare_models(original: Model, new: Model, exclude_fields: list[str]) -> se
 
 
 @dataclass
+class FieldGroup:
+    name: str
+    fields: list["VersionField"] = data_field(default_factory=list)
+    show: bool = data_field(default=False)
+    # Indicates whether a field in this group changed
+    has_changed_fields: bool = data_field(default=False)
+
+
+@dataclass
 class VersionField:
     """Represents a specific detail about the instance. The label is the user friendly name"""
 
-    name: str
-    raw_value: Any
+    name: str = ""
+    raw_value: Any | None = None
     to_display: callable = None
     group_name: str = data_field(default="")
     previous_field_version: "VersionField" = data_field(default=None)
     changed: bool = False
     label: str = data_field(default="")
-    is_related: bool = data_field(default=False)
+    queryset: QuerySet | None = None
+    queryset_result_versions: list["VersionField"] = data_field(default_factory=list)
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
-        if isinstance(self.raw_value, Model | QuerySet) and hasattr(self.raw_value, "version"):
-            self.is_related = True
+        if self.raw_value and not hasattr(self.raw_value, "version"):
+            return
+
+    @property
+    def is_queryset(self) -> bool:
+        return bool(self.queryset)
 
     def display_value(self) -> Any:
         if self.to_display:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
 
-    def related_field_version_details(self):
-        version = self.raw_value.version
-        version.compare(self.previous_field_version.raw_value.version)
-        return version
+    def compare(self, previous_field_version: "VersionField", exclude_fields: list):
+        self.previous_field_version = previous_field_version
+        if self.queryset:
+            self._compare_queryset(previous_field_version.queryset)
+        else:
+            if differs(self.raw_value, previous_field_version.raw_value, exclude_model_fields=exclude_fields):
+                self.changed = True
 
+    def _compare_queryset(self, previous_queryset):
+        """
+        Comparing querysets does the following:
+        For each item in the current queryset, we need to check if there's a version of it in the previous queryset to
+        compare the current item to. If not, we know that the current item was added. Do detect removed items, we need
+        to get all items from the previous queryset that are not versions of the items in the first queryset.
+        """
+        previous_record_version_ids = []
+        for record in self.queryset.all():
+            working_version = record.get_working_version()
+            version_family_ids = [working_version.id]
+            version_family_ids.extend(working_version.versions.values_list("id", flat=True))
+            previous_record = previous_queryset.filter(id__in=version_family_ids).first()
 
-@dataclass
-class FieldGroup:
-    name: str
-    fields: list[VersionField] = data_field(default_factory=list)
-    show: bool = data_field(default=False)
-    # Indicates whether a field in this group changed
-    has_changed_fields: bool = data_field(default=False)
+            version_field = VersionField(raw_value=record)
+            self.queryset_result_versions.append(version_field)
+            if previous_record:
+                previous_record_version_ids.append(previous_record.id)
+                prev_version_field = VersionField(raw_value=previous_record)
+                version_field.compare(prev_version_field, exclude_fields=record.get_fields_to_exclude())
+                self.changed = self.changed or version_field.changed
+            else:
+                version_field.changed = self.changed = True
+
+        for previous_record in previous_queryset.exclude(id__in=previous_record_version_ids):
+            prev_version_field = VersionField(raw_value=previous_record)
+            self.changed = True
+            version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
+            self.queryset_result_versions.append(version_field)
 
 
 @dataclass
@@ -117,10 +155,7 @@ class Version:
                 f"Cannot compare instances of different types: {curr_instance_type} and {prev_instance_type}."
             )
 
-        for version_field in self.fields:
-            current_value = version_field.raw_value
-            previous_field_version = previous_version_details.get_field(version_field.name)
-            version_field.previous_field_version = previous_field_version
-            prev_version_raw_value = previous_field_version.raw_value
-            if differs(current_value, prev_version_raw_value, exclude_model_fields=self.instance.DEFAULT_EXCLUDED_KEYS):
-                self.fields_changed = version_field.changed = True
+        for field in self.fields:
+            previous_field_version = previous_version_details.get_field(field.name)
+            field.compare(previous_field_version, exclude_fields=self.instance.get_fields_to_exclude())
+            self.fields_changed = self.fields_changed or field.changed
