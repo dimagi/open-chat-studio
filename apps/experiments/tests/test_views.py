@@ -355,7 +355,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("version", ["default", 1])
+@pytest.mark.parametrize("version", [Experiment.DEFAULT_VERSION_NUMBER, 1])
 @mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
 @mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
 def test_experiment_session_message_view_creates_files(delay_mock, version, experiment, client):
@@ -367,7 +367,7 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
         "team_slug": experiment.team.slug,
         "experiment_id": experiment.id,
         "session_id": session.id,
-        "version": version,
+        "version_number": version,
     }
     url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
 

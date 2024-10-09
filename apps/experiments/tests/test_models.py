@@ -422,7 +422,7 @@ class TestExperimentSession:
     @pytest.mark.parametrize(
         ("chat_metadata_version", "expected_display_val"),
         [
-            ("default", "Default version"),
+            (Experiment.DEFAULT_VERSION_NUMBER, "Default version"),
             ("1", "v1"),
         ],
     )

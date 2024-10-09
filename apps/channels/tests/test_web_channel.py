@@ -62,7 +62,7 @@ class TestVersioning:
         _session_used, experiment_used = check_and_process_seed_message.call_args[0]
         assert experiment_used == new_version
         assert session.experiment == experiment
-        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == "default"
+        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == experiment.DEFAULT_VERSION_NUMBER
 
     @patch("apps.events.tasks.enqueue_static_triggers", Mock())
     @patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
