@@ -152,7 +152,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     def get_queryset(self):
         return (
             Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
-            .order_by("version_number")
+            .order_by("-version_number")
             .all()
         )
 
@@ -498,6 +498,25 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     button_title = "Create"
     permission_required = "experiments.add_experiment"
     pk_url_kwarg = "experiment_id"
+
+    def get_form_kwargs(self) -> dict:
+        form_kwargs = super().get_form_kwargs()
+        experiment = self.get_object()
+        if not experiment.has_versions:
+            form_kwargs["initial"] = {"is_default_version": True}
+        return form_kwargs
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        working_experiment = self.get_object()
+        version = working_experiment.version
+        if prev_version := working_experiment.latest_version:
+            context["previous_experiment_version"] = prev_version
+            # Populate diffs
+            version.compare(prev_version.version)
+
+        context["version_details"] = version
+        return context
 
     def form_valid(self, form):
         working_experiment = self.get_object()
@@ -1248,6 +1267,6 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     experiment_version = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    return render(
-        request, "experiments/components/experiment_version_details_content.html", {"experiment": experiment_version}
-    )
+
+    context = {"version_details": experiment_version.version, "experiment": experiment_version}
+    return render(request, "experiments/components/experiment_version_details_content.html", context)
