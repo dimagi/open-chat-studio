@@ -67,12 +67,12 @@ urlpatterns = [
     path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
     path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
-        "e/<int:experiment_id>/v/<str:version>/session/<int:session_id>/",
+        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
         views.experiment_chat_session,
         name="experiment_chat_session",
     ),
     path(
-        "e/<int:experiment_id>/v/<str:version>/session/<int:session_id>/message/",
+        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/message/",
         views.experiment_session_message,
         name="experiment_session_message",
     ),

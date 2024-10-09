@@ -689,14 +689,22 @@ class TestExperimentModel:
 
     def test_get_version(self, experiment):
         """Test that we are able to find a specific experiment version using any experiment in the version family"""
-        working_version = experiment
-        new_version = working_version.create_new_version()
+        first_version = experiment.create_new_version()
+        second_version = experiment.create_new_version(make_default=True)
+        experiment.refresh_from_db()
+        first_version.refresh_from_db()
 
-        assert working_version.get_version(version=working_version.version_number) == working_version
-        assert new_version.get_version(version=working_version.version_number) == working_version
+        # Get the default version
+        assert experiment.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
+        assert first_version.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
 
-        assert working_version.get_version(version=new_version.version_number) == new_version
-        assert new_version.get_version(version=new_version.version_number) == new_version
+        # Get the working version. Its version number should be 3
+        assert experiment.get_version(3) == experiment
+        assert first_version.get_version(3) == experiment
+
+        # Get a specific version
+        assert experiment.get_version(1) == first_version
+        assert first_version.get_version(1) == first_version
 
 
 @pytest.mark.django_db()

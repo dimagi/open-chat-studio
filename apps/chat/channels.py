@@ -543,22 +543,18 @@ class WebChannel(ChannelBase):
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
-        version: int | None = None,
+        version: int = Experiment.DEFAULT_VERSION_NUMBER,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
             working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
 
-        if version:
-            try:
-                experiment_version = working_experiment.get_version(version)
-                session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, experiment_version.version_number)
-            except Experiment.DoesNotExist:
-                raise Http404(f"Experiment with version {version} not found")
-        else:
-            experiment_version = working_experiment.default_version
-            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, "default")
+        try:
+            experiment_version = working_experiment.get_version(version)
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+        except Experiment.DoesNotExist:
+            raise Http404(f"Experiment with version {version} not found")
 
         WebChannel.check_and_process_seed_message(session, experiment_version)
         return session

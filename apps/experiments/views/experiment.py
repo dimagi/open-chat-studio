@@ -720,20 +720,17 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 
 
 @login_and_team_required
-def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version: str):
+def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    if version == "default":
-        experiment_version = experiment.default_version
-    else:
-        experiment_version = experiment.get_version(version=int(version))
+    experiment_version = experiment.get_version(version_number)
 
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
-        "experiment_version_number": version,
+        "experiment_version_number": version_number,
     }
     return TemplateResponse(
         request,
@@ -743,16 +740,13 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version: str):
+def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
     session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
 
-    if version == "default":
-        experiment_version = working_experiment.default_version
-    else:
-        experiment_version = working_experiment.get_version(version=int(version))
+    experiment_version = working_experiment.get_version(version_number)
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
