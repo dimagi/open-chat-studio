@@ -370,12 +370,16 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         if annotation.type == "file_citation":
                             file_citation = annotation.file_citation
                             file_id = file_citation.file_id
-                            file_link = self._get_file_link_for_citation(
+                            file_name, file_link = self._get_file_link_for_citation(
                                 file_id=file_id, forbidden_file_ids=assistant_files_ids
                             )
 
                             # Original citation text example:【6:0†source】
-                            message_content_value = message_content_value.replace(file_ref_text, file_link)
+                            message_content_value = message_content_value.replace(file_ref_text, f"[{idx}]")
+                            if file_link:
+                                message_content_value += f"\n[{idx}]: {file_link}"
+                            else:
+                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
 
                         elif annotation.type == "file_path":
                             file_path = annotation.file_path
@@ -428,7 +432,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         except Exception as ex:
             logger.exception(ex)
 
-    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> str:
+    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
@@ -447,9 +451,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         if file_id in forbidden_file_ids:
             # Don't allow downloading assistant level files
-            return f" *{file_name}*"
+            return file_name, None
 
-        return f" [{file_name}]({file_link})"
+        return file_name, file_link
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
