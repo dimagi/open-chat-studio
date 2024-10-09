@@ -595,8 +595,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
 
-    def get_version(self, version: int | str) -> "Experiment":
-        version = int(version)
+    def get_version(self, version: int) -> "Experiment":
         working_version = self.get_working_version()
         if working_version.version_number == version:
             return working_version

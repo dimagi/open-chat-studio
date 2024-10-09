@@ -728,7 +728,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     if version == "default":
         experiment_version = experiment.default_version
     else:
-        experiment_version = experiment.get_version(version=version)
+        experiment_version = experiment.get_version(version=int(version))
 
     version_specific_vars = {
         "assistant": experiment_version.assistant,
@@ -752,7 +752,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     if version == "default":
         experiment_version = working_experiment.default_version
     else:
-        experiment_version = working_experiment.get_version(version=version)
+        experiment_version = working_experiment.get_version(version=int(version))
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
