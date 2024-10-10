@@ -176,7 +176,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
         );
       }
       case "HistoryName": {
-        if (params["history_type"] != "named") {
+        if (params["history_type"] !== "named") {
           return <></>;
         }
         return (
