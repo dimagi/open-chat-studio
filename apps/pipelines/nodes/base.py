@@ -79,7 +79,7 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
-        output = self._process(input, state, node_id)
+        output = self._process(input=input, state=state, node_id=node_id)
         # Append the output to the state, otherwise do not change the state
         return (
             PipelineState(messages=[output], outputs={node_id: output})

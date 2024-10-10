@@ -40,7 +40,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -88,7 +88,7 @@ class LLMResponseMixin(BaseModel):
 class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return output.content
@@ -191,7 +191,7 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
@@ -264,7 +264,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
