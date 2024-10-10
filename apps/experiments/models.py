@@ -26,6 +26,7 @@ from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -171,6 +172,10 @@ class VersionsMixin:
     @property
     def has_versions(self):
         return self.versions.exists()
+
+    def get_fields_to_exclude(self):
+        """Returns a list of fields that should be excluded when comparing two versions."""
+        return self.DEFAULT_EXCLUDED_KEYS
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -336,6 +341,25 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
+
+    @property
+    def version(self) -> Version:
+        """
+        Returns a `Version` instance representing the experiment version.
+        """
+
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(name="name", raw_value=self.name),
+                VersionField(name="consent_text", raw_value=self.consent_text),
+                VersionField(name="capture_identifier", raw_value=self.capture_identifier),
+                VersionField(name="identifier_label", raw_value=self.identifier_label),
+                VersionField(name="identifier_type", raw_value=self.identifier_type),
+                VersionField(name="is_default", raw_value=self.is_default),
+                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
+            ],
+        )
 
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
@@ -701,7 +725,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         latest_attr_version = attr_instance.latest_version
 
         if latest_attr_version and not differs(
-            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.DEFAULT_EXCLUDED_KEYS
+            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.get_fields_to_exclude()
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
@@ -750,7 +774,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_array_field(arr: list):
             return ", ".join([entry for entry in arr])
 
-        # TODO: Add more fields
+        def format_trigger(trigger):
+            string = "If"
+            if trigger.trigger_type == "TimeoutTrigger":
+                seconds = seconds_to_human(trigger.delay)
+                string = f"{string} no response for {seconds}"
+            else:
+                string = f"{string} {trigger.get_type_display().lower()}"
+
+            trigger_action = trigger.action.get_action_type_display().lower()
+            return f"{string} then {trigger_action}"
+
         return Version(
             instance=self,
             fields=[
@@ -767,6 +801,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
+                VersionField(
+                    group_name="Safety",
+                    name="safety_layers",
+                    queryset=self.safety_layers,
+                ),
                 VersionField(
                     group_name="Safety",
                     name="safety_violation_emails",
@@ -829,6 +868,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+                VersionField(
+                    group_name="Triggers",
+                    name="static_triggers",
+                    queryset=self.static_triggers,
+                    to_display=format_trigger,
+                ),
+                VersionField(
+                    group_name="Triggers",
+                    name="timeout_triggers",
+                    queryset=self.timeout_triggers,
+                    to_display=format_trigger,
+                ),
             ],
         )
 

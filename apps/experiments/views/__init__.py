@@ -41,6 +41,7 @@ from .experiment import (  # noqa: F401
     start_session_from_invite,
     start_session_public,
     update_delete_channel,
+    update_version_description,
 )
 from .experiment_routes import (  # noqa: F401
     CreateExperimentRoute,
