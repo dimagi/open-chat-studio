@@ -191,7 +191,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
         );
       }
       case "MaxTokenLimit": {
-        if (params["history_type"] != "global") {
+        if (params["history_type"] !== "global") {
           return <></>;
         }
         return (
