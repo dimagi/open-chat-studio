@@ -79,10 +79,10 @@ class VersionField:
         return bool(self.queryset)
 
     def display_value(self) -> Any:
-        if self.to_display:
-            return self.to_display(self.raw_value)
         if self.queryset:
             return self.queryset_result_versions
+        if self.to_display:
+            return self.to_display(self.raw_value)
         return self.raw_value or ""
 
     def compare(self, previous_field_version: "VersionField", exclude_fields: list):
