@@ -28,6 +28,7 @@ from apps.pipelines.nodes.types import (
     MaxTokenLimit,
     NumOutputs,
     PipelineJinjaTemplate,
+    Prompt,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -97,7 +98,7 @@ class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: str = "You are a helpful assistant. Answer the user's query as best you can"
+    prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         prompt = ChatPromptTemplate.from_messages(
@@ -220,7 +221,9 @@ class BooleanNode(Passthrough):
 
 class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
-    prompt: str = "You are an extremely helpful router {input}"
+    llm_provider_id: LlmProviderId
+    llm_model: LlmModel
+    prompt: Prompt = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 

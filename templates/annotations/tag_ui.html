@@ -1,8 +1,8 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
-    {% for tag in object.get_linked_tags %}
-      <div class="badge {% if tag.is_system_tag %}badge-warning{% else %}badge-neutral{% endif %}"
+    {% for tag in object.tags_json %}
+      <div class="badge {% if not tag.is_system_tag %}badge-neutral{% elif tag.category == 'safety_layer_response' %}badge-error{% else %}badge-warning{% endif %}"
            title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
       >{{ tag.name }}</div>
     {% endfor %}
@@ -19,24 +19,25 @@
   {% else %}
     <div class="flex place-items-center">
       <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple
-              placeholder="Select a tag..." autocomplete="off">
+              placeholder="Select a tag..." autocomplete="off"
+              hx-get="{% url "annotations:tag_ui" request.team.slug %}"
+              hx-vals='{{ object.object_info }}'
+              hx-target="#tag-ui-{{ object.id }}"
+              hx-trigger="ts-blur">
         {% for tag in available_tags %}
           <option value="{{ tag }}" {% if tag in object.user_tag_names %}selected{% endif %}>{{ tag }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-ghost btn-sm !text-success"
-              hx-get="{% url "annotations:tag_ui" request.team.slug %}"
-              hx-vals='{{ object.object_info }}'
-              hx-target="#tag-ui-{{ object.id }}"
-      >
-        <i class="fa-solid fa-check"></i>
-      </button>
     </div>
     <div class="flex place-items-center">
       {% if object.system_tags_names %}
         <span class="text-gray-500 text-sm">System tags: </span>
-        {% for tag in object.system_tags_names %}
-          <div class="badge badge-warning">{{ tag }}</div>
+        {% for tag, category in object.system_tags_names %}
+          {% if category == 'safety_layer_response' %}
+            <div class="badge badge-error">{{ tag }}</div>
+          {% else %}
+            <div class="badge badge-warning">{{ tag }}</div>
+          {% endif %}
         {% endfor %}
       {% endif %}
     </div>

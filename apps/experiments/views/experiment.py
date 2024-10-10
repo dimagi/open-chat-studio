@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -151,7 +152,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     def get_queryset(self):
         return (
             Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
-            .order_by("version_number")
+            .order_by("-version_number")
             .all()
         )
 
@@ -212,6 +213,7 @@ class ExperimentForm(forms.ModelForm):
             "use_processor_bot_voice",
             "trace_provider",
             "participant_allowlist",
+            "debug_mode_enabled",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -223,6 +225,10 @@ class ExperimentForm(forms.ModelForm):
             ),
             "participant_allowlist": (
                 "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
+            ),
+            "debug_mode_enabled": (
+                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
+                "This is applicable only for router bots."
             ),
         }
 
@@ -493,6 +499,25 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     permission_required = "experiments.add_experiment"
     pk_url_kwarg = "experiment_id"
 
+    def get_form_kwargs(self) -> dict:
+        form_kwargs = super().get_form_kwargs()
+        experiment = self.get_object()
+        if not experiment.has_versions:
+            form_kwargs["initial"] = {"is_default_version": True}
+        return form_kwargs
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        working_experiment = self.get_object()
+        version = working_experiment.version
+        if prev_version := working_experiment.latest_version:
+            context["previous_experiment_version"] = prev_version
+            # Populate diffs
+            version.compare(prev_version.version)
+
+        context["version_details"] = version
+        return context
+
     def form_valid(self, form):
         working_experiment = self.get_object()
         description = form.cleaned_data["version_description"]
@@ -532,6 +557,10 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
         if platform.form(**form_kwargs):
             platform_forms[platform] = platform.form(**form_kwargs)
 
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
@@ -543,6 +572,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
             "platform_forms": platform_forms,
             "channels": channels,
             "available_tags": experiment.team.tag_set.filter(is_system_tag=False),
+            "deployed_version": deployed_version,
             **_get_events_context(experiment, team_slug),
             **_get_routes_context(experiment, team_slug),
             **_get_terminal_bots_context(experiment, team_slug),
@@ -693,7 +723,7 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
 
 @require_POST
 @login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int):
+def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
     """Start an authed web session with the chosen experiment, be it a specific version or not"""
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
@@ -702,22 +732,28 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int):
         participant_user=request.user,
         participant_identifier=request.user.email,
         timezone=request.session.get("detected_tz", None),
+        version=version_number,
     )
     return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, session.id])
+        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
 
 
 @login_and_team_required
-def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int):
+def experiment_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
     )
-    experiment_version = experiment.default_version
+    try:
+        experiment_version = experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404
+
     version_specific_vars = {
         "assistant": experiment_version.assistant,
         "experiment_name": experiment_version.name,
+        "experiment_version_number": version_number,
     }
     return TemplateResponse(
         request,
@@ -727,11 +763,16 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 
 
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+    working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
     user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
+
+    try:
+        experiment_version = working_experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404
 
     message_text = request.POST["message"]
     uploaded_files = request.FILES
@@ -752,22 +793,21 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
-    experiment_version = experiment.default_version
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachments,
     )
-
     version_specific_vars = {
         "assistant": experiment_version.assistant,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
         "experiments/chat/experiment_response_htmx.html",
         {
-            "experiment": experiment,
+            "experiment": working_experiment,
             "session": session,
             "message_text": message_text,
             "task_id": result.task_id,
@@ -788,6 +828,13 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
 
+    message_details = {"message": None, "error": False, "complete": progress["complete"]}
+    if progress["complete"] and progress["success"]:
+        result = progress["result"]
+        message_details["message"] = ChatMessage.objects.get(id=result["message_id"])
+    elif progress["complete"]:
+        message_details["error"] = True
+
     return TemplateResponse(
         request,
         "experiments/chat/chat_message_response.html",
@@ -795,7 +842,7 @@ def get_message_response(request, team_slug: str, experiment_id: int, session_id
             "experiment": experiment,
             "session": session,
             "task_id": task_id,
-            "progress": progress,
+            "message_details": message_details,
             "skip_render": skip_render,
             "last_message_datetime": last_message and quote(last_message.created_at.isoformat()),
         },
@@ -1064,6 +1111,9 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
+    version_specific_vars = {
+        "experiment_name": request.experiment.default_version.name,
+    }
     return TemplateResponse(
         request,
         "experiments/experiment_chat.html",
@@ -1071,6 +1121,7 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
             "experiment": request.experiment,
             "session": request.experiment_session,
             "active_tab": "experiments",
+            **version_specific_vars,
         },
     )
 
@@ -1168,6 +1219,10 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
                 }
                 for trigger in experiment.event_triggers
             ],
+            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
+            "participant_schedules": session.participant.get_schedules_for_experiment(
+                experiment, as_dict=True, include_complete=True
+            ),
         },
     )
 
@@ -1231,6 +1286,6 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
     experiment_version = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    return render(
-        request, "experiments/components/experiment_version_details_content.html", {"experiment": experiment_version}
-    )
+
+    context = {"version_details": experiment_version.version, "experiment": experiment_version}
+    return render(request, "experiments/components/experiment_version_details_content.html", context)

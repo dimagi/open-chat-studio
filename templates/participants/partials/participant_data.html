@@ -2,7 +2,7 @@
     <form x-data="{data: '{{ participant_data|escapejs }}', validJson: false}" x-init="validJson = isValidJSON(data)" method="post" action="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
         {% csrf_token %}
         <div class="mb-4">
-            <textarea x-model="data" x-on:input="validJson = isValidJSON(data)" name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data }}</textarea>
+            <textarea x-model="data" x-on:input="validJson = isValidJSON(data)" name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
         </div>
         <div class="flex items-center justify-between">
             <button class="btn btn-primary" id="submit-{{ experiment }}" type="submit" :disabled="!validJson">Update</button>
@@ -10,6 +10,6 @@
     </form>
 {% else %}
     <div class="mt-3 p-3 border rounded-lg border-neutral-500">
-    <pre><code>{{ participant_data }}</code></pre>
+    <pre><code>{{ participant_data|escape }}</code></pre>
     </div>
 {% endif %}

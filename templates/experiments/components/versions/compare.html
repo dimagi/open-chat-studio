@@ -1,0 +1,36 @@
+<div class="my-2">
+    {% if version_details.fields_changed %}
+        {% for group in version_details.fields_grouped %}
+            {% if group.show %}
+                <div class="collapse collapse-arrow bg-base-200 mb-2">
+                    <input type="checkbox" {% if group.has_changed_fields %}checked{% endif %}/>
+                    <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
+                    <div class="collapse-content">
+                        {% for field in group.fields %}
+                            <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                                {% include 'experiments/components/versions/version_field_details.html' with field=field.previous_field_version field_changed=field.changed is_previous_value=True %}
+                                {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        {% for group in version_details.fields_grouped %}
+            {% if group.show %}
+                <div class="collapse collapse-arrow bg-base-200 mb-2">
+                    <input type="checkbox" checked/>
+                    <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
+                    <div class="collapse-content">
+                        {% for field in group.fields %}
+                            <div class="max-h-64 overflow-y-auto">
+                                {% include 'experiments/components/versions/version_field_details.html' with field=field field_changed=field.changed %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</div>

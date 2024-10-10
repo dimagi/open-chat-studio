@@ -16,8 +16,15 @@
 {% block app %}
   <div class="app-card">
     <div class="flex">
-      <div class="flex-1">
+      <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
+        {% flag "experiment_versions" %}
+          {% if deployed_version %}
+            <div>
+              <span class="badge badge-success badge-sm">Deployed Version is v{{ deployed_version }}</span>
+            </div>
+          {% endif %}
+        {% endflag %}
       </div>
       <div class="justify-self-end">
         <div class="join">
@@ -30,10 +37,10 @@
             </div>
           {% endif %}
           <div class="tooltip" data-tip="Start Web Session">
-            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id %}" class="inline">
+            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
-                <i class="fa-solid fa-file-circle-plus"></i>
+                <i class="fas fa-comment"></i>
               </button>
             </form>
           </div>
@@ -236,6 +243,7 @@
               <tr>
                 <th class="px-3 py-3 text-left">Started</th>
                 <th class="px-3 py-3 text-left">Last Message</th>
+                <th class="px-3 py-3 text-left">Version</th>
                 <th class="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
@@ -244,6 +252,7 @@
                 <tr class="text-sm">
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
@@ -251,7 +260,8 @@
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
+                      >
                         Continue Chat
                       </a>
                     {% endif %}

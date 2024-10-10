@@ -1,7 +1,7 @@
 {% load chat_tags %}
 {% if not skip_render %}
-  <div class="chat-message-system flex"
-       {% if not progress.complete %}
+  <div class="flex"
+       {% if not message_details.complete %}
          hx-get="{% url 'experiments:get_message_response' team.slug experiment.id session.id task_id %}"
          hx-trigger="load delay:1s"
          hx-swap="outerHTML"
@@ -9,12 +9,11 @@
        data-last-message-datetime="{{ last_message_datetime|safe }}"
   >
     <div class="flex flex-row">
-      {% include "experiments/chat/components/system_icon.html" %}
-      <div class="message-contents">
-        {% if progress.complete and progress.success %}
-          {{ progress.result|render_markdown }}
-        {% elif progress.complete %}
-          <p class="pg-text-danger">
+      <div>
+        {% if message_details.message %}
+          {% include 'experiments/chat/ai_message.html' with message=message_details.message %}
+        {% elif message_details.error %}
+          <p class="chat-message-system pg-text-danger">
             Sorry something went wrong. This was likely an intermittent error related to load.
             Please try again, and wait a few minutes if this keeps happening.
           </p>

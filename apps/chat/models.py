@@ -22,6 +22,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     class MetadataKeys(StrEnum):
         OPENAI_THREAD_ID = "openai_thread_id"
+        EXPERIMENT_VERSION = "experiment_version"
 
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
@@ -196,6 +197,18 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             category=tag_category,
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
+
+    def get_processor_bot_tag_name(self) -> str | None:
+        """Returns the tag of the bot that generated this message"""
+        if self.message_type != ChatMessageType.AI:
+            return
+        if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
+            return tag.name
+
+    def get_safety_layer_tag_name(self) -> str | None:
+        """Returns the name of the safety layer tag, if there is one"""
+        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
+            return tag.name
 
 
 class ChatAttachment(BaseModel):

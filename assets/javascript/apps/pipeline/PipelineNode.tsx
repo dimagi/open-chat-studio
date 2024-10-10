@@ -12,6 +12,7 @@ import {
   LlmProviderIdWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
+  TextWidget,
 } from "./widgets";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 
@@ -128,6 +129,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           <>
             <div className="m-1 font-medium text-center">Number of Outputs</div>
             <input
+              className="input input-bordered w-full"
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name] || 1}
@@ -205,25 +207,26 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
           </>
         );
       }
-      default:
+      default: {
+        const humanName = inputParam.human_name
+          ? inputParam.human_name
+          : inputParam.name.replace(/_/g, " ");
         return (
           <>
-            <div className="m-1 font-medium text-center">
-              {inputParam.human_name
-                ? inputParam.human_name
-                : inputParam.name.replace(/_/g, " ")}
+            <div className="m-1 font-medium text-center capitalize">
+              {humanName}
             </div>
-            <textarea
-              className="textarea textarea-bordered w-full"
+            <TextWidget
+              humanName={humanName}
               name={inputParam.name}
               onChange={updateParamValue}
               value={params[inputParam.name] || ""}
-            ></textarea>
+            ></TextWidget>
           </>
         );
+      }
     }
   };
-
   const getOuputHandles = () => {
     const numberOfOutputs =
       parseInt(

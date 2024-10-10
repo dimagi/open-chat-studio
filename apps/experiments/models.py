@@ -2,7 +2,6 @@ import logging
 import uuid
 from datetime import datetime
 from functools import cached_property
-from typing import TypedDict
 from uuid import uuid4
 
 import markdown
@@ -23,6 +22,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
+from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -31,18 +31,17 @@ from apps.web.meta import absolute_url
 log = logging.getLogger(__name__)
 
 
-class ExperimentDetail(TypedDict):
-    """Represents a specific detail about an experiment. The label is the user friendly name"""
-
-    label: str
-    value: str | int
+class VersionsObjectManagerMixin:
+    def get_all(self):
+        """A method to return all experiments whether it is deprecated or not"""
+        return super().get_queryset()
 
 
 class PromptObjectManager(AuditingManager):
     pass
 
 
-class ExperimentObjectManager(AuditingManager):
+class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_default_or_working(self, family_member: "Experiment"):
         """
         Returns the default version of the family of experiments relating to `family_member` or if there is no default,
@@ -64,12 +63,8 @@ class ExperimentObjectManager(AuditingManager):
     def get_queryset(self):
         return super().get_queryset().filter(is_archived=False)
 
-    def get_all(self):
-        """A method to return all experiments whether it is deprecated or not"""
-        return super().get_queryset()
 
-
-class SourceMaterialObjectManager(AuditingManager):
+class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -84,7 +79,7 @@ class SourceMaterialObjectManager(AuditingManager):
         )
 
 
-class SafetyLayerObjectManager(AuditingManager):
+class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -99,7 +94,7 @@ class SafetyLayerObjectManager(AuditingManager):
         )
 
 
-class ConsentFormObjectManager(AuditingManager):
+class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -131,6 +126,8 @@ class PromptBuilderHistory(BaseTeamModel):
 
 
 class VersionsMixin:
+    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version_id"]
+
     @transaction.atomic()
     def create_new_version(self, save=True):
         """
@@ -157,6 +154,10 @@ class VersionsMixin:
     @property
     def is_working_version(self):
         return self.working_version is None
+
+    @property
+    def latest_version(self):
+        return self.versions.order_by("-created_at").first()
 
     def get_working_version(self) -> "Experiment":
         """Returns the working version of this experiment family"""
@@ -435,6 +436,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
     Each experiment can be run as a chatbot.
     """
 
+    # 0 is a reserved version number, meaning the default version
+    DEFAULT_VERSION_NUMBER = 0
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -560,6 +564,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         default="",
     )
+    debug_mode_enabled = models.BooleanField(default=False)
     objects = ExperimentObjectManager()
 
     class Meta:
@@ -593,6 +598,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+
+    def get_version(self, version: int) -> "Experiment":
+        """
+        Returns the version of this experiment family matching `version`. If `version` is 0, the default version is
+        returned.
+        """
+        working_version = self.get_working_version()
+        if version == self.DEFAULT_VERSION_NUMBER:
+            return working_version.default_version
+        elif working_version.version_number == version:
+            return working_version
+        return working_version.versions.get(version_number=version)
 
     @property
     def tools_enabled(self):
@@ -668,9 +685,27 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
+
+        If the related field's version matches the current value, link it to the new experiment version; otherwise,
+        create a new version of it.
+        Q: Why?
+        A: When a new experiment version is created, the a new version is also created for the related field. If no
+        new changes was made to this new version by the time we want to create another version of the experiment, it
+        would make sense to add the already versioned related field to the versioned experiment instead of creating yet
+        another version of it.
         """
-        if instance := getattr(self, attr_name):
-            setattr(new_version, attr_name, instance.create_new_version())
+        attr_instance = getattr(self, attr_name)
+        if not attr_instance:
+            return
+
+        latest_attr_version = attr_instance.latest_version
+
+        if latest_attr_version and not differs(
+            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.DEFAULT_EXCLUDED_KEYS
+        ):
+            setattr(new_version, attr_name, latest_attr_version)
+        else:
+            setattr(new_version, attr_name, attr_instance.create_new_version())
 
     def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
@@ -700,41 +735,102 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
-    def version_details_for_display(self) -> list[ExperimentDetail]:
+    @property
+    def version(self) -> Version:
         """
-        Returns a list of dictionaries, each representing a specific detail of this the current experiment.
-        Each dictionary should have a `name` and `value` key.
+        Returns a `Version` instance representing the experiment version.
         """
 
-        def name_or_none(attr_name):
-            return getattr(self, attr_name) or ""
+        def yes_no(value: bool):
+            return "Yes" if value else "No"
 
-        def yes_no(condition):
-            return "Yes" if condition else "No"
+        def format_tools(tools: set):
+            return ", ".join([AgentTools(tool).label for tool in tools])
 
-        return [
-            ExperimentDetail(label="Description", value=self.description),
-            ExperimentDetail(label="Version", value=self.version_number),
-            ExperimentDetail(label="Version Description", value=self.version_description),
-            ExperimentDetail(label="LLM Model", value=self.llm),
-            ExperimentDetail(label="LLM Provider", value=self.llm_provider.name),
-            ExperimentDetail(label="Assistant", value=name_or_none("assistant")),
-            ExperimentDetail(label="Pipeline", value=name_or_none("pipeline")),
-            ExperimentDetail(label="Temperature", value=self.temperature),
-            ExperimentDetail(label="Source Material", value=name_or_none("source_material")),
-            ExperimentDetail(label="Pre-Survey", value=name_or_none("pre_survey")),
-            ExperimentDetail(label="Post-Survey", value=name_or_none("post_survey")),
-            ExperimentDetail(
-                label="Safety Violation Notification Emails",
-                value=", ".join(self.safety_violation_notification_emails),
-            ),
-            ExperimentDetail(label="Max Token Limit", value=self.max_token_limit),
-            ExperimentDetail(label="Voice Response Behaviour", value=self.get_voice_response_behaviour_display),
-            ExperimentDetail(label="Trace Provider", value=name_or_none("trace_provider")),
-            ExperimentDetail(label="Consent Form", value=name_or_none("consent_form")),
-            ExperimentDetail(label="Conversational Consent Enabled", value=yes_no(self.conversational_consent_enabled)),
-            ExperimentDetail(label="Echo Transcript", value=yes_no(self.echo_transcript)),
-        ]
+        def format_array_field(arr: list):
+            return ", ".join([entry for entry in arr])
+
+        # TODO: Add more fields
+        return Version(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="description", raw_value=self.description),
+                VersionField(
+                    group_name="General",
+                    name="allowlist",
+                    raw_value=self.participant_allowlist,
+                    to_display=format_array_field,
+                ),
+                # Language Model
+                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
+                VersionField(group_name="Language Model", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                # Safety
+                VersionField(
+                    group_name="Safety",
+                    name="safety_violation_emails",
+                    raw_value=", ".join(self.safety_violation_notification_emails),
+                ),
+                VersionField(
+                    group_name="Safety",
+                    name="input_formatter",
+                    raw_value=self.input_formatter,
+                ),
+                VersionField(
+                    group_name="Safety",
+                    name="max_token_limit",
+                    raw_value=self.max_token_limit,
+                ),
+                # Consent
+                VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
+                VersionField(
+                    group_name="Consent",
+                    name="conversational_consent_enabled",
+                    raw_value=self.conversational_consent_enabled,
+                    to_display=yes_no,
+                ),
+                # Surveys
+                VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
+                VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
+                # Voice
+                VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
+                VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
+                VersionField(
+                    group_name="Voice",
+                    name="voice_response_behaviour",
+                    raw_value=VoiceResponseBehaviours(self.voice_response_behaviour).label,
+                ),
+                VersionField(
+                    group_name="Voice",
+                    name="echo_transcript",
+                    raw_value=self.echo_transcript,
+                    to_display=yes_no,
+                ),
+                VersionField(
+                    group_name="Voice",
+                    name="use_processor_bot_voice",
+                    raw_value=self.use_processor_bot_voice,
+                    to_display=yes_no,
+                ),
+                # Source material
+                VersionField(
+                    group_name="Source Material",
+                    name="source_material",
+                    raw_value=self.source_material,
+                ),
+                # Tools
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=set(self.tools),
+                    to_display=format_tools,
+                ),
+                VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
+                VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
+                VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+            ],
+        )
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -1183,6 +1279,11 @@ class ExperimentSession(BaseTeamModel):
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
 
+    @property
+    def experiment_version_for_display(self):
+        version_number = self.get_experiment_version_number()
+        return "Default version" if version_number == Experiment.DEFAULT_VERSION_NUMBER else f"v{version_number}"
+
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment
         return participant_data.get("timezone")
@@ -1199,3 +1300,10 @@ class ExperimentSession(BaseTeamModel):
         if scheduled_messages:
             participant_data = {**participant_data, "scheduled_messages": scheduled_messages}
         return self.participant.global_data | participant_data
+
+    def get_experiment_version_number(self) -> int:
+        """
+        Returns the version that is being chatted to. If it's the default version, return 0 which is the default
+        experiment's version number
+        """
+        return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, Experiment.DEFAULT_VERSION_NUMBER)

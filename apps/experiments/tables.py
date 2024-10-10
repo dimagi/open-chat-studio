@@ -126,7 +126,7 @@ class ConsentFormTable(tables.Table):
 
 class ExperimentSessionsTable(tables.Table):
     participant = actions.chip_column(
-        accessor="participant", align="center", orderable=True, order_by="participant__identifier"
+        accessor="participant", align="left", orderable=True, order_by="participant__identifier"
     )
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
@@ -134,6 +134,7 @@ class ExperimentSessionsTable(tables.Table):
         verbose_name="Tags",
         template_name="annotations/tag_ui.html",
     )
+    version = columns.Column(verbose_name="Version", accessor="experiment_version_for_display")
     actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
 
     def render_tags(self, record, bound_column):
@@ -156,7 +157,7 @@ class ExperimentVersionsTable(tables.Table):
         template_code="""{% if record.is_default_version %}
         <span aria-label="true">✓</span>
         {% endif %}""",
-        verbose_name="Default Version",
+        verbose_name="Deployed",
     )
     details = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_details_button.html",
