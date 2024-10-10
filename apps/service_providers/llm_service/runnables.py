@@ -375,7 +375,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             )
 
                             # Original citation text example:【6:0†source】
-                            message_content_value = message_content_value.replace(file_ref_text, f"[{idx}]")
+                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
                             if file_link:
                                 message_content_value += f"\n[{idx}]: {file_link}"
                             else:

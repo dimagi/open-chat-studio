@@ -411,13 +411,13 @@ def test_assistant_response_with_annotations(
         expected_output_message = (
             "![test.png](file:dimagi-test:1:10)\n"
             "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
-            " tree stuff [existing.txt]()."
+            " tree stuff [1].\n\[1\]: existing.txt"
         )
     else:
         expected_output_message = (
             "![test.png](file:dimagi-test:1:10)\n"
             "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
-            " tree stuff [existing.txt](file:dimagi-test:1:9)."
+            " tree stuff [1].\n[1]: file:dimagi-test:1:9"
         )
     assert result.output == expected_output_message
 
