@@ -1,6 +1,7 @@
 from datetime import datetime
 from functools import cached_property
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
@@ -208,14 +209,33 @@ class PipelineChatHistory(BaseModel):
             summaries__isnull=True,  # These messages aren't in a summary
             chat_history__session_id=self.session_id,
         )
+        langchain_messages_to_last_summary = [message for message_pair in messages_to_last_summary for message in message_pair.as_langchain_messages()]
+
         try:
             last_summary = PipelineChatHistory.objects.get(id=self.id).summaries.order_by("-created_at").first()
             if last_summary is not None:
-                return [last_summary, *messages_to_last_summary]
+                langchain_last_summary = SystemMessage(content=last_summary)
+                return [langchain_last_summary, *langchain_messages_to_last_summary]
         except PipelineChatHistory.DoesNotExist:
-            return messages_to_last_summary
+            return langchain_messages_to_last_summary
 
-        return messages_to_last_summary
+        return langchain_messages_to_last_summary
+
+    # @staticmethod
+    # def get_messages_until_summary(session_id: int, history_id: int) -> list:
+    #     messages_to_last_summary = PipelineChatMessages.objects.filter(
+    #         chat_history_id=history_id,
+    #         summaries__isnull=True,  # These messages aren't in a summary
+    #         chat_history__session_id=session_id,
+    #     )
+    #     try:
+    #         last_summary = PipelineChatHistory.objects.get(id=history_id).summaries.order_by("-created_at").first()
+    #         if last_summary is not None:
+    #             return [last_summary, *messages_to_last_summary]
+    #     except PipelineChatHistory.DoesNotExist:
+    #         return messages_to_last_summary
+
+    #     return messages_to_last_summary
 
 
 class PipelineChatMessages(BaseModel):
@@ -225,6 +245,12 @@ class PipelineChatMessages(BaseModel):
 
     def as_tuples(self):
         return [(ChatMessageType.HUMAN.value, self.human_message), (ChatMessageType.AI.value, self.ai_message)]
+
+    def as_langchain_messages(self):
+        return [
+            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id}),
+            AIMessage(content=self.ai_message, additional_kwargs={"id": self.id})
+        ]
 
 
 class PipelineChatHistorySummary(BaseModel):

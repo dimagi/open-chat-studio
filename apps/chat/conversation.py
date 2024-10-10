@@ -17,6 +17,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.pipelines.models import PipelineChatHistory, PipelineChatHistorySummary
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
 
@@ -114,30 +115,57 @@ def compress_chat_history(
     input_messages: list,
     keep_history_len: int = 10,
 ) -> list[BaseMessage]:
+    history_messages = chat.get_langchain_messages_until_summary()
     try:
-        return _compress_chat_history(
-            chat,
+        history, last_message, summary = _compress_chat_history(
+            history=history_messages,
             llm=llm,
             max_token_limit=max_token_limit,
             input_messages=input_messages,
             keep_history_len=keep_history_len,
         )
+        ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+        return [SystemMessage(content=summary)] + history
     except (NameError, ImportError, ValueError, NotImplementedError):
         # typically this is because a library required to count tokens isn't installed
         log.exception("Unable to compress history")
-        return chat.get_langchain_messages_until_summary()
+        return history_messages
+
+
+def compress_pipeline_chat_history(
+    history: PipelineChatHistory, llm: BaseChatModel, input_messages: list, keep_history_len: int = 10
+):
+    messages = history.get_messages_until_summary()
+    try:
+        history_messages, last_message, summary_message = _compress_chat_history(
+            history=messages,
+            llm=llm,
+            max_token_limit=history.token_limit,
+            input_messages=input_messages,
+            keep_history_len=keep_history_len,
+        )
+        PipelineChatHistorySummary.objects.create(
+            history=history,
+            messages=messages,
+            summary=summary_message,
+        )
+        return [SystemMessage(content=summary_message)] + history_messages
+    except (NameError, ImportError, ValueError, NotImplementedError):
+        # typically this is because a library required to count tokens isn't installed
+        log.exception("Unable to compress history")
+        return messages
 
 
 def _compress_chat_history(
-    chat: Chat, llm: BaseChatModel, max_token_limit: int, input_messages: list, keep_history_len: int = 10
-) -> list[BaseMessage]:
+    history: list, llm: BaseChatModel, max_token_limit: int, input_messages: list, keep_history_len: int = 10
+) -> tuple[BaseMessage, BaseMessage, list[BaseMessage]]:
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
     """
-    history = chat.get_langchain_messages_until_summary()
     if max_token_limit <= 0 or not history:
         log.info("Skipping chat history compression")
         return history
+    breakpoint()
 
     total_messages = history.copy()
     total_messages.extend(input_messages)
@@ -151,8 +179,7 @@ def _compress_chat_history(
     history, last_message, summary = compress_chat_history_from_messages(
         llm, history, keep_history_len, max_token_limit, input_messages
     )
-    ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-    return [SystemMessage(content=summary)] + history
+    return history, last_message, summary
 
 
 def compress_chat_history_from_messages(
