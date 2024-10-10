@@ -26,6 +26,7 @@ from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -758,6 +759,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def format_array_field(arr: list):
             return ", ".join([entry for entry in arr])
 
+        def format_trigger(trigger):
+            string = "If"
+            if trigger.trigger_type == "TimeoutTrigger":
+                seconds = seconds_to_human(trigger.delay)
+                string = f"{string} no response for {seconds}"
+            else:
+                string = f"{string} {trigger.get_type_display().lower()}"
+
+            trigger_action = trigger.action.get_action_type_display().lower()
+            return f"{string} then {trigger_action}"
+
         return Version(
             instance=self,
             fields=[
@@ -841,8 +853,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
-                VersionField(group_name="Triggers", name="static_triggers", queryset=self.static_triggers),
-                VersionField(group_name="Triggers", name="timeout_triggers", queryset=self.timeout_triggers),
+                VersionField(
+                    group_name="Triggers",
+                    name="static_triggers",
+                    queryset=self.static_triggers,
+                    to_display=format_trigger,
+                ),
+                VersionField(
+                    group_name="Triggers",
+                    name="timeout_triggers",
+                    queryset=self.timeout_triggers,
+                    to_display=format_trigger,
+                ),
             ],
         )
 

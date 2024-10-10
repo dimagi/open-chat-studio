@@ -72,7 +72,7 @@ class VersionField:
 
         if self.queryset:
             for record in self.queryset.all():
-                self.queryset_result_versions.append(VersionField(raw_value=record))
+                self.queryset_result_versions.append(VersionField(raw_value=record, to_display=self.to_display))
 
     @property
     def is_queryset(self) -> bool:
@@ -110,17 +110,17 @@ class VersionField:
 
             if previous_record:
                 # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
-                # TODO: User friendly name for static and timeout triggers
                 previous_record_version_ids.append(previous_record.id)
-                prev_version_field = VersionField(raw_value=previous_record)
+                prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
                 version_field.compare(prev_version_field, exclude_fields=record.get_fields_to_exclude())
                 self.changed = self.changed or version_field.changed
             else:
                 version_field.changed = self.changed = True
 
         for previous_record in previous_queryset.exclude(id__in=previous_record_version_ids):
-            prev_version_field = VersionField(raw_value=previous_record)
+            # A previous record missing from the current queryset means that something changed
             self.changed = True
+            prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
             self.queryset_result_versions.append(version_field)
 
