@@ -431,6 +431,12 @@ class EditExperiment(BaseExperimentView, UpdateView):
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
         return initial
 
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if obj.working_version:
+            raise Http404("Cannot edit experiment versions.")
+        return obj
+
 
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
