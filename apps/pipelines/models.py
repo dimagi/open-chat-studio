@@ -98,15 +98,13 @@ class Pipeline(BaseTeamModel):
         pipeline_run = self._create_pipeline_run(input, session)
         logging_callback = PipelineLoggingCallbackHandler(pipeline_run)
 
-        if save_run_to_history and session is not None:
-            self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
             output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
+                self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
                 self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
@@ -182,3 +180,32 @@ class PipelineEventInputs(models.TextChoices):
     FULL_HISTORY = "full_history", "Full History"
     HISTORY_LAST_SUMMARY = "history_last_summary", "History to last summary"
     LAST_MESSAGE = "last_message", "Last message"
+
+
+class PipelineChatHistoryTypes(models.TextChoices):
+    NODE = "node", "Node History"
+    NAMED = "named", "Named History"
+    GLOBAL = "global", "Global History"
+    NONE = "none", "No History"
+
+
+class PipelineChatHistory(BaseModel):
+    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="pipeline_chat_history")
+
+    type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
+    name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
+        ]
+        ordering = ["-created_at"]
+
+
+class PipelineChatMessages(BaseModel):
+    chat_history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="messages")
+    human_message = models.TextField()
+    ai_message = models.TextField()
+
+    def as_tuples(self):
+        return [(ChatMessageType.HUMAN.value, self.human_message), (ChatMessageType.AI.value, self.ai_message)]

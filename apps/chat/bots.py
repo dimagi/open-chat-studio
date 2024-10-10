@@ -283,5 +283,7 @@ class PipelineBot:
         self.session = session
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
-        output = self.experiment.pipeline.invoke(PipelineState(messages=[user_input]), self.session)
+        output = self.experiment.pipeline.invoke(
+            PipelineState(messages=[user_input], experiment_session=self.session), self.session
+        )
         return output["messages"][-1]

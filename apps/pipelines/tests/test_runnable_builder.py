@@ -219,10 +219,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
                         "source_material_id": source_material.id,
-                        "prompt": (
-                            "Node 1: Use this {source_material} to answer questions about {participant_data}."
-                            " {input}"
-                        ),
+                        "prompt": ("Node 1: Use this {source_material} to answer questions about {participant_data}."),
                     },
                 },
                 "id": "llm-1",
@@ -236,7 +233,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
                         "source_material_id": source_material.id,
-                        "prompt": "Node 2: ({input})",
+                        "prompt": "Node 2:",
                     },
                 },
                 "id": "llm-2",
@@ -250,8 +247,8 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
         -1
     ]
     expected_output = (
-        f"Node 2: (Node 1: Use this {source_material.material} to answer questions "
-        f"about {participant_data.data}. {user_input})"
+        f"Node 2: Node 1: Use this {source_material.material} to answer questions "
+        f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output
 

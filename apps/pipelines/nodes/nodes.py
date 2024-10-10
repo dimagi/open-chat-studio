@@ -5,21 +5,27 @@ import tiktoken
 from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import Field, create_model
+from pydantic import BaseModel, Field, create_model
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import ParticipantData, SourceMaterial
+from apps.chat.conversation import compress_chat_history
+from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
+    HistoryName,
+    HistoryType,
     Keywords,
     LlmModel,
     LlmProviderId,
     LlmTemperature,
+    MaxTokenLimit,
     NumOutputs,
     PipelineJinjaTemplate,
     Prompt,
@@ -34,7 +40,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -56,10 +62,13 @@ class RenderTemplate(PipelineNode):
         return template.render(content)
 
 
-class LLMResponseMixin:
+class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
+    history_type: HistoryType = PipelineChatHistoryTypes.NONE
+    history_name: HistoryName | None = None
+    max_token_limit: MaxTokenLimit = 8192
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -79,7 +88,7 @@ class LLMResponseMixin:
 class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return output.content
@@ -91,19 +100,22 @@ class LLMResponseWithPrompt(LLMResponse):
     source_material_id: SourceMaterialId | None = None
     prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
-        prompt = PromptTemplate.from_template(template=self.prompt)
-        context = self._get_context(input, state, prompt)
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+        )
+        context = self._get_context(input, state, prompt, node_id)
+        if self.history_type != PipelineChatHistoryTypes.NONE:
+            input_messages = prompt.invoke(context).to_messages()
+            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
+        self._save_history(state["experiment_session"], node_id, input, output.content)
         return output.content
 
-    def _get_context(self, input, state: PipelineState, prompt: PromptTemplate):
-        session = state["experiment_session"]
-        context = {}
-
-        if "input" in prompt.input_variables:
-            context["input"] = input
+    def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
+        session: ExperimentSession = state["experiment_session"]
+        context = {"input": input}
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")
@@ -117,6 +129,46 @@ class LLMResponseWithPrompt(LLMResponse):
             context["current_datetime"] = self._get_current_datetime(session)
 
         return context
+
+    def _get_history_name(self, node_id):
+        if self.history_type == PipelineChatHistoryTypes.NAMED:
+            return self.history_name
+        return node_id
+
+    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list:
+        if self.history_type == PipelineChatHistoryTypes.NONE:
+            return []
+
+        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+            return compress_chat_history(
+                chat=session.chat,
+                llm=self.get_chat_model(),
+                max_token_limit=self.max_token_limit,
+                input_messages=input_messages,
+            )
+
+        try:
+            history: PipelineChatHistory = session.pipeline_chat_history.get(
+                type=self.history_type, name=self._get_history_name(node_id)
+            )
+        except PipelineChatHistory.DoesNotExist:
+            return []
+        message_pairs = history.messages.all()
+        return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
+
+    def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
+        if self.history_type == PipelineChatHistoryTypes.NONE:
+            return
+
+        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+            # Global History is saved outside of the node
+            return
+
+        history, _ = session.pipeline_chat_history.get_or_create(
+            type=self.history_type, name=self._get_history_name(node_id)
+        )
+        message = history.messages.create(human_message=human_message, ai_message=ai_message)
+        return message
 
     def _get_participant_data(self, session):
         if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
@@ -138,7 +190,7 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
+    def _process(self, input, **kwargs) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
@@ -147,7 +199,7 @@ class SendEmail(PipelineNode):
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return input
 
@@ -211,7 +263,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState) -> RunnableLambda:
+    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
