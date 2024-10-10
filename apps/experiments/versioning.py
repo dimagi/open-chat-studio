@@ -52,6 +52,13 @@ class FieldGroup:
 
 
 @dataclass
+class TextDiff:
+    character: str
+    added: bool = False
+    removed: bool = False
+
+
+@dataclass
 class VersionField:
     """Represents a specific detail about the instance. The label is the user friendly name"""
 
@@ -64,6 +71,7 @@ class VersionField:
     label: str = data_field(default="")
     queryset: QuerySet | None = None
     queryset_result_versions: list["VersionField"] = data_field(default_factory=list)
+    text_diffs: list[TextDiff] = data_field(default_factory=list)
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
@@ -92,6 +100,8 @@ class VersionField:
         else:
             if differs(self.raw_value, previous_field_version.raw_value, exclude_model_fields=exclude_fields):
                 self.changed = True
+                if isinstance(self.raw_value, str):
+                    self._compute_character_level_diff()
 
     def _compare_queryset(self, previous_queryset):
         """
@@ -123,6 +133,34 @@ class VersionField:
             prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
             self.queryset_result_versions.append(version_field)
+
+    def _compute_character_level_diff(self):
+        from difflib import Differ
+
+        differ = Differ()
+        difflines = list(differ.compare(self.previous_field_version.raw_value, self.raw_value))
+        operations = {
+            "no_change": " ",
+            "removed": "-",
+            "added": "+",
+        }
+
+        print(difflines)
+        for line in difflines:
+            operation = line[0]
+            character = line[2:]
+            if operation == operations["no_change"]:
+                # line is same in both
+                self.previous_field_version.text_diffs.append(TextDiff(character=character))
+                self.text_diffs.append(TextDiff(character=character))
+
+            elif operation == operations["removed"]:
+                # line is only on the left
+                self.previous_field_version.text_diffs.append(TextDiff(character=character, removed=True))
+
+            elif operation == operations["added"]:
+                # line is only on the right
+                self.text_diffs.append(TextDiff(character=character, added=True))
 
 
 @dataclass
