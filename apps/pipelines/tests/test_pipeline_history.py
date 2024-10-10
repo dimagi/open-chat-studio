@@ -483,6 +483,91 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_llm_with_named_history_cached(get_llm_service, provider, pipeline, experiment_session):
+    # Multiple nodes with the same history should fetch this from a cache
+    llm = FakeLlmEcho()
+    service = build_fake_llm_service(None, [0], llm)
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [
+            {
+                "id": "llm-1->llm-2",
+                "source": "llm-1",
+                "target": "llm-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "llm-2->llm-3",
+                "source": "llm-2",
+                "target": "llm-3",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "data": {
+                    "id": "llm-1",
+                    "label": "Get the robot to respond",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "history_type": "named",
+                        "history_name": "history1",
+                        "prompt": "Node 1:",
+                    },
+                },
+                "id": "llm-1",
+            },
+            {
+                "data": {
+                    "id": "llm-2",
+                    "label": "Get the robot to respond again",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "prompt": "Node 2:",
+                        "history_type": "named",
+                        "history_name": "history1",
+                    },
+                },
+                "id": "llm-2",
+            },
+            {
+                "data": {
+                    "id": "llm-3",
+                    "label": "No History",
+                    "type": "LLMResponseWithPrompt",
+                    "params": {
+                        "llm_provider_id": provider.id,
+                        "llm_model": "fake-model",
+                        "prompt": "Node 3:",
+                        "history_type": "named",
+                        "history_name": "history1",
+                    },
+                },
+                "id": "llm-3",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    user_input = "The User Input"
+    output = runnable.invoke(
+        PipelineState(cached_history={}, messages=[user_input], experiment_session=experiment_session)
+    )
+    assert "history1" in output["cached_history"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)

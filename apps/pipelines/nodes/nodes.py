@@ -115,7 +115,7 @@ class LLMResponseWithPrompt(LLMResponse):
         context = {"input": input}
 
         if self.history_type != PipelineChatHistoryTypes.NONE:
-            context["history"] = self._get_history(session, node_id, input)
+            context["history"] = self._get_history(input, state, node_id)
 
         if "source_material" in prompt.input_variables and self.source_material_id is None:
             raise PipelineNodeBuildError("No source material set, but the prompt expects it")
@@ -130,7 +130,9 @@ class LLMResponseWithPrompt(LLMResponse):
 
         return context
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input) -> list:
+    def _get_history(self, input, state: PipelineState, node_id: str) -> list:
+        session: ExperimentSession = state["experiment_session"]
+
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
@@ -147,10 +149,19 @@ class LLMResponseWithPrompt(LLMResponse):
         else:
             history_name = node_id
 
-        try:
-            history: PipelineChatHistory = session.pipeline_chat_history.get(type=self.history_type, name=history_name)
-        except PipelineChatHistory.DoesNotExist:
-            return []
+        if state["cached_history"] is not None and history_name in state["cached_history"]:
+            history = state["cached_history"][history_name]
+        else:
+            try:
+                history: PipelineChatHistory = session.pipeline_chat_history.get(
+                    type=self.history_type, name=history_name
+                )
+                if state["cached_history"] is None:
+                    state["cached_history"] = {history_name: history}
+                else:
+                    state["cached_history"][history_name] = history
+            except PipelineChatHistory.DoesNotExist:
+                return []
         message_pairs = history.messages.all()
         return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
 
