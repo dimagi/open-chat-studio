@@ -101,8 +101,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     assert history.messages.count() == 1
     assert history.messages.first().as_tuples() == [("human", user_input), ("ai", f"Node 1: {user_input}")]
 
-    history_2 = PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").count()
-    assert history_2 == 0
+    assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").exists()
 
     user_input_2 = "Saying more stuff"
     output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
