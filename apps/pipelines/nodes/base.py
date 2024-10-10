@@ -87,7 +87,7 @@ class PipelineNode(BaseModel, ABC):
             else PipelineState(outputs={node_id: output})
         )
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
