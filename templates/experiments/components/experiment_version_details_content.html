@@ -1,13 +1,24 @@
 <div class="modal-header">
     <div class="modal-title mb-5" id="detailsModalLabel">
         <h3 class="text-base text-xl font-bold mb-2">Details for {{ experiment }}</h3>
-        {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as update_default_url%}
-        <form method="post" action="{{ update_default_url }}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
-                Make default version
-            </button>
-        </form>
+        <div class="flex flex-row gap-1">
+            {% url 'experiments:set-default-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as update_default_url%}
+            <form method="post" action="{{ update_default_url }}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
+                    Make default version
+                </button>
+            </form>
+            <div class="modal-title mb-5">
+                <form method="post" action="{% url 'experiments:reset_to_version' team_slug=team.slug experiment_id=experiment.working_version_id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-error">
+                        Reset to this version
+                    </button>
+                    <input hidden name="version_number" value="{{ experiment.version_number }}">
+                </form>
+            </div>
+        </div>
     </div>
     <form class="my-2" x-data="{
                                editActive: false,

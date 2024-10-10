@@ -676,6 +676,24 @@ class TestExperimentModel:
         assert experiment_version3.source_material != experiment_version2.source_material
         assert experiment_version3.source_material.working_version == original_experiment.source_material
 
+    def test_reset_experiment_to_specific_version(self):
+        team = TeamFactory()
+        source_material = SourceMaterialFactory(team=team, material="material science is interesting")
+        working_version = ExperimentFactory(name="I am Alpha", source_material=source_material, team=team)
+        first_version = working_version.create_new_version()
+        working_version.name = "I am Bravo"
+        working_version.save()
+        second_version = working_version.create_new_version()
+        working_version.name = "I am Charlie"
+        working_version.save()
+
+        # Reset it to the first version
+        working_version.reset_to_version(1)
+        assert working_version.name == first_version.name == "I am Alpha"
+        # Reset it to the second version
+        working_version.reset_to_version(2)
+        assert working_version.name == second_version.name == "I am Bravo"
+
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
             assert layer.working_version is None

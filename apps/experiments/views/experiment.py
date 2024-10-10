@@ -1282,3 +1282,19 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
 
     context = {"version_details": experiment_version.version, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
+
+
+@login_and_team_required
+def reset_to_version(request, team_slug: str, experiment_id: int):
+    # TODO: User needs to confirm before doing this
+    experiment_version = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+
+    experiment_version.reset_to_version(request.POST["version_number"])
+
+    return redirect(
+        reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )

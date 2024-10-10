@@ -868,6 +868,30 @@ class Experiment(BaseTeamModel, VersionsMixin):
             ],
         )
 
+    def reset_to_version(self, version: int):
+        """
+        Here be dragons!
+        """
+        if version == self.version_number:
+            return
+        base_version = self.get_working_version().versions.get(version_number=version)
+        exclude_fields = [
+            "id",
+            "public_id",
+            "is_default_version",
+            "working_version_id",
+            "created_at",
+            "updated_at",
+            "version_number",
+        ]
+        for field in self._meta.fields:
+            if field.name in exclude_fields:
+                continue
+            base_version_value = getattr(base_version, field.name)
+            setattr(self, field.name, base_version_value)
+        # TODO: What to do with related+versioned records?
+        self.save()
+
 
 class ExperimentRouteType(models.TextChoices):
     PROCESSOR = "processor"
