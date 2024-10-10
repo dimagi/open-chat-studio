@@ -194,12 +194,29 @@ class PipelineChatHistory(BaseModel):
 
     type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
     name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
+    token_limit = models.IntegerField(default=8192)  # When to create a new summary
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
         ]
         ordering = ["-created_at"]
+
+    @staticmethod
+    def get_messages_until_summary(session_id: int, history_id: int) -> list:
+        messages_to_last_summary = PipelineChatMessages.objects.filter(
+            chat_history_id=history_id,
+            summaries__isnull=True,  # These messages aren't in a summary
+            chat_history__session_id=session_id,
+        )
+        try:
+            last_summary = PipelineChatHistory.objects.get(id=history_id).summaries.order_by("-created_at").first()
+            if last_summary is not None:
+                return [last_summary, *messages_to_last_summary]
+        except PipelineChatHistory.DoesNotExist:
+            return messages_to_last_summary
+
+        return messages_to_last_summary
 
 
 class PipelineChatMessages(BaseModel):
@@ -209,3 +226,9 @@ class PipelineChatMessages(BaseModel):
 
     def as_tuples(self):
         return [(ChatMessageType.HUMAN.value, self.human_message), (ChatMessageType.AI.value, self.ai_message)]
+
+
+class PipelineChatHistorySummary(BaseModel):
+    history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="summaries")
+    messages = models.ManyToManyField(PipelineChatMessages, related_name="summaries")
+    summary = models.TextField()
