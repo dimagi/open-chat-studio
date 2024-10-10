@@ -130,6 +130,11 @@ class LLMResponseWithPrompt(LLMResponse):
 
         return context
 
+    def _get_history_name(self, node_id):
+        if self.history_type == PipelineChatHistoryTypes.NAMED:
+            return self.history_name
+        return node_id
+
     def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
@@ -142,13 +147,10 @@ class LLMResponseWithPrompt(LLMResponse):
                 input_messages=input_messages,
             )
 
-        if self.history_type == PipelineChatHistoryTypes.NAMED:
-            history_name = self.history_name
-        else:
-            history_name = node_id
-
         try:
-            history: PipelineChatHistory = session.pipeline_chat_history.get(type=self.history_type, name=history_name)
+            history: PipelineChatHistory = session.pipeline_chat_history.get(
+                type=self.history_type, name=self._get_history_name(node_id)
+            )
         except PipelineChatHistory.DoesNotExist:
             return []
         message_pairs = history.messages.all()
@@ -162,12 +164,9 @@ class LLMResponseWithPrompt(LLMResponse):
             # Global History is saved outside of the node
             return
 
-        if self.history_type == PipelineChatHistoryTypes.NAMED:
-            history_name = self.history_name
-        else:
-            history_name = node_id
-
-        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=history_name)
+        history, _ = session.pipeline_chat_history.get_or_create(
+            type=self.history_type, name=self._get_history_name(node_id)
+        )
         message = history.messages.create(human_message=human_message, ai_message=ai_message)
         return message
 
