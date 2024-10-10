@@ -451,7 +451,12 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         except File.DoesNotExist:
             client = self.state.raw_client
             openai_file = client.files.retrieve(file_id=file_id)
-            file_name = openai_file.filename
+            try:
+                openai_file = client.files.retrieve(file_id=file_id)
+                file_name = openai_file.filename
+            except Exception as e:
+                logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
+                file_name = "Unknown File"
 
         if file_id in forbidden_file_ids:
             # Don't allow downloading assistant level files
