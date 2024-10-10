@@ -392,7 +392,10 @@ def test_assistant_response_with_annotations(
     ]
     ai_message = (
         "Hi there human. The generated file can be [downloaded here](sandbox:/mnt/data/file.txt)."
+        " A made up link to [file1.pdf](https://example.com/download/file-1) "
+        "[file2.pdf](https://example.com/download/file-2)"
         " Also, leaves are tree stuff【6:0†source】."
+        " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
 
     assistant = create_experiment_runnable(session.experiment, session)
@@ -410,14 +413,17 @@ def test_assistant_response_with_annotations(
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
             "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
-            " tree stuff [1].\n\[1\]: existing.txt"
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            " A made up link to *file1.pdf* *file2.pdf*"
+            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
         )
     else:
         expected_output_message = (
             "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10). Also, leaves are"
-            " tree stuff [1].\n[1]: file:dimagi-test:1:9"
+            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            " A made up link to *file1.pdf* *file2.pdf*"
+            " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
+            "\n[1]: file:dimagi-test:1:9"
         )
     assert result.output == expected_output_message
 
