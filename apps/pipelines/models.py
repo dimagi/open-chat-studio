@@ -202,15 +202,14 @@ class PipelineChatHistory(BaseModel):
         ]
         ordering = ["-created_at"]
 
-    @staticmethod
-    def get_messages_until_summary(session_id: int, history_id: int) -> list:
+    def get_messages_until_summary(self):
         messages_to_last_summary = PipelineChatMessages.objects.filter(
-            chat_history_id=history_id,
+            chat_history_id=self.id,
             summaries__isnull=True,  # These messages aren't in a summary
-            chat_history__session_id=session_id,
+            chat_history__session_id=self.session_id,
         )
         try:
-            last_summary = PipelineChatHistory.objects.get(id=history_id).summaries.order_by("-created_at").first()
+            last_summary = PipelineChatHistory.objects.get(id=self.id).summaries.order_by("-created_at").first()
             if last_summary is not None:
                 return [last_summary, *messages_to_last_summary]
         except PipelineChatHistory.DoesNotExist:
