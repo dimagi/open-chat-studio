@@ -196,7 +196,9 @@ class PipelineChatHistory(BaseModel):
     name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
 
     class Meta:
-        unique_together = [("session", "type", "name")]
+        constraints = [
+            models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
+        ]
         ordering = ["-created_at"]
 
 
