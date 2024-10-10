@@ -155,14 +155,15 @@ class Version:
 
     def compare(self, previous_version_details: "Version"):
         """Compares the current instance with the previous version and updates the changed status of fields."""
-        self.previous_instance = previous_version_details.instance
+        previous_instance = previous_version_details.instance
 
-        if type(self.previous_instance) != type(self.instance):  # noqa: E721
+        if type(previous_instance) != type(self.instance):  # noqa: E721
             prev_instance_type = type(self.previous_instance)
             curr_instance_type = type(self.instance)
             raise TypeError(
                 f"Cannot compare instances of different types: {curr_instance_type} and {prev_instance_type}."
             )
+        self.previous_instance = previous_instance
 
         for field in self.fields:
             previous_field_version = previous_version_details.get_field(field.name)

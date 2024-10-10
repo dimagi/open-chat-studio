@@ -511,7 +511,6 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         working_experiment = self.get_object()
         version = working_experiment.version
         if prev_version := working_experiment.latest_version:
-            context["previous_experiment_version"] = prev_version
             # Populate diffs
             version.compare(prev_version.version)
 
@@ -1269,7 +1268,7 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    experiment.version_description = request.POST["description"]
+    experiment.version_description = request.POST.get("description", "").strip()
     experiment.save()
 
     return HttpResponse()
