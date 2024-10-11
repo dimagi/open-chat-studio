@@ -31,7 +31,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Set variables
+    - name: Set Deploy Env
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           DEPLOY_ENV="${{ inputs.environment }}"
@@ -43,19 +43,25 @@ jobs:
 
         echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
 
+    - name: Set variables
+      env:
+        APP_NAME: ${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}
+      run: |
+
         # you can't reference the `env` context when defining other env vars to do it here
-        echo "ECR_REPOSITORY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
-        echo "ECS_CLUSTER=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_DJANGO=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY_BEAT=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
+        echo "APP_NAME=${{ env.APP_NAME }}" >> "$GITHUB_ENV"
+        echo "ECR_REPOSITORY=${{ env.APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
+        echo "ECS_CLUSTER=${{ env.APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_DJANGO=${{ env.APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY=${{ env.APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY_BEAT=${{ env.APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
       with:
         role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
-        aws-region: ${{ vars.DEPLOY_AWS_REGION }}
+        aws-region: ${{ fromJSON(vars.DEPLOY_AWS_REGION)[env.DEPLOY_ENV] }}
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -88,7 +94,7 @@ jobs:
       id: django-web-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
@@ -104,7 +110,7 @@ jobs:
       id: celery-worker-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
         image: ${{ steps.image-name.outputs.image }}
 
@@ -112,7 +118,7 @@ jobs:
       id: celery-beat-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat
         image: ${{ steps.image-name.outputs.image }}
 
