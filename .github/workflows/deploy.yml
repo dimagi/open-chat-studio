@@ -29,25 +29,27 @@ jobs:
       - name: Set variables
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "DEPLOY_ENV=${{ inputs.environment }}" >> "$GITHUB_ENV"
+            DEPLOY_ENV="${{ inputs.environment }}"
           elif [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
-            echo "DEPLOY_ENV=prod" >> "$GITHUB_ENV"
+            DEPLOY_ENV="prod"
           else
-            echo "DEPLOY_ENV=dev" >> "$GITHUB_ENV"
+            DEPLOY_ENV="dev"
           fi
+          
+          echo "AWS_REGION=${{ vars.DEPLOY_AWS_REGION }}" >> "$GITHUB_ENV"
+          echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
+
+          # you can't reference the `env` context when defining other env vars to do it here
+          echo "ECR_REPOSITORY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
+          echo "ECS_CLUSTER=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE_DJANGO=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE_CELERY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE_CELERY_BEAT=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
 
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     needs: init
-
-    env:
-      AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
-      ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-ecr-repo
-      ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Cluster
-      ECS_SERVICE_DJANGO: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
-      ECS_SERVICE_CELERY: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Celery
-      ECS_SERVICE_CELERY_BEAT: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeat
 
     steps:
     - name: Checkout
