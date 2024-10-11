@@ -628,6 +628,8 @@ class TestExperimentModel:
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
+        self._assert_source_material_is_duplicated(original_experiment, new_version)
+        self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
