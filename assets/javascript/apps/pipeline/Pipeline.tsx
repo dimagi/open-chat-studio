@@ -45,6 +45,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -123,8 +124,6 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
       type: MarkerType.ArrowClosed,
     },
   };
-
-  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div style={{ height: "80vh" }}>
