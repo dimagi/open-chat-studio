@@ -7,25 +7,47 @@ name: Deploy to Amazon ECS
 
 on:
   workflow_dispatch:
-#  push:
-#    branches: [ "main" ]
+    inputs:
+      environment:
+        description: "Deploy environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+  #  push:
+  #    branches: [ "main" ]
 
-env:
-  AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
-  ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-ecr-repo
-  ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Cluster
-  ECS_SERVICE_DJANGO: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
-  ECS_SERVICE_CELERY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Celery
-  ECS_SERVICE_CELERY_BEAT: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeat
 permissions:
   id-token: write
   contents: read
 
 jobs:
+  init:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set variables
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "DEPLOY_ENV=${{ inputs.environment }}" >> "$GITHUB_ENV"
+          elif [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
+            echo "DEPLOY_ENV=prod" >> "$GITHUB_ENV"
+          else
+            echo "DEPLOY_ENV=dev" >> "$GITHUB_ENV"
+          fi
+
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: production
+    needs: init
+
+    env:
+      AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-ecr-repo
+      ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Cluster
+      ECS_SERVICE_DJANGO: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
+      ECS_SERVICE_CELERY: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Celery
+      ECS_SERVICE_CELERY_BEAT: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeat
 
     steps:
     - name: Checkout
@@ -69,7 +91,7 @@ jobs:
       id: django-web-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+        task-definition-family: ${{ env.ECS_SERVICE_DJANGO }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
@@ -85,7 +107,7 @@ jobs:
       id: celery-worker-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryWorkerTask
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
         image: ${{ steps.image-name.outputs.image }}
 
@@ -93,7 +115,7 @@ jobs:
       id: celery-beat-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeatTask
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat
         image: ${{ steps.image-name.outputs.image }}
 
