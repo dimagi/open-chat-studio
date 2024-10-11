@@ -885,6 +885,13 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
     is_default = models.BooleanField(default=False)
     type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
     condition = models.CharField(max_length=64, blank=True)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
