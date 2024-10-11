@@ -3,7 +3,7 @@ import Component from "./Component";
 import { NodeParams } from "../types/nodeParams";
 import { NodeInputTypes } from "../types/nodeInputTypes";
 
-export default function SidePanel(props: {
+export default function ComponentList(props: {
   inputTypes: NodeInputTypes[];
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;

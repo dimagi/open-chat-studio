@@ -12,7 +12,7 @@ import ReactFlow, {
 } from "reactflow";
 
 import { PipelineNode } from "./PipelineNode";
-import SidePanel from "./panel/SidePanel";
+import ComponentList from "./panel/ComponentList";
 import { NodeInputTypes } from "./types/nodeInputTypes";
 import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
@@ -148,7 +148,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
         onSelectionChange={onSelectionChange}
         onPaneClick={() => setIsOpen(false)} // Close panel when clicking on the canvas
       >
-        <SidePanel
+        <ComponentList
           inputTypes={props.inputTypes}
           isOpen={isOpen}
           setIsOpen={setIsOpen}
