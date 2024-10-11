@@ -145,7 +145,6 @@ class VersionField:
             "added": "+",
         }
 
-        print(difflines)
         for line in difflines:
             operation = line[0]
             character = line[2:]
