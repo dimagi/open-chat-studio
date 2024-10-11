@@ -35,7 +35,7 @@ export default function SidePanel(props: {
       </button>
 
       <div
-        className={`absolute top-16 left-4 w-72 max-h-[80vh] overflow-y-auto bg-white shadow-lg rounded-md p-4 z-20 transition-all duration-300 ${
+        className={`absolute top-16 left-4 w-72 max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-800 shadow-lg rounded-md p-4 z-20 transition-all duration-300 ${
           isOpen
             ? "opacity-100 transform scale-100"
             : "opacity-0 transform scale-95 pointer-events-none"
