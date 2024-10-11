@@ -1,8 +1,3 @@
-"""
-
-
-"""
-
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
@@ -100,10 +95,19 @@ class VersionField:
 
     def _compare_queryset(self, previous_queryset):
         """
-        Comparing querysets does the following:
-        For each item in the current queryset, we need to check if there's a version of it in the previous queryset to
-        compare to. If not, it means that the item was added. To detect removed items, we need to get all items from the
-        previous queryset that are not versions of the items in the first queryset.
+        Compares two querysets by checking the differences between their results.
+
+        For each result in the current queryset, this method attempts to find a corresponding version
+        of that result in the previous queryset. If such a version exists, it is used for comparison.
+        If no corresponding version is found, it indicates that the result was newly added.
+
+        To identify results that have been removed, this method collects all records from the previous
+        queryset that do not have a matching version in the current queryset.
+
+        To ensure accurate comparisons, this method hinges on the "version family" concept. A result in the
+        current queryset is only compared to a result in the previous queryset if they belong to the
+        same "version family". This relationship is identified through the `working_version_id` field of each record,
+        which is expected to be present on each result.
         """
         previous_record_version_ids = []
         for version_field in self.queryset_result_versions:
