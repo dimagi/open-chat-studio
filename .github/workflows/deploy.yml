@@ -41,7 +41,6 @@ jobs:
           DEPLOY_ENV="dev"
         fi
 
-        echo "AWS_REGION=${{ vars.DEPLOY_AWS_REGION }}" >> "$GITHUB_ENV"
         echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
 
         # you can't reference the `env` context when defining other env vars to do it here
@@ -54,9 +53,9 @@ jobs:
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
       with:
-        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT }}:role/github_deploy
+        role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
-        aws-region: ${{ env.AWS_REGION }}
+        aws-region: ${{ vars.DEPLOY_AWS_REGION }}
 
     - name: Login to Amazon ECR
       id: login-ecr
