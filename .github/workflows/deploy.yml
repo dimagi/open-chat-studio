@@ -23,37 +23,33 @@ permissions:
   contents: read
 
 jobs:
-  init:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set variables
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_ENV="${{ inputs.environment }}"
-          elif [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
-            DEPLOY_ENV="prod"
-          else
-            DEPLOY_ENV="dev"
-          fi
-          
-          echo "AWS_REGION=${{ vars.DEPLOY_AWS_REGION }}" >> "$GITHUB_ENV"
-          echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
-
-          # you can't reference the `env` context when defining other env vars to do it here
-          echo "ECR_REPOSITORY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
-          echo "ECS_CLUSTER=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
-          echo "ECS_SERVICE_DJANGO=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
-          echo "ECS_SERVICE_CELERY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
-          echo "ECS_SERVICE_CELERY_BEAT=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
-
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: init
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Set variables
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          DEPLOY_ENV="${{ inputs.environment }}"
+        elif [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
+          DEPLOY_ENV="prod"
+        else
+          DEPLOY_ENV="dev"
+        fi
+
+        echo "AWS_REGION=${{ vars.DEPLOY_AWS_REGION }}" >> "$GITHUB_ENV"
+        echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
+
+        # you can't reference the `env` context when defining other env vars to do it here
+        echo "ECR_REPOSITORY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
+        echo "ECS_CLUSTER=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_DJANGO=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY_BEAT=${{ vars.DEPLOY_APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
