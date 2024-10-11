@@ -89,7 +89,7 @@ jobs:
       id: django-web-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ env.ECS_SERVICE_DJANGO }}-${{ env.DEPLOY_ENV }}-Django
+        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
