@@ -750,16 +750,16 @@ class Experiment(BaseTeamModel, VersionsMixin):
         Returns a `Version` instance representing the experiment version.
         """
 
-        def yes_no(value: bool):
+        def yes_no(value: bool) -> str:
             return "Yes" if value else "No"
 
-        def format_tools(tools: set):
+        def format_tools(tools: set) -> str:
             return ", ".join([AgentTools(tool).label for tool in tools])
 
-        def format_array_field(arr: list):
+        def format_array_field(arr: list) -> str:
             return ", ".join([entry for entry in arr])
 
-        def format_trigger(trigger):
+        def format_trigger(trigger) -> str:
             string = "If"
             if trigger.trigger_type == "TimeoutTrigger":
                 seconds = seconds_to_human(trigger.delay)
@@ -769,6 +769,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
             trigger_action = trigger.action.get_action_type_display().lower()
             return f"{string} then {trigger_action}"
+
+        def format_route(route) -> str:
+            return f'Route to "{route.child}" using the "{route.keyword}" keyword'
 
         return Version(
             instance=self,
@@ -853,6 +856,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+                # Triggers
                 VersionField(
                     group_name="Triggers",
                     name="static_triggers",
@@ -864,6 +868,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     name="timeout_triggers",
                     queryset=self.timeout_triggers,
                     to_display=format_trigger,
+                ),
+                # Routing
+                VersionField(
+                    group_name="Routing",
+                    name="routes",
+                    queryset=self.child_links,
+                    to_display=format_route,
                 ),
             ],
         )

@@ -691,6 +691,7 @@ class TestExperimentModel:
     def _assert_routes_are_duplicated(self, original_experiment, new_version):
         for route in new_version.child_links.all():
             assert route.parent.working_version == original_experiment
+            assert route.working_version.parent == original_experiment
             assert route.child.is_versioned is True
 
     def _assert_files_are_duplicated(self, original_experiment, new_version):
