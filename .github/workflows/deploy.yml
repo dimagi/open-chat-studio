@@ -1,6 +1,14 @@
 # This workflow will build and push a new container image to Amazon ECR,
 # and then will deploy a new task definition for each of the services to Amazon ECS.
 
+# Expected vars:
+# The following vars must be set at the repo level. Their values must be JSON and contain one key per
+# environment (dev, prod, etc.) and the value for each key must be the value for that environment.
+#
+#   DEPLOY_APP_NAME: {"dev": "app1", "prod": "app2"}
+#   DEPLOY_AWS_REGION: {"dev": "us-west-2", "prod": "us-east-1"}
+#   AWS_ACCOUNT: {"dev": "123456789012", "prod": "123456789012"}
+
 # Note: The names of repository, cluster, services match what is configured in https://github.com/dimagi/ocs-deploy
 
 name: Deploy to Amazon ECS
@@ -32,6 +40,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set Deploy Env
+      # Set the deploy env based on the input from the event or else from the branch
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           DEPLOY_ENV="${{ inputs.environment }}"
@@ -44,17 +53,16 @@ jobs:
         echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
 
     - name: Set variables
-      env:
-        APP_NAME: ${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}
+      # Set other variables accordingly
       run: |
-
         # you can't reference the `env` context when defining other env vars to do it here
-        echo "APP_NAME=${{ env.APP_NAME }}" >> "$GITHUB_ENV"
-        echo "ECR_REPOSITORY=${{ env.APP_NAME }}-$DEPLOY_ENV-ecr-repo" >> "$GITHUB_ENV"
-        echo "ECS_CLUSTER=${{ env.APP_NAME }}-$DEPLOY_ENV-Cluster" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_DJANGO=${{ env.APP_NAME }}-$DEPLOY_ENV-Django" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY=${{ env.APP_NAME }}-$DEPLOY_ENV-Celery" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY_BEAT=${{ env.APP_NAME }}-$DEPLOY_ENV-CeleryBeat" >> "$GITHUB_ENV"
+        APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}"
+        echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+        echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo" >> "$GITHUB_ENV"
+        echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
