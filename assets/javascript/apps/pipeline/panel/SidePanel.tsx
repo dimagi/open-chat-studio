@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import Component from "./Component";
 import { NodeParams } from "../types/nodeParams";
 import { NodeInputTypes } from "../types/nodeInputTypes";
@@ -9,9 +9,6 @@ export default function SidePanel(props: {
   setIsOpen: (isOpen: boolean) => void;
 }) {
   const { inputTypes, isOpen, setIsOpen } = props;
-  const panelRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
   function onDragStart(
     event: React.DragEvent<any>,
     data: { type: string; label: string; inputParams: NodeParams[] }
@@ -26,7 +23,6 @@ export default function SidePanel(props: {
   return (
     <div className="relative">
       <button
-        ref={buttonRef}
         className="absolute top-4 left-4 z-10 text-4xl text-primary"
         onClick={togglePanel}
         title="Add Node"
@@ -39,7 +35,6 @@ export default function SidePanel(props: {
       </button>
 
       <div
-        ref={panelRef}
         className={`absolute top-16 left-4 w-72 max-h-[80vh] overflow-y-auto bg-white shadow-lg rounded-md p-4 z-20 transition-all duration-300 ${
           isOpen
             ? "opacity-100 transform scale-100"
