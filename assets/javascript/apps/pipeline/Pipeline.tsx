@@ -125,6 +125,10 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
     },
   };
 
+  const handlePaneClick = useCallback(() => {
+    setIsOpen(false);
+  }, [setIsOpen]);
+
   return (
     <div style={{ height: "80vh" }}>
       <ReactFlow
@@ -145,7 +149,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
         deleteKeyCode={[]}
         defaultEdgeOptions={defaultEdgeOptions}
         onSelectionChange={onSelectionChange}
-        onPaneClick={() => setIsOpen(false)} // Close panel when clicking on the canvas
+        onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
         <ComponentList
           inputTypes={props.inputTypes}
