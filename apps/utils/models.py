@@ -10,16 +10,10 @@ class VersioningMixin:
         [field.attname for field in model_instance._meta.fields]
         ```
         """
-        model_fields = [field.attname for field in self._meta.fields]
-        original_dict, new_dict = self.__dict__, new.__dict__
+        model_fields = [field.attname for field in self._meta.fields if field.attname not in exclude_fields]
         changed_fields = set([])
-        for field_name, field_value in original_dict.items():
-            if field_name not in model_fields:
-                continue
-
-            if field_name in exclude_fields:
-                continue
-            if field_value != new_dict[field_name]:
+        for field_name in model_fields:
+            if getattr(self, field_name) != getattr(new, field_name):
                 changed_fields.add(field_name)
 
         return changed_fields
