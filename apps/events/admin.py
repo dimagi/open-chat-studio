@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 
+from apps.experiments.admin import VersionedModelAdminMixin
+
 from .models import EventAction, EventLog, ScheduledMessage, StaticTrigger, TimeoutTrigger
 
 
@@ -10,12 +12,12 @@ class EventLogInline(GenericTabularInline):
 
 
 @admin.register(TimeoutTrigger)
-class TimeoutTriggerAdmin(admin.ModelAdmin):
+class TimeoutTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     inlines = [EventLogInline]
 
 
 @admin.register(StaticTrigger)
-class StaticTriggerAdmin(admin.ModelAdmin):
+class StaticTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     inlines = [EventLogInline]
 
 

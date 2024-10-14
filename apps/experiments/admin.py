@@ -5,6 +5,11 @@ from django.http import HttpRequest
 from apps.experiments import models
 
 
+class VersionedModelAdminMixin:
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return self.model.objects.get_all()
+
+
 @admin.register(models.PromptBuilderHistory)
 class PromptBuilderHistoryAdmin(admin.ModelAdmin):
     list_display = ("history", "created_at", "owner")
@@ -12,15 +17,12 @@ class PromptBuilderHistoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.SourceMaterial)
-class SourceMaterialAdmin(admin.ModelAdmin):
+class SourceMaterialAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = ("topic", "team", "owner")
     list_filter = (
         "team",
         "owner",
     )
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return models.SourceMaterial.objects.get_all()
 
 
 class SafetyLayerInline(admin.TabularInline):
@@ -32,7 +34,7 @@ class SafetyLayerInline(admin.TabularInline):
 
 
 @admin.register(models.SafetyLayer)
-class SafetyLayerAdmin(admin.ModelAdmin):
+class SafetyLayerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "team",
         "name",
@@ -61,7 +63,7 @@ class ParticipantData(admin.ModelAdmin):
 
 
 @admin.register(models.Survey)
-class SurveyAdmin(admin.ModelAdmin):
+class SurveyAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "team",
@@ -87,9 +89,6 @@ class ExperimentAdmin(admin.ModelAdmin):
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return models.Experiment.objects.get_all()
-
     @admin.display(description="Version Family")
     def version_family(self, obj):
         if obj.working_version:
@@ -98,7 +97,7 @@ class ExperimentAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ExperimentRoute)
-class ExperimentRouteAdmin(admin.ModelAdmin):
+class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = ("parent", "child", "keyword", "is_default")
 
 
@@ -121,7 +120,7 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ConsentForm)
-class ConsentFormAdmin(admin.ModelAdmin):
+class ConsentFormAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "team",
         "name",
@@ -130,9 +129,6 @@ class ConsentFormAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("is_default",)
     list_filter = ("team",)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return models.ConsentForm.objects.get_all()
 
 
 @admin.register(models.SyntheticVoice)
