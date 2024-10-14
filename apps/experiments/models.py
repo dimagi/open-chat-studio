@@ -1006,7 +1006,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         - 2.2. If the version numbers differ:
             - 2.2.1. If both are versions, then they are considered different.
             - 2.2.2. If one of them is a working version, verify if any changes have occurred in the working version
-                    since the version was created. Some fields are not applicable to the child route and can be ignored
+                    since the version was created. Some fields are not applicable to the child and can be ignored
                     when calculating changes.
         """
         is_same_family = self.get_working_version() == route.get_working_version()
@@ -1016,10 +1016,15 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         fields_to_exclude = exclude_fields.copy()
         fields_to_exclude.extend(["parent_id"])
 
-        if self.child_id == route.child_id or (self.child.is_a_version and route.child.is_a_version):
+        different_version_family = self.child.get_working_version() != route.child.get_working_version()
+        is_same_instance = self.child_id == route.child_id
+        both_are_versions = self.child.is_a_version and route.child.is_a_version
+
+        if different_version_family or is_same_instance or both_are_versions:
             return super().compare_with_model(route, fields_to_exclude)
 
-        # The one child is a working version while the other is a version of it
+        # Getting here means that one child is a working version and the other a version of it. We need to check if
+        # meaningful changes were made since the last version
         fields_to_exclude.append("child_id")
         # Compare all other fields first
         results = list(super().compare_with_model(route, fields_to_exclude))

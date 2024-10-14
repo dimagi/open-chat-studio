@@ -630,7 +630,7 @@ class TestExperimentRoute:
             parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
         )
         changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"])
+        assert changes == set(["child_id"])
 
 
 @pytest.mark.django_db()
