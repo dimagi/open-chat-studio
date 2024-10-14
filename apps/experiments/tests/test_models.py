@@ -31,7 +31,7 @@ from apps.utils.factories.experiment import (
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -555,6 +555,82 @@ class TestExperimentRoute:
 
         queryset = ExperimentRoute.eligible_children(team=parent.team)
         assert len(queryset) == 4
+
+    def test_compare_with_model_testcase_1(self):
+        """
+        One child is a working version and the other is a version of that working version
+        """
+        # 1. The children of both route versions are family with one being the working version
+        # 1.1. No changes between the working and versioned child
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set([])
+
+        # 1.2. A change between the working and versioned child
+        child.prompt_text = "This is a change"
+        child.save()
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["prompt_text"])
+
+    def test_compare_with_model_testcase_2(self):
+        """
+        Both children are versions of the same experiment
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set()
+
+    def test_compare_with_model_testcase_3(self):
+        """
+        They are different versions, so we expect the compare method to pick this up
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child1 = child.create_new_version()
+        versioned_child2 = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["child_id"])
+
+    def test_compare_with_model_testcase_4(self):
+        """
+        The children are experiments of different families.
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child1 = ExperimentFactory(team=parent.team)
+        child2 = ExperimentFactory(
+            team=parent.team,
+            synthetic_voice=SyntheticVoiceFactory(),
+            voice_provider=VoiceProviderFactory(),
+            llm="yoda",
+            llm_provider=LlmProviderFactory(),
+            prompt_text="this is a change",
+        )
+        route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"])
 
 
 @pytest.mark.django_db()

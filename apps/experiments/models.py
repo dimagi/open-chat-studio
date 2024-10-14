@@ -786,7 +786,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return f"{string} then {trigger_action}"
 
         def format_route(route) -> str:
-            return f'Route to "{route.child}" using the "{route.keyword}" keyword'
+            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
+            if route.is_default:
+                string = f"{string} (default)"
+            return string
 
         return Version(
             instance=self,
@@ -991,6 +994,48 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             changed_fields = ",".join(changed_fields)
             description = f"{description} since {changed_fields} changed."
         return description
+
+    def compare_with_model(self, route: "ExperimentRoute", exclude_fields):
+        """
+        When comparing two ExperimentRoute versions (with the same parents), consider the following:
+
+        1. The child of one version may belong to a different family than the child of the other version.
+
+        2. If both children belong to the same family:
+        - 2.1. If the version numbers are the same, the child has not changed.
+        - 2.2. If the version numbers differ:
+            - 2.2.1. If both are versions, then they are considered different.
+            - 2.2.2. If one of them is a working version, verify if any changes have occurred in the working version
+                    since the version was created. Some fields are not applicable to the child route and can be ignored
+                    when calculating changes.
+        """
+        is_same_family = self.get_working_version() == route.get_working_version()
+        if not is_same_family:
+            return super().compare_with_model(route, exclude_fields)
+
+        fields_to_exclude = exclude_fields.copy()
+        fields_to_exclude.extend(["parent_id"])
+
+        if self.child_id == route.child_id or (self.child.is_versioned and route.child.is_versioned):
+            return super().compare_with_model(route, fields_to_exclude)
+
+        # The one child is a working version while the other is a version of it
+        fields_to_exclude.append("child_id")
+        # Compare all other fields first
+        results = list(super().compare_with_model(route, fields_to_exclude))
+
+        # Now compare the children
+        child_changes = self.child.compare_with_model(route.child, self.fields_to_exclude_for_child)
+
+        results.extend(list(child_changes))
+        return set(results)
+
+    @property
+    def fields_to_exclude_for_child(self):
+        version_fields = ["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"]
+        all_fields = [field.get_attname() for field in Experiment._meta.fields]
+        [all_fields.remove(field) for field in version_fields]
+        return all_fields
 
     class Meta:
         unique_together = (
