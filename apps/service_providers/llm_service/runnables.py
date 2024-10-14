@@ -370,12 +370,16 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         if annotation.type == "file_citation":
                             file_citation = annotation.file_citation
                             file_id = file_citation.file_id
-                            file_link = self._get_file_link_for_citation(
+                            file_name, file_link = self._get_file_link_for_citation(
                                 file_id=file_id, forbidden_file_ids=assistant_files_ids
                             )
 
                             # Original citation text example:【6:0†source】
-                            message_content_value = message_content_value.replace(file_ref_text, file_link)
+                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                            if file_link:
+                                message_content_value += f"\n[{idx}]: {file_link}"
+                            else:
+                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
 
                         elif annotation.type == "file_path":
                             file_path = annotation.file_path
@@ -408,6 +412,10 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             resource, _created = chat.attachments.get_or_create(tool_type="image_file")
             resource.files.add(*image_file_attachments)
 
+        # replace all instance of `[some filename.pdf](https://example.com/download/file-abc)` with
+        # just the link text
+        output_message = re.sub(r"\[(?!\d+\])([^]]+)\]\([^)]+example\.com[^)]+\)", r"*\1*", output_message)
+
         return output_message.strip(), list(file_ids)
 
     def _create_image_file_from_image_message(self, client, image_file_message) -> File | None:
@@ -428,26 +436,33 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         except Exception as ex:
             logger.exception(ex)
 
-    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> str:
+    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
-        file_name = ""
         file_link = ""
 
-        if file_id not in forbidden_file_ids:
-            # Don't allow downloading assistant level files
-            team = self.state.session.team
-            session_id = self.state.session.id
+        team = self.state.session.team
+        session_id = self.state.session.id
+        try:
+            file = File.objects.get(external_id=file_id, team_id=team.id)
+            file_link = f"file:{team.slug}:{session_id}:{file.id}"
+            file_name = file.name
+        except File.DoesNotExist:
+            client = self.state.raw_client
+            openai_file = client.files.retrieve(file_id=file_id)
             try:
-                file = File.objects.get(external_id=file_id, team_id=team.id)
-                file_link = f"file:{team.slug}:{session_id}:{file.id}"
-                file_name = file.name
-            except File.DoesNotExist:
-                client = self.state.raw_client
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
-        return f" [{file_name}]({file_link})"
+            except Exception as e:
+                logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
+                file_name = "Unknown File"
+
+        if file_id in forbidden_file_ids:
+            # Don't allow downloading assistant level files
+            return file_name, None
+
+        return file_name, file_link
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI

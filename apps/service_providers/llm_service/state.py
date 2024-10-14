@@ -98,7 +98,7 @@ class ExperimentState(RunnableState):
         return self.experiment.prompt_text
 
     def get_tools(self):
-        return get_tools(self.session)
+        return get_tools(self.session, self.experiment)
 
 
 class ChatRunnableState(RunnableState):
@@ -282,9 +282,6 @@ class AssistantExperimentState(ExperimentState, AssistantState):
                 )
 
         return chat_message
-
-    def get_tools(self):
-        return get_tools(self.session, for_assistant=True)
 
     @property
     def tools_enabled(self):

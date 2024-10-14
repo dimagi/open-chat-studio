@@ -18,6 +18,7 @@ class NodeFactory(factory.django.DjangoModelFactory):
 class PipelineFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Pipeline
+        skip_postgeneration_save = True
 
     name = "Test Pipeline"
     data = {

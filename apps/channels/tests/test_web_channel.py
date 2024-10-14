@@ -1,9 +1,11 @@
 import pytest
+from django.http import Http404
 from django.test import override_settings
 from mock.mock import Mock, patch
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
+from apps.chat.models import Chat
 
 
 @pytest.mark.django_db()
@@ -41,6 +43,12 @@ def test_start_new_session(new_user_message, get_ai_message_id, with_seed_messag
 
 
 @pytest.mark.django_db()
+def test_404_raised_when_version_is_not_found(experiment):
+    with pytest.raises(Http404):
+        WebChannel.start_new_session(experiment, "jack@titanic.com", version=20)
+
+
+@pytest.mark.django_db()
 class TestVersioning:
     @patch("apps.events.tasks.enqueue_static_triggers", Mock())
     @patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
@@ -54,3 +62,15 @@ class TestVersioning:
         _session_used, experiment_used = check_and_process_seed_message.call_args[0]
         assert experiment_used == new_version
         assert session.experiment == experiment
+        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == experiment.DEFAULT_VERSION_NUMBER
+
+    @patch("apps.events.tasks.enqueue_static_triggers", Mock())
+    @patch("apps.chat.channels.WebChannel.check_and_process_seed_message")
+    def test_start_new_session_uses_specified_version(self, check_and_process_seed_message, experiment):
+        new_version = experiment.create_new_version()
+        session = WebChannel.start_new_session(experiment, "jack@titanic.com", version=1)
+
+        _session_used, experiment_used = check_and_process_seed_message.call_args[0]
+        assert experiment_used == new_version
+        assert session.experiment == experiment
+        assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == 1

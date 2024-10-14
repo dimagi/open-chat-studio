@@ -79,7 +79,7 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
-        output = self._process(input, state)
+        output = self._process(input=input, state=state, node_id=node_id)
         # Append the output to the state, otherwise do not change the state
         return (
             PipelineState(messages=[output], outputs={node_id: output})
@@ -87,7 +87,7 @@ class PipelineNode(BaseModel, ABC):
             else PipelineState(outputs={node_id: output})
         )
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 

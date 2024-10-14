@@ -1,6 +1,5 @@
 import React, { ChangeEvent, useState } from "react";
 import Pipeline from "./Pipeline";
-import SidePanel from "./panel/SidePanel";
 import { NodeInputTypes } from "./types/nodeInputTypes";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 
@@ -40,13 +39,10 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
               </button>
             </div>
           </div>
-          <div id="react-flow-id" className="h-full w-full">
-            <Pipeline />
+          <div id="react-flow-id" className="relative h-full w-full">
+            <Pipeline inputTypes={props.inputTypes} />
           </div>
         </div>
-      </div>
-      <div className="ml-2">
-        <SidePanel inputTypes={props.inputTypes} />
       </div>
     </div>
   );

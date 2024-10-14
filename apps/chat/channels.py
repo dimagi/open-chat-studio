@@ -9,6 +9,7 @@ from typing import ClassVar
 import emoji
 import requests
 from django.db import transaction
+from django.http import Http404
 from telebot import TeleBot
 from telebot.util import antiflood, smart_split
 
@@ -21,7 +22,7 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -542,12 +543,20 @@ class WebChannel(ChannelBase):
         participant_user: CustomUser | None = None,
         session_status: SessionStatus = SessionStatus.ACTIVE,
         timezone: str | None = None,
+        version: int = Experiment.DEFAULT_VERSION_NUMBER,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(
             working_experiment, experiment_channel, participant_identifier, participant_user, session_status, timezone
         )
-        WebChannel.check_and_process_seed_message(session, working_experiment.default_version)
+
+        try:
+            experiment_version = working_experiment.get_version(version)
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+        except Experiment.DoesNotExist:
+            raise Http404(f"Experiment with version {version} not found")
+
+        WebChannel.check_and_process_seed_message(session, experiment_version)
         return session
 
     @classmethod
