@@ -148,8 +148,8 @@ class VersionsMixin:
         return new_instance
 
     @property
-    def is_versioned(self):
-        """Return whether or not this experiment is a versioned experiment"""
+    def is_a_version(self):
+        """Return whether or not this experiment is a version of an experiment"""
         return self.working_version is not None
 
     @property
@@ -965,7 +965,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
         new_instance = super().create_new_version(save=False)
         new_instance.parent = new_parent
-        if new_instance.child.is_versioned is False:
+        if new_instance.child.is_a_version is False:
             # TODO: The user must be notified and give consent to us doing this. Ignore for now
             latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
 
@@ -1016,7 +1016,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         fields_to_exclude = exclude_fields.copy()
         fields_to_exclude.extend(["parent_id"])
 
-        if self.child_id == route.child_id or (self.child.is_versioned and route.child.is_versioned):
+        if self.child_id == route.child_id or (self.child.is_a_version and route.child.is_a_version):
             return super().compare_with_model(route, fields_to_exclude)
 
         # The one child is a working version while the other is a version of it
