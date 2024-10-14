@@ -195,6 +195,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SourceMaterialObjectManager()
 
     class Meta:
@@ -234,6 +235,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SafetyLayerObjectManager()
 
     def __str__(self):
@@ -280,6 +282,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SurveyObjectManager()
 
     class Meta:
@@ -325,6 +328,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]
@@ -921,6 +925,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
