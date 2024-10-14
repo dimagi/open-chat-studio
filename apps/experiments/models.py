@@ -965,7 +965,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
         new_instance = super().create_new_version(save=False)
         new_instance.parent = new_parent
-        if new_instance.child.is_a_version is False:
+        if not new_instance.child.is_a_version:
             # TODO: The user must be notified and give consent to us doing this. Ignore for now
             latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
 
