@@ -1,7 +1,7 @@
 import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import Version, VersionField, compare_models, differs
+from apps.experiments.versioning import Version, VersionField, differs
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -10,10 +10,10 @@ def test_compare_models():
     experiment = ExperimentFactory(temperature=0.1)
     instance1 = Experiment.objects.get(id=experiment.id)
     instance2 = Experiment.objects.get(id=experiment.id)
-    assert compare_models(instance1, instance2, exclude_fields=[]) == set()
+    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set()
     instance2.temperature = 0.2
-    assert compare_models(instance1, instance2, exclude_fields=["temperature"]) == set()
-    assert compare_models(instance1, instance2, exclude_fields=[]) == set(["temperature"])
+    assert instance1.compare_with_model(instance2, exclude_fields=["temperature"]) == set()
+    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set(["temperature"])
 
 
 def test_differs():
