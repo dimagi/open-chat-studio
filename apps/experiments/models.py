@@ -946,15 +946,51 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
+        """
+        Strategy for handling child versions:
+
+        1. If the child is already a version:
+        - Do not create a new child version.
+
+        2. If the child is a working version, verify whether the latest version of the child:
+        - Is identical to the current one, and
+        - Belongs to the same version family.
+
+        - If both conditions are met, reuse the latest version of the child.
+        - Otherwise, proceed to create a new version.
+        """
+
         new_instance = super().create_new_version(save=False)
         new_instance.parent = new_parent
-
-        if not new_instance.child.is_versioned:
+        if new_instance.child.is_versioned is False:
             # TODO: The user must be notified and give consent to us doing this. Ignore for now
-            new_instance.child = new_instance.child.create_new_version()
+            latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
 
+            if latest_child_version:
+                is_identical_to_working_version = not differs(
+                    self.child, latest_child_version, exclude_model_fields=self.fields_to_exclude_for_child
+                )
+                if is_identical_to_working_version:
+                    new_child = latest_child_version
+                else:
+                    fields_changed = self.child.compare_with_model(
+                        latest_child_version, self.fields_to_exclude_for_child
+                    )
+                    description = self._generate_version_description(fields_changed)
+                    new_child = new_instance.child.create_new_version(version_description=description)
+            else:
+                new_child = new_instance.child.create_new_version(self._generate_version_description())
+
+            new_instance.child = new_child
         new_instance.save()
         return new_instance
+
+    def _generate_version_description(self, changed_fields: set | None = None) -> str:
+        description = "Auto created when the router was versioned"
+        if changed_fields:
+            changed_fields = ",".join(changed_fields)
+            description = f"{description} since {changed_fields} changed."
+        return description
 
     class Meta:
         unique_together = (

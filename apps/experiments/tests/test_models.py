@@ -16,7 +16,6 @@ from apps.experiments.models import (
     SafetyLayer,
     SyntheticVoice,
 )
-from apps.experiments.versioning import compare_models
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -30,7 +29,6 @@ from apps.utils.factories.experiment import (
     SourceMaterialFactory,
     SurveyFactory,
     SyntheticVoiceFactory,
-    VersionedExperimentFactory,
 )
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
@@ -492,22 +490,52 @@ class TestSourceMaterialVersioning:
 
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
-    @pytest.mark.parametrize("versioned", [True, False])
-    def test_create_new_route_version(self, versioned):
+    @pytest.mark.parametrize("child_has_versions", [True, False])
+    def test_child_is_working_with_changes_creates_new_version(self, child_has_versions):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
-        child_exp = VersionedExperimentFactory(team=team) if versioned else ExperimentFactory(team=team)
-        new_parent = ExperimentFactory(team=team)
-        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
+        working_child = ExperimentFactory(team=team, prompt_text="some prompt")
+        working_route = ExperimentRoute.objects.create(
+            team=team, parent=parent_exp, child=working_child, keyword="testing"
+        )
 
-        versioned_route = working_route.create_new_version(new_parent)
-        assert versioned_route != working_route
-        if versioned:
-            expected_difference = set(["id", "parent_id"])
-        else:
-            expected_difference = set(["id", "parent_id", "child_id"])
+        if child_has_versions:
+            working_child.create_new_version()
+            # Update the working version so there are changes
+            working_child.prompt_text = "a new prompt"
+            working_child.save()
 
+        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        expected_difference = set(["id", "parent_id", "child_id"])
         _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child != working_child
+        assert versioned_route.child.working_version == working_child
+
+    def test_versioned_child_is_reused(self):
+        parent_exp = ExperimentFactory()
+        team = parent_exp.team
+        working_child = ExperimentFactory(team=team)
+        child_version = working_child.create_new_version()
+        working_route = ExperimentRoute.objects.create(
+            team=team, parent=parent_exp, child=child_version, keyword="testing"
+        )
+        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        expected_difference = set(["id", "parent_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == child_version
+
+    def test_working_child_without_changes_uses_latest_version(self):
+        parent_exp = ExperimentFactory()
+        team = parent_exp.team
+        working_child = ExperimentFactory(team=team)
+        latest_child_version = working_child.create_new_version()
+        working_route = ExperimentRoute.objects.create(
+            team=team, parent=parent_exp, child=working_child, keyword="testing"
+        )
+        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        expected_difference = set(["id", "parent_id", "child_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == latest_child_version
 
 
 @pytest.mark.django_db()
@@ -792,7 +820,7 @@ class TestExperimentObjectManager:
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    field_difference = compare_models(original, new, original.get_fields_to_exclude()).difference(
+    field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )
     assert (
