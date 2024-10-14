@@ -1016,15 +1016,9 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         fields_to_exclude = exclude_fields.copy()
         fields_to_exclude.extend(["parent_id"])
 
-        different_version_family = self.child.get_working_version() != route.child.get_working_version()
-        is_same_instance = self.child_id == route.child_id
-        both_are_versions = self.child.is_a_version and route.child.is_a_version
-
-        if different_version_family or is_same_instance or both_are_versions:
+        if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
             return super().compare_with_model(route, fields_to_exclude)
 
-        # Getting here means that one child is a working version and the other a version of it. We need to check if
-        # meaningful changes were made since the last version
         fields_to_exclude.append("child_id")
         # Compare all other fields first
         results = list(super().compare_with_model(route, fields_to_exclude))
