@@ -1037,10 +1037,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @property
     def fields_to_exclude_for_child(self):
-        version_fields = ["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"]
-        all_fields = [field.get_attname() for field in Experiment._meta.fields]
-        [all_fields.remove(field) for field in version_fields]
-        return all_fields
+        fields_to_keep = ["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"]
+        return [field.get_attname() for field in Experiment._meta.fields if field.get_attname() not in fields_to_keep]
 
     class Meta:
         unique_together = (
