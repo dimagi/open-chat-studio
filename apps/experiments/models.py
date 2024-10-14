@@ -37,8 +37,15 @@ class VersionsObjectManagerMixin:
         """A method to return all experiments whether it is deprecated or not"""
         return super().get_queryset()
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
 
 class PromptObjectManager(AuditingManager):
+    pass
+
+
+class ExperimentRouteObjectManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
@@ -60,9 +67,6 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def working_versions_queryset(self):
         """Returns a queryset for all working experiments"""
         return self.get_queryset().filter(working_version=None)
-
-    def get_queryset(self):
-        return super().get_queryset().filter(is_archived=False)
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -245,7 +249,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
-class SurveyObjectManager(models.Manager):
+class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -926,6 +930,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
+    objects = ExperimentRouteObjectManager()
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
