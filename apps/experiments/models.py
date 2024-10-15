@@ -215,6 +215,11 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
 
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
+
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel, VersionsMixin):
@@ -309,6 +314,12 @@ class Survey(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:survey_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
+        self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)

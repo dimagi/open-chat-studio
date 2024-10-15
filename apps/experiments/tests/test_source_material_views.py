@@ -38,3 +38,6 @@ def test_delete(client):
     assert response.status_code == 200
     source_material.refresh_from_db()
     assert source_material.is_archived is True
+
+    experiment.refresh_from_db()
+    assert experiment.source_material is None
