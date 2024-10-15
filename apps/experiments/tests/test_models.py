@@ -512,30 +512,26 @@ class TestExperimentRouteVersioning:
         assert versioned_route.child.working_version == working_child
 
     def test_versioned_child_is_reused(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="child")
+        expected_difference = set(["id", "parent_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child
+
+    def test_working_child_without_changes_uses_latest_version(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="working")
+        expected_difference = set(["id", "parent_id", "child_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child.latest_version
+
+    def _setup_versioned_experiment_route(self, child_bot: str):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
         working_child = ExperimentFactory(team=team)
         child_version = working_child.create_new_version()
-        working_route = ExperimentRoute.objects.create(
-            team=team, parent=parent_exp, child=child_version, keyword="testing"
-        )
-        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        expected_difference = set(["id", "parent_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == child_version
-
-    def test_working_child_without_changes_uses_latest_version(self):
-        parent_exp = ExperimentFactory()
-        team = parent_exp.team
-        working_child = ExperimentFactory(team=team)
-        latest_child_version = working_child.create_new_version()
-        working_route = ExperimentRoute.objects.create(
-            team=team, parent=parent_exp, child=working_child, keyword="testing"
-        )
-        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        expected_difference = set(["id", "parent_id", "child_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == latest_child_version
+        child_bot = working_child if child_bot == "working" else child_version
+        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_bot, keyword="testing")
+        version = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        return working_route, version
 
 
 @pytest.mark.django_db()
