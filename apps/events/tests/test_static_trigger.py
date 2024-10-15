@@ -13,9 +13,12 @@ from apps.events.models import (
     StaticTriggerType,
     TimeoutTrigger,
 )
+from apps.events.views import _delete_event_view
 from apps.utils.factories.experiment import (
+    ExperimentFactory,
     ExperimentSessionFactory,
 )
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
@@ -74,3 +77,21 @@ def test_last_timeout_can_end_conversation(session):
     session.refresh_from_db()
     assert session.ended_at is not None
     assert static_trigger.event_logs.count() == 1
+
+
+@pytest.mark.django_db()
+def test_delete():
+    team = TeamWithUsersFactory()
+    experiment = ExperimentFactory(team=team)
+    static_trigger = StaticTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
+        type=StaticTriggerType.LAST_TIMEOUT,
+    )
+    _delete_event_view(
+        trigger_type="static",
+        request=None,
+        team_slug=experiment.team.slug,
+        experiment_id=experiment.id,
+        trigger_id=static_trigger.id,
+    )

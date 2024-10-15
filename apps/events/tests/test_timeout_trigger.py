@@ -14,12 +14,14 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.events.tasks import enqueue_timed_out_events
+from apps.events.views import _delete_event_view
 from apps.experiments.models import SessionStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
 )
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
@@ -332,3 +334,21 @@ def test_not_triggered_no_human_message(session):
         frozen_time.tick(delta=timedelta(minutes=15))
         timed_out_sessions = timeout_trigger.timed_out_sessions()
         assert len(timed_out_sessions) == 0
+
+
+@pytest.mark.django_db()
+def test_delete():
+    team = TeamWithUsersFactory()
+    experiment = ExperimentFactory(team=team)
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        delay=10 * 60,
+    )
+    _delete_event_view(
+        trigger_type="timeout",
+        request=None,
+        team_slug=experiment.team.slug,
+        experiment_id=experiment.id,
+        trigger_id=timeout_trigger.id,
+    )

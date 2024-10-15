@@ -181,6 +181,10 @@ class VersionsMixin:
         """Returns a list of fields that should be excluded when comparing two versions."""
         return self.DEFAULT_EXCLUDED_KEYS
 
+    def archive(self):
+        self.is_archived = True
+        self.save()
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
