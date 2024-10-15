@@ -34,14 +34,14 @@
             <button
                 type="button"
                 x-show="editActive"
-                class="hover:bg-base-200 p-1 rounded"
+                class="btn btn-sm hover:bg-base-200"
                 @click="concludeEdit()"
                 hx-post="{% url 'experiments:update_version_description' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number %}"
                 hx-swap="none"
             >
                 <i class="fa-sm fa-solid fa-check"></i>
             </button>
-            <button type="button" x-show="editActive" class="hover:bg-base-200 p-1 rounded" @click="cancelEdit()">
+            <button type="button" x-show="editActive" class="btn btn-sm hover:bg-base-200" @click="cancelEdit()">
                 <i class="fa-sm fa-solid fa-xmark"></i>
             </button>
         </div>
