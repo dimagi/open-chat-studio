@@ -11,7 +11,7 @@
     </div>
     <form class="my-2" x-data="{
                                editActive: false,
-                               descriptionText: '{{ experiment.version_description }}',
+                               descriptionText: '{{ experiment.version_description|escapejs }}',
                                previousdescriptionText: '',
                                cancelEdit(){
                                this.editActive = false;
