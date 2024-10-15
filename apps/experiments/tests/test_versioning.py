@@ -16,9 +16,10 @@ def test_compare_models():
     assert instance1.compare_with_model(instance2, exclude_fields=[]) == set(["temperature"])
 
 
+@pytest.mark.django_db()
 def test_differs():
-    experiment1 = ExperimentFactory.build(temperature=0.1)
-    experiment2 = ExperimentFactory.build(temperature=0.1)
+    experiment1 = ExperimentFactory(temperature=0.1)
+    experiment2 = ExperimentFactory(temperature=0.1)
     assert (
         differs(
             experiment1,
