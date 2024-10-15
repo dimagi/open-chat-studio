@@ -989,7 +989,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return new_instance
 
     def _generate_version_description(self, changed_fields: set | None = None) -> str:
-        description = "Auto created when the router was versioned"
+        description = "Auto created when the parent experiment was versioned"
         if changed_fields:
             changed_fields = ",".join(changed_fields)
             description = f"{description} since {changed_fields} changed."
