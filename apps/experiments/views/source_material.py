@@ -93,6 +93,6 @@ class EditSourceMaterial(UpdateView):
 class DeleteSourceMaterial(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         source_material = get_object_or_404(SourceMaterial, id=pk, team=request.team)
-        source_material.delete()
+        source_material.archive()
         messages.success(request, "Source Material deleted")
         return HttpResponse()
