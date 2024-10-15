@@ -384,6 +384,12 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
             ],
         )
 
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
+        self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):

@@ -2,8 +2,9 @@ import pytest
 from django.test import RequestFactory
 from django.urls import reverse
 
+from apps.experiments.models import ConsentForm
 from apps.experiments.views.consent import ConsentFormTableView
-from apps.utils.factories.experiment import ConsentFormFactory
+from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -21,13 +22,17 @@ class TestConsentFormTableView:
 
 
 @pytest.mark.django_db()
-def test_delete_123123(client):
+def test_delete(client):
     team = TeamWithUsersFactory()
     user = team.members.first()
     form = ConsentFormFactory(team=team, is_default=False)
+    experiment = ExperimentFactory(consent_form=form)
     client.force_login(user)
     url = reverse("experiments:consent_delete", args=[team.slug, form.id])
     response = client.delete(url)
     assert response.status_code == 200
     form.refresh_from_db()
     assert form.is_archived is True
+
+    experiment.refresh_from_db()
+    assert experiment.consent_form == ConsentForm.objects.get(team=team, is_default=True)
