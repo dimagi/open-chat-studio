@@ -220,7 +220,7 @@ class PipelineChatHistory(BaseModel):
         langchain_messages_to_last_summary = [
             message for message_pair in messages for message in message_pair.as_langchain_messages()
         ]
-        return langchain_messages_to_last_summary
+        return list(reversed(langchain_messages_to_last_summary))
 
 
 class PipelineChatMessages(BaseModel):
@@ -247,14 +247,11 @@ class PipelineChatMessages(BaseModel):
         return message_tuples
 
     def as_langchain_messages(self) -> list[BaseMessage]:
-        langchain_messages = []
+        langchain_messages = [
+            AIMessage(content=self.ai_message, additional_kwargs={"id": self.id}),
+            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id}),
+        ]
         if self.summary:
             langchain_messages.append(SystemMessage(content=self.summary, additional_kwargs={"id": self.id}))
-        langchain_messages.extend(
-            [
-                AIMessage(content=self.ai_message, additional_kwargs={"id": self.id}),
-                HumanMessage(content=self.human_message, additional_kwargs={"id": self.id}),
-            ]
-        )
 
         return langchain_messages

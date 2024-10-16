@@ -35,10 +35,10 @@ def test_no_summary_returns_all_messages(experiment_session):
     message1 = history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
     message2 = history.messages.create(ai_message="I can't do that", human_message="sudo, please fetch me a coffee")
     expected_messages = [
-        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id}),
-        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id}),
-        AIMessage(content="I am a robot", additional_kwargs={"id": message1.id}),
         HumanMessage(content="hi, please fetch me a coffee", additional_kwargs={"id": message1.id}),
+        AIMessage(content="I am a robot", additional_kwargs={"id": message1.id}),
+        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id}),
+        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id}),
     ]
     summary_messages = history.get_langchain_messages_until_summary()
     assert expected_messages == summary_messages
@@ -80,6 +80,6 @@ def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_
     assert PipelineChatMessages.objects.get(id=compressed_history[1].additional_kwargs["id"]).summary == "Summary"
 
     summary_messages = pipeline_chat_history.get_langchain_messages_until_summary()
-    assert isinstance(summary_messages[-1], HumanMessage)
-    assert isinstance(summary_messages[-2], AIMessage)
-    assert isinstance(summary_messages[-3], SystemMessage)
+    assert isinstance(summary_messages[0], SystemMessage)
+    assert isinstance(summary_messages[1], HumanMessage)
+    assert isinstance(summary_messages[2], AIMessage)

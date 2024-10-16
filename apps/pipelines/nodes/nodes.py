@@ -135,7 +135,7 @@ class LLMResponseWithPrompt(LLMResponse):
             return self.history_name
         return node_id
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list:
+    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list[BaseMessage]:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
