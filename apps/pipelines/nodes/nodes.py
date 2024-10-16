@@ -13,7 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.conversation import compress_chat_history
+from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
@@ -153,8 +153,11 @@ class LLMResponseWithPrompt(LLMResponse):
             )
         except PipelineChatHistory.DoesNotExist:
             return []
-        message_pairs = history.messages.all()
-        return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
+        return compress_pipeline_chat_history(
+            pipeline_chat_history=history,
+            llm=self.get_chat_model(),
+            input_messages=input_messages,
+        )
 
     def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
         if self.history_type == PipelineChatHistoryTypes.NONE:
