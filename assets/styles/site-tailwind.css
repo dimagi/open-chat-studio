@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@import './app/chat.css';
+@import './app/table.css';
+@import './app/alertify.css';
+@import './app/pg-components.css';
+@import './app/prompt-builder.css';
+
 @layer components {
 
   .section {
