@@ -10,14 +10,14 @@ class VersioningMixin:
         changed_fields = set([])
         for field in model_fields:
             if hasattr(field, "field"):
-                # These fields are "pseudo" fields, present on this object because another object has a FK to this one
+                # These are reverse relations, so let's ignore them
                 continue
-            elif field.many_to_many or field.one_to_many:
-                # TODO: refactor this piece
-                current_values_queryset = getattr(self, field.attname)
-                new_values_queryset = getattr(new, field.attname)
-                current_value = set(current_values_queryset.values_list("id", flat=True))
-                new_value = set(new_values_queryset.values_list("id", flat=True))
+
+            current_values = getattr(self, field.attname)
+            new_values = getattr(new, field.attname)
+            if field.many_to_many or field.one_to_many:
+                current_value = set(current_values.values_list("id", flat=True))
+                new_value = set(new_values.values_list("id", flat=True))
             else:
                 current_value = getattr(self, field.attname)
                 new_value = getattr(new, field.attname)
