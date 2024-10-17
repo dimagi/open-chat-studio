@@ -56,7 +56,7 @@ class VersionField:
 
     @property
     def is_queryset(self) -> bool:
-        return bool(self.queryset)
+        return self.queryset is not None
 
     def display_value(self) -> Any:
         if self.queryset:
@@ -67,7 +67,7 @@ class VersionField:
 
     def compare(self, previous_field_version: "VersionField", exclude_fields: list):
         self.previous_field_version = previous_field_version
-        if self.queryset:
+        if self.queryset is not None:
             self._compare_queryset(previous_field_version.queryset)
         else:
             if differs(self.raw_value, previous_field_version.raw_value, exclude_model_fields=exclude_fields):
