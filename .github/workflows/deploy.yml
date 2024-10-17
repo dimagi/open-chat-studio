@@ -23,8 +23,8 @@ on:
         options:
           - dev
           - prod
-  #  push:
-  #    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
 
 permissions:
   id-token: write
