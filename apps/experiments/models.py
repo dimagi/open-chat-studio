@@ -718,6 +718,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return new_version
 
     def _copy_pipeline_to_new_version(self, new_version):
+        if not self.pipeline:
+            return
         new_version.pipeline = self.pipeline.create_new_version()
         new_version.save()
 
