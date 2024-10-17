@@ -33,6 +33,10 @@ permissions:
   contents: read
   deployments: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.environment }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy
