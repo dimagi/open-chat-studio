@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -287,3 +287,13 @@ class PipelineBot:
             PipelineState(messages=[user_input], experiment_session=self.session), self.session
         )
         return output["messages"][-1]
+
+    def get_ai_message_id(self) -> int | None:
+        last_ai_message = (
+            ChatMessage.objects.filter(chat=self.session.chat, message_type=ChatMessageType.AI.value)
+            .values("id")
+            .last()
+        )
+        if not last_ai_message:
+            return None
+        return last_ai_message["id"]

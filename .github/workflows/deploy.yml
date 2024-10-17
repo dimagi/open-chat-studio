@@ -1,22 +1,31 @@
 # This workflow will build and push a new container image to Amazon ECR,
 # and then will deploy a new task definition for each of the services to Amazon ECS.
 
+# Expected vars:
+# The following vars must be set at the repo level. Their values must be JSON and contain one key per
+# environment (dev, prod, etc.) and the value for each key must be the value for that environment.
+#
+#   DEPLOY_APP_NAME: {"dev": "app1", "prod": "app2"}
+#   DEPLOY_AWS_REGION: {"dev": "us-west-2", "prod": "us-east-1"}
+#   AWS_ACCOUNT: {"dev": "123456789012", "prod": "123456789012"}
+
 # Note: The names of repository, cluster, services match what is configured in https://github.com/dimagi/ocs-deploy
 
 name: Deploy to Amazon ECS
 
 on:
   workflow_dispatch:
-#  push:
-#    branches: [ "main" ]
+    inputs:
+      environment:
+        description: "Deploy environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+  push:
+    branches: [ "main" ]
 
-env:
-  AWS_REGION: ${{ vars.DEPLOY_AWS_REGION }}
-  ECR_REPOSITORY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-ecr-repo
-  ECS_CLUSTER: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Cluster
-  ECS_SERVICE_DJANGO: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
-  ECS_SERVICE_CELERY: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Celery
-  ECS_SERVICE_CELERY_BEAT: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeat
 permissions:
   id-token: write
   contents: read
@@ -25,18 +34,42 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Set Deploy Env
+      # Set the deploy env based on the input from the event or else from the branch
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          DEPLOY_ENV="${{ inputs.environment }}"
+        elif [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
+          DEPLOY_ENV="prod"
+        else
+          DEPLOY_ENV="dev"
+        fi
+
+        echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
+
+    - name: Set variables
+      # Set other variables accordingly
+      run: |
+        # you can't reference the `env` context when defining other env vars to do it here
+        APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}"
+        echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+        echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo" >> "$GITHUB_ENV"
+        echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
+        echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
+
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
       with:
-        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT }}:role/github_deploy
+        role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
-        aws-region: ${{ env.AWS_REGION }}
+        aws-region: ${{ fromJSON(vars.DEPLOY_AWS_REGION)[env.DEPLOY_ENV] }}
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -69,7 +102,7 @@ jobs:
       id: django-web-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-Django
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
@@ -85,7 +118,7 @@ jobs:
       id: celery-worker-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryWorkerTask
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
         image: ${{ steps.image-name.outputs.image }}
 
@@ -93,7 +126,7 @@ jobs:
       id: celery-beat-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.5.0
       with:
-        task-definition-family: ${{ vars.DEPLOY_APP_NAME }}-${{ vars.DEPLOY_ENV }}-CeleryBeatTask
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat
         image: ${{ steps.image-name.outputs.image }}
 

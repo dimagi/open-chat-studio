@@ -131,7 +131,7 @@ class PromptBuilderHistory(BaseTeamModel):
 
 
 class VersionsMixin:
-    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version_id"]
+    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions"]
 
     @transaction.atomic()
     def create_new_version(self, save=True):
@@ -364,25 +364,6 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
-
-    @property
-    def version(self) -> Version:
-        """
-        Returns a `Version` instance representing the experiment version.
-        """
-
-        return Version(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="consent_text", raw_value=self.consent_text),
-                VersionField(name="capture_identifier", raw_value=self.capture_identifier),
-                VersionField(name="identifier_label", raw_value=self.identifier_label),
-                VersionField(name="identifier_type", raw_value=self.identifier_type),
-                VersionField(name="is_default", raw_value=self.is_default),
-                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
-            ],
-        )
 
     @transaction.atomic()
     def archive(self):
@@ -1020,7 +1001,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return new_instance
 
     def _generate_version_description(self, changed_fields: set | None = None) -> str:
-        description = "Auto created when the router was versioned"
+        description = "Auto created when the parent experiment was versioned"
         if changed_fields:
             changed_fields = ",".join(changed_fields)
             description = f"{description} since {changed_fields} changed."
@@ -1045,12 +1026,12 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             return super().compare_with_model(route, exclude_fields)
 
         fields_to_exclude = exclude_fields.copy()
-        fields_to_exclude.extend(["parent_id"])
+        fields_to_exclude.extend(["parent"])
 
         if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
             return super().compare_with_model(route, fields_to_exclude)
 
-        fields_to_exclude.append("child_id")
+        fields_to_exclude.append("child")
         # Compare all other fields first
         results = list(super().compare_with_model(route, fields_to_exclude))
 
@@ -1062,8 +1043,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @property
     def fields_to_exclude_for_child(self):
-        fields_to_keep = ["prompt_text", "voice_provider_id", "synthetic_voice_id", "llm_provider_id", "llm"]
-        return [field.get_attname() for field in Experiment._meta.fields if field.get_attname() not in fields_to_keep]
+        fields_to_keep = ["prompt_text", "voice_provider", "synthetic_voice", "llm_provider", "llm"]
+        return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
 
     class Meta:
         unique_together = (

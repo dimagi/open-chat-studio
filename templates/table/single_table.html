@@ -9,7 +9,12 @@
       element.addEventListener('click', function (event) {
         if (event.target.tagName === 'TR' || event.target.tagName === 'TD') {
           let editUrl = this.getAttribute('data-redirect-url');
-          window.location.href = editUrl;
+          try {
+            let url = new URL(editUrl, window.location.origin);
+            window.location.href = url.href;
+          } catch (e) {
+            console.error('Invalid URL:', editUrl);
+          }
         }
       });
     });

@@ -512,30 +512,26 @@ class TestExperimentRouteVersioning:
         assert versioned_route.child.working_version == working_child
 
     def test_versioned_child_is_reused(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="child")
+        expected_difference = set(["id", "parent_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child
+
+    def test_working_child_without_changes_uses_latest_version(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="working")
+        expected_difference = set(["id", "parent_id", "child_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child.latest_version
+
+    def _setup_versioned_experiment_route(self, child_bot: str):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
         working_child = ExperimentFactory(team=team)
         child_version = working_child.create_new_version()
-        working_route = ExperimentRoute.objects.create(
-            team=team, parent=parent_exp, child=child_version, keyword="testing"
-        )
-        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        expected_difference = set(["id", "parent_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == child_version
-
-    def test_working_child_without_changes_uses_latest_version(self):
-        parent_exp = ExperimentFactory()
-        team = parent_exp.team
-        working_child = ExperimentFactory(team=team)
-        latest_child_version = working_child.create_new_version()
-        working_route = ExperimentRoute.objects.create(
-            team=team, parent=parent_exp, child=working_child, keyword="testing"
-        )
-        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
-        expected_difference = set(["id", "parent_id", "child_id"])
-        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
-        assert versioned_route.child == latest_child_version
+        child_bot = working_child if child_bot == "working" else child_version
+        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_bot, keyword="testing")
+        version = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        return working_route, version
 
 
 @pytest.mark.django_db()
@@ -608,7 +604,7 @@ class TestExperimentRoute:
             parent=versioned_parent, child=versioned_child2, keyword="test", team=parent.team, working_version=route
         )
         changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["child_id"])
+        assert changes == set(["child"])
 
     def test_compare_with_model_testcase_4(self):
         """
@@ -630,7 +626,7 @@ class TestExperimentRoute:
             parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
         )
         changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
-        assert changes == set(["child_id"])
+        assert changes == set(["child"])
 
 
 @pytest.mark.django_db()
@@ -725,15 +721,16 @@ class TestExperimentModel:
             new=new_version,
             expected_changed_fields=[
                 "id",
-                "source_material_id",
+                "source_material",
                 "public_id",
-                "working_version_id",
+                "working_version",
                 "version_number",
                 "is_default_version",
-                "consent_form_id",
-                "pre_survey_id",
-                "post_survey_id",
+                "consent_form",
+                "pre_survey",
+                "post_survey",
                 "version_description",
+                "safety_layers",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -825,14 +822,14 @@ class TestExperimentModel:
             _compare_models(
                 original=copied_trigger.working_version,
                 new=copied_trigger,
-                expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
+                expected_changed_fields=["id", "action", "working_version", "experiment"],
             )
 
     def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
         _compare_models(
             original=getattr(original_experiment, attr_name),
             new=getattr(new_version, attr_name),
-            expected_changed_fields=["id", "working_version_id"],
+            expected_changed_fields=["id", "working_version"],
         )
 
     def test_get_version(self, experiment):
