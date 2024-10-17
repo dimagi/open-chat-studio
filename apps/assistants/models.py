@@ -83,6 +83,8 @@ class OpenAiAssistant(BaseTeamModel):
     "extra",
     audit_special_queryset_writes=True,
 )
+
+# TODO: deprecate
 class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)

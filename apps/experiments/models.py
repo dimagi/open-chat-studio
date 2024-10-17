@@ -453,6 +453,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         verbose_name="OpenAI Assistant",
     )
+    openai_assistant_id = models.CharField(max_length=255, blank=True)
     pipeline = models.ForeignKey(
         "pipelines.Pipeline",
         on_delete=models.SET_NULL,
@@ -533,6 +534,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
+    # TODO: transisiton to use ToolProperties
     files = models.ManyToManyField("files.File", blank=True)
     participant_data = GenericRelation("experiments.ParticipantData", related_query_name="bots")
     children = models.ManyToManyField(
@@ -1307,3 +1309,19 @@ class ExperimentSession(BaseTeamModel):
         experiment's version number
         """
         return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, Experiment.DEFAULT_VERSION_NUMBER)
+
+
+class ToolProperties(BaseModel):
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="tool_properties")
+    tool_type = models.CharField(max_length=128)
+    files = models.ManyToManyField("files.File", blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    objects = AuditingManager()
+
+    @property
+    def label(self):
+        return self.tool_type.replace("_", " ").title()
+
+    def __str__(self):
+        return f"Tool Properties for {self.experiment.name}: {self.tool_type}"
