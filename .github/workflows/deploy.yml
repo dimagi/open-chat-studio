@@ -23,8 +23,10 @@ on:
         options:
           - dev
           - prod
-  push:
-    branches: [ "main" ]
+  workflow_run:
+    workflows: [ Run Django Tests, Build Front End ]
+    types:
+      - completed
 
 permissions:
   id-token: write
