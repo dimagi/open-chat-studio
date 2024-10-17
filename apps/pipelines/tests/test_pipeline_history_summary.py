@@ -35,10 +35,10 @@ def test_no_summary_returns_all_messages(experiment_session):
     message1 = history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
     message2 = history.messages.create(ai_message="I can't do that", human_message="sudo, please fetch me a coffee")
     expected_messages = [
-        HumanMessage(content="hi, please fetch me a coffee", additional_kwargs={"id": message1.id}),
-        AIMessage(content="I am a robot", additional_kwargs={"id": message1.id}),
-        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id}),
-        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id}),
+        HumanMessage(content="hi, please fetch me a coffee", additional_kwargs={"id": message1.id, "node_id": ""}),
+        AIMessage(content="I am a robot", additional_kwargs={"id": message1.id, "node_id": ""}),
+        HumanMessage(content="sudo, please fetch me a coffee", additional_kwargs={"id": message2.id, "node_id": ""}),
+        AIMessage(content="I can't do that", additional_kwargs={"id": message2.id, "node_id": ""}),
     ]
     summary_messages = history.get_langchain_messages_until_summary()
     assert expected_messages == summary_messages

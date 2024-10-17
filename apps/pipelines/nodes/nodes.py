@@ -171,7 +171,7 @@ class LLMResponseWithPrompt(LLMResponse):
         history, _ = session.pipeline_chat_history.get_or_create(
             type=self.history_type, name=self._get_history_name(node_id)
         )
-        message = history.messages.create(human_message=human_message, ai_message=ai_message)
+        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=node_id)
         return message
 
     def _get_participant_data(self, session):

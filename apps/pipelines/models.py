@@ -227,6 +227,7 @@ class PipelineChatHistory(BaseModel):
 
 class PipelineChatMessages(BaseModel):
     chat_history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="messages")
+    node_id = models.TextField()
     human_message = models.TextField()
     ai_message = models.TextField()
     summary = models.TextField(null=True)  # noqa: DJ001
@@ -250,10 +251,12 @@ class PipelineChatMessages(BaseModel):
 
     def as_langchain_messages(self) -> list[BaseMessage]:
         langchain_messages = [
-            AIMessage(content=self.ai_message, additional_kwargs={"id": self.id}),
-            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id}),
+            AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
+            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]
         if self.summary:
-            langchain_messages.append(SystemMessage(content=self.summary, additional_kwargs={"id": self.id}))
+            langchain_messages.append(
+                SystemMessage(content=self.summary, additional_kwargs={"id": self.id, "node_id": self.node_id})
+            )
 
         return langchain_messages
