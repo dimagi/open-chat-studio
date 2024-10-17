@@ -130,6 +130,9 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+
 
 class TimeoutTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
@@ -278,6 +281,9 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         return not (has_succeeded or failed)
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
 
 
 class TimePeriod(models.TextChoices):

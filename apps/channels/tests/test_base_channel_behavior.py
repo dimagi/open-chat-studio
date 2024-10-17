@@ -814,7 +814,7 @@ class TestBaseChannelMethods:
         assert not ExperimentSession.objects.filter(experiment=new_version).exists()
 
     def test_can_start_a_session_with_working_experiment(self, experiment):
-        assert experiment.is_versioned is False
+        assert experiment.is_a_version is False
         channel = ExperimentChannelFactory(experiment=experiment)
         session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
         assert session.experiment == experiment
@@ -822,6 +822,6 @@ class TestBaseChannelMethods:
     def test_cannot_start_a_session_with_an_experiment_version(self, experiment):
         channel = ExperimentChannelFactory(experiment=experiment)
         new_version = experiment.create_new_version()
-        assert new_version.is_versioned is True
+        assert new_version.is_a_version is True
         with pytest.raises(VersionedExperimentSessionsNotAllowedException):
             ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")

@@ -16,7 +16,6 @@ from apps.experiments.models import (
     SafetyLayer,
     SyntheticVoice,
 )
-from apps.experiments.versioning import compare_models
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -30,10 +29,9 @@ from apps.utils.factories.experiment import (
     SourceMaterialFactory,
     SurveyFactory,
     SyntheticVoiceFactory,
-    VersionedExperimentFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -492,22 +490,48 @@ class TestSourceMaterialVersioning:
 
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
-    @pytest.mark.parametrize("versioned", [True, False])
-    def test_create_new_route_version(self, versioned):
+    @pytest.mark.parametrize("child_has_versions", [True, False])
+    def test_child_is_working_with_changes_creates_new_version(self, child_has_versions):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
-        child_exp = VersionedExperimentFactory(team=team) if versioned else ExperimentFactory(team=team)
-        new_parent = ExperimentFactory(team=team)
-        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
+        working_child = ExperimentFactory(team=team, prompt_text="some prompt")
+        working_route = ExperimentRoute.objects.create(
+            team=team, parent=parent_exp, child=working_child, keyword="testing"
+        )
 
-        versioned_route = working_route.create_new_version(new_parent)
-        assert versioned_route != working_route
-        if versioned:
-            expected_difference = set(["id", "parent_id"])
-        else:
-            expected_difference = set(["id", "parent_id", "child_id"])
+        if child_has_versions:
+            working_child.create_new_version()
+            # Update the working version so there are changes
+            working_child.prompt_text = "a new prompt"
+            working_child.save()
 
+        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        expected_difference = set(["id", "parent_id", "child_id"])
         _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child != working_child
+        assert versioned_route.child.working_version == working_child
+
+    def test_versioned_child_is_reused(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="child")
+        expected_difference = set(["id", "parent_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child
+
+    def test_working_child_without_changes_uses_latest_version(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="working")
+        expected_difference = set(["id", "parent_id", "child_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child.latest_version
+
+    def _setup_versioned_experiment_route(self, child_bot: str):
+        parent_exp = ExperimentFactory()
+        team = parent_exp.team
+        working_child = ExperimentFactory(team=team)
+        child_version = working_child.create_new_version()
+        child_bot = working_child if child_bot == "working" else child_version
+        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_bot, keyword="testing")
+        version = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        return working_route, version
 
 
 @pytest.mark.django_db()
@@ -527,6 +551,82 @@ class TestExperimentRoute:
 
         queryset = ExperimentRoute.eligible_children(team=parent.team)
         assert len(queryset) == 4
+
+    def test_compare_with_model_testcase_1(self):
+        """
+        One child is a working version and the other is a version of that working version
+        """
+        # 1. The children of both route versions are family with one being the working version
+        # 1.1. No changes between the working and versioned child
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set([])
+
+        # 1.2. A change between the working and versioned child
+        child.prompt_text = "This is a change"
+        child.save()
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["prompt_text"])
+
+    def test_compare_with_model_testcase_2(self):
+        """
+        Both children are versions of the same experiment
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set()
+
+    def test_compare_with_model_testcase_3(self):
+        """
+        They are different versions, so we expect the compare method to pick this up
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child1 = child.create_new_version()
+        versioned_child2 = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["child"])
+
+    def test_compare_with_model_testcase_4(self):
+        """
+        The children are experiments of different families.
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child1 = ExperimentFactory(team=parent.team)
+        child2 = ExperimentFactory(
+            team=parent.team,
+            synthetic_voice=SyntheticVoiceFactory(),
+            voice_provider=VoiceProviderFactory(),
+            llm="yoda",
+            llm_provider=LlmProviderFactory(),
+            prompt_text="this is a change",
+        )
+        route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["child"])
 
 
 @pytest.mark.django_db()
@@ -621,18 +721,21 @@ class TestExperimentModel:
             new=new_version,
             expected_changed_fields=[
                 "id",
-                "source_material_id",
+                "source_material",
                 "public_id",
-                "working_version_id",
+                "working_version",
                 "version_number",
                 "is_default_version",
-                "consent_form_id",
-                "pre_survey_id",
-                "post_survey_id",
+                "consent_form",
+                "pre_survey",
+                "post_survey",
                 "version_description",
+                "safety_layers",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
+        self._assert_source_material_is_duplicated(original_experiment, new_version)
+        self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
@@ -694,7 +797,8 @@ class TestExperimentModel:
     def _assert_routes_are_duplicated(self, original_experiment, new_version):
         for route in new_version.child_links.all():
             assert route.parent.working_version == original_experiment
-            assert route.child.is_versioned is True
+            assert route.working_version.parent == original_experiment
+            assert route.child.is_a_version is True
 
     def _assert_files_are_duplicated(self, original_experiment, new_version):
         new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
@@ -718,14 +822,14 @@ class TestExperimentModel:
             _compare_models(
                 original=copied_trigger.working_version,
                 new=copied_trigger,
-                expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
+                expected_changed_fields=["id", "action", "working_version", "experiment"],
             )
 
     def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
         _compare_models(
             original=getattr(original_experiment, attr_name),
             new=getattr(new_version, attr_name),
-            expected_changed_fields=["id", "working_version_id"],
+            expected_changed_fields=["id", "working_version"],
         )
 
     def test_get_version(self, experiment):
@@ -789,7 +893,7 @@ class TestExperimentObjectManager:
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    field_difference = compare_models(original, new, original.DEFAULT_EXCLUDED_KEYS).difference(
+    field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )
     assert (

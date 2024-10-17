@@ -1,0 +1,19 @@
+<div class="grid grid-cols-2">
+    {% if field.changed %}
+        <div class="text-sm col-span-1 rounded bg-red-100 text-red-800 me-2 px-1 py-0.5 dark:bg-red-900 dark:text-red-300">
+            {{ field.previous_field_version.display_value }}
+        </div>
+        <div class="text-sm col-span-1 rounded bg-green-100 text-green-800 me-2 px-1 py-0.5 dark:bg-green-900 dark:text-green-300">
+            {{ field.display_value }}
+        </div>
+    {% else %}
+        {% if field.previous_field_version %}
+            <div class="text-sm col-span-1 px-1">
+                {{ field.previous_field_version.display_value }}
+            </div>
+        {% endif %}
+        <div class="text-sm col-span-1 px-1">
+            {{ field.display_value }}
+        </div>
+    {% endif %}
+</div>

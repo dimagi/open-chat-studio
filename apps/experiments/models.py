@@ -26,6 +26,7 @@ from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
+from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
 
 log = logging.getLogger(__name__)
@@ -126,7 +127,7 @@ class PromptBuilderHistory(BaseTeamModel):
 
 
 class VersionsMixin:
-    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version_id"]
+    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions"]
 
     @transaction.atomic()
     def create_new_version(self, save=True):
@@ -147,8 +148,8 @@ class VersionsMixin:
         return new_instance
 
     @property
-    def is_versioned(self):
-        """Return whether or not this experiment is a versioned experiment"""
+    def is_a_version(self):
+        """Return whether or not this experiment is a version of an experiment"""
         return self.working_version is not None
 
     @property
@@ -171,6 +172,10 @@ class VersionsMixin:
     @property
     def has_versions(self):
         return self.versions.exists()
+
+    def get_fields_to_exclude(self):
+        """Returns a list of fields that should be excluded when comparing two versions."""
+        return self.DEFAULT_EXCLUDED_KEYS
 
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
@@ -701,7 +706,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         latest_attr_version = attr_instance.latest_version
 
         if latest_attr_version and not differs(
-            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.DEFAULT_EXCLUDED_KEYS
+            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.get_fields_to_exclude()
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
@@ -741,16 +746,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
         Returns a `Version` instance representing the experiment version.
         """
 
-        def yes_no(value: bool):
+        def yes_no(value: bool) -> str:
             return "Yes" if value else "No"
 
-        def format_tools(tools: set):
+        def format_tools(tools: set) -> str:
             return ", ".join([AgentTools(tool).label for tool in tools])
 
-        def format_array_field(arr: list):
+        def format_array_field(arr: list) -> str:
             return ", ".join([entry for entry in arr])
 
-        # TODO: Add more fields
+        def format_trigger(trigger) -> str:
+            string = "If"
+            if trigger.trigger_type == "TimeoutTrigger":
+                seconds = seconds_to_human(trigger.delay)
+                string = f"{string} no response for {seconds}"
+            else:
+                string = f"{string} {trigger.get_type_display().lower()}"
+
+            trigger_action = trigger.action.get_action_type_display().lower()
+            return f"{string} then {trigger_action}"
+
+        def format_route(route) -> str:
+            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
+            if route.is_default:
+                string = f"{string} (default)"
+            return string
+
         return Version(
             instance=self,
             fields=[
@@ -767,6 +788,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
+                VersionField(
+                    group_name="Safety",
+                    name="safety_layers",
+                    queryset=self.safety_layers,
+                ),
                 VersionField(
                     group_name="Safety",
                     name="safety_violation_emails",
@@ -829,6 +855,26 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+                # Triggers
+                VersionField(
+                    group_name="Triggers",
+                    name="static_triggers",
+                    queryset=self.static_triggers,
+                    to_display=format_trigger,
+                ),
+                VersionField(
+                    group_name="Triggers",
+                    name="timeout_triggers",
+                    queryset=self.timeout_triggers,
+                    to_display=format_trigger,
+                ),
+                # Routing
+                VersionField(
+                    group_name="Routing",
+                    name="routes",
+                    queryset=self.child_links,
+                    to_display=format_route,
+                ),
             ],
         )
 
@@ -849,6 +895,13 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
     is_default = models.BooleanField(default=False)
     type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
     condition = models.CharField(max_length=64, blank=True)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):
@@ -877,15 +930,90 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
+        """
+        Strategy for handling child versions:
+
+        1. If the child is already a version:
+        - Do not create a new child version.
+
+        2. If the child is a working version, verify whether the latest version of the child:
+        - Is identical to the current one, and
+        - Belongs to the same version family.
+
+        - If both conditions are met, reuse the latest version of the child.
+        - Otherwise, proceed to create a new version.
+        """
+
         new_instance = super().create_new_version(save=False)
         new_instance.parent = new_parent
-
-        if not new_instance.child.is_versioned:
+        if not new_instance.child.is_a_version:
             # TODO: The user must be notified and give consent to us doing this. Ignore for now
-            new_instance.child = new_instance.child.create_new_version()
+            latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
 
+            if latest_child_version:
+                is_identical_to_working_version = not differs(
+                    self.child, latest_child_version, exclude_model_fields=self.fields_to_exclude_for_child
+                )
+                if is_identical_to_working_version:
+                    new_child = latest_child_version
+                else:
+                    fields_changed = self.child.compare_with_model(
+                        latest_child_version, self.fields_to_exclude_for_child
+                    )
+                    description = self._generate_version_description(fields_changed)
+                    new_child = new_instance.child.create_new_version(version_description=description)
+            else:
+                new_child = new_instance.child.create_new_version(self._generate_version_description())
+
+            new_instance.child = new_child
         new_instance.save()
         return new_instance
+
+    def _generate_version_description(self, changed_fields: set | None = None) -> str:
+        description = "Auto created when the parent experiment was versioned"
+        if changed_fields:
+            changed_fields = ",".join(changed_fields)
+            description = f"{description} since {changed_fields} changed."
+        return description
+
+    def compare_with_model(self, route: "ExperimentRoute", exclude_fields):
+        """
+        When comparing two ExperimentRoute versions (with the same parents), consider the following:
+
+        1. The child of one version may belong to a different family than the child of the other version.
+
+        2. If both children belong to the same family:
+        - 2.1. If the version numbers are the same, the child has not changed.
+        - 2.2. If the version numbers differ:
+            - 2.2.1. If both are versions, then they are considered different.
+            - 2.2.2. If one of them is a working version, verify if any changes have occurred in the working version
+                    since the version was created. Some fields are not applicable to the child and can be ignored
+                    when calculating changes.
+        """
+        is_same_family = self.get_working_version() == route.get_working_version()
+        if not is_same_family:
+            return super().compare_with_model(route, exclude_fields)
+
+        fields_to_exclude = exclude_fields.copy()
+        fields_to_exclude.extend(["parent"])
+
+        if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
+            return super().compare_with_model(route, fields_to_exclude)
+
+        fields_to_exclude.append("child")
+        # Compare all other fields first
+        results = list(super().compare_with_model(route, fields_to_exclude))
+
+        # Now compare the children
+        child_changes = self.child.compare_with_model(route.child, self.fields_to_exclude_for_child)
+
+        results.extend(list(child_changes))
+        return set(results)
+
+    @property
+    def fields_to_exclude_for_child(self):
+        fields_to_keep = ["prompt_text", "voice_provider", "synthetic_voice", "llm_provider", "llm"]
+        return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
 
     class Meta:
         unique_together = (

@@ -778,7 +778,7 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
 ) -> ExperimentSession:
-    if working_experiment.is_versioned:
+    if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
             message="A session cannot be linked to an experiment version. "
         )

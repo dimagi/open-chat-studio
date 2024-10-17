@@ -1,7 +1,7 @@
 import pytest
 
 from apps.experiments.models import Experiment, VersionsMixin
-from apps.experiments.versioning import Version, VersionField, compare_models, differs
+from apps.experiments.versioning import Version, VersionField, differs
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -10,15 +10,16 @@ def test_compare_models():
     experiment = ExperimentFactory(temperature=0.1)
     instance1 = Experiment.objects.get(id=experiment.id)
     instance2 = Experiment.objects.get(id=experiment.id)
-    assert compare_models(instance1, instance2, exclude_fields=[]) == set()
+    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set()
     instance2.temperature = 0.2
-    assert compare_models(instance1, instance2, exclude_fields=["temperature"]) == set()
-    assert compare_models(instance1, instance2, exclude_fields=[]) == set(["temperature"])
+    assert instance1.compare_with_model(instance2, exclude_fields=["temperature"]) == set()
+    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set(["temperature"])
 
 
+@pytest.mark.django_db()
 def test_differs():
-    experiment1 = ExperimentFactory.build(temperature=0.1)
-    experiment2 = ExperimentFactory.build(temperature=0.1)
+    experiment1 = ExperimentFactory(temperature=0.1)
+    experiment2 = ExperimentFactory(temperature=0.1)
     assert (
         differs(
             experiment1,
@@ -74,6 +75,59 @@ class TestVersion:
         assert changed_field.raw_value == 0.1
         assert changed_field.changed is True
         assert changed_field.previous_field_version.raw_value == 0.2
+
+    @pytest.mark.django_db()
+    def test_compare_querysets_with_equal_results(self):
+        experiment = ExperimentFactory()
+        queryset = Experiment.objects.filter(id=experiment.id)
+        # Compare with itself
+        version_field = VersionField(queryset=queryset)
+        version_field._compare_queryset(queryset)
+        assert version_field.changed is False
+        assert len(version_field.queryset_result_versions) == 1
+        queryset_result_version = version_field.queryset_result_versions[0]
+        assert queryset_result_version.raw_value == experiment
+        assert queryset_result_version.previous_field_version.raw_value == experiment
+
+    @pytest.mark.django_db()
+    def test_compare_querysets_with_results_of_differing_versions(self):
+        experiment = ExperimentFactory()
+        queryset = Experiment.objects.filter(id=experiment.id)
+        # Compare with new version
+        new_version = experiment.create_new_version()
+        experiment.prompt_text = "This now changed"
+        experiment.save()
+        version_field = VersionField(queryset=queryset)
+        version_field._compare_queryset(Experiment.objects.filter(id=new_version.id))
+        assert version_field.changed is True
+        assert len(version_field.queryset_result_versions) == 1
+        queryset_result_version = version_field.queryset_result_versions[0]
+        assert queryset_result_version.raw_value == experiment
+        assert queryset_result_version.previous_field_version.raw_value == new_version
+
+    @pytest.mark.django_db()
+    def test_compare_querysets_with_different_results(self):
+        """
+        When comparing different querysets, we expect two result versions to be created. One for the current queryset
+        not having a match in the previous queryset and one for the previous queryset not having a match in the current
+        queryset
+        """
+        experiment = ExperimentFactory()
+        queryset = Experiment.objects.filter(id=experiment.id)
+        # Compare with a totally different queryset
+        another_experiment = ExperimentFactory()
+        version_field = VersionField(queryset=queryset)
+        version_field._compare_queryset(Experiment.objects.filter(id=another_experiment.id))
+        assert version_field.changed is True
+
+        assert len(version_field.queryset_result_versions) == 2
+        first_result_version = version_field.queryset_result_versions[0]
+        assert first_result_version.raw_value == experiment
+        assert first_result_version.previous_field_version is None
+
+        second_result_version = version_field.queryset_result_versions[1]
+        assert second_result_version.raw_value is None
+        assert second_result_version.previous_field_version.raw_value == another_experiment
 
     def test_type_error_raised(self):
         """A type error should be raised when comparing versions of differing types"""
