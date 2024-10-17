@@ -23,6 +23,10 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
         return super().get_queryset().prefetch_related("node_set")
 
 
+class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
 class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     data = models.JSONField()
@@ -156,6 +160,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         return pipeline_version
 
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.node_set.update(is_archived=True)
+
 
 class Node(BaseModel, VersionsMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
@@ -170,8 +179,8 @@ class Node(BaseModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
-
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+    objects = NodeObjectManager()
 
     def __str__(self):
         return self.flow_id

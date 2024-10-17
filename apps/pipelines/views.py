@@ -79,7 +79,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
     def delete(self, request, team_slug: str, pk: int):
         pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
-        pipeline.delete()
+        pipeline.archive()
         messages.success(request, f"{pipeline.name} deleted")
         return HttpResponse()
 
