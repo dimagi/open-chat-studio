@@ -117,7 +117,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-                self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                ai_message = self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                output["ai_message_id"] = ai_message.id
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
@@ -139,8 +140,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             session=session,
         )
 
-    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
+    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType) -> ChatMessage:
+        return ChatMessage.objects.create(
             chat=session.chat,
             message_type=type_.value,
             content=message,

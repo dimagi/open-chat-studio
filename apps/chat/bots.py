@@ -282,19 +282,14 @@ class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment):
         self.experiment = experiment
         self.session = session
+        self.ai_message_id = None
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
         output = self.experiment.pipeline.invoke(
             PipelineState(messages=[user_input], experiment_session=self.session), self.session
         )
+        self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]
 
-    def get_ai_message_id(self) -> int | None:
-        last_ai_message = (
-            ChatMessage.objects.filter(chat=self.session.chat, message_type=ChatMessageType.AI.value)
-            .values("id")
-            .last()
-        )
-        if not last_ai_message:
-            return None
-        return last_ai_message["id"]
+    def get_ai_message_id(self):
+        return self.ai_message_id
