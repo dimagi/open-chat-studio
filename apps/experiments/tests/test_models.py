@@ -31,6 +31,7 @@ from apps.utils.factories.experiment import (
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
@@ -687,7 +688,7 @@ class TestExperimentModel:
         post_survey = SurveyFactory(team=team)
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
-
+        experiment.pipeline = PipelineFactory(team=experiment.team)
         experiment.save()
         return experiment
 
@@ -731,6 +732,7 @@ class TestExperimentModel:
                 "post_survey",
                 "version_description",
                 "safety_layers",
+                "pipeline",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -743,12 +745,18 @@ class TestExperimentModel:
         self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
+        self._assert_pipeline_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
+
+    def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
+        assert new_version.pipeline.working_version == original_experiment.pipeline
+        for node in new_version.pipeline.node_set.all():
+            assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
 
     def test_copy_attr_to_new_version(self):
         """

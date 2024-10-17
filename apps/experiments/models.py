@@ -710,11 +710,16 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         self._copy_safety_layers_to_new_version(new_version)
         self._copy_routes_to_new_version(new_version)
-        self.copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
-        self.copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
+        self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
+        self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
+        self._copy_pipeline_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
+
+    def _copy_pipeline_to_new_version(self, new_version):
+        new_version.pipeline = self.pipeline.create_new_version()
+        new_version.save()
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
@@ -755,7 +760,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for route in self.child_links.all():
             route.create_new_version(new_version)
 
-    def copy_trigger_to_new_version(self, trigger_queryset, new_version):
+    def _copy_trigger_to_new_version(self, trigger_queryset, new_version):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
 
@@ -901,7 +906,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(
                     group_name="Routing",
                     name="routes",
-                    queryset=self.child_links,
+                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
+                    to_display=format_route,
+                ),
+                VersionField(
+                    group_name="Routing",
+                    name="terminal_bot",
+                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
                     to_display=format_route,
                 ),
             ],
