@@ -95,3 +95,5 @@ def test_delete():
         experiment_id=experiment.id,
         trigger_id=static_trigger.id,
     )
+    static_trigger.refresh_from_db()
+    assert static_trigger.is_archived, "The static trigger should be archived"

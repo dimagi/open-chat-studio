@@ -352,3 +352,5 @@ def test_delete():
         experiment_id=experiment.id,
         trigger_id=timeout_trigger.id,
     )
+    timeout_trigger.refresh_from_db()
+    assert timeout_trigger.is_archived, "The timeout trigger should be archived"
