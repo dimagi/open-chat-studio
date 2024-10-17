@@ -3,13 +3,13 @@ from functools import cached_property
 
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -18,14 +18,22 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class PipelineManager(models.Manager):
+class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
         return super().get_queryset().prefetch_related("node_set")
 
 
-class Pipeline(BaseTeamModel):
+class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     data = models.JSONField()
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
 
     objects = PipelineManager()
 
@@ -135,12 +143,33 @@ class Pipeline(BaseTeamModel):
         )
         # TODO: Add tags here?
 
+    @transaction.atomic()
+    def create_new_version(self, *args, **kwargs):
+        pipeline_version = super().create_new_version(*args, **kwargs)
+        new_nodes = []
+        for node in self.node_set.all():
+            node_version = node.create_new_version()
+            node_version.pipeline = pipeline_version
+            new_nodes.append(node_version)
 
-class Node(BaseModel):
+        Node.objects.bulk_update(new_nodes, fields=["pipeline"])
+
+        return pipeline_version
+
+
+class Node(BaseModel, VersionsMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = models.JSONField(default=dict)  # Parameters for the specific node type
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
 
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
 
