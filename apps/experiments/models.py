@@ -801,9 +801,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return f"{string} then {trigger_action}"
 
         def format_route(route) -> str:
-            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
-            if route.is_default:
-                string = f"{string} (default)"
+            if route.type == ExperimentRouteType.PROCESSOR:
+                string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
+                if route.is_default:
+                    string = f"{string} (default)"
+                return string
+            elif route.type == ExperimentRouteType.TERMINAL:
+                string = f"Use {route.child} as the terminal bot"
             return string
 
         return Version(
