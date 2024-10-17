@@ -197,6 +197,9 @@ class PipelineChatHistory(BaseModel):
     type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
     name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
 
+    def __str__(self):
+        return f"Session: {self.session_id}, Type: {self.type}, Name: {self.name}"
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
