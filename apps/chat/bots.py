@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
