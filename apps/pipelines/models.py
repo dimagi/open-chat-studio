@@ -20,7 +20,18 @@ from apps.utils.models import BaseModel
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
-        return super().get_queryset().prefetch_related("node_set")
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=models.Case(
+                    models.When(working_version_id__isnull=False, then=True),
+                    models.When(working_version_id__isnull=True, then=False),
+                    output_field=models.BooleanField(),
+                )
+            )
+            .prefetch_related("node_set")
+        )
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
