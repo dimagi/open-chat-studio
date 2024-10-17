@@ -42,8 +42,9 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-    if session.experiment.pipeline_id:
-        return PipelineBot(session)
+    experiment = experiment or session.experiment_version
+    if experiment.pipeline_id:
+        return PipelineBot(session, experiment=experiment)
     return TopicBot(session, experiment, disable_tools=disable_tools)
 
 
@@ -278,8 +279,8 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession):
-        self.experiment = session.experiment_version
+    def __init__(self, session: ExperimentSession, experiment: Experiment):
+        self.experiment = experiment
         self.session = session
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
