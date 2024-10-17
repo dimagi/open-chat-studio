@@ -135,14 +135,18 @@ def compress_chat_history(
 
 
 def compress_pipeline_chat_history(
-    pipeline_chat_history: PipelineChatHistory, llm: BaseChatModel, input_messages: list, keep_history_len: int = 10
+    pipeline_chat_history: PipelineChatHistory,
+    llm: BaseChatModel,
+    max_token_limit: int,
+    input_messages: list,
+    keep_history_len: int = 10,
 ) -> list[BaseMessage]:
     history_messages = pipeline_chat_history.get_langchain_messages_until_summary()
     try:
         history, last_message, summary = _compress_chat_history(
             history=history_messages,
             llm=llm,
-            max_token_limit=pipeline_chat_history.token_limit,
+            max_token_limit=max_token_limit,
             input_messages=input_messages,
             keep_history_len=keep_history_len,
         )

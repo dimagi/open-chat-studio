@@ -196,7 +196,6 @@ class PipelineChatHistory(BaseModel):
 
     type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
     name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
-    token_limit = models.IntegerField(default=8192)  # When to create a new summary
 
     class Meta:
         constraints = [

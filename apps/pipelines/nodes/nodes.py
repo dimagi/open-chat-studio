@@ -155,6 +155,7 @@ class LLMResponseWithPrompt(LLMResponse):
             return []
         return compress_pipeline_chat_history(
             pipeline_chat_history=history,
+            max_token_limit=self.max_token_limit,
             llm=self.get_chat_model(),
             input_messages=input_messages,
         )

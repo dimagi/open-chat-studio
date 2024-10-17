@@ -51,9 +51,12 @@ def test_compress_history_no_need_for_compression(pipeline_chat_history):
         # = 90 tokens in total
         pipeline_chat_history.messages.create(human_message=f"Hello {i}", ai_message=f"Hello {i}")
 
-    pipeline_chat_history.token_limit = 90
+    token_limit = 90
     compress_pipeline_chat_history(
-        pipeline_chat_history, FakeLlmSimpleTokenCount(responses=["Summary"]), input_messages=[]
+        pipeline_chat_history,
+        FakeLlmSimpleTokenCount(responses=["Summary"]),
+        max_token_limit=token_limit,
+        input_messages=[],
     )
     messages = pipeline_chat_history.get_langchain_messages_until_summary()
     # No summary messages
@@ -71,9 +74,12 @@ def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_
         # = 90 tokens in total
         pipeline_chat_history.messages.create(human_message=f"Hello {i}", ai_message=f"Hello {i}")
 
-    pipeline_chat_history.token_limit = 80
+    token_limit = 80
     compressed_history = compress_pipeline_chat_history(
-        pipeline_chat_history, FakeLlmSimpleTokenCount(responses=["Summary"]), input_messages=[]
+        pipeline_chat_history,
+        FakeLlmSimpleTokenCount(responses=["Summary"]),
+        max_token_limit=token_limit,
+        input_messages=[],
     )
     assert isinstance(compressed_history[0], SystemMessage)
     assert compressed_history[0].content == summary_message
