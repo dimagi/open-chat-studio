@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, When
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -1062,10 +1062,14 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
 
     class Meta:
-        unique_together = (
-            ("parent", "child"),
-            ("parent", "keyword", "condition"),
-        )
+        constraints = [
+            UniqueConstraint(fields=["parent", "child"], condition=Q(is_archived=False), name="unique_parent_child"),
+            UniqueConstraint(
+                fields=["parent", "keyword", "condition"],
+                condition=Q(is_archived=False),
+                name="unique_parent_keyword_condition",
+            ),
+        ]
 
 
 class Participant(BaseTeamModel):

@@ -629,6 +629,40 @@ class TestExperimentRoute:
         changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
         assert changes == set(["child"])
 
+    def _setup_route(self, keyword: str):
+        parent = ExperimentFactory()
+        team = parent.team
+        child = ExperimentFactory(team=team)
+        return ExperimentRoute.objects.create(parent=parent, child=child, keyword=keyword, team=team)
+
+    def test_unique_parent_child_constraint_enforced(self):
+        route = self._setup_route(keyword="test")
+        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_child".*'):
+            ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
+
+    def test_unique_parent_child_constraint_not_enforced(self):
+        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
+        route = self._setup_route(keyword="test")
+        parent = route.parent
+        route.archive()
+        ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
+        assert parent.child_links.count() == 1
+
+    def test_unique_parent_keyword_condition_enforced(self):
+        route = self._setup_route(keyword="test")
+        other_child = ExperimentFactory(team=route.team)
+        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition"*.'):
+            ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
+
+    def test_unique_parent_keyword_condition_not_enforced(self):
+        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
+        route = self._setup_route(keyword="test")
+        parent = route.parent
+        other_child = ExperimentFactory(team=route.team)
+        route.archive()
+        ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
+        assert parent.child_links.count() == 1
+
 
 @pytest.mark.django_db()
 class TestExperimentModel:
