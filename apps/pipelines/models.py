@@ -48,6 +48,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    version_number = models.PositiveIntegerField(default=1)
     is_archived = models.BooleanField(default=False)
 
     objects = PipelineManager()
