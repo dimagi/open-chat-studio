@@ -684,7 +684,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         version_number = self.version_number
         self.version_number = version_number + 1
-        self.save()
+        self.save(update_fields=["version_number"])
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.

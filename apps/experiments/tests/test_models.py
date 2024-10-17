@@ -789,6 +789,8 @@ class TestExperimentModel:
 
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
+        assert new_version.pipeline.version_number == 1
+        assert original_experiment.pipeline.version_number == 2
         for node in new_version.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
 

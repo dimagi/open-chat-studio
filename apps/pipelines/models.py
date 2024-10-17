@@ -57,7 +57,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return self.name
+        if self.working_version is None:
+            return self.name
+        return f"{self.name} ({self.version_display})"
+
+    @property
+    def version_display(self) -> str:
+        if self.is_working_version:
+            return ""
+        return f"v{self.version_number}"
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["version_number"]
 
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
@@ -162,7 +173,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
+        version_number = self.version_number
+        self.version_number = version_number + 1
+        self.save()
         pipeline_version = super().create_new_version(*args, **kwargs)
+        pipeline_version.version_number = version_number
+        pipeline_version.save(update_fields=["version_number"])
+
         new_nodes = []
         for node in self.node_set.all():
             node_version = node.create_new_version()
