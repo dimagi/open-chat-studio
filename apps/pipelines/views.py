@@ -44,7 +44,9 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Pipeline.objects.filter(team=self.request.team).annotate(run_count=Count("runs"))
+        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).annotate(
+            run_count=Count("runs")
+        )
 
 
 class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -79,7 +81,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
     def delete(self, request, team_slug: str, pk: int):
         pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
-        pipeline.delete()
+        pipeline.archive()
         messages.success(request, f"{pipeline.name} deleted")
         return HttpResponse()
 

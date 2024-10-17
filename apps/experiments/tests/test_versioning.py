@@ -166,3 +166,22 @@ class TestVersion:
         for group in original_version.fields_grouped:
             if group.name == temerature_group_name:
                 assert group.has_changed_fields is True
+
+    @pytest.mark.django_db()
+    def test_new_queryset_is_empty(self):
+        """This tests the case where a queryset's previous results are not empty, but the current results are"""
+        # Let's use experiment sessions as an example
+        experiment = ExperimentFactory()
+        ExperimentSessionFactory(experiment=experiment)
+        previous_queryset = experiment.sessions
+        # Compare with a totally different queryset
+        new_experiment = ExperimentFactory()
+        new_queryset = new_experiment.sessions
+        # sanity check
+        assert new_queryset.count() == 0
+
+        version_field = VersionField(queryset=new_queryset)
+        # another sanity check
+        assert version_field.is_queryset is True
+        version_field._compare_queryset(previous_queryset)
+        assert version_field.changed is True
