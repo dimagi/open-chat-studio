@@ -31,6 +31,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  deployments: write
 
 jobs:
   deploy:
@@ -65,6 +66,15 @@ jobs:
         echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
+
+    - name: Create GitHub deployment
+      uses: chrnorm/deployment-action@v2
+      id: deployment
+      with:
+        token: '${{ github.token }}'
+        environment: "aws-${{ env.DEPLOY_ENV }}"
+        production-environment: ${{ env.DEPLOY_ENV == 'prod' }}
+
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v4.0.2
@@ -159,3 +169,12 @@ jobs:
     - name: Wait for service stability
       run: |
           aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE_DJANGO $ECS_SERVICE_CELERY $ECS_SERVICE_CELERY_BEAT
+
+    - name: Update deployment status
+      if: success()
+      uses: chrnorm/deployment-status@v2
+      with:
+        token: '${{ github.token }}'
+        environment-url: ${{ steps.deployment.outputs.environment_url }}
+        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+        state: "${{ success() && 'success' || 'failure' }}"
