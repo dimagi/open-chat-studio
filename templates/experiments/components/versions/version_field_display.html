@@ -1,10 +1,10 @@
-<div class="grid grid-cols-2">
+<div class="grid grid-cols-2 gap-1">
     {% if field.changed %}
-        <div class="text-sm col-span-1 rounded px-1 py-0.5">
+        <div class="text-sm col-span-1 px-1 py-0.5 bg-red-400 bg-opacity-20 rounded">
             {% if field.previous_field_version.text_diffs %}
                 <div class="tracking-tighter">
                     {% for text_diff in field.previous_field_version.text_diffs %}
-                        <span class="{% if text_diff.removed %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300{% endif %}">
+                        <span class="{% if text_diff.removed %}bg-red-600 bg-opacity-40{% endif %}">
                             {% if text_diff.character == ' ' %}
                                 &nbsp;
                             {% else %}
@@ -14,16 +14,16 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <span class="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
+                <span>
                     {{ field.previous_field_version.display_value }}
                 </span>
             {% endif %}
         </div>
-        <div class="text-sm col-span-1 rounded px-1 py-0.5">
+        <div class="text-sm col-span-1 px-1 py-0.5 bg-green-400 bg-opacity-20 rounded">
             {% if field.text_diffs %}
                 <div class="tracking-tighter">
                     {% for text_diff in field.text_diffs %}
-                        <span class="{% if text_diff.added %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300{% endif %}">
+                        <span class="{% if text_diff.added %}bg-green-600 bg-opacity-40{% endif %}">
                             {% if text_diff.character == ' ' %}
                                 &nbsp;
                             {% else %}
@@ -33,7 +33,7 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <span class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                <span>
                     {{ field.display_value }}
                 </span>
             {% endif %}
