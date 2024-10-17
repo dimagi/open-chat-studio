@@ -12,7 +12,7 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
-from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin
+from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
@@ -28,6 +28,14 @@ ACTION_HANDLERS = {
     "send_message_to_bot": actions.SendMessageToBotAction,
     "summarize": actions.SummarizeConversationAction,
 }
+
+
+class StaticTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
 
 
 class EventActionType(models.TextChoices):
@@ -101,6 +109,8 @@ class StaticTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = StaticTriggerObjectManager()
 
     @property
     def trigger_type(self):
@@ -152,6 +162,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = TimeoutTriggerObjectManager()
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment):

@@ -80,6 +80,6 @@ class EditExperimentRoute(UpdateView):
 class DeleteExperimentRoute(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int, experiment_id: int):
         experiment_route = get_object_or_404(ExperimentRoute, id=pk, parent_id=experiment_id, team=request.team)
-        experiment_route.delete()
+        experiment_route.archive()
         messages.success(request, "Experiment Route Deleted")
         return HttpResponse()

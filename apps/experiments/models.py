@@ -37,8 +37,15 @@ class VersionsObjectManagerMixin:
         """A method to return all experiments whether it is deprecated or not"""
         return super().get_queryset()
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
+
 
 class PromptObjectManager(AuditingManager):
+    pass
+
+
+class ExperimentRouteObjectManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
@@ -60,9 +67,6 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def working_versions_queryset(self):
         """Returns a queryset for all working experiments"""
         return self.get_queryset().filter(working_version=None)
-
-    def get_queryset(self):
-        return super().get_queryset().filter(is_archived=False)
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -177,6 +181,10 @@ class VersionsMixin:
         """Returns a list of fields that should be excluded when comparing two versions."""
         return self.DEFAULT_EXCLUDED_KEYS
 
+    def archive(self):
+        self.is_archived = True
+        self.save()
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -195,6 +203,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SourceMaterialObjectManager()
 
     class Meta:
@@ -205,6 +214,11 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
 
 @audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
@@ -234,6 +248,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SafetyLayerObjectManager()
 
     def __str__(self):
@@ -243,7 +258,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
 
 
-class SurveyObjectManager(models.Manager):
+class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self) -> models.QuerySet:
         return (
             super()
@@ -280,6 +295,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
     objects = SurveyObjectManager()
 
     class Meta:
@@ -298,6 +314,12 @@ class Survey(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:survey_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
+        self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
 
 @audit_fields(*model_audit_fields.CONSENT_FORM_FIELDS, audit_special_queryset_writes=True)
@@ -325,6 +347,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["name"]
@@ -341,6 +364,12 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
+
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
+        self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
 
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
@@ -902,6 +931,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = ExperimentRouteObjectManager()
 
     @classmethod
     def eligible_children(cls, team: Team, parent: Experiment | None = None):

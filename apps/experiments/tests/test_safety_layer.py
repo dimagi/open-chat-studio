@@ -1,8 +1,12 @@
 from unittest.mock import Mock, patch
 
+import pytest
+from django.urls import reverse
+
 from apps.chat.bots import TopicBot
 from apps.experiments.models import SafetyLayer
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @patch("apps.chat.bots.notify_users_of_violation")
@@ -26,3 +30,17 @@ def test_safety_layer_violation(notify_users_of_violation_mock, create_conversat
     bot.process_input(user_message)
     notify_users_of_violation_mock.assert_called()
     assert experiment_session.chat.messages.filter(message_type="human", content=user_message).count() == 1
+
+
+@pytest.mark.django_db()
+def test_delete(client):
+    team = TeamWithUsersFactory()
+    user = team.members.first()
+    experiment = ExperimentFactory(team=team)
+    client.force_login(user)
+    layer = SafetyLayer.objects.create(prompt_text="Is this message safe?", team=experiment.team)
+    url = reverse("experiments:safety_delete", args=[experiment.team.slug, layer.id])
+    response = client.delete(url)
+    assert response.status_code == 200
+    layer.refresh_from_db()
+    assert layer.is_archived is True
