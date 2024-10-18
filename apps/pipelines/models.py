@@ -175,18 +175,19 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def create_new_version(self, *args, **kwargs):
         version_number = self.version_number
         self.version_number = version_number + 1
-        self.save()
-        pipeline_version = super().create_new_version(*args, **kwargs)
+        self.save(fields=["version_number"])
+
+        pipeline_version = super().create_new_version(save=False, *args, **kwargs)
         pipeline_version.version_number = version_number
-        pipeline_version.save(update_fields=["version_number"])
+        pipeline_version.save()
 
         new_nodes = []
         for node in self.node_set.all():
-            node_version = node.create_new_version()
+            node_version = node.create_new_version(save=False)
             node_version.pipeline = pipeline_version
             new_nodes.append(node_version)
 
-        Node.objects.bulk_update(new_nodes, fields=["pipeline"])
+        Node.objects.bulk_create(new_nodes)
 
         return pipeline_version
 

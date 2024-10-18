@@ -721,7 +721,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if not self.pipeline:
             return
         new_version.pipeline = self.pipeline.create_new_version()
-        new_version.save()
+        new_version.save(fields=["pipeline"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and

@@ -67,7 +67,7 @@ class VersionField:
 
     def compare(self, previous_field_version: "VersionField"):
         self.previous_field_version = previous_field_version
-        if self.queryset is not None:
+        if self.is_queryset:
             self._compare_queryset(previous_field_version.queryset)
         else:
             exclude_fields = []
