@@ -1,6 +1,6 @@
 import factory
 
-from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.utils.factories.team import TeamFactory
 
 
@@ -62,3 +62,11 @@ class PipelineFactory(factory.django.DjangoModelFactory):
 
         NodeFactory(pipeline=self, flow_id="first")
         NodeFactory(pipeline=self, flow_id="second")
+
+
+class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PipelineChatHistory
+
+    type = PipelineChatHistoryTypes.NAMED
+    name = "name"
