@@ -291,5 +291,5 @@ class PipelineBot:
         self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]
 
-    def get_ai_message_id(self):
+    def get_ai_message_id(self) -> int:
         return self.ai_message_id

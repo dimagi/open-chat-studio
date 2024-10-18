@@ -810,6 +810,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 return string
             elif route.type == ExperimentRouteType.TERMINAL:
                 string = f"Use {route.child} as the terminal bot"
+            else:
+                string = "Unknown route type"
             return string
 
         return Version(

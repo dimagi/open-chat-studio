@@ -76,8 +76,8 @@ class VersionField:
             if isinstance(current_val, Model):
                 if not hasattr(current_val, "working_version"):
                     # Not all models can be versioned, in which case can can simply compare its primary keys
-                    current_val = self.raw_value.id
-                    previous_val = previous_field_version.raw_value.id
+                    current_val = current_val.id if current_val else None
+                    previous_val = previous_val.id if previous_val else None
                 else:
                     exclude_fields = current_val.get_fields_to_exclude()
 

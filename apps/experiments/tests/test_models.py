@@ -651,7 +651,7 @@ class TestExperimentRoute:
     def test_unique_parent_keyword_condition_enforced(self):
         route = self._setup_route(keyword="test")
         other_child = ExperimentFactory(team=route.team)
-        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition"*.'):
+        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition".*'):
             ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
 
     def test_unique_parent_keyword_condition_not_enforced(self):
@@ -791,7 +791,7 @@ class TestExperimentModel:
         assert new_version.pipeline.working_version == original_experiment.pipeline
         assert new_version.pipeline.version_number == 1
         assert original_experiment.pipeline.version_number == 2
-        for node in new_version.pipeline.node_set.all():
+        for node in original_experiment.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
 
     def test_copy_attr_to_new_version(self):
