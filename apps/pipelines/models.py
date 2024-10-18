@@ -175,7 +175,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def create_new_version(self, *args, **kwargs):
         version_number = self.version_number
         self.version_number = version_number + 1
-        self.save(fields=["version_number"])
+        self.save(update_fields=["version_number"])
 
         pipeline_version = super().create_new_version(save=False, *args, **kwargs)
         pipeline_version.version_number = version_number
