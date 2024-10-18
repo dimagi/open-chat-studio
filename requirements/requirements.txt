@@ -394,7 +394,7 @@ s3transfer==0.7.0
     # via boto3
 safetensors==0.4.3
     # via transformers
-sentry-sdk==2.8.0
+sentry-sdk==2.17.0
     # via -r requirements.in
 shellingham==1.5.4
     # via typer
