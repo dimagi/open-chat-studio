@@ -47,9 +47,10 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     def _compile(base_path):
         c.run(f"{cmd_base} {base_path}.in -o {base_path}.txt{args}", env=env)
 
-    _compile("requirements/requirements")
-    _compile("requirements/dev-requirements")
-    _compile("requirements/prod-requirements")
+    with c.cd("requirements"):
+        _compile("requirements")
+        _compile("dev-requirements")
+        _compile("prod-requirements")
 
     if _confirm("\nDo you want to sync your venv with the new requirements?", _exit=False):
         if has_uv.ok:
