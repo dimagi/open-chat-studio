@@ -6,7 +6,8 @@ boto3
 celery
 celery-progress
 celery[redis]
-django-allauth
+# 0.62 introduces a database migration that fails due to auditing querysets
+django-allauth<0.62
 django-allauth-2fa
 django-anymail
 # original django-cryptography is not compatible with Django 5 and does not seem to be maintained
@@ -30,7 +31,7 @@ fbmessenger
 ffmpeg # Audio transcription
 httpx
 jinja2
-langchain
+langchain<0.2
 langchain-anthropic
 langchain-openai
 langfuse
