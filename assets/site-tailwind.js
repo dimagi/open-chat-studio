@@ -1,1 +1,1 @@
-require('./styles/site-tailwind.css');
+import './styles/site-tailwind.css';

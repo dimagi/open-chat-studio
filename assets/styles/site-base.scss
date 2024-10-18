@@ -1,6 +1,6 @@
 @charset "utf-8";
 
 
-@import "app/base";
-@import 'tom-select/dist/scss/tom-select';
-@import 'alertifyjs/build/css/alertify.min.css';
+@use "app/base";
+@use '~tom-select/dist/scss/tom-select';
+@import '~alertifyjs/build/css/alertify.min.css';
