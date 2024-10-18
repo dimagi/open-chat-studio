@@ -80,7 +80,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "pipelines.delete_pipeline"
 
     def delete(self, request, team_slug: str, pk: int):
-        pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
+        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), id=pk, team=request.team)
         pipeline.archive()
         messages.success(request, f"{pipeline.name} deleted")
         return HttpResponse()
@@ -137,7 +137,7 @@ def _pipeline_node_input_types():
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
-        pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
+        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
         data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()

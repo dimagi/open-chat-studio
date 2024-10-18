@@ -30,7 +30,6 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
                     output_field=models.BooleanField(),
                 )
             )
-            .prefetch_related("node_set")
         )
 
 
