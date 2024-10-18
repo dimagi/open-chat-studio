@@ -163,7 +163,7 @@ def compress_pipeline_chat_history(
 
 def _compress_chat_history(
     history: list, llm: BaseChatModel, max_token_limit: int, input_messages: list, keep_history_len: int = 10
-) -> tuple[list[BaseMessage], BaseMessage | None, list[BaseMessage] | None]:
+) -> tuple[list[BaseMessage], BaseMessage | None, str | None]:
     """Compresses the chat history to be less than max_token_limit tokens long. This will summarize the history
     if necessary and save the summary to the DB.
     """
