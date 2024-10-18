@@ -24,7 +24,7 @@ on:
           - dev
           - prod
   workflow_run:
-    workflows: [ Run Django Tests, Build Front End ]
+    workflows: [ Run Django Tests ]
     types:
       - completed
 
