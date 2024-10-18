@@ -26,14 +26,12 @@ jobs:
         run: npm install
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.0
-  tests:
+
+  python-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      max-parallel: 4
-      matrix:
-        python-version:
-          - '3.11'
+    env:
+      PYTHON_VERSION: '3.11'
     services:
       postgres:
         image: postgres:latest
@@ -58,10 +56,10 @@ jobs:
           - 6379:6379
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: PYTHON_VERSION
           cache: 'pip'
       - name: Install Dependencies
         run: |
