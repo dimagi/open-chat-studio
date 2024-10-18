@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.runnables import RunnableLambda
 
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -30,7 +31,9 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
     assert run.status == PipelineRunStatus.SUCCESS
 
     assert run.input == PipelineState(messages=[input])
+    ai_message = ChatMessage.objects.filter(message_type=ChatMessageType.AI).last()
     assert run.output == PipelineState(
+        ai_message_id=ai_message.id,
         messages=[
             input,  # the input to the graph
             input,  # The output of the first Passthrough

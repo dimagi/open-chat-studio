@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, When
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -684,7 +684,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         version_number = self.version_number
         self.version_number = version_number + 1
-        self.save()
+        self.save(update_fields=["version_number"])
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
@@ -710,11 +710,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         self._copy_safety_layers_to_new_version(new_version)
         self._copy_routes_to_new_version(new_version)
-        self.copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
-        self.copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
+        self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
+        self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
+        self._copy_pipeline_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
+
+    def _copy_pipeline_to_new_version(self, new_version):
+        if not self.pipeline:
+            return
+        new_version.pipeline = self.pipeline.create_new_version()
+        new_version.save(update_fields=["pipeline"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
@@ -755,7 +762,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for route in self.child_links.all():
             route.create_new_version(new_version)
 
-    def copy_trigger_to_new_version(self, trigger_queryset, new_version):
+    def _copy_trigger_to_new_version(self, trigger_queryset, new_version):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
 
@@ -796,9 +803,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return f"{string} then {trigger_action}"
 
         def format_route(route) -> str:
-            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
-            if route.is_default:
-                string = f"{string} (default)"
+            if route.type == ExperimentRouteType.PROCESSOR:
+                string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
+                if route.is_default:
+                    string = f"{string} (default)"
+                return string
+            elif route.type == ExperimentRouteType.TERMINAL:
+                string = f"Use {route.child} as the terminal bot"
+            else:
+                string = "Unknown route type"
             return string
 
         return Version(
@@ -901,7 +914,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(
                     group_name="Routing",
                     name="routes",
-                    queryset=self.child_links,
+                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
+                    to_display=format_route,
+                ),
+                VersionField(
+                    group_name="Routing",
+                    name="terminal_bot",
+                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
                     to_display=format_route,
                 ),
             ],
@@ -1047,10 +1066,14 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
 
     class Meta:
-        unique_together = (
-            ("parent", "child"),
-            ("parent", "keyword", "condition"),
-        )
+        constraints = [
+            UniqueConstraint(fields=["parent", "child"], condition=Q(is_archived=False), name="unique_parent_child"),
+            UniqueConstraint(
+                fields=["parent", "keyword", "condition"],
+                condition=Q(is_archived=False),
+                name="unique_parent_keyword_condition",
+            ),
+        ]
 
 
 class Participant(BaseTeamModel):

@@ -3,13 +3,13 @@ from functools import cached_property
 
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
@@ -18,14 +18,37 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class PipelineManager(models.Manager):
+class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
-        return super().get_queryset().prefetch_related("node_set")
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=models.Case(
+                    models.When(working_version_id__isnull=False, then=True),
+                    models.When(working_version_id__isnull=True, then=False),
+                    output_field=models.BooleanField(),
+                )
+            )
+        )
 
 
-class Pipeline(BaseTeamModel):
+class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     data = models.JSONField()
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    version_number = models.PositiveIntegerField(default=1)
+    is_archived = models.BooleanField(default=False)
 
     objects = PipelineManager()
 
@@ -33,7 +56,18 @@ class Pipeline(BaseTeamModel):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return self.name
+        if self.working_version is None:
+            return self.name
+        return f"{self.name} ({self.version_display})"
+
+    @property
+    def version_display(self) -> str:
+        if self.is_working_version:
+            return ""
+        return f"v{self.version_number}"
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["version_number"]
 
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
@@ -105,7 +139,8 @@ class Pipeline(BaseTeamModel):
             pipeline_run.output = output
             if save_run_to_history and session is not None:
                 self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-                self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                ai_message = self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                output["ai_message_id"] = ai_message.id
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
                 logging_callback.logger.debug("Pipeline run failed", input=input["messages"][-1])
@@ -127,22 +162,55 @@ class Pipeline(BaseTeamModel):
             session=session,
         )
 
-    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType):
-        ChatMessage.objects.create(
+    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType) -> ChatMessage:
+        return ChatMessage.objects.create(
             chat=session.chat,
             message_type=type_.value,
             content=message,
         )
         # TODO: Add tags here?
 
+    @transaction.atomic()
+    def create_new_version(self, *args, **kwargs):
+        version_number = self.version_number
+        self.version_number = version_number + 1
+        self.save(update_fields=["version_number"])
 
-class Node(BaseModel):
+        pipeline_version = super().create_new_version(save=False, *args, **kwargs)
+        pipeline_version.version_number = version_number
+        pipeline_version.save()
+
+        new_nodes = []
+        for node in self.node_set.all():
+            node_version = node.create_new_version(save=False)
+            node_version.pipeline = pipeline_version
+            new_nodes.append(node_version)
+
+        Node.objects.bulk_create(new_nodes)
+
+        return pipeline_version
+
+    @transaction.atomic()
+    def archive(self):
+        super().archive()
+        self.node_set.update(is_archived=True)
+
+
+class Node(BaseModel, VersionsMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = models.JSONField(default=dict)  # Parameters for the specific node type
-
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+    objects = NodeObjectManager()
 
     def __str__(self):
         return self.flow_id
