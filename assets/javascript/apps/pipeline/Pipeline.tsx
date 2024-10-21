@@ -119,7 +119,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
     }
   }
 
-  useHotkeys("backspace", handleDelete);
+  useHotkeys(["backspace", "delete"], handleDelete);
   useHotkeys("ctrl+s", () => manualSaveCurrentPipeline(), {preventDefault: true});
   
   const onSelectionChange = useCallback(
