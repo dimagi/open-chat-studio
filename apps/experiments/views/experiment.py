@@ -1291,8 +1291,10 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def archive_experiment(request, team_slug: str, pk: int):
-    experiment = get_object_or_404(Experiment, id=pk)
+def archive_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
     if experiment.is_default_version:
         return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working.id)
     experiment.is_archived = True
