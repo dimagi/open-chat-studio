@@ -1177,8 +1177,8 @@ def set_default_experiment(request, team_slug: str, pk: int):
 @login_and_team_required
 def archive_experiment(request, team_slug: str, pk: int):
     experiment = get_object_or_404(Experiment, id=pk)
+    if experiment.is_default_version:
+        return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working.id)
     experiment.is_archived = True
     experiment.save()
-    return redirect(
-        "experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working_version.id
-    )
+    return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working.id)
