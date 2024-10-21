@@ -54,7 +54,7 @@ celery[redis]==5.3.5
     # via
     #   -r requirements.in
     #   django-celery-beat
-celery-progress==0.3
+celery-progress==0.4
     # via -r requirements.in
 certifi==2024.7.4
     # via
