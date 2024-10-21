@@ -1295,11 +1295,18 @@ def archive_experiment(request, team_slug: str, experiment_id: int, version_numb
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
+    url = (
+        reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )
     if experiment.is_default_version:
-        return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working.id)
+        return redirect(url)
     experiment.is_archived = True
     experiment.save()
-    return redirect("experiments:versions-list", team_slug=request.team.slug, experiment_id=experiment.working.id)
+    return redirect(url)
 
 
 @require_POST
