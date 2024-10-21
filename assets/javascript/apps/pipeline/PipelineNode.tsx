@@ -238,7 +238,12 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       { length: numberOfOutputs },
       (_, index) => {
         const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
-        const handleText = `Output ${index + 1}`;
+        let handleAnnotation;
+        if (numberOfOutputs > 1) {
+          const handleText = `Output ${index + 1}`;
+          handleAnnotation = <div className="handle-text">{handleText}</div>
+        }
+
         return (
             <Handle
               key={`output_${index}`}
@@ -247,7 +252,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
               style={{ top: `${position}%` }}
               id={numberOfOutputs > 1 ? `output_${index}` : "output"}
             >
-              <div className="handle-text">{handleText}</div>
+              {handleAnnotation}
             </Handle>
         );
       },
