@@ -47,10 +47,10 @@
 
 
 <div class="divider">
-    <div class="modal-footer">
+    <div class="modal-action">
         {% if not experiment.is_default_version %}
-            <form method="post" action="{% url 'experiments:archive-experiment' team_slug=team.slug
-                                        experiment_id=experiment.working_version_id version_number=experiment.version_number %}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
+            {% url 'experiments:archive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as archive_url%}
+            <form method="post" action="{{ archive_url }}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-warning">
                     Archive Version
