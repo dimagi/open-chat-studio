@@ -17,7 +17,7 @@ export default function Component({
     >
       <dl className="m-1 text-center">
         <dt className="font-bold">{label}</dt>
-        <dd className="text-sm">{nodeDescription}</dd>
+        <dd className="text-sm text-gray-400">{nodeDescription}</dd>
       </dl>
     </div>
   );
