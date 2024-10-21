@@ -1,13 +1,20 @@
 {% load static %}
 {% load render_table from django_tables2 %}
 {% render_table table "table/tailwind_js_pagination.html" %}
+{% block modal %}
+{% endblock %}
 <script>
   function initializeRowClickHandlers() {
     document.querySelectorAll('tr[data-redirect-url]:not([data-redirect-url=""])').forEach(function (element) {
       element.addEventListener('click', function (event) {
         if (event.target.tagName === 'TR' || event.target.tagName === 'TD') {
           let editUrl = this.getAttribute('data-redirect-url');
-          window.location.href = editUrl;
+          try {
+            let url = new URL(editUrl, window.location.origin);
+            window.location.href = url.href;
+          } catch (e) {
+            console.error('Invalid URL:', editUrl);
+          }
         }
       });
     });

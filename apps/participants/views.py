@@ -1,16 +1,21 @@
 import json
 
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.participants.forms import ParticipantForm
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+from ..channels.models import ChannelPlatform
+from ..experiments.tables import ExperimentSessionsTable
 from .tables import ParticipantTable
 
 
@@ -59,7 +64,10 @@ class ParticipantTableView(SingleTableView):
         query = Participant.objects.filter(team=self.request.team)
         search = self.request.GET.get("search")
         if search:
-            query = query.filter(Q(identifier__icontains=search) | Q(platform__iexact=search))
+            if search in {v.lower() for v in ChannelPlatform.values}:
+                query = query.filter(platform__iexact=search)
+            else:
+                query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
         return query
 
 
@@ -103,8 +111,37 @@ class ExperimentData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         participant = Participant.objects.get(id=self.kwargs["participant_id"])
         context["participant"] = participant
         context["experiment"] = experiment
-        context["sessions"] = participant.experimentsession_set.filter(experiment=experiment).all()
+        context["session_table"] = ExperimentSessionsTable(
+            participant.experimentsession_set.filter(experiment=experiment).all(),
+            extra_columns=[("participant", None)],  # remove participant column
+        )
         data = participant.get_data_for_experiment(experiment)
         context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = participant.get_schedules_for_experiment(experiment, as_dict=True)
+        context["participant_schedules"] = participant.get_schedules_for_experiment(
+            experiment, as_dict=True, include_complete=True
+        )
         return context
+
+
+@login_and_team_required
+@permission_required("experiments.change_participant")
+def edit_name(request, team_slug: str, pk: int):
+    participant = get_object_or_404(Participant, id=pk, team=request.team)
+    if request.method == "POST":
+        if name := request.POST.get("name"):
+            participant.name = name
+            participant.save()
+        return render(request, "participants/partials/participant_name.html", {"participant": participant})
+    return render(request, "participants/partials/edit_name.html", {"participant": participant})
+
+
+@login_and_team_required
+@permission_required("experiments.view_participant")
+def search_participant_api(request, team_slug: str):
+    search = request.GET.get("q")
+    query = Participant.objects.filter(team=request.team)
+    if search:
+        query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
+
+    results = query.order_by("identifier")[:10]
+    return JsonResponse({"results": [{"name": p.name, "identifier": p.identifier} for p in results]})

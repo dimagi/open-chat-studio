@@ -1,0 +1,24 @@
+<div class="my-2">
+    {% for group in version_details.fields_grouped %}
+        {% if group.show %}
+            <div class="collapse collapse-arrow bg-base-200 mb-2">
+                <input type="checkbox" {% if group.has_changed_fields or not version_details.fields_changed %}checked{% endif %}/>
+                <div class="collapse-title text-xl font-medium">{{ group.name }}</div>
+                <div class="collapse-content">
+                    {% for field in group.fields %}
+                        {% if field.changed or field.display_value %}
+                            <div class="my-1">
+                                <dl class="flex flex-col gap-2 pb-2">
+                                    <dt class="text-sm font-medium leading-6">{{ field.label }}</dt>
+                                    <dd class="pl-3 max-h-64 overflow-y-auto">
+                                        {% include 'experiments/components/versions/version_field_details.html' %}
+                                    </dd>
+                                </dl>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endfor %}
+</div>

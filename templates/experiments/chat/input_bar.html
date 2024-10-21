@@ -10,15 +10,16 @@
 </script>
 
 <form class="w-full p-2 bg-gray-300"
-      hx-post="{% url 'experiments:experiment_session_message' request.team.slug experiment.id session.id %}"
+      autocomplete="off"
+      hx-post="{% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.id version_number=session.get_experiment_version_number session_id=session.id %}"
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
-      {% if session.experiment.assistant %}enctype="multipart/form-data"{% endif %}
+      {% if assistant %}enctype="multipart/form-data"{% endif %}
 >
   {% csrf_token %}
   <div class="flex flex-col" x-data="fileUploads">
     <div class="flex items-center w-full">
-      {% if session.experiment.assistant %}
+      {% if assistant %}
         <div class="mt-1 flex flex-row gap-2">
           <div class="dropdown dropdown-top">
             <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
@@ -26,7 +27,7 @@
               <li>
                 <a
                   class="btn btn-sm"
-                  {% if not session.experiment.assistant.supports_code_interpreter %}
+                  {% if not assistant.supports_code_interpreter %}
                     disabled
                   {% else %}
                     x-bind:disabled="disableCodeInterpreterUpload"
@@ -38,7 +39,7 @@
               <li>
                 <a
                   class="btn btn-sm"
-                  {% if not session.experiment.assistant.supports_file_search %} disabled {% endif %}
+                  {% if not assistant.supports_file_search %} disabled {% endif %}
                   @click="$refs.fileSearch.click()">
                   File Search
                 </a>
@@ -69,7 +70,7 @@
           />
         </div>
       {% endif %}
-      <input name="message" type="text" placeholder="Type your message..." aria-label="Message" class="input input-bordered input-primary w-full" oninput="checkInput()">
+      <input name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full" oninput="checkInput()">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
     <div class="flex flex-col gap-2 text-slate-500">
@@ -106,7 +107,7 @@
   </div>
 </form>
 
-{% if session.experiment.assistant %}
+{% if assistant %}
   <script>
     document.addEventListener('alpine:init', () => {
       const megabyte_in_bytes = 1048576;

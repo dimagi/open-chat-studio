@@ -30,6 +30,7 @@ def test_list_experiments(experiment):
                 "name": experiment.name,
                 "id": experiment.public_id,
                 "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+                "version_number": 1,
             }
         ],
         "next": None,
@@ -48,6 +49,7 @@ def test_retrieve_experiments(experiment):
         "id": experiment.public_id,
         "name": experiment.name,
         "url": f"http://testserver/api/experiments/{experiment.public_id}/",
+        "version_number": 1,
     }
 
 
@@ -98,6 +100,8 @@ def test_create_and_update_participant_data():
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
+    participant = Participant.objects.get(identifier=identifier)
+    assert participant.name == ""
     participant_data_exp_1 = experiment.participant_data.get(participant__identifier=identifier)
     participant_data_exp_2 = experiment2.participant_data.get(participant__identifier=identifier)
     assert participant_data_exp_1.data["name"] == "John"
@@ -105,9 +109,12 @@ def test_create_and_update_participant_data():
 
     # Let's update the data
     data["data"] = [{"experiment": str(experiment.public_id), "data": {"name": "Harry"}}]
+    data["name"] = "Bob"
     client.post(url, json.dumps(data), content_type="application/json")
     participant_data_exp_1.refresh_from_db()
     assert participant_data_exp_1.data["name"] == "Harry"
+    participant.refresh_from_db()
+    assert participant.name == "Bob"
 
 
 @pytest.mark.django_db()

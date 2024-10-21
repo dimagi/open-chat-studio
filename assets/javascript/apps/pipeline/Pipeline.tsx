@@ -1,20 +1,24 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, { useCallback, useEffect, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  FitViewOptions, MarkerType,
+  FitViewOptions,
+  MarkerType,
   NodeDragHandler,
-  NodeTypes, OnMove, OnSelectionChangeParams
-} from 'reactflow';
+  NodeTypes,
+  OnMove,
+  OnSelectionChangeParams,
+} from "reactflow";
 
-import {PipelineNode} from './PipelineNode';
-
-import 'reactflow/dist/style.css';
+import { PipelineNode } from "./PipelineNode";
+import ComponentList from "./panel/ComponentList";
+import { NodeInputTypes } from "./types/nodeInputTypes";
+import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
-import {getNodeId} from "./utils";
-import {useHotkeys} from "react-hotkeys-hook";
+import { getNodeId } from "./utils";
+import { useHotkeys } from "react-hotkeys-hook";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -24,7 +28,7 @@ const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
 };
 
-export default function Pipeline() {
+export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
@@ -41,6 +45,7 @@ export default function Pipeline() {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -80,6 +85,9 @@ export default function Pipeline() {
           },
         };
         addNode(newNode, {x: event.clientX, y: event.clientY});
+
+        // Close the panel after adding the node
+        setIsOpen(false);
       }
     },
     [getNodeId, setNodes, addNode]
@@ -116,8 +124,13 @@ export default function Pipeline() {
       type: MarkerType.ArrowClosed,
     },
   };
+
+  const handlePaneClick = useCallback(() => {
+    setIsOpen(false);
+  }, [setIsOpen]);
+
   return (
-    <div style={{height: '80vh'}}>
+    <div style={{ height: "80vh" }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -136,10 +149,19 @@ export default function Pipeline() {
         deleteKeyCode={[]}
         defaultEdgeOptions={defaultEdgeOptions}
         onSelectionChange={onSelectionChange}
+        onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
-        <Controls showZoom showFitView showInteractive position="bottom-left"/>
-        {/*<MiniMap position="bottom-right"/>*/}
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1}/>
+        <ComponentList
+          inputTypes={props.inputTypes}
+          isOpen={isOpen}
+          setIsOpen={setIsOpen}
+        />
+        <Controls showZoom showFitView showInteractive position="bottom-left" />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={12}
+          size={1}
+        />
       </ReactFlow>
     </div>
   );

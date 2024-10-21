@@ -16,7 +16,8 @@ export default tseslint.config(
         "document": "readonly",
         "navigator": "readonly",
         "console": "readonly",
+        Event: "readonly",
       }
     },
-  }
+  },
 );

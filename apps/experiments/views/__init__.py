@@ -31,6 +31,7 @@ from .experiment import (  # noqa: F401
     experiment_session_details_view,
     experiment_session_message,
     experiment_session_pagination_view,
+    experiment_version_details,
     experiments_home,
     get_message_response,
     poll_messages,
@@ -41,6 +42,7 @@ from .experiment import (  # noqa: F401
     start_session_from_invite,
     start_session_public,
     update_delete_channel,
+    update_version_description,
 )
 from .experiment_routes import (  # noqa: F401
     CreateExperimentRoute,

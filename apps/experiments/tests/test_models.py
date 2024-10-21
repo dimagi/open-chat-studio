@@ -3,11 +3,19 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.chat.models import Chat
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
-from apps.experiments.models import Experiment, ExperimentRoute, ParticipantData, SafetyLayer, SyntheticVoice
+from apps.experiments.models import (
+    Experiment,
+    ExperimentRoute,
+    ParticipantData,
+    SafetyLayer,
+    SyntheticVoice,
+)
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -19,11 +27,11 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
     SourceMaterialFactory,
+    SurveyFactory,
     SyntheticVoiceFactory,
-    VersionedExperimentFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -96,9 +104,14 @@ class TestSyntheticVoice:
         assert voice1 not in voices_queryset
 
 
+@pytest.mark.django_db()
 class TestExperimentSession:
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
-        params = {
+        params = self._get_params(experiment_id, time_period, frequency, repetitions)
+        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+
+    def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
+        return {
             "name": "Test",
             "time_period": time_period,
             "frequency": frequency,
@@ -106,11 +119,9 @@ class TestExperimentSession:
             "prompt_text": "hi",
             "experiment_id": experiment_id,
         }
-        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
-    @pytest.mark.django_db()
     @freeze_time("2024-01-01")
-    def test_get_participant_scheduled_messages(self):
+    def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
         event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
@@ -130,50 +141,150 @@ class TestExperimentSession:
         )
 
         assert len(participant.get_schedules_for_experiment(experiment)) == 2
-        str_version1 = (
-            f"{message1.name} (ID={message1.external_id}, message={message1.prompt_text}): Every 1 days on Tuesday, "
-            "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. (System)"
-        )
-        str_version2 = (
-            f"{message2.name} (ID={message2.external_id}, message={message2.prompt_text}): Every 1 days on Tuesday, "
-            "1 times. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC. "
-        )
+
+        def _make_string(message, is_system):
+            return (
+                f"{message.name} (Message id={message.external_id}, message={message.prompt_text}): "
+                "One-off reminder. Next trigger is at Tuesday, 02 January 2024 00:00:00 UTC."
+                f"{' (System)' if is_system else ''}"
+            )
 
         scheduled_messages_str = participant.get_schedules_for_experiment(experiment)
-        assert str_version1 in scheduled_messages_str
-        assert str_version2 in scheduled_messages_str
+        assert scheduled_messages_str[0] == _make_string(message1, True)
+        assert scheduled_messages_str[1] == _make_string(message2, False)
+
+        def _make_expected_dict(external_id):
+            return {
+                "name": "Test",
+                "external_id": external_id,
+                "frequency": 1,
+                "time_period": "days",
+                "repetitions": 1,
+                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
+                "is_complete": False,
+                "last_triggered_at": None,
+                "total_triggers": 0,
+                "triggers_remaining": 1,
+                "prompt": "hi",
+            }
 
         expected_dict_version = [
-            {
-                "name": "Test",
-                "external_id": message1.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
-            {
-                "name": "Test",
-                "external_id": message2.external_id,
-                "frequency": 1,
-                "time_period": "days",
-                "repetitions": 1,
-                "next_trigger_date": datetime(2024, 1, 2, tzinfo=UTC),
-                "is_complete": False,
-                "last_triggered_at": None,
-                "total_triggers": 0,
-                "triggers_remaining": 1,
-                "prompt": "hi",
-            },
+            _make_expected_dict(message1.external_id),
+            _make_expected_dict(message2.external_id),
         ]
         assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
 
-    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "expected_triggers_remaining"),
+        [
+            (None, 0, 1),
+            (0, 0, 1),
+            (1, 0, 1),
+            (1, 1, 0),
+        ],
+    )
+    def test_get_schedules_for_experiment_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
+        session = ExperimentSessionFactory()
+        experiment = session.experiment
+        participant = session.participant
+
+        ScheduledMessageFactory(
+            experiment=experiment,
+            team=session.team,
+            participant=participant,
+            action=None,
+            next_trigger_date=timezone.now(),
+            last_triggered_at=timezone.now() if total_triggers > 0 else None,
+            total_triggers=total_triggers,
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
+        )
+
+        schedules = participant.get_schedules_for_experiment(experiment, as_dict=True)
+
+        assert len(schedules) == 1
+        schedule = schedules[0]
+        assert schedule["repetitions"] == (repetitions or 0)
+        assert schedule["total_triggers"] == total_triggers
+        assert schedule["triggers_remaining"] == expected_triggers_remaining
+
+    @freeze_time("2024-01-01")
+    @pytest.mark.parametrize(
+        ("time_period", "repetitions", "total_triggers", "expected"),
+        [
+            (
+                TimePeriod.DAYS,
+                None,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                0,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                1,
+                0,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                1,
+                1,
+                "Test (Message id={message.external_id}, message=hi): One-off reminder. Complete.",
+            ),
+            (
+                TimePeriod.DAYS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. {next_trigger}",
+            ),
+            (
+                TimePeriod.DAYS,
+                2,
+                2,
+                "Test (Message id={message.external_id}, message=hi): Every 1 days, 2 times. Complete.",
+            ),
+            (
+                TimePeriod.WEEKS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): "
+                "Every 1 weeks on Monday, 2 times. {next_trigger}",
+            ),
+            (
+                TimePeriod.MONTHS,
+                2,
+                1,
+                "Test (Message id={message.external_id}, message=hi): Every 1 months, 2 times. {next_trigger}",
+            ),
+        ],
+    )
+    def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
+        session = ExperimentSessionFactory()
+        experiment = session.experiment
+        participant = session.participant
+
+        message = ScheduledMessageFactory(
+            experiment=experiment,
+            team=session.team,
+            participant=participant,
+            action=None,
+            next_trigger_date=timezone.now(),
+            last_triggered_at=timezone.now() if total_triggers > 0 else None,
+            total_triggers=total_triggers,
+            custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
+        )
+
+        schedules = participant.get_schedules_for_experiment(experiment, as_dict=False)
+
+        assert len(schedules) == 1
+        schedule = schedules[0]
+        next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
+        assert schedule == expected.format(message=message, next_trigger=next_trigger)
+
     def test_get_participant_scheduled_messages_includes_child_experiments(self):
         session = ExperimentSessionFactory()
         team = session.team
@@ -189,7 +300,6 @@ class TestExperimentSession:
         assert len(participant.get_schedules_for_experiment(session2.experiment)) == 1
         assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
 
-    @pytest.mark.django_db()
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     def test_scheduled_message_experiment(self, use_custom_experiment):
         """ScheduledMessages should use the experiment specified in the linked action's params"""
@@ -214,7 +324,52 @@ class TestExperimentSession:
         else:
             assert experiment_used == session.experiment
 
-    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("repetitions", "total_triggers", "end_date", "expected"),
+        [
+            pytest.param(None, 0, None, False, id="null_reps_not_triggered"),
+            pytest.param(None, 1, None, True, id="null_reps_triggered"),
+            pytest.param(0, 0, None, False, id="zero_reps_not_triggered"),
+            pytest.param(0, 1, None, True, id="zero_reps_triggered"),
+            pytest.param(3, 2, None, False, id="reps_not_met"),
+            pytest.param(3, 3, None, True, id="reps_met"),
+            pytest.param(1, 0, timezone.now() - timezone.timedelta(days=1), True, id="past_end_date"),
+            pytest.param(1, 0, timezone.now() + timezone.timedelta(days=1), False, id="before_end_date"),
+        ],
+    )
+    def test_should_mark_complete(self, repetitions, total_triggers, end_date, expected):
+        scheduled_message = ScheduledMessage(
+            custom_schedule_params={"repetitions": repetitions},
+            total_triggers=total_triggers,
+            end_date=end_date,
+        )
+        assert scheduled_message._should_mark_complete() == expected
+
+    def test_get_participant_data_name(self):
+        participant = ParticipantFactory()
+        session = ExperimentSessionFactory(participant=participant, team=participant.team)
+        participant_data = ParticipantData.objects.create(
+            content_object=session.experiment,
+            participant=participant,
+            team=participant.team,
+            data={"first_name": "Jimmy"},
+        )
+        data = session.get_participant_data()
+        assert data == {
+            "name": participant.name,
+            "first_name": "Jimmy",
+        }
+
+        participant_data.data["name"] = "James Newman"
+        participant_data.save()
+
+        del session.participant_data_from_experiment
+        data = session.get_participant_data()
+        assert data == {
+            "name": "James Newman",
+            "first_name": "Jimmy",
+        }
+
     @freeze_time("2022-01-01 08:00:00")
     @pytest.mark.parametrize("use_participant_tz", [False, True])
     def test_get_participant_data_timezone(self, use_participant_tz):
@@ -245,7 +400,6 @@ class TestExperimentSession:
         participant_data.pop("scheduled_messages")
         assert participant_data == expected_data
 
-    @pytest.mark.django_db()
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
     @patch("apps.chat.bots.TopicBot.process_input")
@@ -269,6 +423,17 @@ class TestExperimentSession:
                 _test()
         else:
             _test()
+
+    @pytest.mark.parametrize(
+        ("chat_metadata_version", "expected_display_val"),
+        [
+            (Experiment.DEFAULT_VERSION_NUMBER, "Default version"),
+            ("1", "v1"),
+        ],
+    )
+    def test_experiment_version_for_display(self, chat_metadata_version, expected_display_val, experiment_session):
+        experiment_session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, chat_metadata_version)
+        assert experiment_session.experiment_version_for_display == expected_display_val
 
 
 class TestParticipant:
@@ -325,26 +490,147 @@ class TestSourceMaterialVersioning:
 
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
-    @pytest.mark.parametrize("versioned", [True, False])
-    def test_create_new_route_version(self, versioned):
+    @pytest.mark.parametrize("child_has_versions", [True, False])
+    def test_child_is_working_with_changes_creates_new_version(self, child_has_versions):
         parent_exp = ExperimentFactory()
         team = parent_exp.team
-        child_exp = VersionedExperimentFactory(team=team) if versioned else ExperimentFactory(team=team)
-        new_parent = ExperimentFactory(team=team)
-        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
+        working_child = ExperimentFactory(team=team, prompt_text="some prompt")
+        working_route = ExperimentRoute.objects.create(
+            team=team, parent=parent_exp, child=working_child, keyword="testing"
+        )
 
-        versioned_route = working_route.create_new_version(new_parent)
-        assert versioned_route != working_route
-        if versioned:
-            expected_difference = set(["id", "parent_id"])
-        else:
-            expected_difference = set(["id", "parent_id", "child_id"])
+        if child_has_versions:
+            working_child.create_new_version()
+            # Update the working version so there are changes
+            working_child.prompt_text = "a new prompt"
+            working_child.save()
 
+        versioned_route = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        expected_difference = set(["id", "parent_id", "child_id"])
         _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child != working_child
+        assert versioned_route.child.working_version == working_child
+
+    def test_versioned_child_is_reused(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="child")
+        expected_difference = set(["id", "parent_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child
+
+    def test_working_child_without_changes_uses_latest_version(self):
+        working_route, versioned_route = self._setup_versioned_experiment_route(child_bot="working")
+        expected_difference = set(["id", "parent_id", "child_id"])
+        _compare_models(working_route, versioned_route, expected_changed_fields=expected_difference)
+        assert versioned_route.child == working_route.child.latest_version
+
+    def _setup_versioned_experiment_route(self, child_bot: str):
+        parent_exp = ExperimentFactory()
+        team = parent_exp.team
+        working_child = ExperimentFactory(team=team)
+        child_version = working_child.create_new_version()
+        child_bot = working_child if child_bot == "working" else child_version
+        working_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_bot, keyword="testing")
+        version = working_route.create_new_version(new_parent=ExperimentFactory(team=team))
+        return working_route, version
 
 
 @pytest.mark.django_db()
-class TestExperimentVersioning:
+class TestExperimentRoute:
+    def test_eligible_children(self):
+        parent = ExperimentFactory()
+        experiment_version = parent.create_new_version()
+        experiment1 = ExperimentFactory(team=parent.team)
+        experiment2 = ExperimentFactory(team=parent.team)
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team, parent=parent)
+        assert parent not in queryset
+        assert experiment_version not in queryset
+        assert experiment1 in queryset
+        assert experiment2 in queryset
+        assert len(queryset) == 2
+
+        queryset = ExperimentRoute.eligible_children(team=parent.team)
+        assert len(queryset) == 4
+
+    def test_compare_with_model_testcase_1(self):
+        """
+        One child is a working version and the other is a version of that working version
+        """
+        # 1. The children of both route versions are family with one being the working version
+        # 1.1. No changes between the working and versioned child
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set([])
+
+        # 1.2. A change between the working and versioned child
+        child.prompt_text = "This is a change"
+        child.save()
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["prompt_text"])
+
+    def test_compare_with_model_testcase_2(self):
+        """
+        Both children are versions of the same experiment
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set()
+
+    def test_compare_with_model_testcase_3(self):
+        """
+        They are different versions, so we expect the compare method to pick this up
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child = ExperimentFactory(team=parent.team)
+        versioned_child1 = child.create_new_version()
+        versioned_child2 = child.create_new_version()
+        route = ExperimentRoute.objects.create(parent=parent, child=versioned_child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=versioned_child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["child"])
+
+    def test_compare_with_model_testcase_4(self):
+        """
+        The children are experiments of different families.
+        """
+        parent = ExperimentFactory()
+        versioned_parent = parent.create_new_version()
+        child1 = ExperimentFactory(team=parent.team)
+        child2 = ExperimentFactory(
+            team=parent.team,
+            synthetic_voice=SyntheticVoiceFactory(),
+            voice_provider=VoiceProviderFactory(),
+            llm="yoda",
+            llm_provider=LlmProviderFactory(),
+            prompt_text="this is a change",
+        )
+        route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
+        route2 = ExperimentRoute.objects.create(
+            parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
+        )
+        changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
+        assert changes == set(["child"])
+
+
+@pytest.mark.django_db()
+class TestExperimentModel:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
             ExperimentFactory(is_default_version=True, working_version=None)
@@ -395,9 +681,16 @@ class TestExperimentVersioning:
 
         # Setup Timeout Trigger
         TimeoutTriggerFactory(experiment=experiment)
+
+        # Surveys
+        pre_survey = SurveyFactory(team=team)
+        post_survey = SurveyFactory(team=team)
+        experiment.pre_survey = pre_survey
+        experiment.post_survey = post_survey
+
+        experiment.save()
         return experiment
 
-    @pytest.mark.django_db()
     def test_first_version_is_automatically_the_default(self):
         experiment = ExperimentFactory()
         new_version = experiment.create_new_version()
@@ -408,13 +701,12 @@ class TestExperimentVersioning:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @pytest.mark.django_db()
     def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
 
-        new_version = original_experiment.create_new_version()
+        new_version = original_experiment.create_new_version("tis a new version")
         original_experiment.refresh_from_db()
 
         assert new_version != original_experiment
@@ -423,29 +715,74 @@ class TestExperimentVersioning:
         assert new_version.version_number == 1
         assert new_version.is_default_version is True
         assert new_version.working_version == original_experiment
+        assert new_version.version_description == "tis a new version"
         _compare_models(
             original=original_experiment,
             new=new_version,
             expected_changed_fields=[
                 "id",
-                "source_material_id",
+                "source_material",
                 "public_id",
-                "working_version_id",
+                "working_version",
                 "version_number",
                 "is_default_version",
+                "consent_form",
+                "pre_survey",
+                "post_survey",
+                "version_description",
+                "safety_layers",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
+        self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
+        self._assert_attribute_duplicated("source_material", original_experiment, new_version)
+        self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
+        self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
+        self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
+
+    def test_copy_attr_to_new_version(self):
+        """
+        Copying an attribute to the a version should only create a new version of the attribute (or related model) when
+        the attribute 1. is not versioned or 2. the instance differs from the latest version of itself. If there's no
+        difference between the working and latest version of the attribute, the latest version should be linked to the
+        new experiment version.
+        """
+        original_experiment = self._setup_original_experiment()
+        # Choose source_material as the attribute / related model
+        original_related_instance = original_experiment.source_material
+
+        # The original related object has not versions, so we expeect a new version to be created
+        experiment_version1 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version1)
+        assert original_related_instance.versions.count() == 1
+        assert experiment_version1.source_material != original_related_instance
+        assert experiment_version1.source_material.working_version == original_related_instance
+
+        # No change between the original and versioned instances, so we don't want yet another version to be made
+        experiment_version2 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version2)
+        assert original_related_instance.versions.count() == 1
+        # The new instance version should be the same as the previous one
+        assert experiment_version2.source_material == experiment_version1.source_material
+
+        # Changing the working instance causes a new version to be made
+        original_experiment.source_material.material = "Saucy Sauceness"
+        original_experiment.source_material.save()
+        experiment_version3 = ExperimentFactory()
+        original_experiment._copy_attr_to_new_version("source_material", experiment_version3)
+        assert original_related_instance.versions.count() == 2
+        assert experiment_version3.source_material != experiment_version2.source_material
+        assert experiment_version3.source_material.working_version == original_experiment.source_material
 
     def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
         for layer in original_experiment.safety_layers.all():
@@ -460,7 +797,8 @@ class TestExperimentVersioning:
     def _assert_routes_are_duplicated(self, original_experiment, new_version):
         for route in new_version.child_links.all():
             assert route.parent.working_version == original_experiment
-            assert route.child.is_versioned is True
+            assert route.working_version.parent == original_experiment
+            assert route.child.is_a_version is True
 
     def _assert_files_are_duplicated(self, original_experiment, new_version):
         new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
@@ -484,8 +822,34 @@ class TestExperimentVersioning:
             _compare_models(
                 original=copied_trigger.working_version,
                 new=copied_trigger,
-                expected_changed_fields=["id", "action_id", "working_version_id", "experiment_id"],
+                expected_changed_fields=["id", "action", "working_version", "experiment"],
             )
+
+    def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
+        _compare_models(
+            original=getattr(original_experiment, attr_name),
+            new=getattr(new_version, attr_name),
+            expected_changed_fields=["id", "working_version"],
+        )
+
+    def test_get_version(self, experiment):
+        """Test that we are able to find a specific experiment version using any experiment in the version family"""
+        first_version = experiment.create_new_version()
+        second_version = experiment.create_new_version(make_default=True)
+        experiment.refresh_from_db()
+        first_version.refresh_from_db()
+
+        # Get the default version
+        assert experiment.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
+        assert first_version.get_version(Experiment.DEFAULT_VERSION_NUMBER) == second_version
+
+        # Get the working version. Its version number should be 3
+        assert experiment.get_version(3) == experiment
+        assert first_version.get_version(3) == experiment
+
+        # Get a specific version
+        assert experiment.get_version(1) == first_version
+        assert first_version.get_version(1) == first_version
 
 
 @pytest.mark.django_db()
@@ -515,23 +879,23 @@ class TestExperimentObjectManager:
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
+    def test_archived_experiments_are_filtered_out(self):
+        """Default queries should exclude archived experiments"""
+        experiment = ExperimentFactory()
+        new_version = experiment.create_new_version()
+        assert Experiment.objects.count() == 2
+        new_version.is_archived = True
+        new_version.save()
+        assert Experiment.objects.count() == 1
+
+        # To get all experiment,s use the dedicated object method
+        assert Experiment.objects.get_all().count() == 2
+
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
-    """
-    Compares the field values of between `original` and `new`, excluding those in `excluded_keys`.
-    `expected_changed_fields` specifies what fields we expect there to be differences in
-    """
-    excluded_keys = ["created_at", "updated_at"]
-    model_fields = [field.attname for field in original._meta.fields]
-    original_dict, new_dict = original.__dict__, new.__dict__
-    changed_fields = set([])
-    for field_name, field_value in original_dict.items():
-        if field_name not in model_fields:
-            continue
-
-        if field_name in excluded_keys:
-            continue
-        if field_value != new_dict[field_name]:
-            changed_fields.add(field_name)
-
-    assert changed_fields.difference(set(expected_changed_fields)) == set()
+    field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
+        set(expected_changed_fields)
+    )
+    assert (
+        field_difference == set()
+    ), f"These fields differ between the experiment versions, but should not: {field_difference}"

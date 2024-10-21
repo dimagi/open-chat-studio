@@ -124,6 +124,11 @@ def update_participant_data(request):
     team = request.team
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
+    # Update the participant's name if provided
+    if name := serializer.data.get("name"):
+        participant.name = name
+        participant.save()
+
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
@@ -211,6 +216,14 @@ def _create_update_schedules(team, experiment, participant, schedule_data):
         operation_id="session_list",
         summary="List Experiment Sessions",
         tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="tags",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="A list of session tags (comma separated) to filter the results by",
+            ),
+        ],
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
@@ -258,7 +271,10 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        return ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        queryset = ExperimentSession.objects.filter(team__slug=self.request.team.slug).all()
+        if tags_query_param := self.request.query_params.get("tags"):
+            queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
+        return queryset
 
     def create(self, request, *args, **kwargs):
         # Custom create method because we use a different serializer processing the request than for

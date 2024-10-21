@@ -57,11 +57,15 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
                 "id": "report->template",
                 "source": "report",
                 "target": "template",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
             {
                 "id": "template->email",
                 "source": "template",
                 "target": "email",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             },
         ],
         "nodes": [
@@ -201,6 +205,8 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                 "id": "llm-1->llm-2",
                 "source": "llm-1",
                 "target": "llm-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
             }
         ],
         "nodes": [
@@ -213,10 +219,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
                         "source_material_id": source_material.id,
-                        "prompt": (
-                            "Node 1: Use this {source_material} to answer questions about {participant_data}."
-                            " {input}"
-                        ),
+                        "prompt": ("Node 1: Use this {source_material} to answer questions about {participant_data}."),
                     },
                 },
                 "id": "llm-1",
@@ -230,7 +233,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                         "llm_provider_id": provider.id,
                         "llm_model": "fake-model",
                         "source_material_id": source_material.id,
-                        "prompt": "Node 2: ({input})",
+                        "prompt": "Node 2:",
                     },
                 },
                 "id": "llm-2",
@@ -244,8 +247,8 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
         -1
     ]
     expected_output = (
-        f"Node 2: (Node 1: Use this {source_material.material} to answer questions "
-        f"about {participant_data.data}. {user_input})"
+        f"Node 2: Node 1: Use this {source_material.material} to answer questions "
+        f"about {participant_data.data}. {user_input}"
     )
     assert output == expected_output
 
@@ -274,6 +277,362 @@ def test_render_template(pipeline):
     pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
     assert runnable.invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1] == "Cycling is cool"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_branching_pipeline(pipeline, experiment_session):
+    data = {
+        "edges": [
+            {
+                "id": "START -> RenderTemplate-A",
+                "source": "Passthrough-1",
+                "target": "RenderTemplate-A",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "Passthrough -> RenderTemplate-B",
+                "source": "Passthrough-1",
+                "target": "RenderTemplate-B",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RenderTemplate-A -> END",
+                "source": "RenderTemplate-A",
+                "target": "Passthrough-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RenderTemplate-B -> RenderTemplate-C",
+                "source": "RenderTemplate-B",
+                "target": "RenderTemplate-C",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RenderTemplate-C -> END",
+                "source": "RenderTemplate-C",
+                "target": "Passthrough-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "Passthrough-1",
+                "data": {
+                    "id": "Passthrough-1",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                    "inputParams": [],
+                },
+                "type": "pipelineNode",
+                "position": {"x": 76.27754748414293, "y": 280.32562971844055},
+            },
+            {
+                "id": "RenderTemplate-B",
+                "data": {
+                    "id": "RenderTemplate-B",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "B ({{ input}})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "Passthrough-2",
+                "data": {
+                    "id": "Passthrough-2",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                    "inputParams": [],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-C",
+                "data": {
+                    "id": "RenderTemplate-C",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "C ({{input }})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-A",
+                "data": {
+                    "id": "RenderTemplate-A",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "A ({{ input }})"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    user_input = "The Input"
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    output = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["outputs"]
+    expected_output = {
+        "Passthrough-1": user_input,
+        "RenderTemplate-A": f"A ({user_input})",
+        "RenderTemplate-B": f"B ({user_input})",
+        "RenderTemplate-C": f"C (B ({user_input}))",
+        "Passthrough-2": [f"A ({user_input})", f"C (B ({user_input}))"],
+    }
+    assert output == expected_output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_conditional_node(pipeline, experiment_session):
+    data = {
+        "edges": [
+            {
+                "id": "Boolean -> True",
+                "source": "BooleanNode",
+                "target": "RenderTemplate-true",
+                "sourceHandle": "output_true",
+                "targetHandle": "input",
+            },
+            {
+                "id": "Boolean -> False",
+                "source": "BooleanNode",
+                "target": "RenderTemplate-false",
+                "sourceHandle": "output_false",
+                "targetHandle": "input",
+            },
+            {
+                "id": "False -> End",
+                "source": "RenderTemplate-false",
+                "target": "End",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "True -> End",
+                "source": "RenderTemplate-true",
+                "target": "End",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "BooleanNode",
+                "data": {
+                    "id": "BooleanNode",
+                    "type": "BooleanNode",
+                    "label": "Boolean Node",
+                    "params": {"input_equals": "hello"},
+                    "inputParams": [{"name": "input_equals", "type": "<class 'str'>"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-true",
+                "data": {
+                    "id": "RenderTemplate-true",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "said hello"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "RenderTemplate-false",
+                "data": {
+                    "id": "RenderTemplate-false",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "didn't say hello, said {{ input }}"},
+                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "End",
+                "data": {"id": "End", "type": "Passthrough", "label": "End", "params": {}, "inputParams": []},
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "said hello"
+    assert "RenderTemplate-false" not in output["outputs"]
+
+    output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "didn't say hello, said bad"
+    assert "RenderTemplate-true" not in output["outputs"]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_router_node(get_llm_service, provider, pipeline, experiment_session):
+    service = build_fake_llm_echo_service()
+    get_llm_service.return_value = service
+
+    data = {
+        "edges": [
+            {
+                "id": "RouterNode -> A",
+                "source": "RouterNode",
+                "target": "A",
+                "sourceHandle": "output_0",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> B",
+                "source": "RouterNode",
+                "target": "B",
+                "sourceHandle": "output_1",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> C",
+                "source": "RouterNode",
+                "target": "C",
+                "sourceHandle": "output_2",
+                "targetHandle": "input",
+            },
+            {
+                "id": "A -> END",
+                "source": "A",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "B -> END",
+                "source": "B",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "C -> END",
+                "source": "C",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+            {
+                "id": "RouterNode -> D",
+                "source": "RouterNode",
+                "target": "D",
+                "sourceHandle": "output_3",
+                "targetHandle": "input",
+            },
+            {
+                "id": "D -> END",
+                "source": "D",
+                "target": "END",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "id": "RouterNode",
+                "data": {
+                    "id": "RouterNode",
+                    "type": "RouterNode",
+                    "label": "Router",
+                    "params": {
+                        "prompt": "{ input }",
+                        "keywords": ["A", "b", "c", "d"],
+                        "llm_model": "claude-3-5-sonnet-20240620",
+                        "num_outputs": "4",
+                        "llm_provider_id": provider.id,
+                    },
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "A",
+                "data": {
+                    "id": "A",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "A {{input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "B",
+                "data": {
+                    "id": "B",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "B {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "C",
+                "data": {
+                    "id": "C",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "C {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "D",
+                "data": {
+                    "id": "D",
+                    "type": "RenderTemplate",
+                    "label": "Render a template",
+                    "params": {"template_string": "D {{ input }}"},
+                },
+                "type": "pipelineNode",
+            },
+            {
+                "id": "END",
+                "data": {
+                    "id": "END",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                },
+                "type": "pipelineNode",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A a"
+    output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A A"
+    output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B b"
+    output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "C c"
+    output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "D d"
+    output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A z"
 
 
 @contextmanager

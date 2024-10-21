@@ -1,58 +1,15 @@
-<button class="btn btn-sm btn-outline btn-primary"
-        onclick="document.getElementById('modal-{{ record.id }}').showModal()">
-    Details
-</button>
-
-<dialog id="modal-{{ record.id }}" class="modal">
-    <div class="modal-box">
-        <h3 class="font-bold text-xl mb-4">Details for {{ record.name }} (Version {{ record.version_number }})</h3>
-        <div class="my-4 space-y-2">
-            <p><span class="font-semibold">Description:</span> {{ record.description }}</p>
-            <p><span class="font-semibold">LLM Model:</span> {{ record.llm }}</p>
-            {% if record.llm_provider %}
-                <p><span class="font-semibold">LLM Provider:</span> {{ record.llm_provider.name }}</p>
-            {% endif %}
-            {% if record.assistant %}
-                <p><span class="font-semibold">Assistant:</span> {{ record.assistant.name }}</p>
-            {% endif %}
-            {% if record.pipeline %}
-                <p><span class="font-semibold">Pipeline:</span> {{ record.pipeline.name }}</p>
-            {% endif %}
-            <p><span class="font-semibold">Temperature:</span> {{ record.temperature }}</p>
-            {% if record.source_material %}
-                <p><span class="font-semibold">Source Material:</span> {{ record.source_material.name }}</p>
-            {% endif %}
-            {% if record.pre_survey %}
-                <p><span class="font-semibold">Pre-Survey:</span> {{ record.pre_survey.name }}</p>
-            {% endif %}
-            {% if record.post_survey %}
-                <p><span class="font-semibold">Post-Survey:</span> {{ record.post_survey.name }}</p>
-            {% endif %}
-            {% if record.safety_violation_notification_emails %}
-                <p><span class="font-semibold">Safety Violation Notification Emails:</span> {{ record.safety_violation_notification_emails|join:", " }}</p>
-            {% endif %}
-            <p><span class="font-semibold">Max Token Limit:</span> {{ record.max_token_limit }}</p>
-            <p><span class="font-semibold">Voice Response Behaviour:</span> {{ record.get_voice_response_behaviour_display }}</p>
-            {% if record.trace_provider %}
-                <p><span class="font-semibold">Trace Provider:</span> {{ record.trace_provider.name }}</p>
-            {% endif %}
-            <p><span class="font-semibold">Consent Form:</span> {{ record.consent_form.name }}</p>
-            <p><span class="font-semibold">Conversational Consent Enabled:</span> {{ record.conversational_consent_enabled|yesno:"Yes,No" }}</p>
-            <p><span class="font-semibold">Echo Transcript:</span> {{ record.echo_transcript|yesno:"Yes,No" }}</p>
-        </div>
-        <div class="modal-action">
-            {% if not record.is_default_version %}
-                <form method="post" action="{% url 'experiments:archive-experiment' team.slug record.id %}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-warning">Archive</button>
-                </form>
-            {% endif %}
-            {% url 'experiments:set-default-experiment' record.id as form_action_url %}
-            <form method="post" action="{{ form_action_url }}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-primary">Set as Default</button>
-            </form>
-            <button class="btn" onclick="document.getElementById('modal-{{ record.id }}').close()">Close</button>
-        </div>
-    </div>
-</dialog>
+<div class="flex flex-row gap-1">
+  <form method="post" action="{% url 'experiments:start_authed_web_session' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}" class="inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline btn-primary">
+      <i class="fas fa-comment"></i>
+    </button>
+  </form>
+  <button class="btn btn-sm btn-outline btn-primary"
+          hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
+          hx-target="#modal-content"
+          hx-trigger="click"
+          onclick="document.querySelector('#versionDetailsModal').showModal();">
+    View Details
+  </button>
+</div>

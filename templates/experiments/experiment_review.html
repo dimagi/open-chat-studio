@@ -18,7 +18,7 @@
     <h1 class="pg-title">Experiment Review</h1>
     <div class="prose !max-w-none">
       <p>Thanks for completing the experiment!</p>
-      {% if experiment.post_survey %}
+      {% if survey_link %}
         <p>{{ survey_text }}</p>
         <p><a class="btn btn-accent" href="{{ survey_link }}" target="_blank">Take the Survey</a></p>
       {% else %}
@@ -43,8 +43,6 @@
         <p class="mt-2 text-sm text-gray-700">A log of your chat history, in case you'd like to refer to it.</p>
       </div>
     </div>
-    <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "experiments/components/experiment_chat.html" %}
-    </div>
+    {% include "experiments/components/experiment_chat.html" %}
   </div>
 {% endblock %}

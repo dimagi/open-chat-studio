@@ -286,8 +286,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
         input_dict["instructions"] = self.state.get_assistant_instructions()
-        output, thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
-        output, annotation_file_ids = self._save_response_annotations(output, thread_id, run_id)
+        thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
+        output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
 
         if not current_thread_id:
             self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
@@ -304,18 +304,25 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         This is necessary in multi-bot setups if some of the bots are assistants but not all.
         """
+
+        def _sync_messages_to_existing_thread(thread_id, messages):
+            for message in messages_to_sync:
+                self.state.raw_client.beta.threads.messages.create(current_thread_id, **message)
+
         if messages_to_sync := self.state.get_messages_to_sync_to_thread():
             if current_thread_id:
-                for message in messages_to_sync:
-                    self.state.raw_client.beta.threads.messages.create(current_thread_id, **message)
+                _sync_messages_to_existing_thread(current_thread_id, messages_to_sync)
             else:
-                thread = self.state.raw_client.beta.threads.create(messages=messages_to_sync)
+                # There is a 32 message limit when creating a new thread
+                first, rest = messages_to_sync[:32], messages_to_sync[32:]
+                thread = self.state.raw_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
+                _sync_messages_to_existing_thread(current_thread_id, rest)
                 self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
         return current_thread_id
 
     @transaction.atomic()
-    def _save_response_annotations(self, output, thread_id, run_id) -> tuple[str, dict]:
+    def _get_output_with_annotations(self, thread_id, run_id) -> tuple[str, list[str]]:
         """
         This makes a call to OpenAI with the `run_id` and `thread_id` to get more information about the response
         message, specifically regarding annotations.
@@ -327,10 +334,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         from apps.assistants.sync import get_and_store_openai_file
 
         client = self.state.raw_client
-        generated_files = []
+        chat = self.state.session.chat
+        session_id = self.state.session.id
 
-        # This output is a concatanation of all messages in this run
-        output_message = output
         team = self.state.session.team
         assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
             "files"
@@ -340,68 +346,122 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         ).values_list("external_id", flat=True)
 
         file_ids = set()
+        image_file_attachments = []
+        file_path_attachments = []
+        output_message = ""
         for message in client.beta.threads.messages.list(thread_id, run_id=run_id):
             for message_content in message.content:
-                annotations = message_content.text.annotations
-                for idx, annotation in enumerate(annotations):
-                    file_id = None
-                    file_ref_text = annotation.text
-                    if annotation.type == "file_citation":
-                        file_citation = annotation.file_citation
-                        file_id = file_citation.file_id
-                        file_name, file_link = self._get_file_name_and_link_for_citation(
-                            file_id=file_id, forbidden_file_ids=assistant_files_ids
-                        )
+                if message_content.type == "image_file":
+                    if created_file := self._create_image_file_from_image_message(client, message_content.image_file):
+                        image_file_attachments.append(created_file)
+                        file_ids.add(created_file.external_id)
 
-                        # Original citation text example:【6:0†source】
-                        output_message = output_message.replace(file_ref_text, f" [{file_name}]({file_link})")
+                        team_slug = self.state.session.team.slug
+                        file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
+                        output_message += f"![{created_file.name}]({file_link})\n"
 
-                    elif annotation.type == "file_path":
-                        file_path = annotation.file_path
-                        file_id = file_path.file_id
-                        created_file = get_and_store_openai_file(
-                            client=client,
-                            file_name=annotation.text.split("/")[-1],
-                            file_id=file_id,
-                            team_id=self.state.experiment.team_id,
-                        )
-                        # Original citation text example: sandbox:/mnt/data/the_file.csv. This is the link part in what
-                        # looks like [Download the CSV file](sandbox:/mnt/data/the_file.csv)
-                        session_id = self.state.session.id
-                        output_message = output_message.replace(
-                            file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
-                        )
-                        generated_files.append(created_file)
+                elif message_content.type == "text":
+                    message_content_value = message_content.text.value
 
-                    file_ids.add(file_id)
+                    annotations = message_content.text.annotations
+                    for idx, annotation in enumerate(annotations):
+                        file_id = None
+                        file_ref_text = annotation.text
+                        if annotation.type == "file_citation":
+                            file_citation = annotation.file_citation
+                            file_id = file_citation.file_id
+                            file_name, file_link = self._get_file_link_for_citation(
+                                file_id=file_id, forbidden_file_ids=assistant_files_ids
+                            )
+
+                            # Original citation text example:【6:0†source】
+                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                            if file_link:
+                                message_content_value += f"\n[{idx}]: {file_link}"
+                            else:
+                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
+
+                        elif annotation.type == "file_path":
+                            file_path = annotation.file_path
+                            file_id = file_path.file_id
+                            created_file = get_and_store_openai_file(
+                                client=client,
+                                file_id=file_id,
+                                team_id=self.state.experiment.team_id,
+                            )
+                            # Original citation text example: sandbox:/mnt/data/the_file.csv.
+                            # This is the link part in what looks like
+                            # [Download the CSV file](sandbox:/mnt/data/the_file.csv)
+                            message_content_value = message_content_value.replace(
+                                file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
+                            )
+                            file_path_attachments.append(created_file)
+                        file_ids.add(file_id)
+
+                    output_message += message_content_value + "\n"
+                else:
+                    # Ignore any other type for now
+                    pass
 
         # Attach the generated files to the chat object as an annotation
-        if generated_files:
-            chat = self.state.session.chat
+        if file_path_attachments:
             resource, _created = chat.attachments.get_or_create(tool_type="file_path")
-            resource.files.add(*generated_files)
+            resource.files.add(*file_path_attachments)
 
-        return output_message, list(file_ids)
+        if image_file_attachments:
+            resource, _created = chat.attachments.get_or_create(tool_type="image_file")
+            resource.files.add(*image_file_attachments)
 
-    def _get_file_name_and_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str]:
+        # replace all instance of `[some filename.pdf](https://example.com/download/file-abc)` with
+        # just the link text
+        output_message = re.sub(r"\[(?!\d+\])([^]]+)\]\([^)]+example\.com[^)]+\)", r"*\1*", output_message)
+
+        return output_message.strip(), list(file_ids)
+
+    def _create_image_file_from_image_message(self, client, image_file_message) -> File | None:
+        """
+        Creates a File record from `image_file_message` by pulling the data from OpenAI. Typically, these files don't
+        have extentions, so we'll need to guess it based on the content. We know it will be an image, but not which
+        extension to use.
+        """
+        from apps.assistants.sync import get_and_store_openai_file
+
+        try:
+            file_id = image_file_message.file_id
+            return get_and_store_openai_file(
+                client=client,
+                file_id=file_id,
+                team_id=self.state.experiment.team_id,
+            )
+        except Exception as ex:
+            logger.exception(ex)
+
+    def _get_file_link_for_citation(self, file_id: str, forbidden_file_ids: list[str]) -> tuple[str, str | None]:
         """Returns a file name and a link constructor for `file_id`. If `file_id` is a member of
         `forbidden_file_ids`, the link will be empty to prevent unauthorized access.
         """
-        file_name = ""
         file_link = ""
 
-        if file_id not in forbidden_file_ids:
-            # Don't allow downloading assistant level files
-            team = self.state.session.team
-            session_id = self.state.session.id
+        team = self.state.session.team
+        session_id = self.state.session.id
+        try:
+            file = File.objects.get(external_id=file_id, team_id=team.id)
+            file_link = f"file:{team.slug}:{session_id}:{file.id}"
+            file_name = file.name
+        except File.DoesNotExist:
+            client = self.state.raw_client
+            openai_file = client.files.retrieve(file_id=file_id)
             try:
-                file = File.objects.get(external_id=file_id, team_id=team.id)
-                file_link = f"file:{team.slug}:{session_id}:{file.id}"
-                file_name = file.name
-            except File.DoesNotExist:
-                client = self.state.raw_client
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
+            except Exception as e:
+                logger.error(f"Failed to retrieve file {file_id} from OpenAI: {e}")
+                file_name = "Unknown File"
+
+        if file_id in forbidden_file_ids:
+            # Don't allow downloading assistant level files
+            return file_name, None
+
         return file_name, file_link
 
     def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
@@ -431,7 +491,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 resource_file_ids[resource_name] = openai_file_ids
         return resource_file_ids
 
-    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str, str]:
+    def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.state.get_openai_assistant()
 
         for i in range(3):
@@ -473,11 +533,9 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     def experiment(self) -> Experiment:
         return self.state.experiment
 
-    def _get_response(
-        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
-    ) -> tuple[str, str, str]:
+    def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
-        return response.return_values["output"], response.thread_id, response.run_id
+        return response.thread_id, response.run_id
 
     def _extra_input_configs(self) -> dict:
         # Allow builtin tools but not custom tools when not running as an agent
@@ -496,13 +554,11 @@ class AssistantAgentRunnable(AssistantExperimentRunnable):
     def _extra_input_configs(self) -> dict:
         return {}
 
-    def _get_response(
-        self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict
-    ) -> tuple[str, str, str]:
+    def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         agent = AgentExecutor.from_agent_and_tools(
             agent=assistant_runnable,
             tools=self.state.get_tools(),
             max_execution_time=120,
         )
         response: dict = agent.invoke(input, config)
-        return response["output"], response["thread_id"], response["run_id"]
+        return response["thread_id"], response["run_id"]

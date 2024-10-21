@@ -5,8 +5,10 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.runnables import chain
 from pydantic import ValidationError
 
+from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -60,7 +62,7 @@ class TopicBot:
     """
 
     def __init__(self, session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-        self.experiment = experiment or session.experiment
+        self.experiment = experiment or session.experiment_version
         self.disable_tools = disable_tools
         self.prompt = self.experiment.prompt_text
         self.input_formatter = self.experiment.input_formatter
@@ -86,6 +88,8 @@ class TopicBot:
         if self.experiment.trace_provider:
             self.trace_service = self.experiment.trace_provider.get_service()
 
+        # The chain that generated the AI message
+        self.generator_chain = None
         self._initialize()
 
     def _initialize(self):
@@ -133,7 +137,8 @@ class TopicBot:
         )
 
         if self.terminal_chain:
-            result = self.terminal_chain.invoke(
+            chain = self.terminal_chain
+            result = chain.invoke(
                 result.output,
                 config={
                     "run_name": "terminal_chain",
@@ -144,6 +149,8 @@ class TopicBot:
                     },
                 },
             )
+
+        self.generator_chain = chain
 
         enqueue_static_triggers.delay(self.session.id, StaticTriggerType.NEW_BOT_MESSAGE)
         self.input_tokens = self.input_tokens + result.prompt_tokens
@@ -177,6 +184,7 @@ class TopicBot:
             # human safety layers
             for safety_bot in self.safety_bots:
                 if safety_bot.filter_human_messages() and not safety_bot.is_safe(user_input):
+                    self._save_message_to_history(user_input, ChatMessageType.HUMAN)
                     enqueue_static_triggers.delay(self.session.id, StaticTriggerType.HUMAN_SAFETY_LAYER_TRIGGERED)
                     notify_users_of_violation(self.session.id, safety_layer_id=safety_bot.safety_layer.id)
                     return self._get_safe_response(safety_bot.safety_layer)
@@ -209,13 +217,29 @@ class TopicBot:
             }
         return main_bot_chain.invoke(user_input, config=config)
 
+    def get_ai_message_id(self) -> int | None:
+        """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
+        if self.generator_chain and self.generator_chain.state.ai_message:
+            return self.generator_chain.state.ai_message.id
+
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
-            safety_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
-            return safety_response
+            bot_response = self._call_predict(safety_layer.prompt_to_bot, save_input_to_history=False)
         else:
             no_answer = "Sorry, I can't answer that. Please try something else."
-            return safety_layer.default_response_to_user or no_answer
+            bot_response = safety_layer.default_response_to_user or no_answer
+            # This is a bit of a hack to store the bot's response, since it didn't really generate it, but we still
+            # need to save it
+            self._save_message_to_history(bot_response, ChatMessageType.AI)
+            self.generator_chain = self.chain
+
+        self.generator_chain.state.ai_message.add_system_tag(
+            safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
+        )
+        return bot_response
+
+    def _save_message_to_history(self, message: str, message_type: ChatMessageType):
+        self.chain.state.save_message_to_history(message, type_=message_type)
 
 
 class SafetyBot:
@@ -255,9 +279,21 @@ class SafetyBot:
 
 class PipelineBot:
     def __init__(self, session: ExperimentSession):
-        self.experiment = session.experiment
+        self.experiment = session.experiment_version
         self.session = session
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
-        output = self.experiment.pipeline.invoke(PipelineState(messages=[user_input]), self.session)
+        output = self.experiment.pipeline.invoke(
+            PipelineState(messages=[user_input], experiment_session=self.session), self.session
+        )
         return output["messages"][-1]
+
+    def get_ai_message_id(self) -> int | None:
+        last_ai_message = (
+            ChatMessage.objects.filter(chat=self.session.chat, message_type=ChatMessageType.AI.value)
+            .values("id")
+            .last()
+        )
+        if not last_ai_message:
+            return None
+        return last_ai_message["id"]

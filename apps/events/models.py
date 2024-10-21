@@ -12,14 +12,13 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
-from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin
+from apps.experiments.models import Experiment, ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger(__name__)
-
 
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
@@ -29,6 +28,14 @@ ACTION_HANDLERS = {
     "send_message_to_bot": actions.SendMessageToBotAction,
     "summarize": actions.SummarizeConversationAction,
 }
+
+
+class StaticTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
+    pass
 
 
 class EventActionType(models.TextChoices):
@@ -102,6 +109,8 @@ class StaticTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = StaticTriggerObjectManager()
 
     @property
     def trigger_type(self):
@@ -131,6 +140,9 @@ class StaticTrigger(BaseModel, VersionsMixin):
         new_instance.save()
         return new_instance
 
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+
 
 class TimeoutTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
@@ -150,6 +162,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
+    is_archived = models.BooleanField(default=False)
+    objects = TimeoutTriggerObjectManager()
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment):
@@ -280,6 +294,9 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         return not (has_succeeded or failed)
 
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+
 
 class TimePeriod(models.TextChoices):
     HOURS = ("hours", "Hours")
@@ -347,10 +364,7 @@ class ScheduledMessage(BaseTeamModel):
         utc_now = timezone.now()
         self.last_triggered_at = utc_now
         self.total_triggers += 1
-        repetitions = self.params.get("repetitions", None)
-        if (repetitions is not None and self.total_triggers >= repetitions) or (
-            self.end_date and self.end_date <= timezone.now()
-        ):
+        if self._should_mark_complete():
             self.is_complete = True
         else:
             delta = relativedelta(**{self.params["time_period"]: self.params["frequency"]})
@@ -358,49 +372,69 @@ class ScheduledMessage(BaseTeamModel):
 
         self.save()
 
+    def _should_mark_complete(self):
+        return bool(not self.remaining_triggers or (self.end_date and self.end_date <= timezone.now()))
+
     @cached_property
     def params(self):
         return self.custom_schedule_params or (self.action.params if self.action else {})
 
-    @cached_property
+    @property
     def name(self) -> str:
         return self.params["name"]
 
-    @cached_property
+    @property
     def frequency(self) -> int:
         return self.params["frequency"]
 
-    @cached_property
+    @property
     def time_period(self) -> str:
         return self.params["time_period"]
 
-    @cached_property
+    @property
     def repetitions(self) -> int:
-        return self.params["repetitions"]
+        return self.params["repetitions"] or 0
 
-    @cached_property
+    @property
     def prompt_text(self) -> str:
         return self.params["prompt_text"]
+
+    @property
+    def expected_trigger_count(self):
+        return self.repetitions or 1
+
+    @property
+    def remaining_triggers(self):
+        return self.expected_trigger_count - self.total_triggers
 
     @property
     def was_created_by_system(self) -> bool:
         return self.action_id is not None
 
     def as_string(self, as_timezone: str | None = None):
-        header_str = f"{self.name} (ID={self.external_id}, message={self.prompt_text})"
-        if self.repetitions == 0:
+        header_str = f"{self.name} (Message id={self.external_id}, message={self.prompt_text})"
+        if self.repetitions <= 1:
             schedule_details_str = "One-off reminder"
-        elif self.time_period in ["hour", "day"]:
-            schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
         else:
-            weekday = self.next_trigger_date.strftime("%A")
-            schedule_details_str = f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
+            if self.time_period == TimePeriod.WEEKS:
+                weekday = self.next_trigger_date.strftime("%A")
+                schedule_details_str = (
+                    f"Every {self.frequency} {self.time_period} on {weekday}, {self.repetitions} times"
+                )
+            else:
+                schedule_details_str = f"Every {self.frequency} {self.time_period}, {self.repetitions} times"
 
-        next_trigger_str = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+        if not self.is_complete and self.remaining_triggers:
+            next_trigger_date = pretty_date(self.next_trigger_date, as_timezone=as_timezone)
+            next_trigger_str = f"Next trigger is at {next_trigger_date}"
+        else:
+            next_trigger_str = "Complete"
+
         tail_str = ""
         if self.action is not None:
-            tail_str = "(System)"
-        return f"{header_str}: {schedule_details_str}. Next trigger is at {next_trigger_str}. {tail_str}"
+            tail_str = " (System)"
+
+        return f"{header_str}: {schedule_details_str}. {next_trigger_str}.{tail_str}"
 
     def __str__(self):
         return self.as_string()

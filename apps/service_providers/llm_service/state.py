@@ -15,6 +15,8 @@ from apps.utils.time import pretty_date
 
 
 class RunnableState(metaclass=ABCMeta):
+    ai_message: ChatMessage | None = None
+
     @abstractmethod
     def get_llm_service(self):
         pass
@@ -96,7 +98,7 @@ class ExperimentState(RunnableState):
         return self.experiment.prompt_text
 
     def get_tools(self):
-        return get_tools(self.session)
+        return get_tools(self.session, self.experiment)
 
 
 class ChatRunnableState(RunnableState):
@@ -147,6 +149,13 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
 
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            if not self.experiment.is_working_version:
+                chat_message.add_system_tag(
+                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                )
+
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
         # temporary mechanism to cancel the chat
@@ -172,7 +181,9 @@ class AssistantState(RunnableState):
         pass
 
     @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, resource_file_ids: dict | None = None):
+    def save_message_to_history(
+        self, message: str, type_: ChatMessageType, resource_file_ids: dict | None = None
+    ) -> ChatMessage:
         pass
 
     @abstractmethod
@@ -262,10 +273,15 @@ class AssistantExperimentState(ExperimentState, AssistantState):
                 category=TagCategories.BOT_RESPONSE,
             )
             chat_message.add_tag(tag, team=self.session.team, added_by=None)
-        return chat_message
 
-    def get_tools(self):
-        return get_tools(self.session, for_assistant=True)
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            if not self.experiment.is_working_version:
+                chat_message.add_system_tag(
+                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                )
+
+        return chat_message
 
     @property
     def tools_enabled(self):

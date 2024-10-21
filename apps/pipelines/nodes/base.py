@@ -1,3 +1,4 @@
+import operator
 from abc import ABC
 from collections.abc import Sequence
 from functools import cached_property
@@ -10,13 +11,23 @@ from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 
 
-def add_messages(left: list, right: list):
-    # Could probably log here
-    return left + right
+def add_messages(left: dict, right: dict):
+    # If the node already has an output, create a list and append the value to it
+    output = {**left}
+    for key, value in right.items():
+        if key in output:
+            if isinstance(output[key], list):
+                output[key] = [*output[key], value]
+            else:
+                output[key] = [output[key], value]
+        else:
+            output[key] = value
+    return output
 
 
 class PipelineState(dict):
-    messages: Annotated[Sequence[Any], add_messages]
+    messages: Annotated[Sequence[Any], operator.add]
+    outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
 
     def json_safe(self):
@@ -54,13 +65,29 @@ class PipelineNode(BaseModel, ABC):
 
     _config: RunnableConfig | None = None
 
-    def process(self, state: PipelineState, config) -> PipelineState:
+    def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config
-        output = self._process(state)
-        # Append the output to the state, otherwise do not change the state
-        return PipelineState(messages=[output]) if output else PipelineState()
 
-    def _process(self, state: PipelineState) -> PipelineState:
+        for incoming_edge in reversed(incoming_edges):
+            # We assume there is only a single path that would be valid through
+            # the graph.
+            # If we wanted to have multiple parallel paths that end
+            # in a single node, we should give that node multiple inputs, and
+            # read the input from that particular input
+            if incoming_edge in state["outputs"]:
+                input = str(state["outputs"][incoming_edge])
+                break
+        else:  # This is the first node in the graph
+            input = state["messages"][-1]
+        output = self._process(input=input, state=state, node_id=node_id)
+        # Append the output to the state, otherwise do not change the state
+        return (
+            PipelineState(messages=[output], outputs={node_id: output})
+            if output
+            else PipelineState(outputs={node_id: output})
+        )
+
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 

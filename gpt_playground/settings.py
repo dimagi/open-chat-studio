@@ -489,7 +489,7 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 # text-neutral text-error (pipeline run table styles here for tailwind build)
 DJANGO_TABLES2_ROW_ATTRS = {
     "class": """
-        border-b border-gray-200 hover:bg-gray-100
+        border-b border-base-300 hover:bg-base-200
         data-[redirect-url]:[&:not([data-redirect-url=''])]:hover:cursor-pointer
     """,
     "id": lambda record: f"record-{record.id}",

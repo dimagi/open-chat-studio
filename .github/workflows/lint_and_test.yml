@@ -1,34 +1,52 @@
-name: Run Django Tests
+name: Lint and Test
 on:
   pull_request:
   push:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+      - name: Install dependencies
+        run: npm install
+      - name: Build front end
+        run: npm run build
+      - name: Check types
+        run: npm run type-check
+
   code-style:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
       - name: Set up Node.js 18.x
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18.x
       - name: Install JS dependencies
         run: npm install
       - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.0
-  tests:
+        uses: pre-commit/action@v3.0.1
+
+  python-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      max-parallel: 4
-      matrix:
-        python-version:
-          - '3.11'
+    env:
+      PYTHON_VERSION: '3.11'
     services:
       postgres:
         image: postgres:latest
@@ -52,11 +70,11 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
       - name: Install Dependencies
         run: |
@@ -66,4 +84,9 @@ jobs:
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
-        run: pytest
+        run: pytest --cov --cov-context=test
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

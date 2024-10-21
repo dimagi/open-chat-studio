@@ -30,7 +30,7 @@ class SafetyLayerTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return SafetyLayer.objects.filter(team=self.request.team)
+        return SafetyLayer.objects.filter(team=self.request.team, is_version=False)
 
 
 class CreateSafetyLayer(CreateView):
@@ -84,6 +84,6 @@ class EditSafetyLayer(UpdateView):
 class DeleteSafetyLayer(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         safety_layer = get_object_or_404(SafetyLayer, id=pk, team=request.team)
-        safety_layer.delete()
+        safety_layer.archive()
         messages.success(request, "Safety Layer")
         return HttpResponse()

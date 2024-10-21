@@ -18,11 +18,18 @@ class NodeFactory(factory.django.DjangoModelFactory):
 class PipelineFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Pipeline
+        skip_postgeneration_save = True
 
     name = "Test Pipeline"
     data = {
         "edges": [
-            {"id": "1->2", "source": "first", "target": "second"},
+            {
+                "id": "1->2",
+                "source": "first",
+                "target": "second",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
         ],
         "nodes": [
             {

@@ -16,8 +16,15 @@
 {% block app %}
   <div class="app-card">
     <div class="flex">
-      <div class="flex-1">
+      <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
+        {% flag "experiment_versions" %}
+          {% if deployed_version %}
+            <div>
+              <span class="badge badge-success badge-sm">Deployed Version is v{{ deployed_version }}</span>
+            </div>
+          {% endif %}
+        {% endflag %}
       </div>
       <div class="justify-self-end">
         <div class="join">
@@ -30,10 +37,10 @@
             </div>
           {% endif %}
           <div class="tooltip" data-tip="Start Web Session">
-            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id %}" class="inline">
+            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
-                <i class="fa-solid fa-file-circle-plus"></i>
+                <i class="fas fa-comment"></i>
               </button>
             </form>
           </div>
@@ -179,12 +186,13 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="All Sessions" id="tab-allsessions" checked/>
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="app-card">
-          <div x-data="{tags: ''}">
-            <div class="grid grid-flow-col auto-cols-max gap-x-2">
+          <div x-data="{tags: '', participant: null}">
+            <div class="flex gap-x-2">
               {% if perms.experiments.download_chats %}
                 <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}"
                       class="my-2">
                   {% csrf_token %}
+                  <input name="participant" class="hidden" x-bind:value="participant"/>
                   <input name="tags" class="hidden" x-bind:value="tags"/>
                   <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All"/>
                 </form>
@@ -195,9 +203,12 @@
                 hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
                 hx-swap="innerHTML"
               >
-                <div class="flex">
+                <div class="flex gap-2">
+                  <div class="w-72 my-2">
+                    <input x-model="participant" name="participant" id="participant-filter" placeholder="Filter participants...">
+                  </div>
                   {% if perms.annotations.view_customtaggeditem %}
-                    <div class="w-96 my-2">
+                    <div class="w-72 my-2">
                       <select x-model="tags" id="tag-multiselect-filter" name="tags" multiple
                               placeholder="Filter tags..."
                               autocomplete="off">
@@ -208,7 +219,7 @@
                       </select>
                     </div>
                   {% endif %}
-                  <div class="form-control ml-2">
+                  <div class="form-control">
                     <label class="label cursor-pointer">
                       <span class="label-text mr-2">Include API Sessions</span>
                       <input type="checkbox" name="show-all" class="toggle" />
@@ -232,6 +243,7 @@
               <tr>
                 <th class="px-3 py-3 text-left">Started</th>
                 <th class="px-3 py-3 text-left">Last Message</th>
+                <th class="px-3 py-3 text-left">Version</th>
                 <th class="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
@@ -240,6 +252,7 @@
                 <tr class="text-sm">
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.created_at }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
+                  <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">
                     {% if session.is_complete %}
                       <a class="btn btn-sm btn-outline btn-primary"
@@ -247,7 +260,8 @@
                          class="link">Review Chat</a>
                     {% else %}
                       <a class="btn btn-sm btn-outline btn-primary"
-                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.id %}" class="link">
+                         href="{% url 'experiments:experiment_chat_session' team.slug experiment.id session.get_experiment_version_number session.id %}" class="link"
+                      >
                         Continue Chat
                       </a>
                     {% endif %}
@@ -316,16 +330,46 @@
   </div>
   <script src="{% static 'js/app-bundle.js' %}"></script>
   <script>
-    function filterSessions(tags) {
-      htmx.trigger(htmx.find("#sessions-table"), "tagFilter", {});
-    }
-
-    let element = document.getElementById('tag-multiselect-filter');
-    new TomSelect(element, {
-      maxItems: null,
-    });
-
     document.addEventListener('DOMContentLoaded', () => {
+      new TomSelect('#tag-multiselect-filter', {
+        maxItems: null,
+        hidePlaceholder: true,
+      });
+
+      new TomSelect('#participant-filter', {
+        valueField: 'identifier',
+        searchField: ['name', 'identifier'],
+        hidePlaceholder: true,
+        load: function(query, callback) {
+          const url = '{% url "participants:search" request.team.slug %}?q=' + encodeURIComponent(query);
+          fetch(url)
+            .then(response => response.json())
+            .then(json => {
+              callback(json.results);
+            }).catch(()=>{
+              callback();
+            });
+        },
+        render: {
+          option: function(item, escape) {
+            return `<div class="">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                </div>`;
+          },
+          item: function(item, escape) {
+            return `<div class="">
+                      <span class="h4">
+                        ${ escape(item.name || 'No Name') }
+                      </span>
+                      <span class="text-muted"> (${ escape(item.identifier) })</span>
+                </div>`;
+          }
+        },
+      });
+
       const tabs = document.querySelectorAll('.tab');
       const tabContents = document.querySelectorAll('.tab-content');
       const showTabContent = (tabId) => {

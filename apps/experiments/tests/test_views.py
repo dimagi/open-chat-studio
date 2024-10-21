@@ -5,10 +5,12 @@ from unittest import mock
 import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory
 from django.urls import reverse
 from waffle.testutils import override_flag
 
 from apps.chat.channels import WebChannel
+from apps.chat.models import Chat
 from apps.experiments.models import (
     AgentTools,
     Experiment,
@@ -17,7 +19,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import ExperimentForm, validate_prompt_variables
+from apps.experiments.views.experiment import ExperimentForm, ExperimentTableView, validate_prompt_variables
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -353,17 +355,21 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("version", [Experiment.DEFAULT_VERSION_NUMBER, 1])
 @mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
 @mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
-def test_experiment_session_message_view_creates_files(delay_mock, experiment, client):
+def test_experiment_session_message_view_creates_files(delay_mock, version, experiment, client):
     task = mock.Mock()
     task.task_id = 1
     delay_mock.return_value = task
     session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
-    url = reverse(
-        "experiments:experiment_session_message",
-        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.id, "session_id": session.id},
-    )
+    url_kwargs = {
+        "team_slug": experiment.team.slug,
+        "experiment_id": experiment.id,
+        "session_id": session.id,
+        "version_number": version,
+    }
+    url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
 
     client.force_login(experiment.owner)
     file_search_file = BytesIO(b"some content")
@@ -377,3 +383,45 @@ def test_experiment_session_message_view_creates_files(delay_mock, experiment, c
     assert ci_resource.files.filter(name="ci.text").exists()
     fs_resource = session.chat.attachments.get(tool_type="file_search")
     assert fs_resource.files.filter(name="fs.text").exists()
+
+
+class TestExperimentTableView:
+    def test_get_queryset(self, experiment):
+        team = experiment.team
+        experiment.create_new_version()
+        archived_working = ExperimentFactory(team=team)
+        archived_version = archived_working.create_new_version()
+        archived_version.is_archived = archived_working.is_archived = True
+        archived_version.save()
+        archived_working.save()
+        assert Experiment.objects.get_all().count() == 4
+
+        request = RequestFactory().get(reverse("experiments:table", args=[team.slug]))
+        request.team = team
+        view = ExperimentTableView()
+        view.request = request
+        assert list(view.get_queryset().all()) == [experiment]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("version_number", [1, 2])
+def test_start_authed_web_session_with_version(version_number, client):
+    team = TeamWithUsersFactory()
+    working_experiment = ExperimentFactory(team=team)
+    working_experiment.create_new_version()
+
+    client.force_login(working_experiment.team.members.first())
+    url = reverse(
+        "experiments:start_authed_web_session",
+        kwargs={
+            "team_slug": working_experiment.team.slug,
+            "experiment_id": working_experiment.id,
+            "version_number": version_number,
+        },
+    )
+
+    response = client.post(url, data={})
+    assert response.status_code == 302
+    assert working_experiment.sessions.count() == 1
+    expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
+    assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata

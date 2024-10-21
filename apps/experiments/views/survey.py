@@ -33,7 +33,7 @@ class SurveyTableView(SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Survey.objects.filter(team=self.request.team)
+        return Survey.objects.filter(team=self.request.team, is_version=False)
 
 
 class CreateSurvey(CreateView):
@@ -75,6 +75,6 @@ class EditSurvey(UpdateView):
 class DeleteSurvey(LoginAndTeamRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         survey = get_object_or_404(Survey, id=pk, team=request.team)
-        survey.delete()
+        survey.archive()
         messages.success(request, "Survey Deleted")
         return HttpResponse()

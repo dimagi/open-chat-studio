@@ -7,7 +7,7 @@ from django.db import models
 from django.utils.functional import classproperty
 from langchain.schema import BaseMessage, messages_from_dict
 
-from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
+from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -22,6 +22,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
     class MetadataKeys(StrEnum):
         OPENAI_THREAD_ID = "openai_thread_id"
+        EXPERIMENT_VERSION = "experiment_version"
 
     # must match or be greater than experiment name field
     name = models.CharField(max_length=128, default="Unnamed Chat")
@@ -187,6 +188,27 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
+
+    def add_system_tag(self, tag: str, tag_category: TagCategories):
+        tag, _ = Tag.objects.get_or_create(
+            name=tag,
+            team=self.chat.team,
+            is_system_tag=True,
+            category=tag_category,
+        )
+        self.add_tag(tag, team=self.chat.team, added_by=None)
+
+    def get_processor_bot_tag_name(self) -> str | None:
+        """Returns the tag of the bot that generated this message"""
+        if self.message_type != ChatMessageType.AI:
+            return
+        if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
+            return tag.name
+
+    def get_safety_layer_tag_name(self) -> str | None:
+        """Returns the name of the safety layer tag, if there is one"""
+        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
+            return tag.name
 
 
 class ChatAttachment(BaseModel):

@@ -1,3 +1,4 @@
+import json
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -16,6 +17,8 @@ from apps.users.models import CustomUser
 
 class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
+    SAFETY_LAYER_RESPONSE = "safety_layer_response", _("Safety Layer Response")
+    EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
 
 
 @audit_fields(
@@ -69,8 +72,6 @@ class CustomTaggedItem(GenericTaggedItemBase, BaseTeamModel):
 class AnnotationMixin:
     @cached_property
     def object_info(self):
-        import json
-
         return json.dumps(
             {
                 "id": self.id,
@@ -96,14 +97,21 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
-    @property
-    def get_linked_tags(self):
-        # return [{"user": item.user.username, "tag": item.tag.name} for item in self.tagged_items.all()]
-        return [item.tag.name for item in self.tagged_items.all()]
+    def user_tag_names(self):
+        return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
 
-    @property
-    def get_system_tags(self):
-        return self.tags.filter(is_system_tag=True)
+    def system_tags_names(self):
+        return {(tag["name"], tag["category"]) for tag in self.tags_json if tag["is_system_tag"]}
+
+    def all_tag_names(self):
+        return [tag["name"] for tag in self.tags_json]
+
+    @cached_property
+    def tags_json(self):
+        return [
+            {"name": tag.name, "id": tag.id, "is_system_tag": tag.is_system_tag, "category": tag.category}
+            for tag in self.tags.all()
+        ]
 
 
 class UserComment(BaseTeamModel):

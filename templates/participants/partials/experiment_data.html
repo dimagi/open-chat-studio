@@ -1,9 +1,10 @@
+{% load render_table from django_tables2 %}
 <td colspan="100%" class="px-3 py-2">
   <div role="tablist" class="tabs tabs-bordered">
     <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Sessions"
            checked/>
     <div role="tabpanel" class="tab-content">
-      {% include 'participants/partials/experiment_sessions.html' %}
+      {% include "table/single_table.html" with table=session_table %}
     </div>
     {% if perms.experiments.view_participantdata %}
       <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab"
@@ -14,71 +15,7 @@
       <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Schedules"/>
       <div role="tabpanel" class="tab-content">
         <div class="mt-3 border rounded-lg border-neutral-500 divide-y divide-neutral-500">
-          {% for schedule in participant_schedules %}
-            <div class="mb-3">
-              <h3 class="text-lg font-semibold px-3 mt-2">{{ schedule.name }}</h3>
-              <div class="grid grid-cols-2 p-3">
-                <div><p>{{ schedule.prompt }}</p></div>
-                <div>
-                  {% if schedule.repetitions %}
-                    <p class="text-sm">
-                      Every {{ schedule.frequency }} {{ schedule.time_period }}, {{ schedule.repetitions }} times
-                      {% if schedule.is_complete %}
-                        (Completed).
-                      {% else %}
-                        ({{ schedule.triggers_remaining }} left).
-                      {% endif %}
-                    </p>
-                    {% if not schedule.is_complete %}
-                      <p class="text-sm">
-                        <span class="font-medium">Next due:</span>
-                        <time datetime="{{ schedule.next_trigger_date.isoformat }}"
-                              title="{{ schedule.next_trigger_date.isoformat }}">
-                          {{ schedule.next_trigger_date|date:"DATETIME_FORMAT" }}
-                        </time>
-                      </p>
-                    {% endif %}
-                    <p class="text-sm">
-                      <span class="font-medium">Last triggered:</span>
-                      {% if schedule.last_triggered_at %}
-                        <time datetime="{{ schedule.last_triggered_at.isoformat }}"
-                              title="{{ schedule.last_triggered_at.isoformat }}">
-                          {{ schedule.last_triggered_at|date:"DATETIME_FORMAT" }}
-                        </time>
-                      {% else %}
-                        Not yet triggered.
-                      {% endif %}
-                    </p>
-                  {% else %}
-                    <p class="text-sm">
-                      Once off {% if schedule.is_complete %}(Completed){% endif %}.
-                    </p>
-                    {% if schedule.is_complete %}
-                      <p class="text-sm">
-                        <span class="font-medium">Triggered on:</span>
-                        {% if schedule.last_triggered_at %}
-                          <time datetime="{{ schedule.last_triggered_at.isoformat }}"
-                                title="{{ schedule.last_triggered_at.isoformat }}">
-                            {{ schedule.last_triggered_at|date:"DATETIME_FORMAT" }}
-                          </time>
-                        {% else %}
-                          Not yet triggered.
-                        {% endif %}
-                      </p>
-                    {% else %}
-                      <p class="text-sm">
-                        <span class="font-medium">Due:</span>
-                        <time datetime="{{ schedule.next_trigger_date.isoformat }}"
-                              title="{{ schedule.next_trigger_date.isoformat }}">
-                          {{ schedule.next_trigger_date|date:"DATETIME_FORMAT" }}
-                        </time>
-                      </p>
-                    {% endif %}
-                  {% endif %}
-                </div>
-              </div>
-            </div>
-          {% endfor %}
+          {% include "participants/partials/participant_schedules.html" %}
         </div>
       </div>
     {% endif %}

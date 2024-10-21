@@ -100,7 +100,7 @@ distro==1.8.0
     # via
     #   anthropic
     #   openai
-django==5.1
+django==5.1.2
     # via
     #   -r requirements.in
     #   django-allauth
@@ -245,7 +245,7 @@ langchain-openai==0.1.3
     # via -r requirements.in
 langchain-text-splitters==0.0.1
     # via langchain
-langfuse==2.43.3
+langfuse==2.52.1
     # via -r requirements.in
 langgraph==0.0.38
     # via -r requirements.in
@@ -294,9 +294,9 @@ packaging==23.2
     #   langfuse
     #   marshmallow
     #   transformers
-pandas==2.1.3
+pandas==2.2.3
     # via -r requirements.in
-phonenumberslite==8.13.40
+phonenumberslite==8.13.47
     # via -r requirements.in
 prompt-toolkit==3.0.41
     # via click-repl
@@ -338,6 +338,8 @@ python-dateutil==2.8.2
     #   pandas
     #   python-crontab
     #   taskbadger
+python-magic==0.4.27
+    # via -r requirements.in
 python3-openid==3.2.0
     # via django-allauth
 pytz==2023.3.post1
@@ -392,7 +394,7 @@ s3transfer==0.7.0
     # via boto3
 safetensors==0.4.3
     # via transformers
-sentry-sdk==2.8.0
+sentry-sdk==2.17.0
     # via -r requirements.in
 shellingham==1.5.4
     # via typer

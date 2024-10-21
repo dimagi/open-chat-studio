@@ -40,14 +40,11 @@ class ExperimentTable(tables.Table):
 
 
 class SafetyLayerTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:safety_edit"),
-                actions.delete_action(url_name="experiments:safety_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:safety_edit"),
+            actions.delete_action(url_name="experiments:safety_delete"),
+        ]
     )
 
     class Meta:
@@ -64,14 +61,11 @@ class SafetyLayerTable(tables.Table):
 
 class SourceMaterialTable(tables.Table):
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:source_material_edit"),
-                actions.delete_action(url_name="experiments:source_material_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:source_material_edit"),
+            actions.delete_action(url_name="experiments:source_material_delete"),
+        ]
     )
 
     class Meta:
@@ -87,14 +81,11 @@ class SourceMaterialTable(tables.Table):
 
 
 class SurveyTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:survey_edit"),
-                actions.delete_action(url_name="experiments:survey_delete"),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:survey_edit"),
+            actions.delete_action(url_name="experiments:survey_delete"),
+        ]
     )
 
     class Meta:
@@ -109,17 +100,14 @@ class SurveyTable(tables.Table):
 
 
 class ConsentFormTable(tables.Table):
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(url_name="experiments:consent_edit"),
-                actions.delete_action(
-                    url_name="experiments:consent_delete",
-                    display_condition=lambda request, record: not record.is_default,
-                ),
-            ]
-        },
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="experiments:consent_edit"),
+            actions.delete_action(
+                url_name="experiments:consent_delete",
+                display_condition=lambda request, record: not record.is_default,
+            ),
+        ]
     )
 
     class Meta:
@@ -137,23 +125,26 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentSessionsTable(tables.Table):
-    participant = columns.Column(verbose_name="Participant", accessor="participant__identifier")
+    participant = actions.chip_column(
+        accessor="participant", align="left", orderable=True, order_by="participant__identifier"
+    )
     started = columns.Column(accessor="created_at", verbose_name="Started", orderable=True)
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(
         verbose_name="Tags",
-        template_name="experiments/components/experiment_sessions_list_tags.html",
+        template_name="annotations/tag_ui.html",
     )
-    actions = columns.TemplateColumn(template_name="experiments/components/experiment_session_view_button.html")
+    version = columns.Column(verbose_name="Version", accessor="experiment_version_for_display")
+    actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
-        return template.render({"tags": record.chat.tags.all()})
+        return template.render({"object": record.chat})
 
     class Meta:
         model = ExperimentSession
         fields = []
-        row_attrs = {"class": "text-sm"}
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
 
@@ -161,14 +152,16 @@ class ExperimentSessionsTable(tables.Table):
 class ExperimentVersionsTable(tables.Table):
     version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
+    version_description = columns.Column(verbose_name="Description", default="")
     is_default = columns.TemplateColumn(
         template_code="""{% if record.is_default_version %}
         <span aria-label="true">✓</span>
         {% endif %}""",
-        verbose_name="Default Version",
+        verbose_name="Deployed",
     )
     details = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_details_button.html",
+        verbose_name="",
     )
 
     class Meta:
@@ -179,32 +172,23 @@ class ExperimentVersionsTable(tables.Table):
         empty_text = "No versions yet!"
 
 
-def _get_route_url(url_name, request, record):
+def _get_route_url(url_name, request, record, value):
     return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
 
 
 class ChildExperimentRoutesTable(tables.Table):
-    child = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
-    actions = columns.TemplateColumn(
-        template_name="generic/crud_actions_column.html",
-        extra_context={
-            "actions": [
-                actions.edit_action(
-                    url_name="experiments:experiment_route_edit",
-                    url_factory=_get_route_url,
-                ),
-                actions.delete_action(
-                    url_name="experiments:experiment_route_delete",
-                    url_factory=_get_route_url,
-                ),
-            ]
-        },
+    child = actions.chip_column(orderable=True)
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                url_name="experiments:experiment_route_edit",
+                url_factory=_get_route_url,
+            ),
+            actions.delete_action(
+                url_name="experiments:experiment_route_delete",
+                url_factory=_get_route_url,
+            ),
+        ]
     )
 
     class Meta:
@@ -216,14 +200,7 @@ class ChildExperimentRoutesTable(tables.Table):
 
 
 class TerminalBotsTable(ChildExperimentRoutesTable):
-    child = columns.Column(
-        verbose_name="Bot",
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
+    child = actions.chip_column(orderable=True)
 
     class Meta:
         model = ExperimentRoute
@@ -234,13 +211,7 @@ class TerminalBotsTable(ChildExperimentRoutesTable):
 
 
 class ParentExperimentRoutesTable(tables.Table):
-    parent = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
-        orderable=True,
-    )
+    parent = actions.chip_column(orderable=True)
 
     class Meta:
         model = ExperimentRoute

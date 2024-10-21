@@ -97,9 +97,18 @@ def _pipeline_node_parameter_values(team, llm_providers):
 
 def _pipeline_node_default_values(llm_providers):
     """Returns the default values for each input type"""
+    try:
+        provider_id = llm_providers[0]["id"]
+    except (IndexError, KeyError):
+        provider_id = None
+
+    try:
+        llm_model = llm_providers[0]["llm_models"][0]
+    except (IndexError, KeyError):
+        llm_model = None
     return {
-        "LlmProviderId": llm_providers[0]["id"],
-        "LlmModel": llm_providers[0]["llm_models"][0],
+        "LlmProviderId": provider_id,
+        "LlmModel": llm_model,
         "LlmTemperature": 0.7,
     }
 
