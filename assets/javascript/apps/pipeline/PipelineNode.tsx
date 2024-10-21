@@ -238,14 +238,17 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       { length: numberOfOutputs },
       (_, index) => {
         const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
+        const handleText = `Output ${index + 1}`;
         return (
-          <Handle
-            key={`output_${index}`}
-            type="source"
-            position={Position.Right}
-            style={{ top: `${position}%` }}
-            id={numberOfOutputs > 1 ? `output_${index}` : "output"}
-          />
+            <Handle
+              key={`output_${index}`}
+              type="source"
+              position={Position.Right}
+              style={{ top: `${position}%` }}
+              id={numberOfOutputs > 1 ? `output_${index}` : "output"}
+            >
+              <div className="handle-text">{handleText}</div>
+            </Handle>
         );
       },
     );
