@@ -2,11 +2,11 @@ import React, { DragEventHandler } from "react";
 
 export default function Component({
   label,
-nodeDescription,
+  nodeDescription,
   onDragStart,
 }: {
   label: string;
-nodeDescription: string;
+  nodeDescription: string;
   onDragStart: DragEventHandler<HTMLDivElement>;
 }) {
   return (

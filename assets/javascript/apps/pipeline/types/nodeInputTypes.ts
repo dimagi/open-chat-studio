@@ -8,5 +8,5 @@ export type NodeInputTypes = {
   name: string;
   human_name: string;
   input_params: InputParam[];
-node_description: string;
+  node_description: string;
 };
