@@ -50,6 +50,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
           if (updatedFlow) {
             set({currentPipeline: pipeline});
             resolve();
+            // @ts-expect-error. This module is available
             alertify.success(saveText).delay(2);
           }
         })
