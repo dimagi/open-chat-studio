@@ -167,7 +167,7 @@ djangorestframework-api-key==3.0.0
     # via -r requirements.in
 drf-spectacular==0.26.5
     # via -r requirements.in
-emoji==2.12.1
+emoji==2.14.0
     # via -r requirements.in
 fbmessenger==6.0.0
     # via -r requirements.in
@@ -451,7 +451,6 @@ typer[all]==0.9.0
 typing-extensions==4.8.0
     # via
     #   anthropic
-    #   emoji
     #   huggingface-hub
     #   openai
     #   psycopg
