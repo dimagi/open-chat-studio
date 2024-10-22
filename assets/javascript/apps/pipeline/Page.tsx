@@ -11,6 +11,8 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
   const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
 
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
+  const lastSaved = usePipelineManagerStore((state) => state.lastSaved);
+  const isSaving = usePipelineManagerStore((state) => state.isSaving);
   const [name, setName] = useState(currentPipeline?.name);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
@@ -30,8 +32,8 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
         <div className="h-full w-full">
-          <div className="grid grid-cols-6">
-            <div className="col-span-5">
+          <div className="grid grid-cols-2">
+            <div className="">
               <input
                 type="text"
                 value={name}
@@ -40,10 +42,11 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
                 placeholder="Edit pipeline name"
               />
             </div>
-            <div className="justify-self-end">
-              <button onClick={onClickSave} className="pg-button-primary mt-2">
-                Save
+            <div className="justify-self-end place-items-end">
+              <button onClick={onClickSave} className="btn btn-primary btn-sm" disabled={isSaving}>
+                {isSaving ? <div className="loader loader-sm ml-2"></div> : "Save"}
               </button>
+              <div className="text-xs">Last saved: {lastSaved ? new Date(lastSaved).toLocaleString() : "Never"}</div>
             </div>
           </div>
           <div id="react-flow-id" className="relative h-full w-full">

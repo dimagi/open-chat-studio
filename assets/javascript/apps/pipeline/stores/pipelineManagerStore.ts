@@ -9,6 +9,9 @@ let saveTimeoutId: NodeJS.Timeout | null = null;
 const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => ({
   currentPipeline: undefined,
   currentPipelineId: undefined,
+  lastSaved: undefined,
+  isSaving: false,
+  isLoading: true,
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
@@ -20,7 +23,6 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       console.log(e);
     });
   },
-  isLoading: true,
   setIsLoading: (isLoading: boolean) => set({isLoading}),
   autoSaveCurrentPipline: (nodes: Node[], edges: Edge[], viewport: Viewport) => {
     // Clear the previous timeout if it exists.
@@ -34,13 +36,12 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         get().savePipeline(
           {...get().currentPipeline!, data: {nodes, edges, viewport}},
           true,
-          true
         );
       }
     }, 10000); // Delay of 10s.
   },
-  savePipeline: (pipeline: PipelineType, isAutoSave: boolean = false) => {
-    const saveText = isAutoSave ? "Pipeline auto-saved" : "Pipeline saved";
+  savePipeline: (pipeline: PipelineType,) => {
+    set({isSaving: true});
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
     }
@@ -48,15 +49,16 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((updatedFlow) => {
           if (updatedFlow) {
-            set({currentPipeline: pipeline});
+            set({currentPipeline: pipeline, lastSaved: new Date()});
             resolve();
-            alertify.success(saveText).delay(2);
           }
         })
         .catch((err) => {
           console.log(err);
           reject(err);
-        });
+        }).finally(() => {
+        set({isSaving: false});
+      });
     });
   },
 }));
