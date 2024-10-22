@@ -55,7 +55,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
           }
         })
         .catch((err) => {
-          console.log(err);
+          alertify.error("There was an error saving");
           reject(err);
         }).finally(() => {
         set({isSaving: false});
