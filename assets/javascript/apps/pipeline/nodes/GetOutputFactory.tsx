@@ -39,7 +39,7 @@ const routerOutputs = (params: NodeParams) => {
     {length: numberOfOutputs},
     (_, index) => {
       const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
-      const handleAnnotation = <div className="handle-text">{`Output ${index + 1}`}</div>
+      const handleAnnotation = handleText(`Output ${index + 1}`)
 
       return (
         <Handle
@@ -70,7 +70,7 @@ const booleanOutputs = () => {
       style={{top: "75%"}}
       id="output_false"
     >
-      <div className="handle-text">Output False</div>
+      {handleText("Output False")}
     </Handle>,
     <Handle
       key="output_true"
@@ -79,9 +79,15 @@ const booleanOutputs = () => {
       style={{top: "25%"}}
       id="output_true"
     >
-      <div className="handle-text">Output True</div>
+      {handleText("Output True")}
     </Handle>
   ];
 
   return <>{outputHandles}</>;
 };
+
+const handleText = (label: string) => {
+  return <div className="font-bold relative w-24 translate-x-[15px] -translate-y-[15px] pointer-events-none whitespace-nowrap">
+    {label}
+  </div>;
+}
