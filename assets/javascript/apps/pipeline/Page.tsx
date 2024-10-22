@@ -2,11 +2,14 @@ import React, { ChangeEvent, useState } from "react";
 import Pipeline from "./Pipeline";
 import { NodeInputTypes } from "./types/nodeInputTypes";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
+import usePipelineStore from "./stores/pipelineStore";
 
 export default function Page(props: { inputTypes: NodeInputTypes[] }) {
-  const currentPipeline = usePipelineManagerStore(
-    (state) => state.currentPipeline,
-  );
+  const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
+  const nodes = usePipelineStore((state) => state.nodes);
+  const edges = usePipelineStore((state) => state.edges);
+  const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
+
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
   const [name, setName] = useState(currentPipeline?.name);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -17,7 +20,11 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
       });
   };
   const onClickSave = () => {
-    currentPipeline && savePipeline(currentPipeline);
+    if (currentPipeline) {
+      const viewport = reactFlowInstance?.getViewport()!;
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      savePipeline(updatedPipeline);
+    }
   };
   return (
     <div className="flex h-full overflow-hidden">
