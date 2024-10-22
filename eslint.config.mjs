@@ -17,7 +17,6 @@ export default tseslint.config(
         "navigator": "readonly",
         "console": "readonly",
         Event: "readonly",
-        "alertify": "readonly",
       }
     },
   },
