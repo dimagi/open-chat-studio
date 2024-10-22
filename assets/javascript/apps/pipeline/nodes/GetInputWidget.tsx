@@ -100,6 +100,8 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             value={params[inputParam.name] || 1}
             type="number"
             step="1"
+            min="1"
+            max="10"
           ></input>
         </>
       );
