@@ -1,5 +1,5 @@
 import { Handle, Node, NodeProps, NodeToolbar, Position } from "reactflow";
-import React, { ChangeEvent, useState } from "react";
+import React, {ChangeEvent, useState} from "react";
 import { classNames } from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import { InputParam } from "./types/nodeInputTypes";
@@ -239,6 +239,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       }
     }
   };
+
   const getOutputHandles = () => {
     const numberOfOutputs =
       parseInt(
@@ -273,6 +274,35 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   };
 
   return (
+    <PipelineNodeComponent
+      id={id}
+      data={data}
+      selected={selected}
+      getInputWidget={getInputWidget}
+      getOutputHandles={getOutputHandles}
+      deleteNode={deleteNode}
+    />
+  );
+}
+
+interface PipelineNodeComponentProps {
+  id: string;
+  data: NodeData;
+  selected: boolean;
+  getInputWidget: (inputParam: InputParam) => React.JSX.Element;
+  getOutputHandles: () => React.JSX.Element;
+  deleteNode: (id: string) => void;
+}
+
+const PipelineNodeComponent = ({
+  id,
+  data,
+  selected,
+  getInputWidget,
+  getOutputHandles,
+  deleteNode,
+}: PipelineNodeComponentProps) => {
+  return (
     <>
       <NodeToolbar position={Position.Top}>
         <div className="join">
@@ -303,4 +333,4 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       </div>
     </>
   );
-}
+};
