@@ -240,57 +240,92 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
     }
   };
 
-  const getOutputHandles = () => {
-    const numberOfOutputs =
-      parseInt(
-        Array.isArray(params.num_outputs)
-          ? params.num_outputs.join("")
-          : params.num_outputs,
-      ) || 1;
-    const outputHandles = Array.from(
-      { length: numberOfOutputs },
-      (_, index) => {
-        const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
-        let handleAnnotation;
-        if (numberOfOutputs > 1) {
-          const handleText = `Output ${index + 1}`;
-          handleAnnotation = <div className="handle-text">{handleText}</div>
-        }
-
-        return (
-            <Handle
-              key={`output_${index}`}
-              type="source"
-              position={Position.Right}
-              style={{ top: `${position}%` }}
-              id={numberOfOutputs > 1 ? `output_${index}` : "output"}
-            >
-              {handleAnnotation}
-            </Handle>
-        );
-      },
-    );
-    return <>{outputHandles}</>;
-  };
-
   return (
     <PipelineNodeComponent
       id={id}
       data={data}
       selected={selected}
+      params={params}
       getInputWidget={getInputWidget}
-      getOutputHandles={getOutputHandles}
+      getOutputHandles={getOutputFactory(data.type)}
       deleteNode={deleteNode}
     />
   );
+}
+
+const getOutputFactory = (nodeType: string) => {
+  const outputFactories: Record<string, (params: NodeParams) => React.JSX.Element> = {
+    BooleanNode: booleanOutputs,
+    RouterNode: routerOutputs,
+  };
+  return outputFactories[nodeType] || defaultOutputs;
+};
+
+const routerOutputs = (params: NodeParams) => {
+  const numberOfOutputs =
+    parseInt(
+      Array.isArray(params.num_outputs)
+        ? params.num_outputs.join("")
+        : params.num_outputs,
+    ) || 1;
+  const outputHandles = Array.from(
+    { length: numberOfOutputs },
+    (_, index) => {
+      const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
+      const handleAnnotation = <div className="handle-text">{`Output ${index + 1}`}</div>
+
+      return (
+          <Handle
+            key={`output_${index}`}
+            type="source"
+            position={Position.Right}
+            style={{ top: `${position}%` }}
+            id={`output_${index}`}
+          >
+            {handleAnnotation}
+          </Handle>
+      );
+    },
+  );
+  return <>{outputHandles}</>;
+};
+
+const defaultOutputs = () => {
+  return <Handle key="output_1" type="source" position={Position.Right} id="output"></Handle>;
+}
+
+const booleanOutputs = () => {
+  const outputHandles = [
+    <Handle
+      key="output_false"
+      type="target"
+      position={Position.Right}
+      style={{top: "75%"}}
+      id="output_false"
+    >
+      <div className="handle-text">Output False</div>
+    </Handle>,
+    <Handle
+      key="output_true"
+      type="source"
+      position={Position.Right}
+      style={{top: "25%"}}
+      id="output_true"
+    >
+      <div className="handle-text">Output True</div>
+    </Handle>
+  ];
+
+  return <>{outputHandles}</>
 }
 
 interface PipelineNodeComponentProps {
   id: string;
   data: NodeData;
   selected: boolean;
+  params: NodeParams;
   getInputWidget: (inputParam: InputParam) => React.JSX.Element;
-  getOutputHandles: () => React.JSX.Element;
+  getOutputHandles: (params: NodeParams) => React.JSX.Element;
   deleteNode: (id: string) => void;
 }
 
@@ -298,6 +333,7 @@ const PipelineNodeComponent = ({
   id,
   data,
   selected,
+  params,
   getInputWidget,
   getOutputHandles,
   deleteNode,
@@ -329,7 +365,7 @@ const PipelineNodeComponent = ({
             </React.Fragment>
           ))}
         </div>
-        {getOutputHandles()}
+        {getOutputHandles(params)}
       </div>
     </>
   );
