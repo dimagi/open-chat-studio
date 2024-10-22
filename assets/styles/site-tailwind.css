@@ -99,8 +99,28 @@
   @apply bg-gray-100 text-gray-900;
 }
 
+.react-flow__handle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
 
 input[type=number]::-webkit-inner-spin-button, 
 input[type=number]::-webkit-outer-spin-button {
   display: none;
+}
+
+.react-flow__handle-right {
+  right: -7px;
+  top: 50%;
+  transform: translate(0, -50%);
+}
+.react-flow__handle-left {
+  left: -7px;
+  top: 50%;
+  transform: translate(0, -50%);
+}
+
+.handle-text {
+  @apply font-bold relative w-24 translate-x-[15px] -translate-y-[15px] pointer-events-none
 }
