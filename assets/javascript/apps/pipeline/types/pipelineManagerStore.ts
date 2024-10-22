@@ -4,7 +4,7 @@ import {PipelineType} from "./pipeline";
 export type PipelineManagerStoreType = {
   currentPipeline: PipelineType | undefined;
   currentPipelineId: number | undefined;
-  lastSaved: Date | undefined;
+  dirty: boolean | undefined;
   isSaving: boolean;
   loadPipeline: (pipelineId: number) => void;
   isLoading: boolean;
