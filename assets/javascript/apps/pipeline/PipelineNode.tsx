@@ -37,7 +37,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const defaultParams = data.inputParams.reduce(
     (acc, param) => {
-      acc[param.name] = defaultValues[param.type];
+      acc[param.name] = param.default || defaultValues[param.type];
       return acc;
     },
     {} as Record<string, any>,
@@ -227,7 +227,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       }
     }
   };
-  const getOuputHandles = () => {
+  const getOutputHandles = () => {
     const numberOfOutputs =
       parseInt(
         Array.isArray(params.num_outputs)
@@ -287,7 +287,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
             </React.Fragment>
           ))}
         </div>
-        {getOuputHandles()}
+        {getOutputHandles()}
       </div>
     </>
   );
