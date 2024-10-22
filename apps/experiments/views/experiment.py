@@ -931,6 +931,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     else:
         form = ConsentForm(
             consent,
+            redirect_url=f"{login_url}?next={request.path}",
             initial={
                 "experiment_id": experiment_version.id,
                 "identifier": user.email if user else None,
@@ -1068,7 +1069,8 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
             return _record_consent_and_redirect(request, team_slug, experiment_session)
 
     else:
-        form = ConsentForm(consent, initial=initial)
+        login_url = reverse(settings.LOGIN_URL)
+        form = ConsentForm(consent, redirect_url=f"{login_url}?next={request.path}", initial=initial)
 
     consent_notice = consent.get_rendered_content()
     version_specific_vars = {

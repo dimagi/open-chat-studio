@@ -11,10 +11,15 @@ class ConsentForm(forms.Form):
     participant_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, consent, *args, **kwargs):
+        redirect_url = kwargs.pop("redirect_url", None)
         super().__init__(*args, **kwargs)
         if consent.capture_identifier:
             self.fields["identifier"].required = True
             self.fields["identifier"].label = consent.identifier_label
+            if redirect_url:
+                self.fields[
+                    "identifier"
+                ].help_text = f"Have a user? Be sure to <a class='font-bold' href={redirect_url}>log in</a> first"
 
             if consent.identifier_type == "email":
                 self.fields["identifier"].widget = forms.EmailInput()
