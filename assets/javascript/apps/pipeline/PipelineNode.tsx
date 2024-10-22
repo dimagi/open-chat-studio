@@ -26,13 +26,25 @@ type NodeData = {
 
 export type PipelineNode = Node<NodeData>;
 
+const localCache = {
+  parameterValues: null as unknown as NodeParameterValues,
+  defaultValues: null as unknown as Record<string, any>,
+};
+
+const getCachedData: () => typeof localCache = () => {
+  if (!localCache.parameterValues) {
+    localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
+  }
+  if (!localCache.defaultValues) {
+    localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
+  }
+  return localCache;
+};
+
 export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
-  const parameterValues: NodeParameterValues = JSON.parse(
-    document.getElementById("parameter-values")?.textContent || "{}",
-  );
-  const defaultValues = JSON.parse(
-    document.getElementById("default-values")?.textContent || "{}",
-  );
+  const cachedData = getCachedData();
+  const parameterValues: NodeParameterValues = cachedData.parameterValues;
+  const defaultValues = cachedData.defaultValues;
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const defaultParams = data.inputParams.reduce(
