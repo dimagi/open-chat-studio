@@ -34,8 +34,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         get().savePipeline(
           {...get().currentPipeline!, data: {nodes, edges, viewport}},
           true,
-          true
-        );
+                  );
       }
     }, 10000); // Delay of 10s.
   },
