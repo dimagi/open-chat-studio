@@ -1,13 +1,27 @@
 {% extends 'web/app/app_base.html' %}
 {% load static %}
-
 {% block page_head %}
   <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
+  <style>
+    .react-flow__handle {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+    }
+    .react-flow__handle-right {
+      right: -7px;
+      top: 50%;
+      transform: translate(0, -50%);
+    }
+    .react-flow__handle-left {
+      left: -7px;
+      top: 50%;
+      transform: translate(0, -50%);
+    }
+  </style>
 {% endblock page_head %}
-
 {% block breadcrumbs %}
 {% endblock %}
-
 {% block app %}
   <div class="max-w-7xl mx-auto" id="pipelineBuilder">
   </div>
