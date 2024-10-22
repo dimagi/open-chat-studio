@@ -65,7 +65,7 @@ const booleanOutputs = () => {
   const outputHandles = [
     <Handle
       key="output_false"
-      type="target"
+      type="source"
       position={Position.Right}
       style={{top: "75%"}}
       id="output_false"
