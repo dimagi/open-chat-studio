@@ -78,6 +78,7 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.users.models import CustomUser
 from apps.utils.prompt import validate_prompt_variables
 
 
@@ -901,15 +902,23 @@ def start_session_public(request, team_slug: str, experiment_id: str):
         raise Http404
 
     consent = experiment_version.consent_form
+    login_url = reverse(settings.LOGIN_URL)
     user = get_real_user_or_none(request.user)
     if request.method == "POST":
-        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
+        initial_data = {}
+        if user:
+            initial_data = {"identifier": user.email}
+        form = ConsentForm(consent, request.POST, initial=initial_data)
         if form.is_valid():
             if consent.capture_identifier:
                 identifier = form.cleaned_data.get("identifier", None)
             else:
                 # The identifier field will be disabled, so we must generate one
                 identifier = user.email if user else str(uuid.uuid4())
+
+            if user is None and CustomUser.objects.filter(email=identifier).exists():
+                # Platform users should log in first
+                return HttpResponseRedirect(f"{login_url}?next={request.path}")
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,

@@ -188,6 +188,42 @@ def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, clie
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
+def test_redirect_platform_user_to_login_for_public_sessions(_trigger_mock, is_user, client):
+    """
+    When the identifier specified before starting a public session belongs to a platform user, we should redirect the
+    user to the login screen, after which they should be redirected back to the public session link. Otherwise, the user
+    should not be redirected.
+    """
+    experiment = ExperimentFactory(team=TeamWithUsersFactory(), pre_survey=None)
+    platform_user = experiment.owner
+    post_data = {
+        "identifier": "someone@gmail.com",
+        "consent_agreement": True,
+        "experiment_id": str(experiment.id),
+        "participant_id": "",
+    }
+    if is_user:
+        post_data["identifier"] = platform_user.email
+
+    url = reverse(
+        "experiments:start_session_public",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+    response = client.post(url, data=post_data)
+    if is_user:
+        expected_redirect_url_path = reverse(settings.LOGIN_URL) + "?next=" + url
+    else:
+        created_session = experiment.sessions.first()
+        expected_redirect_url_path = reverse(
+            "experiments:experiment_chat",
+            args=[experiment.team.slug, experiment.public_id, created_session.external_id],
+        )
+    assert response.url == expected_redirect_url_path
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("is_user", [False, True])
+@mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
