@@ -10,6 +10,7 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
   const edges = usePipelineStore((state) => state.edges);
   const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
 
+  const updatePipelineName = usePipelineManagerStore((state) => state.updatePipelineName);
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
   const dirty = usePipelineManagerStore((state) => state.dirty);
   const isSaving = usePipelineManagerStore((state) => state.isSaving);
@@ -17,10 +18,7 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
   const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
-    currentPipeline &&
-    usePipelineManagerStore.setState({
-      currentPipeline: {...currentPipeline, name: event.target.value},
-    });
+    updatePipelineName(event.target.value);
   };
   const onClickSave = () => {
     if (currentPipeline) {

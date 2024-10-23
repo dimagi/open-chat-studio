@@ -9,6 +9,7 @@ export type PipelineManagerStoreType = {
   loadPipeline: (pipelineId: number) => void;
   isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
+  updatePipelineName: (name: string) => void;
   savePipeline: (pipelne: PipelineType, isAutoSave?: boolean) => Promise<void>;
   autoSaveCurrentPipline: (
     nodes: Node[],

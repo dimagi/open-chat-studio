@@ -23,6 +23,11 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       console.log(e);
     });
   },
+  updatePipelineName: (name: string) => {
+    if (get().currentPipeline) {
+      set({currentPipeline: {...get().currentPipeline!, name}});
+    }
+  },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
   autoSaveCurrentPipline: (nodes: Node[], edges: Edge[], viewport: Viewport) => {
     set({dirty: true});
