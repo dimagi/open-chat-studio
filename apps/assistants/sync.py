@@ -166,6 +166,38 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
             delete_file_from_openai(client, file)
 
 
+@wrap_openai_errors
+def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
+    """Checks if the files for an assistant in OCS match the files in OpenAI."""
+    tool_resources = assistant.tool_resources.all()
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+
+    for resource in tool_resources:
+        openai_file_ids = []
+        if resource.tool_type == "code_interpreter":
+            try:
+                openai_file_ids = client.beta.assistants.retrieve(
+                    assistant.assistant_id
+                ).tool_resources.code_interpreter.file_ids
+            except AttributeError:
+                openai_file_ids = []
+        elif resource.tool_type == "file_search":
+            try:
+                openai_vector_store_id = resource.extra.get("vector_store_id")
+                if not openai_vector_store_id:
+                    continue
+                openai_file_ids = [
+                    file.id
+                    for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id).data
+                ]
+            except AttributeError:
+                openai_file_ids = []
+        ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
+        if set(ocs_file_ids) != set(openai_file_ids):
+            return False
+    return True
+
+
 def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_file = client.files.retrieve(file_id)
