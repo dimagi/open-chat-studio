@@ -30,11 +30,11 @@ const defaultOutputs = () => {
  */
 const routerOutputs = (params: NodeParams) => {
   const numberOfOutputs =
-    parseInt(
+    Math.max(1, parseInt(
       Array.isArray(params.num_outputs)
         ? params.num_outputs.join("")
         : params.num_outputs,
-    ) || 1;
+    ) || 1);
   const outputHandles = Array.from(
     {length: numberOfOutputs},
     (_, index) => {
