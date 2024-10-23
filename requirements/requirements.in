@@ -31,8 +31,10 @@ ffmpeg # Audio transcription
 httpx
 jinja2
 langchain
+langchain-core==0.2
 langchain-anthropic
 langchain-openai
+langchain-community
 langfuse
 langgraph
 loguru

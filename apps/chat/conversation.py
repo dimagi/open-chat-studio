@@ -4,17 +4,17 @@ from abc import ABC, abstractmethod
 from langchain.chains import ConversationChain
 from langchain.chains.llm import LLMChain
 from langchain.memory.prompt import SUMMARY_PROMPT
-from langchain.prompts import (
+from langchain_anthropic import ChatAnthropic
+from langchain_community.callbacks import get_openai_callback
+from langchain_core.language_models import BaseChatModel
+from langchain_core.memory import BaseMemory
+from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
+from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
-from langchain.schema import BaseMemory
-from langchain_anthropic import ChatAnthropic
-from langchain_community.callbacks import get_openai_callback
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 

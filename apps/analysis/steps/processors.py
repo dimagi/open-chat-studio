@@ -9,8 +9,8 @@ import openai
 import pydantic
 from jinja2 import TemplateSyntaxError
 from jinja2.sandbox import SandboxedEnvironment
-from langchain.chat_models.base import BaseChatModel
-from langchain.prompts import PromptTemplate
+from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import PromptTemplate
 from openai.types import FileObject
 from pydantic import model_validator
 

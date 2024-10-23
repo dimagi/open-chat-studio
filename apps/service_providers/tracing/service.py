@@ -1,3 +1,6 @@
+from langchain_core.tracers import LangChainTracer
+
+
 class TraceService:
     def get_callback(self, participant_id: str, session_id: str):
         raise NotImplementedError
@@ -18,7 +21,6 @@ class LangSmithTraceService(TraceService):
         self.config = config
 
     def get_callback(self, participant_id: str, session_id: str):
-        from langchain.callbacks.tracers import LangChainTracer
         from langsmith import Client
 
         client = Client(

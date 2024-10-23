@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
-from langchain.tools.base import BaseTool
+from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
 from apps.events.forms import ScheduledMessageConfigForm
