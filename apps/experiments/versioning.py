@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
+from difflib import Differ
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Model, QuerySet
@@ -135,31 +136,22 @@ class VersionField:
             self.queryset_result_versions.append(version_field)
 
     def _compute_character_level_diff(self):
-        from difflib import Differ
-
         differ = Differ()
         difflines = list(differ.compare(self.previous_field_version.raw_value, self.raw_value))
-        operations = {
-            "no_change": " ",
-            "removed": "-",
-            "added": "+",
-        }
 
         for line in difflines:
-            operation = line[0]
-            character = line[2:]
-            if operation == operations["no_change"]:
-                # line is same in both
-                self.previous_field_version.text_diffs.append(TextDiff(character=character))
-                self.text_diffs.append(TextDiff(character=character))
-
-            elif operation == operations["removed"]:
-                # line is only on the left
-                self.previous_field_version.text_diffs.append(TextDiff(character=character, removed=True))
-
-            elif operation == operations["added"]:
-                # line is only on the right
-                self.text_diffs.append(TextDiff(character=character, added=True))
+            operation, character = line[0], line[2:]
+            match operation:
+                case " ":
+                    # line is same in both
+                    self.previous_field_version.text_diffs.append(TextDiff(character=character))
+                    self.text_diffs.append(TextDiff(character=character))
+                case "-":
+                    # line is only on the left
+                    self.previous_field_version.text_diffs.append(TextDiff(character=character, removed=True))
+                case "+":
+                    # line is only on the right
+                    self.text_diffs.append(TextDiff(character=character, added=True))
 
 
 @dataclass
