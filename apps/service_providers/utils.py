@@ -43,7 +43,7 @@ class ServiceProviderType:
 
 
 class ServiceProvider(ServiceProviderType, Enum):
-    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type", "llm_models"]
+    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type"]
     voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
     auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]

@@ -1,0 +1,10 @@
+{% load team_tags %}
+{% load i18n %}
+<div>
+  {% has_perm "service_providers" perm as allow_new %}
+  {% url "service_providers:llm_provider_model_table" request.team.slug as table_url %}
+  {% url "service_providers:new" request.team.slug provider_type as new_object_url %}
+  {% with button_style="btn-outline" title_class="pg-subtitle" %}
+    {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
+  {% endwith %}
+</div>
