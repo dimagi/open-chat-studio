@@ -2,24 +2,18 @@ import {Handle, Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent, useState} from "react";
 import {classNames, getCachedData} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
-import {InputParam} from "./types/nodeInputTypes";
-import {NodeParams} from "./types/nodeParams";
+import useEditorStore from "./stores/editorStore";
+import {NodeData} from "./types/nodeParams";
 import {getInputWidget} from "./nodes/GetInputWidget";
 import {getOutputFactory} from "./nodes/GetOutputFactory";
 
-type NodeData = {
-  label: string;
-  value: number;
-  type: string;
-  inputParams: InputParam[];
-  params: NodeParams;
-};
-
 export type PipelineNode = Node<NodeData>;
 
-export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
+export function PipelineNode(nodeProps: NodeProps<NodeData>) {
+  const { id, data, selected } = nodeProps;
   const cachedData = getCachedData();
   const defaultValues = cachedData.defaultValues;
+  const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const defaultParams = data.inputParams.reduce(
@@ -50,25 +44,35 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       return newParams;
     });
   };
+  
+  const editNode = () => {
+    openEditorForNode(nodeProps);
+  }
 
   const handleFactory = getOutputFactory(data.type);
 
   return (
     <>
       <NodeToolbar position={Position.Top}>
-        <div className="join">
+        <div className="border border-primary join">
           <button
             className="btn btn-xs join-item"
             onClick={() => deleteNode(id)}
           >
             <i className="fa fa-trash-o"></i>
           </button>
+          <button
+            className="btn btn-xs join-item"
+            onClick={() => editNode()}
+          >
+            <i className="fa fa-pencil"></i>
+          </button>
         </div>
       </NodeToolbar>
       <div
         className={classNames(
           selected ? "border border-primary" : "border",
-          "px-4 py-2 shadow-md rounded-xl border-2 border-stone-400 bg-base-100",
+          "px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
         )}
       >
         <Handle type="target" position={Position.Left} id="input" />

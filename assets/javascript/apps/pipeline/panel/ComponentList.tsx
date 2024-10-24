@@ -1,6 +1,7 @@
 import React from "react";
 import Component from "./Component";
 import {InputParam, NodeInputTypes} from "../types/nodeInputTypes";
+import OverlayPanel from "../components/OverlayPanel";
 
 type ComponentListParams = {
   inputTypes: NodeInputTypes[];
@@ -51,13 +52,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
         />
       </button>
 
-      <div
-        className={`absolute top-16 left-4 w-72 max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-800 shadow-lg rounded-md p-4 z-20 transition-all duration-300 ${
-          isOpen
-            ? "transform scale-100"
-            : "opacity-0 transform scale-95 pointer-events-none"
-        }`}
-      >
+      <OverlayPanel classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen}>
         {isOpen && (
           <>
             <h2 className="text-xl text-center font-bold">Available Nodes</h2>
@@ -67,7 +62,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
             {components}
           </>
         )}
-      </div>
+      </OverlayPanel>
     </div>
   );
 }

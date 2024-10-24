@@ -7,7 +7,7 @@ export function getNodeId(nodeType: string) {
   return nodeType + "-" + uid.rnd();
 }
 
-export function classNames(...classes: Array<string>): string {
+export function classNames(...classes: Array<string | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
 

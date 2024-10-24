@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -11,14 +11,15 @@ import ReactFlow, {
   OnSelectionChangeParams,
 } from "reactflow";
 
-import { PipelineNode } from "./PipelineNode";
+import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
-import { NodeInputTypes } from "./types/nodeInputTypes";
+import {NodeInputTypes} from "./types/nodeInputTypes";
 import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
-import { getNodeId } from "./utils";
-import { useHotkeys } from "react-hotkeys-hook";
+import {getNodeId} from "./utils";
+import {useHotkeys} from "react-hotkeys-hook";
+import EditPanel from "./panel/EditPanel";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -121,7 +122,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
 
   useHotkeys(["backspace", "delete"], handleDelete);
   useHotkeys("ctrl+s", () => manualSaveCurrentPipeline(), {preventDefault: true});
-  
+
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
       setLastSelection(flow);
@@ -140,7 +141,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
   }, [setIsOpen]);
 
   return (
-    <div style={{ height: "80vh" }}>
+    <div className="h-[80vh]">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -166,7 +167,8 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
           isOpen={isOpen}
           setIsOpen={setIsOpen}
         />
-        <Controls showZoom showFitView showInteractive position="bottom-left" />
+        <EditPanel />
+        <Controls showZoom showFitView showInteractive position="bottom-left"/>
         <Background
           variant={BackgroundVariant.Dots}
           gap={12}
