@@ -13,7 +13,7 @@ import {getCachedData} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
 
-interface InputWidgetParams {
+type InputWidgetParams = {
   id: string;
   inputParam: InputParam;
   params: NodeParams;
