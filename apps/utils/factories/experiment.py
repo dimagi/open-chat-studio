@@ -2,7 +2,11 @@ import factory
 
 from apps.chat.models import Chat
 from apps.experiments import models
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    LlmProviderModelFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -56,10 +60,10 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
     name = factory.Faker("name")
-    llm = factory.Faker("random_element", elements=["gpt-3.5-turbo", "gpt-4"])
     prompt_text = "You are a helpful assistant"
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
+    llm_provider_model = factory.SubFactory(LlmProviderModelFactory, team=factory.SelfAttribute("..team"))
     pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)

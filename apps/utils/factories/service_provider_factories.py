@@ -4,6 +4,7 @@ from apps.service_providers.models import (
     AuthProvider,
     AuthProviderType,
     LlmProvider,
+    LlmProviderModel,
     LlmProviderTypes,
     MessagingProvider,
     TraceProvider,
@@ -30,6 +31,16 @@ class LlmProviderFactory(factory.django.DjangoModelFactory):
     name = factory.Faker("name")
     llm_models = ["gtp-4", "gpt-3.5-turbo"]
     config = {"openai_api_key": "123"}
+
+
+class LlmProviderModelFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = LlmProviderModel
+
+    team = factory.SubFactory(TeamFactory)
+    type = str(LlmProviderTypes.openai)
+    name = factory.Faker("name")
+    supports_tool_calling = True
 
 
 class VoiceProviderFactory(factory.django.DjangoModelFactory):
