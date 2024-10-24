@@ -15,4 +15,5 @@ urlpatterns = make_crud_urls(views, "OpenAiAssistant", "") + [
         views.DeleteFileFromAssistant.as_view(),
         name="remove_file",
     ),
+    path("<int:pk>/syncing/", views.SyncEditingOpenAiAssistant.as_view(), name="sync_while_editing"),
 ]
