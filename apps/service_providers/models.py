@@ -1,5 +1,6 @@
 import dataclasses
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import IntegrityError, models, transaction
@@ -17,8 +18,11 @@ from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
 from apps.teams.models import BaseTeamModel, Team
 
-from . import forms, llm_service, messaging_service, speech_service
+from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
+
+if TYPE_CHECKING:
+    from apps.service_providers.forms import ProviderTypeConfigForm
 
 
 class MessagingProviderObjectManager(AuditingManager):
@@ -63,7 +67,9 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return empty + [(member.value.slug, member.label) for member in cls]
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case LlmProviderTypes.openai:
                 return forms.OpenAIConfigForm
@@ -167,7 +173,9 @@ class VoiceProviderType(models.TextChoices):
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case VoiceProviderType.aws:
                 return forms.AWSVoiceConfigForm
@@ -278,7 +286,9 @@ class MessagingProviderType(models.TextChoices):
     slack = "slack", _("Slack")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case MessagingProviderType.twilio:
                 return forms.TwilioMessagingConfigForm
@@ -337,7 +347,9 @@ class AuthProviderType(models.TextChoices):
     commcare = "commcare", _("CommCare")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
@@ -380,7 +392,9 @@ class TraceProviderType(models.TextChoices):
     langsmith = "langsmith", _("LangSmith")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case TraceProviderType.langfuse:
                 return forms.LangfuseTraceProviderForm
