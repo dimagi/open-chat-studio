@@ -159,6 +159,18 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         return response
 
 
+class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
+    permission_required = "assistants.change_openaiassistant"
+
+    def post(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        try:
+            sync_from_openai(assistant)
+        except OpenAiSyncError as e:
+            messages.error(request, f"Error syncing assistant: {e}")
+        return HttpResponseRedirect(reverse("assistants:home", args=[self.request.team.slug]))
+
+
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "assistants.delete_openaiassistant"
 
