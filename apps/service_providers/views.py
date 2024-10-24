@@ -1,14 +1,18 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, resolve_url
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from django.views.generic import TemplateView
+from django.views.generic.edit import ModelFormMixin, SingleObjectMixin
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.files.views import BaseAddFileHtmxView
+from apps.service_providers.forms import LlmProviderModelForm
 from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
 from apps.service_providers.tables import LlmProviderModelTable
 
@@ -120,3 +124,61 @@ class LlmProviderModelTableView(SingleTableView):
 
     def get_queryset(self):
         return LlmProviderModel.objects.filter(team=self.request.team)
+
+
+class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObjectMixin, TemplateView):
+    permission_required = ("service_providers.add_llmprovidermodel", "service_providers.change_llmprovidermodel")
+    model = LlmProviderModel
+    form_class = LlmProviderModelForm
+    template_name = "generic/object_form.html"
+
+    @property
+    def extra_context(self):
+        return {
+            "title": self._get_title(),
+            "button_text": "Save",
+        }
+
+    def _get_title(self):
+        if self.object:
+            return "Edit Custom LLM Provider"
+        return "Create Custom LLM Provider"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self.extra_context)
+        return context
+
+    def get(self, request, *args, **kwargs):
+        if "pk" in self.kwargs:
+            self.object = self.get_object()
+        else:
+            self.object = None
+        return self.render_to_response(self.get_context_data(form=self.get_form()))
+
+    def post(self, request, *args, **kwargs):
+        if "pk" in self.kwargs:
+            self.object = self.get_object()
+        else:
+            self.object = None
+        form = self.get_form()
+        if form.is_valid():
+            return self.form_valid(form)
+        else:
+            return self.form_invalid(form)
+
+    def get_success_url(self):
+        return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
+
+    def form_valid(self, form):
+        if not self.object:
+            form.instance.team = self.request.team
+        return super().form_valid(form)
+
+
+@require_http_methods(["DELETE"])
+def delete_llm_provider_model(request, team_slug: str, pk: int):
+    # TODO: Only delete if this isn't attached to any experiments
+    llm_provider_model = get_object_or_404(LlmProviderModel, team=request.team, pk=pk)
+    llm_provider_model.delete()
+    return HttpResponse()
