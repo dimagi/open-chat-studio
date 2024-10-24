@@ -96,6 +96,14 @@ class ExperimentAdmin(admin.ModelAdmin):
             return obj.working_version.name
         return obj.name
 
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     if db_field.name == "llm_provider_model":
+    #         obj_id = request.resolver_match.kwargs.get('object_id')
+    #         if obj_id:
+    #             experiment = models.Experiment.objects.get(pk=obj_id)
+    #             kwargs["queryset"] = LlmProviderModel.objects.filter(Q(team=experiment.team) | Q(team__isnull=True).filter(type=experiment.llm_provider.type))
+    #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(models.ExperimentRoute)
 class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
