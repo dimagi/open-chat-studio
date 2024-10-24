@@ -56,7 +56,7 @@ class VersionField:
 
     @property
     def is_queryset(self) -> bool:
-        return bool(self.queryset)
+        return self.queryset is not None
 
     def display_value(self) -> Any:
         if self.queryset:
@@ -65,12 +65,23 @@ class VersionField:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
 
-    def compare(self, previous_field_version: "VersionField", exclude_fields: list):
+    def compare(self, previous_field_version: "VersionField"):
         self.previous_field_version = previous_field_version
-        if self.queryset:
+        if self.is_queryset:
             self._compare_queryset(previous_field_version.queryset)
         else:
-            if differs(self.raw_value, previous_field_version.raw_value, exclude_model_fields=exclude_fields):
+            exclude_fields = []
+            current_val = self.raw_value
+            previous_val = previous_field_version.raw_value
+            if isinstance(current_val, Model):
+                if not hasattr(current_val, "working_version"):
+                    # Not all models can be versioned, in which case can can simply compare its primary keys
+                    current_val = current_val.id if current_val else None
+                    previous_val = previous_val.id if previous_val else None
+                else:
+                    exclude_fields = current_val.get_fields_to_exclude()
+
+            if differs(current_val, previous_val, exclude_model_fields=exclude_fields):
                 self.changed = True
 
     def _compare_queryset(self, previous_queryset):
@@ -101,7 +112,7 @@ class VersionField:
                 # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
                 previous_record_version_ids.append(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
-                version_field.compare(prev_version_field, exclude_fields=record.get_fields_to_exclude())
+                version_field.compare(prev_version_field)
                 self.changed = self.changed or version_field.changed
             else:
                 version_field.changed = self.changed = True
@@ -156,5 +167,5 @@ class Version:
 
         for field in self.fields:
             previous_field_version = previous_version_details.get_field(field.name)
-            field.compare(previous_field_version, exclude_fields=self.instance.get_fields_to_exclude())
+            field.compare(previous_field_version)
             self.fields_changed = self.fields_changed or field.changed
