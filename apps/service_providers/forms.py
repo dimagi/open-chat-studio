@@ -3,6 +3,7 @@ from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
+from apps.service_providers.models import LlmProviderModel
 
 
 class ProviderTypeConfigForm(forms.Form):
@@ -216,3 +217,9 @@ class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     api_key = forms.CharField(label=_("API Key"))
     api_url = forms.URLField(label=_("API URL"), initial="https://api.smith.langchain.com")
     project = forms.CharField(label=_("Project Name"))
+
+
+class LlmProviderModelForm(forms.ModelForm):
+    class Meta:
+        model = LlmProviderModel
+        fields = ("type", "name", "max_token_limit", "supports_tool_calling")
