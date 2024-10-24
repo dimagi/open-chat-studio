@@ -1,49 +1,72 @@
-import React, { ChangeEvent, useState } from "react";
+import React, {ChangeEvent, useState} from "react";
 import Pipeline from "./Pipeline";
-import { NodeInputTypes } from "./types/nodeInputTypes";
+import {NodeInputTypes} from "./types/nodeInputTypes";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
+import usePipelineStore from "./stores/pipelineStore";
 
 export default function Page(props: { inputTypes: NodeInputTypes[] }) {
-  const currentPipeline = usePipelineManagerStore(
-    (state) => state.currentPipeline,
-  );
+  const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
+  const nodes = usePipelineStore((state) => state.nodes);
+  const edges = usePipelineStore((state) => state.edges);
+  const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
+
+  const updatePipelineName = usePipelineManagerStore((state) => state.updatePipelineName);
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
+  const dirty = usePipelineManagerStore((state) => state.dirty);
+  const isSaving = usePipelineManagerStore((state) => state.isSaving);
   const [name, setName] = useState(currentPipeline?.name);
+  const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
-    if (currentPipeline) {
-      usePipelineManagerStore.setState({
-          currentPipeline: { ...currentPipeline, name: event.target.value },
-        });
-    }
+    updatePipelineName(event.target.value);
   };
   const onClickSave = () => {
     if (currentPipeline) {
-      savePipeline(currentPipeline);
+      const viewport = reactFlowInstance?.getViewport()!;
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      savePipeline(updatedPipeline).then(() => setEditingName(false));
     }
   };
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex flex-1">
         <div className="h-full w-full">
-          <div className="grid grid-cols-6">
-            <div className="col-span-5">
-              <input
-                type="text"
-                value={name}
-                onChange={handleNameChange}
-                className="input input-bordered"
-                placeholder="Edit pipeline name"
-              />
-            </div>
-            <div className="justify-self-end">
-              <button onClick={onClickSave} className="pg-button-primary mt-2">
-                Save
-              </button>
+          <div className="grid grid-cols-2">
+            <div className="flex gap-2">
+              {editingName ? (
+                <>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={handleNameChange}
+                    className="input input-bordered input-sm"
+                    placeholder="Edit pipeline name"
+                  />
+                  <button className="btn btn-sm btn-primary" onClick={onClickSave}>
+                    <i className="fa fa-check"></i>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-lg font-bold">{name}</div>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setEditingName(true)}>
+                    <i className="fa fa-pencil"></i>
+                  </button>
+                </>
+              )}
+              <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
+                <button className="btn btn-sm btn-circle no-animation self-center">
+                  {dirty ?
+                    (isSaving ? <div className="loader loader-sm ml-2"></div> :
+                      <i className="fa fa-cloud-upload"></i>)
+                    : <i className="fa fa-check"></i>
+                  }
+                </button>
+              </div>
             </div>
           </div>
           <div id="react-flow-id" className="relative h-full w-full">
-            <Pipeline inputTypes={props.inputTypes} />
+            <Pipeline inputTypes={props.inputTypes}/>
           </div>
         </div>
       </div>

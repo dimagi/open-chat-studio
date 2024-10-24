@@ -9,6 +9,9 @@ let saveTimeoutId: NodeJS.Timeout | null = null;
 const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => ({
   currentPipeline: undefined,
   currentPipelineId: undefined,
+  dirty: false,
+  isSaving: false,
+  isLoading: true,
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
@@ -20,9 +23,14 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       console.log(e);
     });
   },
-  isLoading: true,
+  updatePipelineName: (name: string) => {
+    if (get().currentPipeline) {
+      set({currentPipeline: {...get().currentPipeline!, name}});
+    }
+  },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
   autoSaveCurrentPipline: (nodes: Node[], edges: Edge[], viewport: Viewport) => {
+    set({dirty: true});
     // Clear the previous timeout if it exists.
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
@@ -34,12 +42,12 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         get().savePipeline(
           {...get().currentPipeline!, data: {nodes, edges, viewport}},
           true,
-                  );
+        );
       }
-    }, 10000); // Delay of 10s.
+    }, 2000); // Delay of 2s
   },
-  savePipeline: (pipeline: PipelineType, isAutoSave: boolean = false) => {
-    const saveText = isAutoSave ? "Pipeline auto-saved" : "Pipeline saved";
+  savePipeline: (pipeline: PipelineType,) => {
+    set({isSaving: true});
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
     }
@@ -47,16 +55,16 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((updatedFlow) => {
           if (updatedFlow) {
-            set({currentPipeline: pipeline});
+            set({currentPipeline: pipeline, dirty: false});
             resolve();
-            // @ts-expect-error. This module is available
-            alertify.success(saveText).delay(2);
           }
         })
         .catch((err) => {
-          console.log(err);
+          alertify.error("There was an error saving");
           reject(err);
-        });
+        }).finally(() => {
+        set({isSaving: false});
+      });
     });
   },
 }));

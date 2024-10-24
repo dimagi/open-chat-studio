@@ -35,7 +35,7 @@ class ApiClient {
   public async getPipeline(pipelineId: number): Promise<PipelineType> {
     const client = this.createClient();
     try {
-      const response = await client.get(`/pipelines/data/${pipelineId}`);
+      const response = await client.get(`/pipelines/data/${pipelineId}/`);
       if (response.status !== 200) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

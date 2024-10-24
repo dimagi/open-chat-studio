@@ -1,7 +1,6 @@
 import React from "react";
 import Component from "./Component";
-import { NodeParams } from "../types/nodeParams";
-import { NodeInputTypes } from "../types/nodeInputTypes";
+import {InputParam, NodeInputTypes} from "../types/nodeInputTypes";
 
 type ComponentListParams = {
   inputTypes: NodeInputTypes[];
@@ -12,7 +11,7 @@ type ComponentListParams = {
 export default function ComponentList({ inputTypes, isOpen, setIsOpen }: ComponentListParams) {
   function onDragStart(
     event: React.DragEvent<any>,
-    data: { type: string; label: string; inputParams: NodeParams[] }
+    data: { type: string; label: string; inputParams: InputParam[] }
   ): void {
     event.dataTransfer.setData("nodedata", JSON.stringify(data));
   }
