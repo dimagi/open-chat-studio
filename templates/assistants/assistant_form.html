@@ -13,6 +13,19 @@
   </div>
 {% endblock %}
 {% block pre_form %}
+<!-- Sync Confirmation Block -->
+  {% if sync_confirmation %}
+    <div id="sync-notification" class="flex w-full shadow-md !rounded-none alert m-1">
+      <p><strong>Your assistant is out of sync with OpenAI	</strong></p>
+      <div class="flex gap-2">
+        <form method="post" action="{% url 'assistants:sync' request.team.slug object.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-primary  mr-4">Sync Now</button>
+        </form>
+        <button class="btn btn-sm btn-warning" onclick="hideSyncNotification()">Continue Without Syncing</button>
+      </div>
+    </div>
+  {% endif %}
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}
@@ -62,5 +75,13 @@
         }
       }));
     });
+  </script>
+  <script>
+    function hideSyncNotification() {
+      const notification = document.getElementById('sync-notification');
+      if (notification) {
+        notification.style.display = 'none'; // Hides the notification
+      }
+    }
   </script>
 {% endblock page_js %}

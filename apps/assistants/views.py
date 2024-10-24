@@ -24,6 +24,7 @@ from .sync import (
     delete_file_from_openai,
     delete_openai_assistant,
     import_openai_assistant,
+    is_synced_with_openai,
     push_assistant_to_openai,
     sync_from_openai,
 )
@@ -128,18 +129,18 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         try:
-            sync_from_openai(self.object)
-        except OpenAiSyncError as e:
-            messages.error(self.request, f"Error syncing assistant: {e}")
-            return HttpResponse(status=500)
-
+            is_synced = is_synced_with_openai(self.object)
+        except OpenAiSyncError:
+            is_synced = False
+        if not is_synced:
+            context = self.get_context_data(sync_confirmation=True)
+            return self.render_to_response(context)
         if not are_files_in_sync_with_openai(self.object):
             messages.warning(
-                self.request,
+                request,
                 "Your assistant does not contain the same files as in OpenAI. \
                 Please upload the files to OCS before editing.",
             )
-
         return super().get(request, *args, **kwargs)
 
     @transaction.atomic()

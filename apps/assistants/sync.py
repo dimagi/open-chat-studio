@@ -198,6 +198,17 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     return True
 
 
+@wrap_openai_errors
+def is_synced_with_openai(assistant: OpenAiAssistant):
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+    openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
+    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
+        current_value = getattr(assistant, key, None)
+        if current_value != value:
+            return False
+    return True
+
+
 def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_file = client.files.retrieve(file_id)
