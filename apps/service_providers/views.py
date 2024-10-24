@@ -9,7 +9,8 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.models import MessagingProviderType, VoiceProviderType
+from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
+from apps.service_providers.tables import LlmProviderModelTable
 
 from ..generics.views import BaseTypeSelectFormView
 from .utils import ServiceProvider, get_service_provider_config_form
@@ -109,3 +110,13 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
+
+
+class LlmProviderModelTableView(SingleTableView):
+    paginate_by = 25
+    template_name = "table/single_table.html"
+    model = LlmProviderModel
+    table_class = LlmProviderModelTable
+
+    def get_queryset(self):
+        return LlmProviderModel.objects.filter(team=self.request.team)
