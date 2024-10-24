@@ -6,7 +6,8 @@ import {
   LlmProviderIdWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
-  TextWidget
+  TextWidget,
+  InputField
 } from "../widgets";
 import React from "react";
 import {getCachedData} from "../utils";
@@ -35,8 +36,7 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
-        <>
-          <div className="m-1 font-medium text-center">Temperature</div>
+        <InputField label="Temperature">
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
@@ -45,12 +45,11 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             type="number"
             step=".1"
           ></input>
-        </>
+        </InputField>
       );
     case "LlmProviderId":
       return (
-        <>
-          <div className="m-1 font-medium text-center">LLM Provider</div>
+        <InputField label="LLM Provider">
           <LlmProviderIdWidget
             parameterValues={parameterValues}
             inputParam={inputParam}
@@ -58,24 +57,22 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             setParams={setParams}
             id={id}
           />
-        </>
+        </InputField>
       );
     case "SourceMaterialId":
       return (
-        <>
-          <div className="m-1 font-medium text-center">Source Material</div>
+        <InputField label="Source Material">
           <SourceMaterialIdWidget
             parameterValues={parameterValues}
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
           />
-        </>
+        </InputField>
       );
     case "LlmModel":
       return (
-        <>
-          <div className="m-1 font-medium text-center">LLM Model</div>
+        <InputField label="LLM Model">
           <LlmModelWidget
             parameterValues={parameterValues}
             inputParam={inputParam}
@@ -87,12 +84,11 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
                 : params.llm_provider_id
             }
           />
-        </>
+        </InputField>
       );
     case "NumOutputs":
       return (
-        <>
-          <div className="m-1 font-medium text-center">Number of Outputs</div>
+        <InputField label="Number of Outputs">
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
@@ -103,7 +99,7 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             min="1"
             max="10"
           ></input>
-        </>
+        </InputField>
       );
     case "Keywords": {
       const length =
@@ -132,14 +128,13 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
     }
     case "HistoryType": {
       return (
-        <>
-          <div className="m-1 font-medium text-center">History Type</div>
+        <InputField label="History Type">
           <HistoryTypeWidget
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
           ></HistoryTypeWidget>
-        </>
+        </InputField>
       );
     }
     case "HistoryName": {
@@ -147,14 +142,13 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         return <></>;
       }
       return (
-        <>
-          <div className="m-1 font-medium text-center">History Name</div>
+        <InputField label="History Name">
           <HistoryNameWidget
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
           ></HistoryNameWidget>
-        </>
+        </InputField>
       );
     }
     case "MaxTokenLimit": {
@@ -162,16 +156,13 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         return <></>;
       }
       return (
-        <>
-          <div className="m-1 font-medium text-center">
-            Maximum Token Limit
-          </div>
+        <InputField label="Maximum Token Limit">
           <MaxTokenLimitWidget
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
           ></MaxTokenLimitWidget>
-        </>
+        </InputField>
       );
     }
     default: {
@@ -179,17 +170,14 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         ? inputParam.human_name
         : inputParam.name.replace(/_/g, " ");
       return (
-        <>
-          <div className="m-1 font-medium text-center capitalize">
-            {humanName}
-          </div>
+        <InputField label={humanName}>
           <TextWidget
             humanName={humanName}
             name={inputParam.name}
             onChange={updateParamValue}
             value={params[inputParam.name] || ""}
           ></TextWidget>
-        </>
+        </InputField>
       );
     }
   }

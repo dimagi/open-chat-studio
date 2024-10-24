@@ -128,15 +128,14 @@ export function KeywordsWidget({
   };
   const humanName = `Output ${index + 1} Keyword`;
   return (
-    <>
-      <div className="m-1 font-medium text-center">{humanName}</div>
+    <InputField label={humanName}>
       <TextWidget
         humanName={humanName}
         name="keywords"
         onChange={updateParamValue}
         value={keywords ? keywords[index] : ""}
       ></TextWidget>
-    </>
+    </InputField>
   );
 }
 
@@ -313,5 +312,18 @@ export function MaxTokenLimitWidget({
       type="number"
       step="1"
     ></input>
+  );
+}
+
+export function InputField({label, children}: React.PropsWithChildren<{ label: string }>) {
+  return (
+    <>
+      <div className="form-control w-full">
+        <label className="label font-bold">{label}</label>
+        {children}
+      </div>
+      {/*<div className="m-1 font-medium text-left capitalize">{label}</div>*/}
+      {/*{children}*/}
+    </>
   );
 }

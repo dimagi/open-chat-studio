@@ -20,6 +20,7 @@ import usePipelineStore from "./stores/pipelineStore";
 import {getNodeId} from "./utils";
 import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
+import useEditorStore from "./stores/editorStore";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -46,6 +47,9 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
+
+  const editingNode = useEditorStore((state) => state.currentNode);
+
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -167,7 +171,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
           isOpen={isOpen}
           setIsOpen={setIsOpen}
         />
-        <EditPanel />
+        {editingNode && <EditPanel nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         <Background
           variant={BackgroundVariant.Dots}
