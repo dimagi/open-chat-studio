@@ -18,7 +18,7 @@ annotated-types==0.6.0
     # via pydantic
 anthropic==0.25.2
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   langchain-anthropic
 anyio==4.4.0
     # via
@@ -28,8 +28,6 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
-async-timeout==4.0.3
-    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -37,14 +35,14 @@ attrs==23.1.0
     #   referencing
     #   taskbadger
 azure-cognitiveservices-speech==1.32.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 backoff==2.2.1
     # via langfuse
 billiard==4.2.0
     # via celery
 boto3==1.28.85
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   django-storages
 botocore==1.31.85
     # via
@@ -54,10 +52,10 @@ brotli==1.1.0
     # via whitenoise
 celery[redis]==5.3.5
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   django-celery-beat
-celery-progress==0.3
-    # via -r requirements/requirements.in
+celery-progress==0.4
+    # via -r requirements.in
 certifi==2024.7.4
     # via
     #   httpcore
@@ -102,9 +100,9 @@ distro==1.8.0
     # via
     #   anthropic
     #   openai
-django==5.1
+django==5.1.2
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   django-allauth
     #   django-allauth-2fa
     #   django-anymail
@@ -125,56 +123,56 @@ django==5.1
     #   drf-spectacular
 django-allauth==0.58.2
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   django-allauth-2fa
 django-allauth-2fa==0.11.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-anymail==10.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-appconf==1.0.5
     # via django-cryptography-django5
 django-celery-beat==2.7.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-cryptography-django5==2.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-environ==0.11.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-field-audit==1.2.8
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-health-check==3.18.3
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-hijack==3.4.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-otp==1.3.0
     # via django-allauth-2fa
 django-redis==5.4.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-storages[s3]==1.14.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-tables2==2.6.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-taggit==5.0.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 django-timezone-field==7.0
     # via django-celery-beat
 django-tz-detect==0.5.0
-    # via -r requirements/requirements.in
-django-waffle==4.0.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
+django-waffle==4.1.0
+    # via -r requirements.in
 djangorestframework==3.15.2
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   drf-spectacular
 djangorestframework-api-key==3.0.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 drf-spectacular==0.26.5
-    # via -r requirements/requirements.in
-emoji==2.12.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
+emoji==2.14.0
+    # via -r requirements.in
 fbmessenger==6.0.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 ffmpeg==1.4
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 filelock==3.13.1
     # via
     #   huggingface-hub
@@ -193,7 +191,7 @@ httpcore==0.17.3
     # via httpx
 httpx==0.24.1
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   anthropic
     #   langfuse
     #   openai
@@ -212,7 +210,7 @@ idna==3.7
 inflection==0.5.1
     # via drf-spectacular
 jinja2==3.1.4
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 jmespath==1.0.1
     # via
     #   boto3
@@ -230,9 +228,9 @@ jsonschema-specifications==2023.7.1
 kombu==5.3.3
     # via celery
 langchain==0.1.16
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 langchain-anthropic==0.1.8
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 langchain-community==0.0.32
     # via langchain
 langchain-core==0.1.42
@@ -244,22 +242,22 @@ langchain-core==0.1.42
     #   langchain-text-splitters
     #   langgraph
 langchain-openai==0.1.3
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 langchain-text-splitters==0.0.1
     # via langchain
-langfuse==2.43.3
-    # via -r requirements/requirements.in
+langfuse==2.52.1
+    # via -r requirements.in
 langgraph==0.0.38
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 langsmith==0.1.47
     # via
     #   langchain
     #   langchain-community
     #   langchain-core
 loguru==0.7.2
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 markdown==3.5.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 markdown-it-py==3.0.0
     # via rich
 markupsafe==2.1.5
@@ -284,7 +282,7 @@ oauthlib==3.2.2
     # via requests-oauthlib
 openai==1.23.6
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   langchain-openai
 orjson==3.10.0
     # via langsmith
@@ -296,21 +294,21 @@ packaging==23.2
     #   langfuse
     #   marshmallow
     #   transformers
-pandas==2.1.3
-    # via -r requirements/requirements.in
-phonenumberslite==8.13.40
-    # via -r requirements/requirements.in
+pandas==2.2.3
+    # via -r requirements.in
+phonenumberslite==8.13.47
+    # via -r requirements.in
 prompt-toolkit==3.0.41
     # via click-repl
 psycopg[binary]==3.2.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 psycopg-binary==3.2.1
     # via psycopg
 pycparser==2.21
     # via cffi
 pydantic==2.5.0
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   anthropic
     #   langchain
     #   langchain-core
@@ -320,7 +318,7 @@ pydantic==2.5.0
 pydantic-core==2.14.1
     # via pydantic
 pydub==0.25.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 pygments==2.16.1
     # via rich
 pyjwt[crypto]==2.8.0
@@ -330,7 +328,7 @@ pyjwt[crypto]==2.8.0
 pypng==0.20220715.0
     # via qrcode
 pytelegrambotapi==4.12.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 python-crontab==3.0.0
     # via django-celery-beat
 python-dateutil==2.8.2
@@ -341,7 +339,7 @@ python-dateutil==2.8.2
     #   python-crontab
     #   taskbadger
 python-magic==0.4.27
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 python3-openid==3.2.0
     # via django-allauth
 pytz==2023.3.post1
@@ -396,14 +394,14 @@ s3transfer==0.7.0
     # via boto3
 safetensors==0.4.3
     # via transformers
-sentry-sdk==2.8.0
-    # via -r requirements/requirements.in
+sentry-sdk==2.17.0
+    # via -r requirements.in
 shellingham==1.5.4
     # via typer
 six==1.16.0
     # via python-dateutil
 slack-bolt==1.18.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 slack-sdk==3.27.2
     # via slack-bolt
 sniffio==1.3.0
@@ -420,16 +418,16 @@ sqlalchemy==2.0.23
 sqlparse==0.5.0
     # via django
 taskbadger==1.3.3
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 tenacity==8.2.3
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   langchain
     #   langchain-community
     #   langchain-core
-tiktoken==0.7.0
+tiktoken==0.8.0
     # via
-    #   -r requirements/requirements.in
+    #   -r requirements.in
     #   langchain-openai
 tokenizers==0.15.0
     # via
@@ -443,17 +441,16 @@ tqdm==4.66.3
     #   openai
     #   transformers
 transformers==4.39.3
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 turn-python==0.2.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 twilio==8.10.1
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 typer[all]==0.9.0
     # via taskbadger
 typing-extensions==4.8.0
     # via
     #   anthropic
-    #   emoji
     #   huggingface-hub
     #   openai
     #   psycopg
@@ -486,7 +483,7 @@ vine==5.1.0
 wcwidth==0.2.10
     # via prompt-toolkit
 whitenoise[brotli]==6.6.0
-    # via -r requirements/requirements.in
+    # via -r requirements.in
 wrapt==1.16.0
     # via langfuse
 yarl==1.9.2

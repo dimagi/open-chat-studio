@@ -235,14 +235,22 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       { length: numberOfOutputs },
       (_, index) => {
         const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
+        let handleAnnotation;
+        if (numberOfOutputs > 1) {
+          const handleText = `Output ${index + 1}`;
+          handleAnnotation = <div className="handle-text">{handleText}</div>
+        }
+
         return (
-          <Handle
-            key={`output_${index}`}
-            type="source"
-            position={Position.Right}
-            style={{ top: `${position}%` }}
-            id={numberOfOutputs > 1 ? `output_${index}` : "output"}
-          />
+            <Handle
+              key={`output_${index}`}
+              type="source"
+              position={Position.Right}
+              style={{ top: `${position}%` }}
+              id={numberOfOutputs > 1 ? `output_${index}` : "output"}
+            >
+              {handleAnnotation}
+            </Handle>
         );
       },
     );
@@ -264,7 +272,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<NodeData>) {
       <div
         className={classNames(
           selected ? "border border-primary" : "border",
-          "px-4 py-2 shadow-md rounded-md border-2 border-stone-400 bg-base-100",
+          "px-4 py-2 shadow-md rounded-xl border-2 border-stone-400 bg-base-100",
         )}
       >
         <Handle type="target" position={Position.Left} id="input" />

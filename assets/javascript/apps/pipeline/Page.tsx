@@ -11,13 +11,16 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
   const [name, setName] = useState(currentPipeline?.name);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
-    currentPipeline &&
+    if (currentPipeline) {
       usePipelineManagerStore.setState({
-        currentPipeline: { ...currentPipeline, name: event.target.value },
-      });
+          currentPipeline: { ...currentPipeline, name: event.target.value },
+        });
+    }
   };
   const onClickSave = () => {
-    currentPipeline && savePipeline(currentPipeline);
+    if (currentPipeline) {
+      savePipeline(currentPipeline);
+    }
   };
   return (
     <div className="flex h-full overflow-hidden">

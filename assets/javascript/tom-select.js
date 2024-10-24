@@ -1,1 +1,2 @@
-window.TomSelect = require('tom-select');
+import TomSelect from "tom-select";
+window.TomSelect = TomSelect;

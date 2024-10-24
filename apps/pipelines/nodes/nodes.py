@@ -38,6 +38,7 @@ from apps.utils.time import pretty_date
 
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
+    __node_description__ = "Renders a template"
     template_string: PipelineJinjaTemplate
 
     def _process(self, input, **kwargs) -> PipelineState:
@@ -87,6 +88,7 @@ class LLMResponseMixin(BaseModel):
 
 class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
+    __node_description__ = "Calls an LLM with the given input"
 
     def _process(self, input, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
@@ -96,6 +98,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 class LLMResponseWithPrompt(LLMResponse):
     __human_name__ = "LLM response with prompt"
+    __node_description__ = "Calls an LLM with a prompt"
 
     source_material_id: SourceMaterialId | None = None
     prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
@@ -191,6 +194,7 @@ class LLMResponseWithPrompt(LLMResponse):
 
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
+    __node_description__ = ""
     recipient_list: str
     subject: str
 
@@ -202,6 +206,7 @@ class SendEmail(PipelineNode):
 
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
+    __node_description__ = ""
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
@@ -210,6 +215,7 @@ class Passthrough(PipelineNode):
 
 class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
+    __node_description__ = "Verifies whether the input is a certain value or not"
     input_equals: str
 
     def process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
@@ -224,6 +230,7 @@ class BooleanNode(Passthrough):
 
 class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
+    __node_description__ = "Routes the input to one of the linked nodes"
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     prompt: Prompt = "You are an extremely helpful router {input}"
@@ -368,11 +375,13 @@ class ExtractStructuredDataNodeMixin:
 
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Structured Data"
+    __node_description__ = "Extract structured data from the input"
     data_schema: str
 
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Participant Data"
+    __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: str
     key_name: str | None = None
 

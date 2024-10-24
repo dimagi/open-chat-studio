@@ -44,6 +44,7 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
   const currentPipelineId = usePipelineManagerStore((state) => state.currentPipelineId);
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
+  const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -110,8 +111,17 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
     }
   }
 
-  useHotkeys("backspace", handleDelete);
+  function manualSaveCurrentPipeline() {
+    if (currentPipeline) {
+      const viewport = reactFlowInstance?.getViewport()!;
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      savePipeline(updatedPipeline);
+    }
+  }
 
+  useHotkeys(["backspace", "delete"], handleDelete);
+  useHotkeys("ctrl+s", () => manualSaveCurrentPipeline(), {preventDefault: true});
+  
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
       setLastSelection(flow);

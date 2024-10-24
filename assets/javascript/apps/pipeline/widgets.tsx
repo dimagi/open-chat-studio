@@ -126,7 +126,7 @@ export function KeywordsWidget({
       return newParams;
     });
   };
-  const humanName = `Keyword ${index + 1}`;
+  const humanName = `Output ${index + 1} Keyword`;
   return (
     <>
       <div className="m-1 font-medium text-center">{humanName}</div>

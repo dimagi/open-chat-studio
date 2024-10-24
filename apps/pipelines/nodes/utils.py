@@ -10,6 +10,7 @@ def get_input_types_for_node(node_class):
         name: str
         human_name: str
         input_params: list[InputParam]
+        node_description: str
 
     inputs = []
     for field_name, info in node_class.model_fields.items():
@@ -24,4 +25,5 @@ def get_input_types_for_node(node_class):
         name=node_class.__name__,
         human_name=getattr(node_class, "__human_name__", node_class.__name__),
         input_params=inputs,
+        node_description=getattr(node_class, "__node_description__", ""),
     ).model_dump()

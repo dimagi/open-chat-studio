@@ -33,18 +33,24 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       if (get().currentPipeline) {
         get().savePipeline(
           {...get().currentPipeline!, data: {nodes, edges, viewport}},
-          true
-        );
+          true,
+                  );
       }
-    }, 300); // Delay of 300ms.
+    }, 10000); // Delay of 10s.
   },
-  savePipeline: (pipeline: PipelineType) => {
+  savePipeline: (pipeline: PipelineType, isAutoSave: boolean = false) => {
+    const saveText = isAutoSave ? "Pipeline auto-saved" : "Pipeline saved";
+    if (saveTimeoutId) {
+      clearTimeout(saveTimeoutId);
+    }
     return new Promise<void>((resolve, reject) => {
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((updatedFlow) => {
           if (updatedFlow) {
             set({currentPipeline: pipeline});
             resolve();
+            // @ts-expect-error. This module is available
+            alertify.success(saveText).delay(2);
           }
         })
         .catch((err) => {
