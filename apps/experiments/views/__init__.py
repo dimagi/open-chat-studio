@@ -34,6 +34,7 @@ from .experiment import (  # noqa: F401
     experiments_home,
     get_message_response,
     poll_messages,
+    reset_to_version,
     send_invitation,
     set_default_experiment,
     single_experiment_home,

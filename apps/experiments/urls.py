@@ -59,6 +59,11 @@ urlpatterns = [
         views.update_version_description,
         name="update_version_description",
     ),
+    path(
+        "e/<int:experiment_id>/reset/",
+        views.reset_to_version,
+        name="reset_to_version",
+    ),
     path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
