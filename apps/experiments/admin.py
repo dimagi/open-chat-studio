@@ -81,6 +81,7 @@ class ExperimentAdmin(admin.ModelAdmin):
         "source_material",
         "llm",
         "llm_provider",
+        "llm_provider_model",
         "version_family",
         "version_number",
     )
