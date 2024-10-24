@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
 
@@ -5,6 +6,7 @@ import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.urls import reverse
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
@@ -263,17 +265,74 @@ class PipelineChatHistory(BaseModel):
     type = models.CharField(max_length=10, choices=PipelineChatHistoryTypes.choices)
     name = models.CharField(max_length=128, db_index=True)  # Either the name of the named history, or the node id
 
+    def __str__(self):
+        return f"Session: {self.session_id}, Type: {self.type}, Name: {self.name}"
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
         ]
         ordering = ["-created_at"]
 
+    def message_iterator(self) -> Iterator["PipelineChatMessages"]:
+        yield from self.messages.order_by("-created_at").iterator(100)
+
+    def get_messages_until_summary(self):
+        messages = []
+        for message in self.message_iterator():
+            messages.append(message)
+            if message.summary:
+                break
+        return messages
+
+    def get_langchain_messages_until_summary(self):
+        messages = self.get_messages_until_summary()
+        langchain_messages_to_last_summary = [
+            message for message_pair in messages for message in message_pair.as_langchain_messages()
+        ]
+        return list(reversed(langchain_messages_to_last_summary))
+
 
 class PipelineChatMessages(BaseModel):
     chat_history = models.ForeignKey(PipelineChatHistory, on_delete=models.CASCADE, related_name="messages")
+    node_id = models.TextField()
     human_message = models.TextField()
     ai_message = models.TextField()
+    summary = models.TextField(null=True)  # noqa: DJ001
+
+    def __str__(self):
+        if self.summary:
+            return f"Human: {self.human_message}, AI: {self.ai_message}, System: {self.summary}"
+        return f"Human: {self.human_message}, AI: {self.ai_message}"
 
     def as_tuples(self):
-        return [(ChatMessageType.HUMAN.value, self.human_message), (ChatMessageType.AI.value, self.ai_message)]
+        message_tuples = []
+        if self.summary:
+            message_tuples.append((ChatMessageType.SYSTEM.value, self.summary))
+        message_tuples.extend(
+            [
+                (ChatMessageType.HUMAN.value, self.human_message),
+                (ChatMessageType.AI.value, self.ai_message),
+            ]
+        )
+        return message_tuples
+
+    def as_langchain_messages(self) -> list[BaseMessage]:
+        """
+        Converts this message instance into a list of Langchain `BaseMessage` objects.
+        The message order is the reverse of the typical order because of where this
+        method is called. The returned order is: [`AIMessage`, `HumanMessage`, `SystemMessage`].
+
+        The `SystemMessage` represents the conversation summary and will only be
+        included if it exists.
+        """
+        langchain_messages = [
+            AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
+            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
+        ]
+        if self.summary:
+            langchain_messages.append(
+                SystemMessage(content=self.summary, additional_kwargs={"id": self.id, "node_id": self.node_id})
+            )
+
+        return langchain_messages
