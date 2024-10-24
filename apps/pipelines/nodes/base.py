@@ -29,6 +29,7 @@ class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
+    ai_message_id: int | None = None
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
