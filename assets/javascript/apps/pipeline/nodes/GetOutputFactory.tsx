@@ -38,7 +38,9 @@ const routerOutputs = (params: NodeParams) => {
   const outputHandles = Array.from(
     {length: numberOfOutputs},
     (_, index) => {
-      const position = (index / (numberOfOutputs - 1)) * 100; // Distributes evenly between 0% to 100%
+      const position = numberOfOutputs > 1
+        ? (index / (numberOfOutputs - 1)) * 100  // Distribute evenly when there are multiple outputs
+        : 50;  // Center position when there's only one output
       const handleAnnotation = handleText(`Output ${index + 1}`)
 
       return (
