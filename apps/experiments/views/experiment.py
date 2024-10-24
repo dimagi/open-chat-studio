@@ -1278,7 +1278,6 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
     ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
     experiment.is_default_version = True
     experiment.save()
-
     url = (
         reverse(
             "experiments:single_experiment_home",
@@ -1286,6 +1285,27 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         )
         + "#versions"
     )
+    return redirect(url)
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+def archive_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+    experiment = get_object_or_404(
+        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
+    )
+    url = (
+        reverse(
+            "experiments:single_experiment_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )
+    if experiment.is_default_version:
+        return redirect(url)
+    experiment.is_archived = True
+    experiment.save()
     return redirect(url)
 
 
