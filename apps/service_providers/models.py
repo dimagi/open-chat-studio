@@ -5,6 +5,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
 from django.utils.functional import classproperty
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
@@ -14,7 +15,7 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Team
 
 from . import forms, llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
@@ -118,6 +119,45 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def get_llm_service(self):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
+
+
+class LlmProviderModel(BaseTeamModel):
+    team = models.ForeignKey(
+        Team,
+        verbose_name=gettext("Team"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )  # Optional FK relationship to team. If this is
+    # null, then it is a "global" model that is managed in Django admin. Team,
+
+    type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
+
+    name = models.CharField(
+        max_length=128, help_text="The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'"
+    )
+    max_token_limit = models.PositiveIntegerField(
+        default=8192,
+        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
+        "If 0, compression will be disabled which may result in errors or high LLM costs.",
+    )
+    supports_tool_calling = models.BooleanField(default=False, help_text="If the model can call tools.")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("team", "name", "max_token_limit"), name="unique_team_name_max_token_limit"
+            ),
+        ]
+
+    def __str__(self):
+        label = f"{LlmProviderTypes[self.type].label}: {self.name}"
+        if self.is_custom():
+            label = f"{label} (custom for {self.team.name})"
+        return label
+
+    def is_custom(self):
+        return self.team is not None
 
 
 class VoiceProviderType(models.TextChoices):

@@ -125,6 +125,7 @@ def chat_completions(request, experiment_id: str):
             }
         ],
         "created": int(time.time()),
+        # TODO: change me
         "model": session.experiment.llm,
         "object": "chat.completion",
     }

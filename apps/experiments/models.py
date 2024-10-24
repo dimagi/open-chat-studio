@@ -479,6 +479,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
     llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
@@ -666,7 +674,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_chat_model(self):
         service = self.get_llm_service()
-        return service.get_chat_model(self.llm, self.temperature)
+        return service.get_chat_model(self.llm_provider_model.name, self.temperature)
 
     def get_llm_service(self):
         if self.llm_provider:
