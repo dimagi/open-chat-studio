@@ -1,7 +1,7 @@
 import React, {
   ChangeEvent,
   ChangeEventHandler,
-  Dispatch,
+  Dispatch, ReactNode,
   SetStateAction,
   useId,
 } from "react";
@@ -12,10 +12,57 @@ import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
 
 export function TextModal({
+  modalId,
   humanName,
   name,
   value,
   onChange,
+}: {
+  modalId: string;
+  humanName: string;
+  name: string;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <dialog
+      id={modalId}
+      className="modal nopan nodelete nodrag noflow nowheel"
+    >
+      <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+        <div className="flex-grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+            {humanName}
+          </h4>
+          <textarea
+            className="textarea textarea-bordered textarea-lg w-full flex-grow resize-none"
+            name={name}
+            onChange={onChange}
+            value={value}
+          ></textarea>
+          <form method="dialog" className="modal-backdrop">
+            <button className="pg-button-primary mt-2">Save</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        {/* Allows closing the modal by clicking outside of it */}
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
+export function ExpandableTextWidget({
+  humanName,
+  name,
+  onChange,
+  value,
 }: {
   humanName: string;
   name: string;
@@ -23,78 +70,33 @@ export function TextModal({
   onChange: ChangeEventHandler;
 }) {
   const modalId = useId();
-  return (
-    <>
-      <dialog
-        id={modalId}
-        className="modal nopan nodelete nodrag noflow nowheel"
-      >
-              <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
-          <form method="dialog">
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
-              ✕
-            </button>
-          </form>
-          <div className="flex-grow h-full w-full">
-            <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
-              {humanName}
-            </h4>
-            <textarea
-              className="textarea textarea-bordered textarea-lg h-[80%] w-full"
-              name={name}
-              onChange={onChange}
-              value={value}
-            ></textarea>
-            <form method="dialog" className="modal-backdrop">
-              <button className="pg-button-primary mt-2">Save</button>
-            </form>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          {/* Allows closing the modal by clicking outside of it */}
-          <button>close</button>
-        </form>
-      </dialog>
-      <button
-        className="btn btn-ghost"
-        onClick={() =>
-          (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
-        }
-      >
-        <i className="fa-solid fa-expand-alt"></i>
-      </button>
+  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
+  const label = (
+    <>{humanName}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${humanName}`}>
+        <button className="btn btn-xs btn-ghost" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
     </>
-  );
-}
-
-export function TextWidget({
-  humanName,
-  name,
-  onChange,
-  value,
-}: {
-  humanName: string;
-  name: string;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
+  )
   return (
-    <div className="join">
+    <InputField label={label}>
       <textarea
-        className="input input-bordered join-item nopan nodelete nodrag noflow textarea nowheel w-full resize-none"
+        className="textarea textarea-bordered resize-none textarea-sm w-full"
+        rows={3}
         name={name}
         onChange={onChange}
         value={value}
       ></textarea>
-      <div className="join-item">
-        <TextModal
-          humanName={humanName}
-          name={name}
-          value={value}
-          onChange={onChange}
-        ></TextModal>
-      </div>
-    </div>
+      <TextModal
+        modalId={modalId}
+        humanName={humanName}
+        name={name}
+        value={value}
+        onChange={onChange}>
+      </TextModal>
+    </InputField>
   );
 }
 
@@ -110,7 +112,7 @@ export function KeywordsWidget({
   id: NodeProps["id"];
 }) {
   const setNode = usePipelineStore((state) => state.setNode);
-  const updateParamValue = (event: ChangeEvent<HTMLTextAreaElement>) => {
+  const updateParamValue = (event: ChangeEvent<HTMLInputElement>) => {
     setParams((prevParams) => {
       const { name, value } = event.target;
       const updatedList = [...(prevParams[name] || [])];
@@ -129,23 +131,23 @@ export function KeywordsWidget({
   const humanName = `Output ${index + 1} Keyword`;
   return (
     <InputField label={humanName}>
-      <TextWidget
-        humanName={humanName}
-        name="keywords"
+      <input
+        className="input input-bordered w-full"
+        name={humanName}
         onChange={updateParamValue}
         value={keywords ? keywords[index] : ""}
-      ></TextWidget>
+      ></input>
     </InputField>
   );
 }
 
 export function LlmProviderIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  setParams,
-  id,
-}: {
+                                      parameterValues,
+                                      inputParam,
+                                      value,
+                                      setParams,
+                                      id,
+                                    }: {
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
   value: string | string[];
@@ -315,15 +317,13 @@ export function MaxTokenLimitWidget({
   );
 }
 
-export function InputField({label, children}: React.PropsWithChildren<{ label: string }>) {
+export function InputField({label, children}: React.PropsWithChildren<{ label: string | ReactNode }>) {
   return (
     <>
-      <div className="form-control w-full">
+      <div className="form-control w-full capitalize">
         <label className="label font-bold">{label}</label>
         {children}
       </div>
-      {/*<div className="m-1 font-medium text-left capitalize">{label}</div>*/}
-      {/*{children}*/}
     </>
   );
 }

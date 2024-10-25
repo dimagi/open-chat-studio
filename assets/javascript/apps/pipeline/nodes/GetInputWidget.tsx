@@ -6,8 +6,8 @@ import {
   LlmProviderIdWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
-  TextWidget,
-  InputField
+  ExpandableTextWidget,
+  InputField,
 } from "../widgets";
 import React from "react";
 import {getCachedData} from "../utils";
@@ -165,18 +165,26 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         </InputField>
       );
     }
+    case "Prompt": {
+      return (
+        <ExpandableTextWidget
+          humanName={"Prompt"}
+          name={inputParam.name}
+          onChange={updateParamValue}
+          value={params[inputParam.name] || ""}>
+        </ExpandableTextWidget>
+      );
+    }
     default: {
-      const humanName = inputParam.human_name
-        ? inputParam.human_name
-        : inputParam.name.replace(/_/g, " ");
+      const humanName = inputParam.name.replace(/_/g, " ");
       return (
         <InputField label={humanName}>
-          <TextWidget
-            humanName={humanName}
+          <input
+            className="input input-bordered w-full"
             name={inputParam.name}
             onChange={updateParamValue}
-            value={params[inputParam.name] || ""}
-          ></TextWidget>
+            value={params[inputParam.name]}
+          ></input>
         </InputField>
       );
     }
