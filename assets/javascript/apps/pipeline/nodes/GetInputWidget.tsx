@@ -152,9 +152,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
       );
     }
     case "MaxTokenLimit": {
-      if (params["history_type"] !== "global") {
-        return <></>;
-      }
       return (
         <InputField label="Maximum Token Limit">
           <MaxTokenLimitWidget
