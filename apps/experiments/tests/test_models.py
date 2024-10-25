@@ -31,6 +31,7 @@ from apps.utils.factories.experiment import (
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
@@ -628,6 +629,40 @@ class TestExperimentRoute:
         changes = route.compare_with_model(route2, exclude_fields=route2.get_fields_to_exclude())
         assert changes == set(["child"])
 
+    def _setup_route(self, keyword: str):
+        parent = ExperimentFactory()
+        team = parent.team
+        child = ExperimentFactory(team=team)
+        return ExperimentRoute.objects.create(parent=parent, child=child, keyword=keyword, team=team)
+
+    def test_unique_parent_child_constraint_enforced(self):
+        route = self._setup_route(keyword="test")
+        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_child".*'):
+            ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
+
+    def test_unique_parent_child_constraint_not_enforced(self):
+        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
+        route = self._setup_route(keyword="test")
+        parent = route.parent
+        route.archive()
+        ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
+        assert parent.child_links.count() == 1
+
+    def test_unique_parent_keyword_condition_enforced(self):
+        route = self._setup_route(keyword="test")
+        other_child = ExperimentFactory(team=route.team)
+        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition".*'):
+            ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
+
+    def test_unique_parent_keyword_condition_not_enforced(self):
+        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
+        route = self._setup_route(keyword="test")
+        parent = route.parent
+        other_child = ExperimentFactory(team=route.team)
+        route.archive()
+        ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
+        assert parent.child_links.count() == 1
+
 
 @pytest.mark.django_db()
 class TestExperimentModel:
@@ -687,7 +722,7 @@ class TestExperimentModel:
         post_survey = SurveyFactory(team=team)
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
-
+        experiment.pipeline = PipelineFactory(team=experiment.team)
         experiment.save()
         return experiment
 
@@ -731,6 +766,7 @@ class TestExperimentModel:
                 "post_survey",
                 "version_description",
                 "safety_layers",
+                "pipeline",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -743,12 +779,20 @@ class TestExperimentModel:
         self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
+        self._assert_pipeline_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
+
+    def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
+        assert new_version.pipeline.working_version == original_experiment.pipeline
+        assert new_version.pipeline.version_number == 1
+        assert original_experiment.pipeline.version_number == 2
+        for node in original_experiment.pipeline.node_set.all():
+            assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
 
     def test_copy_attr_to_new_version(self):
         """

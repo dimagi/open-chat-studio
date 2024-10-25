@@ -4,6 +4,9 @@ import {createRoot} from "react-dom/client";
 import App from "./pipeline/App";
 import { NodeInputTypes } from "./pipeline/types/nodeInputTypes";
 
+declare global {
+  const alertify: any;
+}
 
 export function renderPipeline(containerId: string, team_slug: string, pipelineId: number | undefined, inputTypes: NodeInputTypes[]) {
   const root = document.querySelector(containerId)!;

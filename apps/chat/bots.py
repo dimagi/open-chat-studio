@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation, Conversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
@@ -42,8 +42,9 @@ def notify_users_of_violation(session_id: int, safety_layer_id: int):
 
 
 def get_bot(session: ExperimentSession, experiment: Experiment | None = None, disable_tools: bool = False):
-    if session.experiment.pipeline_id:
-        return PipelineBot(session)
+    experiment = experiment or session.experiment_version
+    if experiment.pipeline_id:
+        return PipelineBot(session, experiment=experiment)
     return TopicBot(session, experiment, disable_tools=disable_tools)
 
 
@@ -278,22 +279,17 @@ class SafetyBot:
 
 
 class PipelineBot:
-    def __init__(self, session: ExperimentSession):
-        self.experiment = session.experiment_version
+    def __init__(self, session: ExperimentSession, experiment: Experiment):
+        self.experiment = experiment
         self.session = session
+        self.ai_message_id = None
 
     def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
-        output = self.experiment.pipeline.invoke(
+        output: PipelineState = self.experiment.pipeline.invoke(
             PipelineState(messages=[user_input], experiment_session=self.session), self.session
         )
+        self.ai_message_id = output["ai_message_id"]
         return output["messages"][-1]
 
-    def get_ai_message_id(self) -> int | None:
-        last_ai_message = (
-            ChatMessage.objects.filter(chat=self.session.chat, message_type=ChatMessageType.AI.value)
-            .values("id")
-            .last()
-        )
-        if not last_ai_message:
-            return None
-        return last_ai_message["id"]
+    def get_ai_message_id(self) -> int:
+        return self.ai_message_id

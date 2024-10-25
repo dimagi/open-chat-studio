@@ -44,7 +44,9 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Pipeline.objects.filter(team=self.request.team).annotate(run_count=Count("runs"))
+        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).annotate(
+            run_count=Count("runs")
+        )
 
 
 class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -78,8 +80,8 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "pipelines.delete_pipeline"
 
     def delete(self, request, team_slug: str, pk: int):
-        pipeline = get_object_or_404(Pipeline, id=pk, team=request.team)
-        pipeline.delete()
+        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), id=pk, team=request.team)
+        pipeline.archive()
         messages.success(request, f"{pipeline.name} deleted")
         return HttpResponse()
 
@@ -110,6 +112,7 @@ def _pipeline_node_default_values(llm_providers):
         "LlmProviderId": provider_id,
         "LlmModel": llm_model,
         "LlmTemperature": 0.7,
+        "MaxTokenLimit": 8192,
     }
 
 
@@ -135,7 +138,7 @@ def _pipeline_node_input_types():
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
-        pipeline = get_object_or_404(Pipeline, pk=pk, team=request.team)
+        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
         data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()

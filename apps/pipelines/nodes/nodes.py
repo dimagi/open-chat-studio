@@ -12,7 +12,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.conversation import compress_chat_history
+from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
@@ -137,7 +137,7 @@ class LLMResponseWithPrompt(LLMResponse):
             return self.history_name
         return node_id
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list:
+    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list[BaseMessage]:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
@@ -155,8 +155,12 @@ class LLMResponseWithPrompt(LLMResponse):
             )
         except PipelineChatHistory.DoesNotExist:
             return []
-        message_pairs = history.messages.all()
-        return [message for message_pair in message_pairs for message in message_pair.as_tuples()]
+        return compress_pipeline_chat_history(
+            pipeline_chat_history=history,
+            max_token_limit=self.max_token_limit,
+            llm=self.get_chat_model(),
+            input_messages=input_messages,
+        )
 
     def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
         if self.history_type == PipelineChatHistoryTypes.NONE:
@@ -169,7 +173,7 @@ class LLMResponseWithPrompt(LLMResponse):
         history, _ = session.pipeline_chat_history.get_or_create(
             type=self.history_type, name=self._get_history_name(node_id)
         )
-        message = history.messages.create(human_message=human_message, ai_message=ai_message)
+        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=node_id)
         return message
 
     def _get_participant_data(self, session):

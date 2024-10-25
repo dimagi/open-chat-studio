@@ -1,3 +1,5 @@
+from typing import Any
+
 import pydantic
 
 
@@ -5,6 +7,7 @@ def get_input_types_for_node(node_class):
     class InputParam(pydantic.BaseModel):
         name: str
         type: str
+        default: Any = None
 
     class NodeInputType(pydantic.BaseModel):
         name: str
@@ -18,7 +21,7 @@ def get_input_types_for_node(node_class):
             type_ = info.annotation.__args__[0]
         else:
             type_ = info.annotation
-        new_input = InputParam(name=field_name, type=str(type_))
+        new_input = InputParam(name=field_name, type=str(type_), default=info.default)
         inputs.append(new_input)
 
     return NodeInputType(
