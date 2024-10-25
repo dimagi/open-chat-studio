@@ -158,9 +158,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
       );
     }
     case "MaxTokenLimit": {
-      if (params["history_type"] !== "global") {
-        return <></>;
-      }
       return (
         <>
           <div className="m-1 font-medium text-center">
