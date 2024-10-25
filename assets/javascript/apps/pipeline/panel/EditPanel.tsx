@@ -70,7 +70,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
           </div>
           <h2 className="text-lg text-center font-bold">Editing {data?.label}</h2>
 
-          <div className="ml-2">
+          <div className={classNames("ml-2", expanded ? "grid grid-cols-2 gap-4" : "")}>
             {data.inputParams.map((inputParam: InputParam) => (
               <React.Fragment key={inputParam.name}>
                 {getInputWidget({
