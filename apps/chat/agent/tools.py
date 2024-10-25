@@ -15,7 +15,7 @@ from apps.utils.time import pretty_date
 class CustomBaseTool(BaseTool):
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
-    requires_session = False
+    requires_session: bool = False
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
@@ -35,9 +35,9 @@ class CustomBaseTool(BaseTool):
 
 
 class RecurringReminderTool(CustomBaseTool):
-    name = AgentTools.RECURRING_REMINDER
-    description = "Schedule recurring reminders"
-    requires_session = True
+    name: str = AgentTools.RECURRING_REMINDER
+    description: str = "Schedule recurring reminders"
+    requires_session: bool = True
     args_schema: type[schemas.RecurringReminderSchema] = schemas.RecurringReminderSchema
 
     def action(
@@ -64,9 +64,9 @@ class RecurringReminderTool(CustomBaseTool):
 
 
 class OneOffReminderTool(CustomBaseTool):
-    name = AgentTools.ONE_OFF_REMINDER
-    description = "Schedule one-off reminders"
-    requires_session = True
+    name: str = AgentTools.ONE_OFF_REMINDER
+    description: str = "Schedule one-off reminders"
+    requires_session: bool = True
     args_schema: type[schemas.OneOffReminderSchema] = schemas.OneOffReminderSchema
 
     def action(
@@ -81,9 +81,9 @@ class OneOffReminderTool(CustomBaseTool):
 
 
 class MoveScheduledMessageDateTool(CustomBaseTool):
-    name = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
-    description = "Move the day and time that the scheduled message should trigger"
-    requires_session = True
+    name: str = AgentTools.MOVE_SCHEDULED_MESSAGE_DATE
+    description: str = "Move the day and time that the scheduled message should trigger"
+    requires_session: bool = True
     args_schema: type[schemas.ScheduledMessageSchema] = schemas.ScheduledMessageSchema
 
     def action(
@@ -123,9 +123,9 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
 
 
 class DeleteReminderTool(CustomBaseTool):
-    name = AgentTools.DELETE_REMINDER
-    description = "Delete scheduled reminders"
-    requires_session = True
+    name: str = AgentTools.DELETE_REMINDER
+    description: str = "Delete scheduled reminders"
+    requires_session: bool = True
     args_schema: type[schemas.DeleteReminderSchema] = schemas.DeleteReminderSchema
 
     def action(self, message_id: str):
@@ -142,9 +142,9 @@ class DeleteReminderTool(CustomBaseTool):
 
 
 class UpdateParticipantDataTool(CustomBaseTool):
-    name = AgentTools.UPDATE_PARTICIPANT_DATA
-    description = "Update user data"
-    requires_session = True
+    name: str = AgentTools.UPDATE_PARTICIPANT_DATA
+    description: str = "Update user data"
+    requires_session: bool = True
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
     @transaction.atomic

@@ -51,4 +51,4 @@ class ScheduledMessageSchema(BaseModel):
 
 class UpdateUserDataSchema(BaseModel):
     key: str = Field(description="The key in the user data to update")
-    value: Any = Field(description="The new value of the user data")
+    value: Any = Field(None, description="The new value of the user data")

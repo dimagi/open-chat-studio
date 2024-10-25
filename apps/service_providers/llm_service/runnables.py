@@ -23,6 +23,7 @@ from langchain_core.runnables import (
     ensure_config,
 )
 from langchain_core.runnables.config import merge_configs
+from pydantic import ConfigDict
 
 from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
@@ -96,9 +97,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
     last_cancel_check: float | None = None
     check_every_ms: int = 1000
     input_key: str = "input"
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -253,10 +252,8 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
     state: AssistantExperimentState
-    input_key = "content"
-
-    class Config:
-        arbitrary_types_allowed = True
+    input_key: str = "content"
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def invoke(
         self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
