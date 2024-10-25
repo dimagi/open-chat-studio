@@ -41,7 +41,7 @@ class RenderTemplate(PipelineNode):
     __node_description__ = "Renders a template"
     template_string: PipelineJinjaTemplate
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input, **kwargs) -> str:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -90,7 +90,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
     __node_description__ = "Calls an LLM with the given input"
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input, **kwargs) -> str:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return output.content
@@ -103,7 +103,7 @@ class LLMResponseWithPrompt(LLMResponse):
     source_material_id: SourceMaterialId | None = None
     prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, state: PipelineState, node_id: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
@@ -198,7 +198,7 @@ class SendEmail(PipelineNode):
     recipient_list: str
     subject: str
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
@@ -208,7 +208,7 @@ class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
     __node_description__ = ""
 
-    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+    def _process(self, input, state: PipelineState, node_id: str) -> str:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return input
 
@@ -274,7 +274,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
+    def _process(self, input, state: PipelineState, **kwargs) -> str:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
