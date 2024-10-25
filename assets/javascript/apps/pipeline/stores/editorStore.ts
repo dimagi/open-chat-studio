@@ -3,7 +3,6 @@ import {NodeProps} from "reactflow";
 import {NodeData} from "../types/nodeParams";
 
 type EditorStoreType = {
-  isOpen: boolean;
   currentNode: NodeProps<NodeData> | null;
   openEditorForNode: (node: NodeProps<NodeData>) => void;
   closeEditor: () => void;
@@ -11,12 +10,11 @@ type EditorStoreType = {
 
 const useEditorStore = create<EditorStoreType>((set) => ({
   currentNode: null,
-  isOpen: false,
   openEditorForNode: (node: NodeProps<NodeData>) => {
-    set({currentNode: node, isOpen: true});
+    set({currentNode: node});
   },
   closeEditor: () => {
-    set({currentNode: null, isOpen: false});
+    set({currentNode: null});
   }
 }))
 
