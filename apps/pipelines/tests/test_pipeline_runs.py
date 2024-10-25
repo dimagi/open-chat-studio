@@ -126,13 +126,13 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
         message=error_message,
         level="ERROR",
     )
-    assert LogEntry(**entries[4]) == LogEntry(
-        time=entries[4]["time"],
+    assert LogEntry(**entries[3]) == LogEntry(
+        time=entries[3]["time"],
         message=error_message,
         level="ERROR",
     )
-    assert LogEntry(**entries[5]) == LogEntry(
-        time=entries[5]["time"], message="Pipeline run failed", level="DEBUG", input=input
+    assert LogEntry(**entries[4]) == LogEntry(
+        time=entries[4]["time"], message="Pipeline run failed", level="DEBUG", input=input
     )
 
 

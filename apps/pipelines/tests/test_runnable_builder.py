@@ -117,7 +117,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
 
     state = PipelineState(
         messages=["Ice is not a liquid. When it is melted it turns into water."],
-        experiment_session_id=1,
+        experiment_session=None,
     )
     runnable.invoke(state)
     assert len(mail.outbox) == 1
