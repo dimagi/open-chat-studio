@@ -48,7 +48,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   return (
     <div className="relative">
-      <OverlayPanel classes="top-0 right-0 w-2/5 h-[80vh] overflow-hidden" isOpen={true}>
+      <OverlayPanel classes="top-0 right-0 w-2/5 h-[80vh] overflow-y-auto" isOpen={true}>
         <>
           <div className="absolute top-0 right-0">
             <button
