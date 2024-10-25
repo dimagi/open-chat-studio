@@ -1,5 +1,4 @@
 import {
-  HistoryNameWidget,
   HistoryTypeWidget,
   KeywordsWidget,
   LlmModelWidget,
@@ -143,11 +142,12 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
       }
       return (
         <InputField label="History Name">
-          <HistoryNameWidget
+          <input
+            className="input input-bordered w-full"
+            name={inputParam.name}
             onChange={updateParamValue}
-            inputParam={inputParam}
             value={params[inputParam.name]}
-          ></HistoryNameWidget>
+          ></input>
         </InputField>
       );
     }
