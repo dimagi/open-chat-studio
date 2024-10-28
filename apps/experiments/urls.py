@@ -162,6 +162,11 @@ urlpatterns = [
         name="experiment_route_delete",
     ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
+    path(
+        "e/<slug:experiment_id>/verify_token/<str:token>/",
+        views.verify_public_chat_token,
+        name="verify_public_chat_token",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

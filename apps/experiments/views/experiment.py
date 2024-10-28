@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from urllib.parse import quote
 
+import jwt
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django import forms
@@ -43,8 +44,13 @@ from apps.events.models import (
 from apps.events.tables import (
     EventsTable,
 )
-from apps.experiments.decorators import experiment_session_view, set_session_access_cookie, verify_session_access_cookie
-from apps.experiments.email import send_experiment_invitation
+from apps.experiments.decorators import (
+    experiment_session_view,
+    get_chat_session_access_cookie_data,
+    set_session_access_cookie,
+    verify_session_access_cookie,
+)
+from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import (
@@ -59,6 +65,7 @@ from apps.experiments.models import (
     ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
+    Participant,
     SessionStatus,
     SyntheticVoice,
 )
@@ -771,8 +778,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
-    user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, participant__user=user, experiment=working_experiment, id=session_id)
+    session = get_object_or_404(ExperimentSession, experiment=working_experiment, id=session_id)
 
     try:
         experiment_version = working_experiment.get_version(version_number)
@@ -822,12 +828,10 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     )
 
 
-# @login_and_team_required
 def get_message_response(request, team_slug: str, experiment_id: int, session_id: int, task_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     # hack for anonymous user/teams
-    user = get_real_user_or_none(request.user)
-    session = get_object_or_404(ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id)
+    session = get_object_or_404(ExperimentSession, experiment_id=experiment_id, id=session_id)
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
@@ -917,8 +921,11 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
             )
-            return _record_consent_and_redirect(request, team_slug, session)
-
+            return _verify_user(
+                identifier=identifier,
+                request=request,
+                session=session,
+            )
     else:
         form = ConsentForm(
             consent,
@@ -944,6 +951,40 @@ def start_session_public(request, team_slug: str, experiment_id: str):
             **version_specific_vars,
         },
     )
+
+
+def _verify_user(identifier, request, session):
+    """
+    Verifies if the user is allowed to access the chat.
+
+    Process:
+    1. If the user is currently logged in, they are considered verified.
+    2. If not logged in, check for a session cookie from a prior public chat:
+        - The session cookie should contain a `participant_id` field.
+        - Match the specified `identifier` to the one of the participant from the session cookie.
+        - If the identifiers match, the user previously verified their email and can proceed.
+    3. If there is no match or if the session has expired, the user has to verify their email address.
+    """
+    team_slug = session.team.slug
+    if request.user.is_authenticated:
+        return _record_consent_and_redirect(request, team_slug, session)
+
+    if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
+        if Participant.objects.filter(id=session_data["participant_id"], identifier=identifier):
+            return _record_consent_and_redirect(request, team_slug, session)
+
+    send_chat_link_email(session)
+    return TemplateResponse(request=request, template="account/participant_email_verify.html")
+
+
+def verify_public_chat_token(request, team_slug: str, experiment_id: str, token: str):
+    try:
+        claimset = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
+        session = get_object_or_404(ExperimentSession, external_id=claimset["session"])
+        return _record_consent_and_redirect(request, team_slug, session)
+    except (jwt.DecodeError, jwt.ExpiredSignatureError):
+        messages.warning(request=request, message="This link could not be verified")
+        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
 
 
 @login_and_team_required
