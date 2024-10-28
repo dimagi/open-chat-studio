@@ -346,8 +346,8 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
     url_kwargs = {
         "team_slug": experiment.team.slug,
-        "experiment_id": experiment.id,
-        "session_id": session.id,
+        "experiment_id": experiment.public_id,
+        "session_id": session.external_id,
         "version_number": version,
     }
     url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
