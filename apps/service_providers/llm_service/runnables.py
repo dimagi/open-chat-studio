@@ -59,8 +59,12 @@ def create_experiment_runnable(experiment: Experiment, session: ExperimentSessio
             return AssistantAgentRunnable(state=state)
         return AssistantExperimentRunnable(state=state)
 
-    assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
+    assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
+    assert (
+        experiment.llm_provider.type == experiment.llm_provider_model.type
+    ), "Experiment provider and provider model should be of the same type"
+
     state = ChatExperimentState(**state_kwargs)
     if experiment.tools_enabled and not disable_tools:
         return AgentExperimentRunnable(state=state)

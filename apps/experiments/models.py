@@ -834,7 +834,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 ),
                 # Language Model
                 VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
