@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, resolve_url
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -181,7 +182,9 @@ class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObject
 
 @require_http_methods(["DELETE"])
 def delete_llm_provider_model(request, team_slug: str, pk: int):
-    # TODO: Only delete if this isn't attached to any experiments
     llm_provider_model = get_object_or_404(LlmProviderModel, team=request.team, pk=pk)
-    llm_provider_model.delete()
+    try:
+        llm_provider_model.delete()
+    except ValidationError as ex:
+        return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()

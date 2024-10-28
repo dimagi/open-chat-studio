@@ -3,6 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
 from django.utils.functional import classproperty
@@ -171,6 +172,15 @@ class LlmProviderModel(BaseTeamModel):
 
     def is_custom(self):
         return self.team is not None
+
+    def delete(self, *args, **kwargs):
+        experiments = self.experiment_set.values_list("name", flat=True).all()
+        if experiments:
+            raise DjangoValidationError(
+                f"Cannot delete LLM Provider Model {self.name} "
+                "as it is in use by experiments: {', '.join(experiments)}"
+            )
+        return super().delete(*args, **kwargs)
 
 
 class VoiceProviderType(models.TextChoices):
