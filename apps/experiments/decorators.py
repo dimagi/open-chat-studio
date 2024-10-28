@@ -22,7 +22,7 @@ def experiment_session_view(allowed_states=None):
         """
 
         @wraps(view_func)
-        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str):
+        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str, **kwargs):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
             request.experiment_session = get_object_or_404(
                 ExperimentSession,
@@ -33,7 +33,7 @@ def experiment_session_view(allowed_states=None):
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)
-            return view_func(request, team_slug, experiment_id, session_id)
+            return view_func(request, team_slug, experiment_id, session_id, **kwargs)
 
         return decorated_view
 

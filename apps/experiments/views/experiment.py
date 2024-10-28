@@ -774,11 +774,13 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     )
 
 
+@experiment_session_view()
+@verify_session_access_cookie
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
-    working_experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    working_experiment = request.experiment
     # hack for anonymous user/teams
-    session = get_object_or_404(ExperimentSession, experiment=working_experiment, id=session_id)
+    session = request.experiment_session
 
     try:
         experiment_version = working_experiment.get_version(version_number)
@@ -828,10 +830,12 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
     )
 
 
-def get_message_response(request, team_slug: str, experiment_id: int, session_id: int, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+@experiment_session_view()
+@verify_session_access_cookie
+def get_message_response(request, team_slug: str, experiment_id: str, session_id: str, task_id: str):
+    experiment = request.experiment
     # hack for anonymous user/teams
-    session = get_object_or_404(ExperimentSession, experiment_id=experiment_id, id=session_id)
+    session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
     # don't render empty messages
