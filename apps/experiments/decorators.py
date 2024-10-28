@@ -55,6 +55,17 @@ def set_session_access_cookie(response, experiment_session):
     return response
 
 
+def get_chat_session_access_cookie_data(request, fail_silently=False):
+    try:
+        return signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(
+            request.COOKIES[CHAT_SESSION_ACCESS_COOKIE], max_age=MAX_AGE
+        )
+    except Exception as e:
+        if fail_silently:
+            return
+        raise e
+
+
 def verify_session_access_cookie(view):
     """View decorator for views that provide public access to an experiment session.
     This decorator must be applied before the `experiment_session_view` decorator:
@@ -74,9 +85,7 @@ def verify_session_access_cookie(view):
                 return view(request, *args, **kwargs)
 
         try:
-            access_value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(
-                request.COOKIES[CHAT_SESSION_ACCESS_COOKIE], max_age=MAX_AGE
-            )
+            access_value = get_chat_session_access_cookie_data(request)
         except (signing.BadSignature, KeyError):
             raise Http404()
 
