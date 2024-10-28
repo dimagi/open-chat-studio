@@ -132,6 +132,9 @@ class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObject
     form_class = LlmProviderModelForm
     template_name = "generic/object_form.html"
 
+    def get_form_kwargs(self):
+        return {"team": self.request.team, **super().get_form_kwargs()}
+
     @property
     def extra_context(self):
         return {
@@ -141,8 +144,8 @@ class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObject
 
     def _get_title(self):
         if self.object:
-            return "Edit Custom LLM Provider"
-        return "Create Custom LLM Provider"
+            return "Edit Custom LLM Model"
+        return "Create Custom LLM Model"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

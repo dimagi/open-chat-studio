@@ -1,9 +1,10 @@
 from django import forms
 from django.core.validators import URLValidator
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 
 
 class ProviderTypeConfigForm(forms.Form):
@@ -223,3 +224,11 @@ class LlmProviderModelForm(forms.ModelForm):
     class Meta:
         model = LlmProviderModel
         fields = ("type", "name", "max_token_limit", "supports_tool_calling")
+
+    def __init__(self, team, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        types = LlmProvider.objects.filter(team=team).values_list("type", flat=True).all()
+        self.fields["type"].choices = [choice for choice in LlmProviderTypes.choices if choice[0] in types]
+        if len(types) == 0:
+            url = reverse("service_providers:new", kwargs={"team_slug": team.slug, "provider_type": "llm"})
+            self.fields["type"].help_text = f"You must create an <a href={url}>LLM provider</a> first"
