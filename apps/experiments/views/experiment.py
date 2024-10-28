@@ -909,11 +909,13 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
+            verify_user = True
             if consent.capture_identifier:
                 identifier = form.cleaned_data.get("identifier", None)
             else:
                 # The identifier field will be disabled, so we must generate one
                 identifier = user.email if user else str(uuid.uuid4())
+                verify_user = False
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,
@@ -921,11 +923,14 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
             )
-            return _verify_user(
-                identifier=identifier,
-                request=request,
-                session=session,
-            )
+            if verify_user:
+                return _verify_user_or_start_session(
+                    identifier=identifier,
+                    request=request,
+                    session=session,
+                )
+            else:
+                return _record_consent_and_redirect(request, team_slug, session)
     else:
         form = ConsentForm(
             consent,
@@ -953,7 +958,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
     )
 
 
-def _verify_user(identifier, request, session):
+def _verify_user_or_start_session(identifier, request, session):
     """
     Verifies if the user is allowed to access the chat.
 
@@ -970,7 +975,9 @@ def _verify_user(identifier, request, session):
         return _record_consent_and_redirect(request, team_slug, session)
 
     if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
-        if Participant.objects.filter(id=session_data["participant_id"], identifier=identifier):
+        if Participant.objects.filter(
+            id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
+        ).exists():
             return _record_consent_and_redirect(request, team_slug, session)
 
     send_chat_link_email(session)
@@ -979,10 +986,10 @@ def _verify_user(identifier, request, session):
 
 def verify_public_chat_token(request, team_slug: str, experiment_id: str, token: str):
     try:
-        claimset = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = get_object_or_404(ExperimentSession, external_id=claimset["session"])
+        claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
+        session = get_object_or_404(ExperimentSession, external_id=claims["session"])
         return _record_consent_and_redirect(request, team_slug, session)
-    except (jwt.DecodeError, jwt.ExpiredSignatureError):
+    except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
 

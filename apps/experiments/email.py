@@ -38,7 +38,7 @@ def send_chat_link_email(experiment_session: ExperimentSession):
     token = jwt.encode(
         {
             "exp": timezone.now() + timedelta(minutes=settings.PUBLIC_CHAT_LINK_MAX_AGE),
-            "session": experiment_session.external_id,
+            "session": str(experiment_session.external_id),
         },
         settings.SECRET_KEY,
         algorithm="HS256",
