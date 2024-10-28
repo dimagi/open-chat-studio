@@ -127,6 +127,11 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         return self.type_enum.get_llm_service(config)
 
 
+class LlmProviderModelManager(models.Manager):
+    def for_team(self, team):
+        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+
+
 class LlmProviderModel(BaseTeamModel):
     team = models.ForeignKey(
         Team,
@@ -148,6 +153,8 @@ class LlmProviderModel(BaseTeamModel):
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
     supports_tool_calling = models.BooleanField(default=False, help_text="If the model can call tools.")
+
+    objects = LlmProviderModelManager()
 
     class Meta:
         constraints = [
