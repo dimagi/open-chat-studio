@@ -28,7 +28,6 @@ from apps.pipelines.nodes.types import (
     LlmTemperature,
     MaxTokenLimit,
     NumOutputs,
-    PipelineJinjaTemplate,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -39,7 +38,7 @@ from apps.utils.time import pretty_date
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
-    template_string: PipelineJinjaTemplate
+    template_string: ExpandableText
 
     def _process(self, input, **kwargs) -> str:
         def all_variables(in_):

@@ -8,7 +8,6 @@ LlmProviderId = TypeAliasType("LlmProviderId", int)
 LlmTemperature = TypeAliasType("LlmTemperature", float)
 MaxTokenLimit = TypeAliasType("MaxTokenLimit", int)
 NumOutputs = TypeAliasType("NumOutputs", int)
-PipelineJinjaTemplate = TypeAliasType("PipelineJinjaTemplate", str)
 SourceMaterialId = TypeAliasType("SourceMaterialId", int)
 
 ExpandableText = TypeAliasType("ExpandableText", str)
