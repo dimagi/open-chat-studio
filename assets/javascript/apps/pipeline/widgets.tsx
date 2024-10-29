@@ -169,7 +169,7 @@ export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodePa
             </>
           )
           return (
-            <div className="form-control w-full capitalize">
+            <div className="form-control w-full capitalize" key={index}>
               <label className="label">{label}</label>
               <input
                 className="input input-bordered w-full"
