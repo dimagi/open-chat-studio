@@ -161,7 +161,7 @@ export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodePa
           const value = keywords ? keywords[index] || "" : "";
           const label = (
             <>{`Output Keyword ${index + 1}`}
-              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index}`}>
+              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                 <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
                   <i className="fa-solid fa-minus"></i>
                 </button>
