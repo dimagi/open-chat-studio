@@ -13,6 +13,7 @@ from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
     ExperimentRunnable,
+    SimpleExperimentRunnable,
 )
 from apps.service_providers.llm_service.state import ChatExperimentState
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
@@ -52,7 +53,7 @@ class RunnableFixture:
 
 
 runnables = {
-    # "simple": RunnableFixture(SimpleExperimentRunnable),
+    "simple": RunnableFixture(SimpleExperimentRunnable),
     "agent": RunnableFixture(AgentExperimentRunnable, expect_tools=True),
 }
 
