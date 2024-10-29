@@ -30,6 +30,10 @@ function NodeOutput({nodeId, handleKey, label}: {nodeId: string, handleKey: stri
     }
   }, [nodeId, ref, updateNodeInternals])
 
+  useEffect(() => {
+    updateNodeInternals(nodeId)
+  }, [nodeId, position, updateNodeInternals])
+
   return <div ref={ref} className="py-2 text-right">
     <Handle
       id={handleKey}

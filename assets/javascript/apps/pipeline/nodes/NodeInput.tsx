@@ -12,6 +12,10 @@ export default function NodeInput({nodeId}: {nodeId: string}) {
     }
   }, [nodeId, ref, updateNodeInternals])
 
+  useEffect(() => {
+    updateNodeInternals(nodeId)
+  }, [nodeId, position, updateNodeInternals])
+
   return (
     <div ref={ref} className="py-2 mb-2 border-b border-neutral">
       <Handle
