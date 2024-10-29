@@ -40,7 +40,8 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   return (
     <div className="relative">
-      <OverlayPanel classes={classNames("top-0 right-0 h-[80vh] overflow-y-auto", width)} isOpen={true}>
+      <OverlayPanel classes={classNames("top-0 right-0 h-[80vh] overflow-y-auto", width)} isOpen={true}
+        onOpenChange={(value) => !value && closeEditor()}>
         <>
           <div className="absolute top-0 left-0">
             <button className="btn btn-xs btn-ghost" onClick={toggleExpand}>
