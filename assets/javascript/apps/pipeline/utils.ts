@@ -26,7 +26,7 @@ export const getCachedData: () => typeof localCache = () => {
   return localCache;
 };
 
-export function join(value: string | string[] | null | undefined): string {
+export function concatenate(value: string | string[] | null | undefined): string {
   if (!value) return "";
   return Array.isArray(value) ? value.join("") : value;
 }

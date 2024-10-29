@@ -20,6 +20,11 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, value} = event.target;
+    const param = data.inputParams.find((p: InputParam) => p.name === name);
+    if (!param) {
+      console.warn(`Unknown parameter: ${name}`);
+      return;
+    }
     setNode(id!, (old) => ({
       ...old,
       data: {
@@ -44,19 +49,24 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
         onOpenChange={(value) => !value && closeEditor()}>
         <>
           <div className="absolute top-0 left-0">
-            <button className="btn btn-xs btn-ghost" onClick={toggleExpand}>
+            <button className="btn btn-xs btn-ghost" onClick={toggleExpand}
+              aria-label={expanded ? "Collapse panel" : "Expand panel"}
+            >
               {expanded ? <i className="fa-solid fa-down-left-and-up-right-to-center"></i> :
                 <i className="fa-solid fa-up-right-and-down-left-from-center"></i>}
             </button>
           </div>
           <div className="absolute top-0 right-0">
-            <button className="btn btn-xs btn-ghost" onClick={closeEditor}>
+            <button className="btn btn-xs btn-ghost" onClick={closeEditor} aria-label="Close editor">
               <i className="fa fa-times"></i>
             </button>
           </div>
-          <h2 className="text-lg text-center font-bold">Editing {data?.label}</h2>
+          <h2 className="text-lg text-center font-bold">{data?.label ? `Editing ${data.label}` : 'Loading...'}</h2>
 
-          <div className={classNames("ml-2", expanded ? "grid grid-cols-2 gap-4" : "")}>
+          <div className="ml-2">
+            {data.inputParams.length === 0 && (
+              <p className="pg-text-muted">No parameters to edit</p>
+            )}
             {data.inputParams.map((inputParam: InputParam) => (
               <React.Fragment key={inputParam.name}>
                 {getInputWidget({

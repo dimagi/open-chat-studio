@@ -8,7 +8,7 @@ import { InputParam } from "./types/nodeInputTypes";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import { NodeProps } from "reactflow";
-import {join} from "./utils";
+import {concatenate} from "./utils";
 import {NodeParams} from "./types/nodeParams";
 import {Node} from "reactflow";
 
@@ -139,7 +139,7 @@ export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodePa
     });
   }
 
-  const length =parseInt(join(params.num_outputs)) || 1;
+  const length =parseInt(concatenate(params.num_outputs)) || 1;
   const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
   return (
     <>

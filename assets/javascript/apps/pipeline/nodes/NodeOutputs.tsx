@@ -1,7 +1,7 @@
 import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
-import {join} from "../utils";
+import {concatenate} from "../utils";
 import WrappedHandle from "./WrappedHandle";
 
 export default function NodeOutputs({nodeId, data}: {nodeId: string, data: NodeData}) {
@@ -19,7 +19,12 @@ export default function NodeOutputs({nodeId, data}: {nodeId: string, data: NodeD
   )
 }
 
-function NodeOutput({nodeId, handleKey, label}: {nodeId: string, handleKey: string, label: string}) {
+interface NodeOutputProps {
+  nodeId: string;
+  handleKey: string;
+  label: string;
+}
+const NodeOutput = React.memo(function NodeOutput({nodeId, handleKey, label}: NodeOutputProps) {
   return <WrappedHandle
     nodeId={nodeId}
     id={handleKey}
@@ -28,16 +33,16 @@ function NodeOutput({nodeId, handleKey, label}: {nodeId: string, handleKey: stri
     classes="py-2 text-right"
     key={handleKey}
     />
-}
+});
 
 
 function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
     return ["Output True", "Output False"];
   } else if (nodeType === "RouterNode") {
-    const numberOfOutputs = Math.max(1, parseInt(join(params.num_outputs)) || 1);
+    const numberOfOutputs = Math.max(1, parseInt(concatenate(params.num_outputs)) || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {
-      if (params.keywords && params.keywords[i]) {
+      if (params.keywords?.[i]) {
         return `Keyword '${params.keywords[i]}'`
       }
       return `Output ${i + 1}`

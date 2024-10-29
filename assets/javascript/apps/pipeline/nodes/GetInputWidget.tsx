@@ -6,7 +6,7 @@ import {
   InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
 import React from "react";
-import {getCachedData, join} from "../utils";
+import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
 
@@ -31,6 +31,10 @@ export const showAdvancedButton = (nodeType: string) => {
 }
 
 export const getNodeInputWidget = (params: InputWidgetParams) => {
+  if (!params.nodeType) {
+    return <></>;
+  }
+
   const allowedInNode = nodeTypeToInputParamsMap[params.nodeType];
   if (allowedInNode && !allowedInNode.includes(params.inputParam.name)) {
     return <></>;
@@ -84,8 +88,8 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             id={id}
             parameterValues={parameterValues}
             inputParam={inputParam}
-            providerId={join(params.llm_provider_id)}
-            model={join(params.llm_model)}
+            providerId={concatenate(params.llm_provider_id)}
+            model={concatenate(params.llm_model)}
             ></LlmWidget>
         </InputField>
       );
@@ -99,8 +103,8 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           <HistoryTypeWidget
             onChange={updateParamValue}
             inputParam={inputParam}
-            historyType={join(params[inputParam.name])}
-            historyName={join(params["history_name"])}
+            historyType={concatenate(params[inputParam.name])}
+            historyName={concatenate(params["history_name"])}
           ></HistoryTypeWidget>
       );
     }
@@ -138,6 +142,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             name={inputParam.name}
             onChange={updateParamValue}
             value={params[inputParam.name]}
+            type="text"
           ></input>
         </InputField>
       );
