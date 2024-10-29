@@ -96,7 +96,7 @@
             To limit the set of particiapants that can chat with this bot, simply add their identifiers in this list.
             When the list is empty, the bot will accessible via its public link.
           {% endblocktranslate %}
-          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist }}}">
+          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist|default:'[]' }}}">
             <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist"></input>
             <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
               {% for identifier in team_participant_identifiers %}
