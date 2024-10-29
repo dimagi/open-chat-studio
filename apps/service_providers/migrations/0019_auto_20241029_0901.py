@@ -27,9 +27,40 @@ def _create_default_llm_provider_models(apps, schema_editor):
         )
     # TODO: Get list of current global models
 
-def _handle_assistant(LlmProviderModel, assistant):
-    breakpoint()
+def _handle_analysis(LlmProviderModel, analysis):
+    try:
+        global_provider_model = LlmProviderModel.objects.get(
+            team__isnull=True,
+            type=analysis.llm_provider.type,
+            name=analysis.llm_model,
+        )
+        analysis.llm_provider_model = global_provider_model
+        analysis.save()
+        return
+    except LlmProviderModel.DoesNotExist:
+        pass
 
+    try:
+        custom_provider_model = LlmProviderModel.objects.get(
+            team=analysis.team,
+            type=analysis.llm_provider.type,
+            name=analysis.llm_model,
+        )
+        analysis.llm_provider_model = custom_provider_model
+        analysis.save()
+        return
+    except LlmProviderModel.DoesNotExist:
+        pass
+
+    new_custom_provider_model = LlmProviderModel.objects.create(
+        team=analysis.team,
+        type=analysis.llm_provider.type,
+        name=analysis.llm_model,
+    )
+    analysis.llm_provider_model = new_custom_provider_model
+    analysis.save()
+
+def _handle_assistant(LlmProviderModel, assistant):
     try:
         global_provider_model = LlmProviderModel.objects.get(
             team__isnull=True,
@@ -101,6 +132,11 @@ def _handle_llm_experiment(LlmProviderModel, experiment):
 def _create_custom_llm_provider_models(apps, schema_editor):
     LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
     Experiment = apps.get_model("experiments", "Experiment")
+    Analysis = apps.get_model("analysis", "Analysis")
+
+    for analysis in Analysis.objects.select_related("llm_provider").all():
+        _handle_analysis(LlmProviderModel, analysis)
+
 
     for experiment in Experiment.objects.select_related("llm_provider").all():
         if experiment.llm_provider is None and experiment.assistant:
@@ -124,7 +160,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('service_providers', '0018_llmprovidermodel'),
-
     ]
 
     operations = [migrations.RunPython(_create_llm_provider_models, reverse_code=_delete_all_llm_provider_models)
