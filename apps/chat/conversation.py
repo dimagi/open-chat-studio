@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 
-from langchain.chains import ConversationChain
+from langchain.chains.conversation.base import ConversationChain
 from langchain.chains.llm import LLMChain
 from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain_anthropic import ChatAnthropic
