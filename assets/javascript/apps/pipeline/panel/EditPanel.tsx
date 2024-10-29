@@ -1,7 +1,7 @@
-import React, {ChangeEvent, useEffect, useState} from "react";
+import React, {ChangeEvent, useState} from "react";
 import useEditorStore from "../stores/editorStore";
 import OverlayPanel from "../components/OverlayPanel";
-import {classNames, getCachedData} from "../utils";
+import {classNames} from "../utils";
 import usePipelineStore from "../stores/pipelineStore";
 import {getInputWidget} from "../nodes/GetInputWidget";
 import {InputParam} from "../types/nodeInputTypes";
@@ -10,41 +10,26 @@ import {InputParam} from "../types/nodeInputTypes";
 export default function EditPanel({nodeId}: { nodeId: string }) {
   const closeEditor = useEditorStore((state) => state.closeEditor);
   const getNode = usePipelineStore((state) => state.getNode);
+  const setNode = usePipelineStore((state) => state.setNode);
+
   const [expanded, setExpanded] = useState(false);
 
   const {id, data} = getNode(nodeId)!;
-  const cachedData = getCachedData();
-  const defaultValues = cachedData.defaultValues;
-  const setNode = usePipelineStore((state) => state.setNode);
-  const getParams = () => {
-    if (data.params) return data.params;
-    return data.inputParams.reduce(
-      (acc: Record<string, any>, param: InputParam) => {
-        acc[param.name] = param.default || defaultValues[param.type];
-        return acc;
-      },
-      {} as Record<string, any>,
-    );
-  }
-  const [params, setParams] = useState(getParams());
-
-  useEffect(() => {
-    setNode(id!, (old) => ({
-      ...old,
-      data: {
-        ...old.data,
-        params: params,
-      },
-    }));
-  }, [params, setNode]);
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, value} = event.target;
-    setParams((prevParams: Record<string, any>) => {
-      return {...prevParams, [name]: value};
-    });
+    setNode(id!, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [name]: value
+        },
+      },
+    }));
   };
 
   const toggleExpand = () => {
@@ -76,7 +61,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
                 {getInputWidget({
                   id: id!,
                   inputParam: inputParam,
-                  params: params,
+                  params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type
                 })}

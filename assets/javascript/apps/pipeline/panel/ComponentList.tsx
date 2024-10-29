@@ -1,7 +1,8 @@
 import React from "react";
 import Component from "./Component";
-import {InputParam, NodeInputTypes} from "../types/nodeInputTypes";
+import {NodeInputTypes} from "../types/nodeInputTypes";
 import OverlayPanel from "../components/OverlayPanel";
+import {getCachedData} from "../utils";
 
 type ComponentListParams = {
   inputTypes: NodeInputTypes[];
@@ -10,11 +11,30 @@ type ComponentListParams = {
 }
 
 export default function ComponentList({ inputTypes, isOpen, setIsOpen }: ComponentListParams) {
+  const cachedData = getCachedData();
+  const defaultValues = cachedData.defaultValues;
+
+  function getDefaultParamValues(inputType: NodeInputTypes): Record<string, any> {
+    return inputType.input_params.reduce(
+      (acc, param) => {
+        acc[param.name] = param.default || defaultValues[param.type];
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+  }
+
   function onDragStart(
     event: React.DragEvent<any>,
-    data: { type: string; label: string; inputParams: InputParam[] }
+    inputType: NodeInputTypes
   ): void {
-    event.dataTransfer.setData("nodedata", JSON.stringify(data));
+    const nodeData = {
+      label: inputType.human_name,
+      inputParams: inputType.input_params,
+      type: inputType.name,
+      params: getDefaultParamValues(inputType),
+    }
+    event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
   }
 
   function togglePanel() {
@@ -28,11 +48,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
         label={inputType.human_name}
         nodeDescription={inputType.node_description}
         onDragStart={(event) =>
-          onDragStart(event, {
-            label: inputType.human_name,
-            inputParams: inputType.input_params,
-            type: inputType.name,
-          })
+          onDragStart(event, inputType)
         }
       />
     );

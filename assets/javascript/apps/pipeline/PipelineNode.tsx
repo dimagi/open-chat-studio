@@ -1,6 +1,6 @@
 import {Handle, Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {classNames, getCachedData} from "./utils";
+import {classNames} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {NodeData} from "./types/nodeParams";
@@ -14,18 +14,6 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-  const cachedData = getCachedData();
-  const defaultValues = cachedData.defaultValues;
-  const defaultParams = data.inputParams.reduce(
-    (acc, param) => {
-      acc[param.name] = param.default || defaultValues[param.type];
-      return acc;
-    },
-    {} as Record<string, any>,
-  );
-  if (!data.params) {
-    data.params = defaultParams;
-  }
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
