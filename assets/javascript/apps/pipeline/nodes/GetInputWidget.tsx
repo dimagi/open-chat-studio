@@ -17,6 +17,27 @@ type InputWidgetParams = {
   params: NodeParams;
   setParams: React.Dispatch<React.SetStateAction<NodeParams>>;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  nodeType: string;
+}
+
+const nodeTypeToInputParamsMap: Record<string, string[]> = {
+  "RouterNode": ["llm_model", "history_type", "prompt"],
+  "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
+  "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
+  "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
+  "LLMResponse": ["llm_model", "history_type"],
+};
+
+export const showAdvancedButton = (nodeType: string) => {
+  return nodeTypeToInputParamsMap[nodeType] !== undefined;
+}
+
+export const getNodeInputWidget = (params: InputWidgetParams) => {
+  const allowedInNode = nodeTypeToInputParamsMap[params.nodeType];
+  if (allowedInNode && !allowedInNode.includes(params.inputParam.name)) {
+    return <></>;
+  }
+  return getInputWidget(params);
 }
 
 /**

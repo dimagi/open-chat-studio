@@ -4,7 +4,7 @@ import {classNames, getCachedData} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {NodeData} from "./types/nodeParams";
-import {getInputWidget} from "./nodes/GetInputWidget";
+import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import {getOutputFactory} from "./nodes/GetOutputFactory";
 
 export type PipelineNode = Node<NodeData>;
@@ -78,11 +78,28 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         <Handle type="target" position={Position.Left} id="input" />
         <div className="ml-2">
           <div className="m-1 text-lg font-bold text-center">{data.label}</div>
-          {data.inputParams.map((inputParam) => (
-            <React.Fragment key={inputParam.name}>
-              {getInputWidget({id : id, inputParam : inputParam, params : params, setParams : setParams, updateParamValue : updateParamValue})}
-            </React.Fragment>
-          ))}
+          <div>
+            {data.inputParams.map((inputParam) => (
+              <React.Fragment key={inputParam.name}>
+                {getNodeInputWidget({
+                  id : id,
+                  inputParam : inputParam,
+                  params : params,
+                  setParams : setParams,
+                  updateParamValue : updateParamValue,
+                  nodeType: data.type,
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+          {showAdvancedButton(data.type) && (
+            <div className="mt-2">
+              <button className="btn btn-sm btn-ghost w-full"
+                onClick={() => editNode()}>
+                Advanced
+              </button>
+            </div>
+          )}
         </div>
         {handleFactory(params)}
       </div>
