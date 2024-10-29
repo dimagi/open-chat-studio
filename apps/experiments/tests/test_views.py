@@ -45,7 +45,11 @@ def test_create_experiment_success(client, team_with_users):
         "name": "some name",
         "description": "Some description",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant. The current date time is {current_datetime}. {participant_data}",
+        "prompt_text": """
+            You are a helpful assistant. The current date time is {current_datetime}.
+            Participant data: {participant_data}.
+            Source material: {source_material}.
+        """,
         "source_material": source_material.id if source_material else "",
         "consent_form": consent_form.id,
         "temperature": 0.7,
@@ -105,16 +109,24 @@ def test_experiment_form_with_assistants(
     ("tools", "source_material", "prompt_str", "expectation"),
     [
         (None, None, "You're an assistant", does_not_raise()),
-        (None, "something", "You're an assistant", does_not_raise()),
+        (None, "something", "You're an assistant", pytest.raises(ValidationError)),
         (None, "something", "Answer questions from this source: {source_material}", does_not_raise()),
         (None, None, "Answer questions from this source: {source_material}", pytest.raises(ValidationError)),
         (None, None, "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
         (None, "something", "Answer questions from this source: {bob}", pytest.raises(ValidationError)),
         (None, "something", "Source material: {source_material} and {source_material}", pytest.raises(ValidationError)),
-        ("ToolA", None, "", pytest.raises(ValidationError)),
-        ("ToolA", None, "{current_datetime}", pytest.raises(ValidationError)),
-        ("ToolA", None, "{participant_data}", pytest.raises(ValidationError)),
-        ("ToolA", None, "{current_datetime} {participant_data}", does_not_raise()),
+        (["one-off-reminder"], None, "", pytest.raises(ValidationError)),
+        (["recurring-reminder"], None, "", pytest.raises(ValidationError)),
+        (["delete-reminder"], None, "", pytest.raises(ValidationError)),
+        (["move-scheduled-message-date"], None, "", pytest.raises(ValidationError)),
+        (["move-scheduled-message-date"], None, "{current_datetime}", pytest.raises(ValidationError)),
+        (["move-scheduled-message-date"], None, "{participant_data}", pytest.raises(ValidationError)),
+        (["update-user-data"], None, "", pytest.raises(ValidationError)),
+        (["one-off-reminder"], None, "{current_datetime}", does_not_raise()),
+        (["recurring-reminder"], None, "{current_datetime}", does_not_raise()),
+        (["delete-reminder"], None, "{participant_data}", does_not_raise()),
+        (["move-scheduled-message-date"], None, "{participant_data},{current_datetime}", does_not_raise()),
+        (["update-user-data"], None, "{participant_data}", does_not_raise()),
     ],
 )
 def test_prompt_variable_validation(tools, source_material, prompt_str, expectation):

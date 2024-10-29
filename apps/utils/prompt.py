@@ -1,5 +1,23 @@
+from django.db import models
 from django.forms import ValidationError
 from langchain_core.prompts import PromptTemplate
+
+from apps.experiments.models import AgentTools
+
+
+class PromptVars(models.TextChoices):
+    PARTICIPANT_DATA = "participant_data"
+    SOURCE_MATERIAL = "source_material"
+    CURRENT_DATETIME = "current_datetime"
+
+
+PROMPT_VARS_REQUIRED_BY_TOOL = {
+    AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],
+    AgentTools.MOVE_SCHEDULED_MESSAGE_DATE: [PromptVars.PARTICIPANT_DATA, PromptVars.CURRENT_DATETIME],
+    AgentTools.ONE_OFF_REMINDER: [PromptVars.CURRENT_DATETIME],
+    AgentTools.RECURRING_REMINDER: [PromptVars.CURRENT_DATETIME],
+    AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
+}
 
 
 def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
@@ -14,10 +32,14 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
 
     if not form_data.get("source_material") and "source_material" in prompt_variables:
         raise ValidationError({prompt_key: "Prompt expects source_material but it is not provided."})
+    elif form_data.get("source_material") and "source_material" not in prompt_variables:
+        raise ValidationError({prompt_key: "source_material variable expected since source material is specified"})
 
-    if form_data.get("tools"):
-        tools_need = {"current_datetime", "participant_data"}
-        missing_vars = tools_need - prompt_variables
+    if tools := form_data.get("tools", []):
+        tools_need = []
+        [tools_need.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)]) for tool_name in tools]
+
+        missing_vars = set(tools_need) - prompt_variables
         if missing_vars:
             raise ValidationError(
                 {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
