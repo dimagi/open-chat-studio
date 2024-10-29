@@ -36,7 +36,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
         params: params,
       },
     }));
-  }, [params]);
+  }, [params, setNode]);
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -77,8 +77,8 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
                   id: id!,
                   inputParam: inputParam,
                   params: params,
-                  setParams: setParams,
                   updateParamValue: updateParamValue,
+                  nodeType: data.type
                 })}
               </React.Fragment>
             ))}

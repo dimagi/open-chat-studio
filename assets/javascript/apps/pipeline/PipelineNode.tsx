@@ -1,5 +1,5 @@
 import {Handle, Node, NodeProps, NodeToolbar, Position} from "reactflow";
-import React, {ChangeEvent, useState} from "react";
+import React, {ChangeEvent} from "react";
 import {classNames, getCachedData} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
@@ -11,11 +11,11 @@ export type PipelineNode = Node<NodeData>;
 
 export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const { id, data, selected } = nodeProps;
-  const cachedData = getCachedData();
-  const defaultValues = cachedData.defaultValues;
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
+  const cachedData = getCachedData();
+  const defaultValues = cachedData.defaultValues;
   const defaultParams = data.inputParams.reduce(
     (acc, param) => {
       acc[param.name] = param.default || defaultValues[param.type];
@@ -23,26 +23,24 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     },
     {} as Record<string, any>,
   );
-  const [params, setParams] = useState(data.params || defaultParams);
+  if (!data.params) {
+    data.params = defaultParams;
+  }
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const { name, value } = event.target;
-    setParams((prevParams) => {
-      const newParams = {
-        ...prevParams,
-        [name]: value,
-      };
-      setNode(id, (old) => ({
-        ...old,
-        data: {
-          ...old.data,
-          params: newParams,
+    setNode(id, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [name]: value,
         },
-      }));
-      return newParams;
-    });
+      },
+    }));
   };
   
   const editNode = () => {
@@ -84,8 +82,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                 {getNodeInputWidget({
                   id : id,
                   inputParam : inputParam,
-                  params : params,
-                  setParams : setParams,
+                  params : data.params,
                   updateParamValue : updateParamValue,
                   nodeType: data.type,
                 })}
@@ -101,7 +98,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             </div>
           )}
         </div>
-        {handleFactory(params)}
+        {handleFactory(data.params)}
       </div>
     </>
   );

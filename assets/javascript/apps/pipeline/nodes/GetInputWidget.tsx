@@ -15,7 +15,6 @@ type InputWidgetParams = {
   id: string;
   inputParam: InputParam;
   params: NodeParams;
-  setParams: React.Dispatch<React.SetStateAction<NodeParams>>;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   nodeType: string;
 }
@@ -49,7 +48,7 @@ export const getNodeInputWidget = (params: InputWidgetParams) => {
  * @param updateParamValue - The function to update the value of the input parameter.
  * @returns The input widget for the specified parameter type.
  */
-export const getInputWidget = ({id, inputParam, params, setParams, updateParamValue}: InputWidgetParams) => {
+export const getInputWidget = ({id, inputParam, params, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
   switch (inputParam.type) {
     case "LlmTemperature":
@@ -86,7 +85,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             id={id}
             parameterValues={parameterValues}
             inputParam={inputParam}
-            setParams={setParams}
             providerId={join(params.llm_provider_id)}
             model={join(params.llm_model)}
             ></LlmWidget>
@@ -118,7 +116,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
                 keywords={
                   Array.isArray(params.keywords) ? params["keywords"] : []
                 }
-                setParams={setParams}
                 id={id}
                 key={`${inputParam.name}-${index}`}
               ></KeywordsWidget>

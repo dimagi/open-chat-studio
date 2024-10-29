@@ -1,14 +1,12 @@
 import React, {
   ChangeEvent,
   ChangeEventHandler,
-  Dispatch, ReactNode,
-  SetStateAction,
+  ReactNode,
   useId,
 } from "react";
 import { InputParam } from "./types/nodeInputTypes";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
-import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
 
 export function TextModal({
@@ -103,30 +101,30 @@ export function ExpandableTextWidget({
 export function KeywordsWidget({
   index,
   keywords,
-  setParams,
   id,
 }: {
   index: number;
   keywords: string[];
-  setParams: Dispatch<SetStateAction<NodeParams>>;
   id: NodeProps["id"];
 }) {
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLInputElement>) => {
-    setParams((prevParams) => {
-      const { name, value } = event.target;
-      const updatedList = [...(prevParams[name] || [])];
+    const { name, value } = event.target;
+    setNode(id, (old) => {
+      const updatedList = [...(old.data.params[name] || [])];
       updatedList[index] = value;
-      const newParams = { ...prevParams, [name]: updatedList };
-      setNode(id, (old) => ({
+      return {
         ...old,
         data: {
           ...old.data,
-          params: newParams,
-        },
-      }));
-      return newParams;
-    });
+            params: {
+              ...old.data.params,
+              [name]: updatedList,
+            },
+         },
+        };
+      }
+    );
   };
   const humanName = `Output ${index + 1} Keyword`;
   return (
@@ -145,14 +143,12 @@ export function LlmWidget({
   id,
   parameterValues,
   inputParam,
-  setParams,
   providerId,
   model,
 }: {
   id: NodeProps["id"];
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  setParams: Dispatch<SetStateAction<NodeParams>>;
   providerId: string;
   model: string;
 }) {
@@ -160,21 +156,17 @@ export function LlmWidget({
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const { value } = event.target;
     const [providerId, model] = value.split('|:|');
-    setParams((prevParams) => {
-      const newParams = {
-        ...prevParams,
-        llm_provider_id: providerId,
-        llm_model: model,
-      };
-      setNode(id, (old) => ({
-        ...old,
-        data: {
-          ...old.data,
-          params: newParams,
+    setNode(id, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          llm_provider_id: providerId,
+          llm_model: model,
         },
-      }));
-      return newParams;
-    });
+      },
+    }));
   };
 
   const makeValue = (providerId: string, model: string) => {
