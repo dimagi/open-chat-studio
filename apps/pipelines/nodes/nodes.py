@@ -19,6 +19,7 @@ from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
+    ExpandableText,
     HistoryName,
     HistoryType,
     Keywords,
@@ -28,7 +29,6 @@ from apps.pipelines.nodes.types import (
     MaxTokenLimit,
     NumOutputs,
     PipelineJinjaTemplate,
-    Prompt,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -101,7 +101,7 @@ class LLMResponseWithPrompt(LLMResponse):
     __node_description__ = "Calls an LLM with a prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: Prompt = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
@@ -233,7 +233,7 @@ class RouterNode(Passthrough, LLMResponseMixin):
     __node_description__ = "Routes the input to one of the linked nodes"
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
-    prompt: Prompt = "You are an extremely helpful router {input}"
+    prompt: ExpandableText = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
@@ -376,13 +376,13 @@ class ExtractStructuredDataNodeMixin:
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
-    data_schema: str
+    data_schema: ExpandableText
 
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: str
+    data_schema: ExpandableText
     key_name: str | None = None
 
     def get_reference_data(self, state) -> dict:

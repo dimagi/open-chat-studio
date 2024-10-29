@@ -151,10 +151,11 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         </InputField>
       );
     }
-    case "Prompt": {
+    case "ExpandableText": {
+      const humanName = inputParam.name.replace(/_/g, " ");
       return (
         <ExpandableTextWidget
-          humanName={"Prompt"}
+          humanName={humanName}
           name={inputParam.name}
           onChange={updateParamValue}
           value={params[inputParam.name] || ""}>
