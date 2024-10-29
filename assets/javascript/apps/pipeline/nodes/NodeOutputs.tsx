@@ -1,7 +1,8 @@
-import {Handle, Position, useUpdateNodeInternals} from "reactflow";
-import React, {useEffect, useRef, useState} from "react";
+import {Position} from "reactflow";
+import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
 import {join} from "../utils";
+import WrappedHandle from "./WrappedHandle";
 
 export default function NodeOutputs({nodeId, data}: {nodeId: string, data: NodeData}) {
   const outputNames = getOutputNames(data.type, data.params);
@@ -19,31 +20,14 @@ export default function NodeOutputs({nodeId, data}: {nodeId: string, data: NodeD
 }
 
 function NodeOutput({nodeId, handleKey, label}: {nodeId: string, handleKey: string, label: string}) {
-  const ref = useRef<any>();
-  const [position, setPosition] = useState(0);
-  const updateNodeInternals = useUpdateNodeInternals()
-
-  useEffect(() => {
-    if (ref.current && ref.current.offsetTop && ref.current.clientHeight) {
-      setPosition(ref.current.offsetTop + ref.current.clientHeight / 2)
-      updateNodeInternals(nodeId)
-    }
-  }, [nodeId, ref, updateNodeInternals])
-
-  useEffect(() => {
-    updateNodeInternals(nodeId)
-  }, [nodeId, position, updateNodeInternals])
-
-  return <div ref={ref} className="py-2 text-right">
-    <Handle
-      id={handleKey}
-      key={handleKey}
-      type="source"
-      position={Position.Right}
-      style={{top: position}}
+  return <WrappedHandle
+    nodeId={nodeId}
+    id={handleKey}
+    label={label}
+    position={Position.Right}
+    classes="py-2 text-right"
+    key={handleKey}
     />
-    <span className="font-semibold font-mono">{label}</span>
-  </div>
 }
 
 
