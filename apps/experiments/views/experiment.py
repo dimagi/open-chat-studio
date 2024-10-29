@@ -779,7 +779,6 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     working_experiment = request.experiment
-    # hack for anonymous user/teams
     session = request.experiment_session
 
     try:
@@ -834,7 +833,6 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 @verify_session_access_cookie
 def get_message_response(request, team_slug: str, experiment_id: str, session_id: str, task_id: str):
     experiment = request.experiment
-    # hack for anonymous user/teams
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
     progress = Progress(AsyncResult(task_id)).get_info()
