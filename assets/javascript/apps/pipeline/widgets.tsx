@@ -46,9 +46,6 @@ export function TextModal({
             onChange={onChange}
             value={value}
           ></textarea>
-          <form method="dialog" className="modal-backdrop">
-            <button className="pg-button-primary mt-2">Save</button>
-          </form>
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">
