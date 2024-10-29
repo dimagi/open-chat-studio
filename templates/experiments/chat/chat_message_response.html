@@ -2,7 +2,7 @@
 {% if not skip_render %}
   <div class="flex"
        {% if not message_details.complete %}
-         hx-get="{% url 'experiments:get_message_response' team.slug experiment.id session.id task_id %}"
+         hx-get="{% url 'experiments:get_message_response' team.slug experiment.public_id session.external_id task_id %}"
          hx-trigger="load delay:1s"
          hx-swap="outerHTML"
        {% endif %}

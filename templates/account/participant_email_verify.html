@@ -1,0 +1,11 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+{% load account %}
+{% block content %}
+    <h1 class="pg-title">{% translate "Check your inbox" %}</h1>
+    <h2 class="pg-subtitle">
+        {% blocktranslate %}
+            We've sent you an e-mail with a link that you can follow to chat to this bot.
+        {% endblocktranslate %}
+    </h2>
+{% endblock %}

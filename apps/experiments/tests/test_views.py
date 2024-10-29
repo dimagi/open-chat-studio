@@ -2,10 +2,12 @@ from contextlib import nullcontext as does_not_raise
 from io import BytesIO
 from unittest import mock
 
+import jwt
 import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.test import RequestFactory
+from django.http import HttpResponse
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
 from waffle.testutils import override_flag
 
@@ -19,7 +21,12 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import ExperimentForm, ExperimentTableView, validate_prompt_variables
+from apps.experiments.views.experiment import (
+    ExperimentForm,
+    ExperimentTableView,
+    _verify_user_or_start_session,
+    validate_prompt_variables,
+)
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -157,32 +164,6 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     assert Participant.objects.filter(team=experiment.team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=experiment.team).count() == 1
     assert session.participant.identifier == identifier
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
-def test_start_session_public_with_emtpy_identifier(_trigger_mock, is_user, client):
-    """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
-    the case where it's an external user, use a UUID as the identifier"""
-    experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=False)
-    assert Participant.objects.filter(team=experiment.team).count() == 0
-
-    user = None
-    if is_user:
-        user = experiment.team.members.first()
-        client.login(username=user.username, password="password")
-
-    post_data = {"identifier": "", "consent_agreement": True, "experiment_id": str(experiment.id), "participant_id": ""}
-
-    url = reverse(
-        "experiments:start_session_public",
-        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
-    )
-    client.post(url, data=post_data)
-    assert Participant.objects.filter(team=experiment.team).count() == 1
-    if is_user:
-        assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
 
 
 @pytest.mark.django_db()
@@ -365,8 +346,8 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
     url_kwargs = {
         "team_slug": experiment.team.slug,
-        "experiment_id": experiment.id,
-        "session_id": session.id,
+        "experiment_id": experiment.public_id,
+        "session_id": session.external_id,
         "version_number": version,
     }
     url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
@@ -425,3 +406,149 @@ def test_start_authed_web_session_with_version(version_number, client):
     assert working_experiment.sessions.count() == 1
     expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
     assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
+
+
+@pytest.mark.django_db()
+class TestPublicSessions:
+    @pytest.mark.parametrize("is_user", [False, True])
+    @mock.patch("apps.chat.channels.enqueue_static_triggers")
+    def test_start_session_public_with_emtpy_identifier(self, _trigger_mock, is_user, client):
+        """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
+        the case where it's an external user, use a UUID as the identifier"""
+        experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=False)
+        assert Participant.objects.filter(team=experiment.team).count() == 0
+
+        user = None
+        if is_user:
+            user = experiment.team.members.first()
+            client.login(username=user.username, password="password")
+
+        post_data = {
+            "identifier": "",
+            "consent_agreement": True,
+            "experiment_id": str(experiment.id),
+            "participant_id": "",
+        }
+
+        url = reverse(
+            "experiments:start_session_public",
+            kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+        )
+        client.post(url, data=post_data)
+        assert Participant.objects.filter(team=experiment.team).count() == 1
+        if is_user:
+            assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
+
+    @pytest.mark.parametrize(("capture_identifier", "expect_user_verified"), [(True, True), (False, False)])
+    @mock.patch("apps.experiments.views.experiment._verify_user_or_start_session")
+    def test_user_is_verified_if_identifier_is_captured(
+        self, verify_user, capture_identifier, expect_user_verified, client
+    ):
+        verify_user.return_value = HttpResponse()
+        experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=capture_identifier)
+        post_data = {
+            "identifier": "someone@gmail.com",
+            "consent_agreement": True,
+            "experiment_id": str(experiment.id),
+            "participant_id": "",
+        }
+
+        url = reverse(
+            "experiments:start_session_public",
+            kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+        )
+        client.post(url, data=post_data)
+        if expect_user_verified:
+            verify_user.assert_called()
+        else:
+            verify_user.assert_not_called()
+
+    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
+    def test_do_not_verify_authenticated_users(self, record_consent_and_redirect_mock, request):
+        experiment_session = ExperimentSessionFactory()
+        request.user = experiment_session.experiment.owner
+
+        _verify_user_or_start_session("something", request, experiment_session)
+        record_consent_and_redirect_mock.assert_called()
+
+    @pytest.mark.parametrize(("participant_match"), [True, False])
+    @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
+    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
+    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data")
+    def test_user_has_session_cookie(
+        self,
+        get_chat_session_access_cookie_data,
+        record_consent_and_redirect_mock,
+        send_chat_link_email,
+        participant_match,
+        request,
+    ):
+        """
+        When a signed-out user wants to chat to a bot and has a session cookie from a prior chat, the following
+        scenarios are expected:
+        - If the specified email matche that of the participant in the session, the user's email should not be verified
+            again.
+        - If the specified email do not match that of the participant in the session, it should be verified
+        """
+        request_user = mock.Mock()
+        request_user.is_authenticated = False
+        request.user = request_user
+        experiment_session = ExperimentSessionFactory()
+        participant = experiment_session.participant
+        get_chat_session_access_cookie_data.return_value = {
+            "participant_id": participant.id if participant_match else participant.id + 1
+        }
+        _verify_user_or_start_session(identifier=participant.identifier, request=request, session=experiment_session)
+
+        if participant_match:
+            record_consent_and_redirect_mock.assert_called()
+            send_chat_link_email.assert_not_called()
+        else:
+            record_consent_and_redirect_mock.assert_not_called()
+            send_chat_link_email.assert_called()
+
+    @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
+    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data", return_value=None)
+    def test_user_does_not_have_session_cookie(self, send_chat_link_email, request):
+        """
+        When a signed-out user wants to chat to a bot and does not have a session cookie from a prior chat, we should
+        verify the specified email first.
+        """
+        request_user = mock.Mock()
+        request_user.is_authenticated = False
+        request.user = request_user
+        experiment_session = ExperimentSessionFactory()
+        _verify_user_or_start_session(identifier="someone@gmail.com", request=request, session=experiment_session)
+        send_chat_link_email.assert_called()
+
+
+@pytest.mark.django_db()
+class TestVerifyPublicChatToken:
+    @override_settings(SECRET_KEY="test_key")
+    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
+    def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
+        record_consent_and_redirect.return_value = HttpResponse()
+        session = ExperimentSessionFactory(experiment__pre_survey=None)
+        experiment = session.experiment
+        token = jwt.encode(
+            {
+                "session": str(session.external_id),
+            },
+            "test_key",
+            algorithm="HS256",
+        )
+        client.get(
+            reverse("experiments:verify_public_chat_token", args=(session.team.slug, experiment.public_id, token))
+        )
+        record_consent_and_redirect.assert_called()
+
+    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
+    def test_invalid_token_redirects_to_consent_form(self, record_consent_and_redirect, experiment, client):
+        team_slug = experiment.team.slug
+        token = "blah"
+        expected_redirect_url = reverse("experiments:start_session_public", args=(team_slug, experiment.public_id))
+        response = client.get(
+            reverse("experiments:verify_public_chat_token", args=(team_slug, experiment.public_id, token))
+        )
+        assert response.url == expected_redirect_url
+        record_consent_and_redirect.assert_not_called()

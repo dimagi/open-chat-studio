@@ -22,7 +22,7 @@ def experiment_session_view(allowed_states=None):
         """
 
         @wraps(view_func)
-        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str):
+        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str, **kwargs):
             request.experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
             request.experiment_session = get_object_or_404(
                 ExperimentSession,
@@ -33,7 +33,7 @@ def experiment_session_view(allowed_states=None):
 
             if allowed_states and request.experiment_session.status not in allowed_states:
                 return _redirect_for_state(request, team_slug)
-            return view_func(request, team_slug, experiment_id, session_id)
+            return view_func(request, team_slug, experiment_id, session_id, **kwargs)
 
         return decorated_view
 
@@ -55,6 +55,17 @@ def set_session_access_cookie(response, experiment_session):
     return response
 
 
+def get_chat_session_access_cookie_data(request, fail_silently=False):
+    try:
+        return signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(
+            request.COOKIES[CHAT_SESSION_ACCESS_COOKIE], max_age=MAX_AGE
+        )
+    except Exception as e:
+        if fail_silently:
+            return
+        raise e
+
+
 def verify_session_access_cookie(view):
     """View decorator for views that provide public access to an experiment session.
     This decorator must be applied before the `experiment_session_view` decorator:
@@ -74,9 +85,7 @@ def verify_session_access_cookie(view):
                 return view(request, *args, **kwargs)
 
         try:
-            access_value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).unsign_object(
-                request.COOKIES[CHAT_SESSION_ACCESS_COOKIE], max_age=MAX_AGE
-            )
+            access_value = get_chat_session_access_cookie_data(request)
         except (signing.BadSignature, KeyError):
             raise Http404()
 

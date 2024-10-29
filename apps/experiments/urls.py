@@ -82,12 +82,12 @@ urlpatterns = [
         name="experiment_chat_session",
     ),
     path(
-        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/message/",
+        "e/<str:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
         views.experiment_session_message,
         name="experiment_session_message",
     ),
     path(
-        "e/<int:experiment_id>/session/<int:session_id>/get_response/<slug:task_id>/",
+        "e/<str:experiment_id>/session/<str:session_id>/get_response/<slug:task_id>/",
         views.get_message_response,
         name="get_message_response",
     ),
@@ -162,6 +162,11 @@ urlpatterns = [
         name="experiment_route_delete",
     ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
+    path(
+        "e/<slug:experiment_id>/verify_token/<str:token>/",
+        views.verify_public_chat_token,
+        name="verify_public_chat_token",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

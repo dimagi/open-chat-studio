@@ -11,7 +11,7 @@
 
 <form class="w-full p-2 bg-gray-300"
       autocomplete="off"
-      hx-post="{% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.id version_number=session.get_experiment_version_number session_id=session.id %}"
+      hx-post="{% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number %}"
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
       {% if assistant %}enctype="multipart/form-data"{% endif %}
