@@ -131,9 +131,9 @@ export function KeywordsWidget({
     <InputField label={humanName}>
       <input
         className="input input-bordered w-full"
-        name={humanName}
+        name="keywords"
         onChange={updateParamValue}
-        value={keywords ? keywords[index] : ""}
+        value={keywords ? keywords[index] || "" : ""}
       ></input>
     </InputField>
   );
