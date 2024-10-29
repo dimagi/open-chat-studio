@@ -19,7 +19,7 @@
 {% endblock pre_form %}
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "instructions" "include_file_info" "llm_provider" "llm_model" "temperature" "top_p" "tools" "builtin_tools" %}
+  {% render_form_fields form "name" "instructions" "include_file_info" "llm_provider" "llm_provider_model" "temperature" "top_p" "tools" "builtin_tools" %}
   {% if not object.id %}
     <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
@@ -53,11 +53,11 @@
       Alpine.data('assistant', () => ({
         builtinTools: [],
         llmProvider: null,
-        llm_model: '{{object.llm_model|default:'null'}}',
-        llm_model_options: [],
+        llm_provider_model: '{{object.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model_options: [],
         init() {
           this.$watch('llmProvider', () => {
-            this.llm_model_options = llmModelOptions[this.llmProvider].models;
+            this.llm_provider_model_options = llmModelOptions[this.llmProvider].models;
           })
         }
       }));

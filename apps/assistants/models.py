@@ -39,6 +39,14 @@ class OpenAiAssistant(BaseTeamModel):
         blank=True,
         verbose_name="LLM Provider",
     )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
     llm_model = models.CharField(
         max_length=255,
         help_text="The LLM model to use.",

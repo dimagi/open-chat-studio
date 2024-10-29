@@ -160,7 +160,7 @@ class LlmProviderModel(BaseTeamModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=("team", "name", "max_token_limit"), name="unique_team_name_max_token_limit"
+                fields=("team", "name", "type", "max_token_limit"), name="unique_team_name_type_max_token_limit"
             ),
         ]
 

@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
                 ('team', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='teams.team', verbose_name='Team')),
             ],
             options={
-                'constraints': [models.UniqueConstraint(fields=('team', 'name', 'max_token_limit'), name='unique_team_name_max_token_limit')],
+                'constraints': [models.UniqueConstraint(fields=('team', 'name', 'type', 'max_token_limit'), name='unique_team_name_type_max_token_limit')],
             },
             bases=(models.Model, apps.utils.models.VersioningMixin),
         ),
