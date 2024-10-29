@@ -8,6 +8,9 @@ import { InputParam } from "./types/nodeInputTypes";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import { NodeProps } from "reactflow";
+import {join} from "./utils";
+import {NodeParams} from "./types/nodeParams";
+import {Node} from "reactflow";
 
 export function TextModal({
   modalId,
@@ -98,54 +101,97 @@ export function ExpandableTextWidget({
   );
 }
 
-export function KeywordsWidget({
-  index,
-  keywords,
-  id,
-}: {
-  index: number;
-  keywords: string[];
-  id: NodeProps["id"];
-}) {
+export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodeParams}) {
   const setNode = usePipelineStore((state) => state.setNode);
-  const updateParamValue = (event: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = event.target;
-    setNode(id, (old) => {
-      const updatedList = [...(old.data.params[name] || [])];
+
+  function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
+    return {
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          ["keywords"]: keywords,
+          ["num_outputs"]: numOutputs,
+        },
+      },
+    };
+  }
+
+  const addKeyword = () => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || []), ""];
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
+    });
+  }
+
+  const updateKeyword = (index: number, value: string) => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList[index] = value;
-      return {
-        ...old,
-        data: {
-          ...old.data,
-            params: {
-              ...old.data.params,
-              [name]: updatedList,
-            },
-         },
-        };
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs);
       }
     );
   };
-  const humanName = `Output ${index + 1} Keyword`;
+
+  const deleteKeyword = (index: number) => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || [])];
+      updatedList.splice(index, 1);
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
+    });
+  }
+
+  const length =parseInt(join(params.num_outputs)) || 1;
+  const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
   return (
-    <InputField label={humanName}>
-      <input
-        className="input input-bordered w-full"
-        name="keywords"
-        onChange={updateParamValue}
-        value={keywords ? keywords[index] || "" : ""}
-      ></input>
-    </InputField>
+    <>
+      <div className="form-control w-full capitalize">
+        <label className="label font-bold">
+          Outputs
+          <div className="tooltip tooltip-left" data-tip="Add Keyword">
+            <button className="btn btn-xs btn-ghost" onClick={() => addKeyword()}>
+              <i className="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        </label>
+      </div>
+      <div className="ml-2">
+        {Array.from({length: length}, (_, index) => {
+          const value = keywords ? keywords[index] || "" : "";
+          const label = (
+            <>{`Output Keyword ${index + 1}`}
+              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index}`}>
+                <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
+                  <i className="fa-solid fa-minus"></i>
+                </button>
+              </div>
+            </>
+          )
+          return (
+            <div className="form-control w-full capitalize">
+              <label className="label">{label}</label>
+              <input
+                className="input input-bordered w-full"
+                name="keywords"
+                onChange={(event) => updateKeyword(index, event.target.value)}
+                value={value}
+              ></input>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
 export function LlmWidget({
-  id,
-  parameterValues,
-  inputParam,
-  providerId,
-  model,
-}: {
+                            id,
+                            parameterValues,
+                            inputParam,
+                            providerId,
+                            model,
+                          }: {
   id: NodeProps["id"];
   parameterValues: NodeParameterValues;
   inputParam: InputParam;

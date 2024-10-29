@@ -1,10 +1,9 @@
 import {
   HistoryTypeWidget,
-  KeywordsWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
   ExpandableTextWidget,
-  InputField, LlmWidget,
+  InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
 import React from "react";
 import {getCachedData, join} from "../utils";
@@ -91,38 +90,9 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
         </InputField>
       );
     case "NumOutputs":
-      return (
-        <InputField label="Number of Outputs">
-          <input
-            className="input input-bordered w-full"
-            name={inputParam.name}
-            onChange={updateParamValue}
-            value={params[inputParam.name]}
-            type="number"
-            step="1"
-            min="1"
-            max="10"
-          ></input>
-        </InputField>
-      );
+      return <></>;
     case "Keywords": {
-      const length =parseInt(join(params.num_outputs)) || 1;
-      return (
-        <>
-          {Array.from({length: length}, (_, index) => {
-            return (
-              <KeywordsWidget
-                index={index}
-                keywords={
-                  Array.isArray(params.keywords) ? params["keywords"] : []
-                }
-                id={id}
-                key={`${inputParam.name}-${index}`}
-              ></KeywordsWidget>
-            );
-          })}
-        </>
-      );
+      return <KeywordsWidget nodeId={id} params={params}/>
     }
     case "HistoryType": {
       return (

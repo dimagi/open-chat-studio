@@ -38,7 +38,7 @@ function NodeOutput({nodeId, handleKey, label}: {nodeId: string, handleKey: stri
       position={Position.Right}
       style={{top: position}}
     />
-    <span className="text-semibold font-mono">{label}</span>
+    <span className="font-semibold font-mono">{label}</span>
   </div>
 }
 

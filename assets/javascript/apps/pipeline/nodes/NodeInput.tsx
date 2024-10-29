@@ -19,7 +19,7 @@ export default function NodeInput({nodeId}: {nodeId: string}) {
         position={Position.Left} id="input"
         style={{top: position}}
       />
-      <span className="text-semibold font-mono">Input</span>
+      <span className="font-semibold font-mono">Input</span>
     </div>
   )
 }
