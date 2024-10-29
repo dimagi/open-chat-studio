@@ -1,15 +1,13 @@
 import {
   HistoryTypeWidget,
   KeywordsWidget,
-  LlmModelWidget,
-  LlmProviderIdWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
   ExpandableTextWidget,
-  InputField,
+  InputField, LlmWidget,
 } from "../widgets";
 import React from "react";
-import {getCachedData} from "../utils";
+import {getCachedData, join} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
 
@@ -46,18 +44,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
           ></input>
         </InputField>
       );
-    case "LlmProviderId":
-      return (
-        <InputField label="LLM Provider">
-          <LlmProviderIdWidget
-            parameterValues={parameterValues}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-            setParams={setParams}
-            id={id}
-          />
-        </InputField>
-      );
     case "SourceMaterialId":
       return (
         <InputField label="Source Material">
@@ -69,20 +55,20 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
           />
         </InputField>
       );
+    case "LlmProviderId":
+    //   this is handled in the LlmModel widget
+      return <></>;
     case "LlmModel":
       return (
-        <InputField label="LLM Model">
-          <LlmModelWidget
+        <InputField label="LLM">
+          <LlmWidget
+            id={id}
             parameterValues={parameterValues}
             inputParam={inputParam}
-            value={params[inputParam.name]}
-            onChange={updateParamValue}
-            provider={
-              Array.isArray(params.llm_provider_id)
-                ? params.llm_provider_id.join("")
-                : params.llm_provider_id
-            }
-          />
+            setParams={setParams}
+            providerId={join(params.llm_provider_id)}
+            model={join(params.llm_model)}
+            ></LlmWidget>
         </InputField>
       );
     case "NumOutputs":
@@ -101,12 +87,7 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
         </InputField>
       );
     case "Keywords": {
-      const length =
-        parseInt(
-          Array.isArray(params.num_outputs)
-            ? params.num_outputs.join("")
-            : params.num_outputs,
-        ) || 1;
+      const length =parseInt(join(params.num_outputs)) || 1;
       return (
         <>
           {Array.from({length: length}, (_, index) => {

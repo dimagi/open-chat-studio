@@ -141,27 +141,30 @@ export function KeywordsWidget({
   );
 }
 
-export function LlmProviderIdWidget({
-                                      parameterValues,
-                                      inputParam,
-                                      value,
-                                      setParams,
-                                      id,
-                                    }: {
+export function LlmWidget({
+  id,
+  parameterValues,
+  inputParam,
+  setParams,
+  providerId,
+  model,
+}: {
+  id: NodeProps["id"];
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  value: string | string[];
   setParams: Dispatch<SetStateAction<NodeParams>>;
-  id: NodeProps["id"];
+  providerId: string;
+  model: string;
 }) {
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const { value } = event.target;
+    const [providerId, model] = value.split('|:|');
     setParams((prevParams) => {
       const newParams = {
         ...prevParams,
-        llm_provider_id: value,
-        llm_model: "",
+        llm_provider_id: providerId,
+        llm_model: model,
       };
       setNode(id, (old) => ({
         ...old,
@@ -173,54 +176,28 @@ export function LlmProviderIdWidget({
       return newParams;
     });
   };
+
+  const makeValue = (providerId: string, model: string) => {
+    return providerId + '|:|' + model;
+  }
   return (
     <select
       className="select select-bordered w-full"
       name={inputParam.name}
       onChange={updateParamValue}
-      value={value}
-    >
-      <option value="" disabled>
-        Select a provider
-      </option>
-      {parameterValues.LlmProviderId.map((opt) => (
-        <option key={opt.id} value={opt.id}>
-          {opt.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-export function LlmModelWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-  provider,
-}: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-  provider: string;
-}) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
+      value={makeValue(providerId, model)}
     >
       <option value="" disabled>
         Select a model
       </option>
-      {parameterValues.LlmModel[provider] &&
-        parameterValues.LlmModel[provider].map((model) => (
-          <option key={model} value={model}>
-            {model}
+      {parameterValues.LlmProviderId.map((provider) => (
+        parameterValues.LlmModel[provider.id] &&
+        parameterValues.LlmModel[provider.id].map((model) => (
+          <option key={provider.id + model} value={makeValue(provider.id, model)}>
+            {provider.name}: {model}
           </option>
-        ))}
+        ))
+      ))}
     </select>
   );
 }

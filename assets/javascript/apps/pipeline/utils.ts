@@ -25,3 +25,7 @@ export const getCachedData: () => typeof localCache = () => {
   }
   return localCache;
 };
+
+export function join(value: string | string[]) {
+  return Array.isArray(value) ? value.join("") : value;
+}
