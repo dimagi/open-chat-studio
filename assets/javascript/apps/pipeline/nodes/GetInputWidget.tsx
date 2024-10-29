@@ -108,29 +108,16 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
     }
     case "HistoryType": {
       return (
-        <InputField label="History Type">
           <HistoryTypeWidget
             onChange={updateParamValue}
             inputParam={inputParam}
-            value={params[inputParam.name]}
+            historyType={join(params[inputParam.name])}
+            historyName={join(params["history_name"])}
           ></HistoryTypeWidget>
-        </InputField>
       );
     }
     case "HistoryName": {
-      if (params["history_type"] !== "named") {
-        return <></>;
-      }
-      return (
-        <InputField label="History Name">
-          <input
-            className="input input-bordered w-full"
-            name={inputParam.name}
-            onChange={updateParamValue}
-            value={params[inputParam.name]}
-          ></input>
-        </InputField>
-      );
+      return <></>;
     }
     case "MaxTokenLimit": {
       return (

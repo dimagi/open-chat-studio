@@ -232,33 +232,50 @@ export function SourceMaterialIdWidget({
 
 export function HistoryTypeWidget({
   inputParam,
-  value,
+  historyType,
+  historyName,
   onChange,
 }: {
   inputParam: InputParam;
-  value: string | string[];
+  historyType: string;
+  historyName: string;
   onChange: ChangeEventHandler;
 }) {
   return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="none">No History</option>
-      <option value="node">Node</option>
-      <option value="global">Global</option>
-      <option value="named">Named</option>
-    </select>
-  );
+    <div className="flex join">
+      <InputField label="History">
+        <select
+          className="select select-bordered join-item"
+          name={inputParam.name}
+          onChange={onChange}
+          value={historyType}
+        >
+          <option value="none">No History</option>
+          <option value="node">Node</option>
+          <option value="global">Global</option>
+          <option value="named">Named</option>
+        </select>
+      </InputField>
+      {historyType == "named" && (
+        <InputField label="History Name">
+          <input
+            className="input input-bordered join-item"
+            name="history_name"
+            onChange={onChange}
+            value={historyName || ""}
+          ></input>
+        </InputField>
+      )}
+    </div>
+)
+  ;
 }
 
 export function MaxTokenLimitWidget({
-  inputParam,
-  value,
-  onChange,
-}: {
+                                      inputParam,
+                                      value,
+                                      onChange,
+                                    }: {
   inputParam: InputParam;
   value: string | string[];
   onChange: ChangeEventHandler;
