@@ -36,10 +36,11 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
         raise ValidationError({prompt_key: "source_material variable expected since source material is specified"})
 
     if tools := form_data.get("tools", []):
-        tools_need = []
-        [tools_need.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)]) for tool_name in tools]
+        required_prompt_variables = []
+        for tool_name in tools:
+            required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
 
-        missing_vars = set(tools_need) - prompt_variables
+        missing_vars = set(required_prompt_variables) - prompt_variables
         if missing_vars:
             raise ValidationError(
                 {prompt_key: f"Tools require {', '.join(missing_vars)}. Please include them in your prompt."}
