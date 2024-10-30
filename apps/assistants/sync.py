@@ -195,7 +195,29 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if set(ocs_file_ids) != set(openai_file_ids):
             return False
+
+    if not check_tool_enabled(
+        "code_interpreter", tool_resources, client, assistant.assistant_id
+    ) or not check_tool_enabled("file_search", tool_resources, client, assistant.assistant_id):
+        return False
+
     return True
+
+
+def check_tool_enabled(tool_type: str, tool_resources: list, client, assistant_id: str):
+    """Check if a specific tool type is enabled in OpenAI."""
+    if tool_type in tool_resources:
+        return True
+    try:
+        if tool_type == "code_interpreter":
+            tool_resources_data = client.beta.assistants.retrieve(assistant_id).tool_resources
+        elif tool_type == "file_search":
+            tool_resources_data = client.beta.vector_stores.files
+        else:
+            return False
+        return bool(tool_resources_data)
+    except Exception:
+        return False
 
 
 @wrap_openai_errors
