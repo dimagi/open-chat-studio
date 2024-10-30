@@ -191,37 +191,52 @@ export function LlmProviderIdWidget({
   );
 }
 
-export function LlmModelWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-  provider,
+export function LlmProviderModelWidget({
+    parameterValues,
+    inputParam,
+    value,
+    onChange,
+    providerId,
 }: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-  provider: string;
+    parameterValues: NodeParameterValues;
+    inputParam: InputParam;
+    value: string | string[];
+    onChange: ChangeEventHandler;
+    providerId: string;
 }) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="" disabled>
-        Select a model
-      </option>
-      {parameterValues.LlmModel[provider] &&
-        parameterValues.LlmModel[provider].map((model) => (
-          <option key={model} value={model}>
-            {model}
-          </option>
-        ))}
-    </select>
-  );
+
+    const providerTypeById = parameterValues.LlmProviderId.reduce((acc, prov) => {
+        acc[prov.id] = prov.type;
+        return acc;
+    }, {});
+  const providerType = providerTypeById[providerId];
+
+  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+      if (!acc[provModel.type]) {
+          acc[provModel.type] = [];
+      }
+      acc[provModel.type].push(provModel);
+      return acc;
+  }, {});
+
+    return (
+        <select
+            className="select select-bordered w-full"
+            name={inputParam.name}
+            onChange={onChange}
+            value={value}
+        >
+            <option value="" disabled>
+                Select a provider model
+            </option>
+            { providerId &&
+                providerModelsByType[providerType].map((model) => (
+                    <option key={model.id} value={model.id}>
+                        {model.name}
+                    </option>
+                ))}
+        </select>
+    );
 }
 
 export function SourceMaterialIdWidget({

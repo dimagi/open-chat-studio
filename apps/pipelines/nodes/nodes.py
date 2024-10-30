@@ -22,8 +22,8 @@ from apps.pipelines.nodes.types import (
     HistoryName,
     HistoryType,
     Keywords,
-    LlmModel,
     LlmProviderId,
+    LlmProviderModelId,
     LlmTemperature,
     MaxTokenLimit,
     NumOutputs,
@@ -33,6 +33,7 @@ from apps.pipelines.nodes.types import (
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.time import pretty_date
 
 
@@ -65,7 +66,7 @@ class RenderTemplate(PipelineNode):
 
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
-    llm_model: LlmModel
+    llm_provider_model_id: LlmProviderModelId
     llm_temperature: LlmTemperature = 1.0
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
@@ -82,8 +83,14 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    def get_llm_provider_model(self):
+        try:
+            return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
+        except LlmProviderModel.DoesNotExist:
+            raise PipelineNodeBuildError(f"LLM provider model with id {self.llm_provider_model_id} does not exist")
+
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
+        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
 
 
 class LLMResponse(PipelineNode, LLMResponseMixin):
@@ -231,8 +238,6 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
-    llm_provider_id: LlmProviderId
-    llm_model: LlmModel
     prompt: Prompt = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
@@ -328,7 +333,7 @@ class ExtractStructuredDataNodeMixin:
         self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
-            encoding = tiktoken.encoding_for_model(self.llm_model)
+            encoding = tiktoken.encoding_for_model(self.get_llm_provider_model().name)
             encoding_name = encoding.name
         except KeyError:
             # The same encoder we use for llm.get_num_tokens_from_messages

@@ -2,8 +2,8 @@ import {
   HistoryNameWidget,
   HistoryTypeWidget,
   KeywordsWidget,
-  LlmModelWidget,
   LlmProviderIdWidget,
+  LlmProviderModelWidget,
   MaxTokenLimitWidget,
   SourceMaterialIdWidget,
   TextWidget
@@ -32,6 +32,14 @@ type InputWidgetParams = {
  */
 export const getInputWidget = ({id, inputParam, params, setParams, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
+  if (inputParam.name == "llm_model"){
+    /*
+       This is here as we migrated llm_model to llm_provider_model_id, in October 2024.
+       During the migration, we kept the data in llm_model as a safeguard. This check can safely be deleted once a second migration to delete all instances of llm_model has been run.
+       TODO: Remove this check once there are no instances of llm_model in the node definitions.
+     */
+    return
+  }
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
@@ -60,6 +68,23 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
           />
         </>
       );
+      case "LlmProviderModelId":
+          return (
+              <>
+                  <div className="m-1 font-medium text-center">LLM Model</div>
+                  <LlmProviderModelWidget
+                      parameterValues={parameterValues}
+                      inputParam={inputParam}
+                      value={params[inputParam.name]}
+                      onChange={updateParamValue}
+                      providerId={
+                          Array.isArray(params.llm_provider_id)
+                              ? params.llm_provider_id.join("")
+                              : params.llm_provider_id
+                      }
+                  />
+              </>
+          );
     case "SourceMaterialId":
       return (
         <>
@@ -69,23 +94,6 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
-          />
-        </>
-      );
-    case "LlmModel":
-      return (
-        <>
-          <div className="m-1 font-medium text-center">LLM Model</div>
-          <LlmModelWidget
-            parameterValues={parameterValues}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-            onChange={updateParamValue}
-            provider={
-              Array.isArray(params.llm_provider_id)
-                ? params.llm_provider_id.join("")
-                : params.llm_provider_id
-            }
           />
         </>
       );
