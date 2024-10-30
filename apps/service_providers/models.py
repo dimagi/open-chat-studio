@@ -294,17 +294,27 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
 
 class AuthProviderType(models.TextChoices):
+    basic = "basic", _("Basic")
+    api_key = "api_key", _("API Key")
     commcare = "commcare", _("CommCare")
 
     @property
     def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
         match self:
+            case AuthProviderType.basic:
+                return forms.BasicAuthConfigForm
+            case AuthProviderType.api_key:
+                return forms.ApiKeyAuthConfigForm
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
         match self:
+            case AuthProviderType.basic:
+                return auth_service.BasicAuthService(**config)
+            case AuthProviderType.api_key:
+                return auth_service.ApiKeyAuthService(**config)
             case AuthProviderType.commcare:
                 return auth_service.CommCareAuthService(**config)
         raise Exception(f"No messaging service configured for {self}")

@@ -1,6 +1,16 @@
 import httpx
 
 
+class ApiKeyAuth(httpx.Auth):
+    def __init__(self, key: str, value: str):
+        self.key = key
+        self.value = value
+
+    def auth_flow(self, request):
+        request.headers[self.key] = self.value
+        yield request
+
+
 class CommCareAuth(httpx.Auth):
     def __init__(self, username: str, api_key: str):
         self.username = username
