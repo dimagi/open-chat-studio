@@ -128,19 +128,9 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
-        try:
-            is_synced = is_synced_with_openai(self.object)
-        except OpenAiSyncError:
-            is_synced = False
-        if not is_synced:
-            context = self.get_context_data(sync_confirmation=True)
+        if are_files_in_sync_with_openai(self.object):
+            context = self.get_context_data(files_out_of_sync=True)
             return self.render_to_response(context)
-        if not are_files_in_sync_with_openai(self.object):
-            messages.warning(
-                request,
-                "Your assistant does not contain the same files as in OpenAI. \
-                Please upload the files to OCS before editing.",
-            )
         return super().get(request, *args, **kwargs)
 
     @transaction.atomic()
@@ -165,7 +155,11 @@ def check_sync_status(request, team_slug, pk):
         is_synced = is_synced_with_openai(assistant)
     except OpenAiSyncError:
         is_synced = False
-    return render(request, "assistants/sync_status.html", {"is_synced": is_synced})
+    context = {
+        "is_synced": is_synced,
+        "object": assistant,
+    }
+    return render(request, "assistants/sync_status.html", context)
 
 
 class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
