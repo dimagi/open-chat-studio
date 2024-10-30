@@ -9,7 +9,7 @@ from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
+from apps.files.views import BaseAddMultipleFilesHtmxView, BaseDeleteFileView
 from apps.generics import actions
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
@@ -209,14 +209,14 @@ class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMix
         return super().form_valid(form)
 
 
-class AddFileToAssistant(BaseAddFileHtmxView):
+class AddFileToAssistant(BaseAddMultipleFilesHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
         resource = get_object_or_404(ToolResources, assistant_id=self.kwargs["pk"], pk=self.kwargs["resource_id"])
-        file = super().form_valid(form)
-        resource.files.add(file)
+        files = super().form_valid(form)
+        resource.files.add(*files)
         push_assistant_to_openai(resource.assistant)
-        return file
+        return files
 
     def get_delete_url(self, file):
         return reverse(
