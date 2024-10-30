@@ -24,7 +24,7 @@ class ExperimentInline(admin.TabularInline):
 
 @admin.register(LlmProviderModel)
 class LlmProviderModelAdmin(admin.ModelAdmin):
-    list_display = ("name", "type", "max_token_limit", "supports_tool_calling", "team", "related_nodes")
+    list_display = ("name", "type", "max_token_limit", "team", "related_nodes")
     list_filter = ("team", "type", "name")
     inlines = [ExperimentInline]
 

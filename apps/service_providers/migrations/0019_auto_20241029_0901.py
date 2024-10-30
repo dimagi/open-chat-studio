@@ -27,7 +27,6 @@ def _create_default_llm_provider_models(apps, schema_editor):
             type=default_provider_model.type,
             name=default_provider_model.name,
             max_token_limit=default_provider_model.max_token_limit,
-            supports_tool_calling=True,
         )
     # TODO: Get list of current global models
 

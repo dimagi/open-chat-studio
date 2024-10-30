@@ -223,7 +223,7 @@ class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
 class LlmProviderModelForm(forms.ModelForm):
     class Meta:
         model = LlmProviderModel
-        fields = ("type", "name", "max_token_limit", "supports_tool_calling")
+        fields = ("type", "name", "max_token_limit")
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)

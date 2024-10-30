@@ -39,7 +39,6 @@ class LlmProviderModelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
     name = factory.Faker("name")
-    supports_tool_calling = True
 
 
 class VoiceProviderFactory(factory.django.DjangoModelFactory):

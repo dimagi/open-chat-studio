@@ -153,7 +153,6 @@ class LlmProviderModel(BaseTeamModel):
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
     )
-    supports_tool_calling = models.BooleanField(default=False, help_text="If the model can call tools.")
 
     objects = LlmProviderModelManager()
 

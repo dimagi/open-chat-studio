@@ -56,6 +56,6 @@ class LlmProviderModelTable(tables.Table):
 
     class Meta:
         model = LlmProviderModel
-        fields = ("name", "type", "max_token_limit", "supports_tool_calling")
+        fields = ("name", "type", "max_token_limit")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         empty_text = "No custom llm provider models found."

@@ -22,7 +22,6 @@ class Migration(migrations.Migration):
                 ('type', models.CharField(choices=[('openai', 'OpenAI'), ('azure', 'Azure OpenAI'), ('anthropic', 'Anthropic')], max_length=255)),
                 ('name', models.CharField(help_text="The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'", max_length=128)),
                 ('max_token_limit', models.PositiveIntegerField(default=8192, help_text='When the message history for a session exceeds this limit (in tokens), it will be compressed. If 0, compression will be disabled which may result in errors or high LLM costs.')),
-                ('supports_tool_calling', models.BooleanField(default=False, help_text='If the model can call tools.')),
                 ('team', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='teams.team', verbose_name='Team')),
             ],
             options={
