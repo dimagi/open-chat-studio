@@ -16,6 +16,18 @@ class File(BaseTeamModel):
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
 
+    @staticmethod
+    def get_content_type(file):
+        filename = file.name
+        try:
+            filename = pathlib.Path(filename).name
+        except Exception:
+            pass
+        try:
+            return mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        except Exception:
+            return "application/octet-stream"
+
     def save(self, *args, **kwargs):
         if self.file:
             self.content_size = self.file.size
@@ -23,12 +35,7 @@ class File(BaseTeamModel):
             if not self.name:
                 self.name = filename
             if not self.content_type:
-                try:
-                    filename = pathlib.Path(filename).name
-                except Exception:
-                    pass
-
-                self.content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+                self.content_type = File.get_content_type(self.file)
         super().save(*args, **kwargs)
 
     def duplicate(self):

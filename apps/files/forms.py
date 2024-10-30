@@ -1,9 +1,9 @@
-from django.forms import BaseModelFormSet, modelformset_factory
+from django import forms
 
 from apps.files.models import File
 
 
-class BaseFileFormSet(BaseModelFormSet):
+class BaseFileFormSet(forms.BaseModelFormSet):
     def save(self, request):
         files = super().save(commit=False)
         for file in files:
@@ -23,7 +23,29 @@ def get_file_formset(request, formset_cls=None, prefix=""):
             }
         )
 
-    FileFormSet = modelformset_factory(
+    FileFormSet = forms.modelformset_factory(
         File, formset=formset_cls, fields=("file",), can_delete=True, can_delete_extra=True, extra=0
     )
     return FileFormSet(queryset=File.objects.none(), prefix=f"{prefix}files", **kwargs)
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, list | tuple):
+            result = [single_file_clean(d, initial) for d in data]
+        else:
+            result = [single_file_clean(data, initial)]
+        return result
+
+
+class MultipleFileFieldForm(forms.Form):
+    file = MultipleFileField()
