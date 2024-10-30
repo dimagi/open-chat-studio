@@ -32,11 +32,11 @@ type InputWidgetParams = {
  */
 export const getInputWidget = ({id, inputParam, params, setParams, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
-  if (inputParam.name == "llm_model"){
+  if (inputParam.name == "llm_model" || inputParam.name == "max_token_limit"){
     /*
        This is here as we migrated llm_model to llm_provider_model_id, in October 2024.
        During the migration, we kept the data in llm_model as a safeguard. This check can safely be deleted once a second migration to delete all instances of llm_model has been run.
-       TODO: Remove this check once there are no instances of llm_model in the node definitions.
+       TODO: Remove this check once there are no instances of llm_model or max_token_limit in the node definitions.
      */
     return
   }

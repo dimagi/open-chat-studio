@@ -50,7 +50,7 @@
       {% endflag %}
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
+        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">

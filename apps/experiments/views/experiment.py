@@ -200,7 +200,6 @@ class ExperimentForm(forms.ModelForm):
             "llm_provider_model",
             "assistant",
             "pipeline",
-            "max_token_limit",
             "temperature",
             "prompt_text",
             "input_formatter",

@@ -564,11 +564,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
     )
-    max_token_limit = models.PositiveIntegerField(
+    max_token_limit_old = models.PositiveIntegerField(
         default=8192,
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
-    )
+    )  # TODO Remove this after migration to llm_provider_model is complete
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,
@@ -666,6 +666,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if self.is_working_version:
             return ""
         return f"v{self.version_number}"
+
+    @cached_property
+    def max_token_limit(self) -> int:
+        return self.llm_provider_model.max_token_limit
 
     @cached_property
     def default_version(self) -> "Experiment":
@@ -852,11 +856,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     group_name="Safety",
                     name="input_formatter",
                     raw_value=self.input_formatter,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="max_token_limit",
-                    raw_value=self.max_token_limit,
                 ),
                 # Consent
                 VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),

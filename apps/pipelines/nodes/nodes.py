@@ -25,7 +25,6 @@ from apps.pipelines.nodes.types import (
     LlmProviderId,
     LlmProviderModelId,
     LlmTemperature,
-    MaxTokenLimit,
     NumOutputs,
     PipelineJinjaTemplate,
     Prompt,
@@ -70,7 +69,6 @@ class LLMResponseMixin(BaseModel):
     llm_temperature: LlmTemperature = 1.0
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = 8192
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -153,7 +151,7 @@ class LLMResponseWithPrompt(LLMResponse):
             return compress_chat_history(
                 chat=session.chat,
                 llm=self.get_chat_model(),
-                max_token_limit=self.max_token_limit,
+                max_token_limit=self.get_llm_provider_model().max_token_limit,
                 input_messages=input_messages,
             )
 
@@ -165,7 +163,7 @@ class LLMResponseWithPrompt(LLMResponse):
             return []
         return compress_pipeline_chat_history(
             pipeline_chat_history=history,
-            max_token_limit=self.max_token_limit,
+            max_token_limit=self.get_llm_provider_model().max_token_limit,
             llm=self.get_chat_model(),
             input_messages=input_messages,
         )

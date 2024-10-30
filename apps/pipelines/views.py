@@ -112,7 +112,6 @@ def _pipeline_node_default_values(llm_providers):
     return {
         "LlmProviderId": provider_id,
         "LlmTemperature": 0.7,
-        "MaxTokenLimit": 8192,
     }
 
 
