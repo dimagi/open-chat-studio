@@ -12,10 +12,15 @@ class CustomAction(BaseTeamModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     prompt = models.TextField(blank=True)
+    server_url = models.URLField()
     api_schema = models.JSONField()
 
     class Meta:
         ordering = ("name",)
+
+    def save(self, *args, **kwargs):
+        self.server_url = self.api_schema.get("servers", [{}])[0].get("url", "")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

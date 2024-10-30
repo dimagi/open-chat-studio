@@ -28,7 +28,7 @@ class CustomActionTable(tables.Table):
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description")
+        fields = ("name", "description", "server_url")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No actions found."
