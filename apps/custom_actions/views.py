@@ -45,6 +45,9 @@ class CreateCustomAction(CreateView):
         "active_tab": "custom_actions",
     }
 
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "request": self.request}
+
     def get_success_url(self):
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
@@ -62,6 +65,9 @@ class EditCustomAction(UpdateView):
         "button_text": "Update",
         "active_tab": "custom_actions",
     }
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "request": self.request}
 
     def get_queryset(self):
         return CustomAction.objects.filter(team=self.request.team)

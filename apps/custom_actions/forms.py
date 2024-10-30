@@ -20,10 +20,20 @@ class CustomActionForm(forms.ModelForm):
         "This will be used to generate the API calls for the LLM. Accepts YAML or JSON.",
         initial={},
     )
+    auth_provider = forms.ModelChoiceField(
+        queryset=None,
+        required=False,
+        label="Auth",
+        help_text="Select an authentication to use for this action.",
+    )
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "prompt", "api_schema")
+        fields = ("name", "description", "auth_provider", "prompt", "api_schema")
+
+    def __init__(self, request, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["auth_provider"].queryset = request.team.authprovider_set.all()
 
     def clean_api_schema(self):
         api_schema = self.cleaned_data["api_schema"]

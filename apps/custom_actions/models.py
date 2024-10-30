@@ -14,6 +14,13 @@ class CustomAction(BaseTeamModel):
     prompt = models.TextField(blank=True)
     server_url = models.URLField()
     api_schema = models.JSONField()
+    auth_provider = models.ForeignKey(
+        "service_providers.AuthProvider",
+        on_delete=models.SET_NULL,
+        related_name="custom_actions",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ("name",)
