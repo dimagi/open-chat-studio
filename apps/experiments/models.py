@@ -573,6 +573,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    custom_actions = models.ManyToManyField(
+        "custom_actions.CustomAction",
+        related_name="experiments",
+        blank=True,
+    )
     echo_transcript = models.BooleanField(
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
