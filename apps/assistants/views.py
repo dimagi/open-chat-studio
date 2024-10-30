@@ -150,7 +150,7 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
 
 
 def check_sync_status(request, team_slug, pk):
-    assistant = get_object_or_404(OpenAiAssistant, pk=pk)
+    assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
     try:
         is_synced = is_synced_with_openai(assistant)
     except OpenAiSyncError:
