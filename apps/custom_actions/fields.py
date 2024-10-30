@@ -7,6 +7,8 @@ from django.forms.fields import CharField, InvalidJSONInput, JSONString
 
 
 class JSONORYAMLField(CharField):
+    """A field that accepts JSON or YAML input and returns a Python object."""
+
     default_error_messages = {
         "invalid": "Enter a valid JSON or YAML.",
     }
