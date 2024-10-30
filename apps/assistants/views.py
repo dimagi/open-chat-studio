@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
@@ -159,6 +159,15 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         return response
 
 
+def check_sync_status(request, team_slug, pk):
+    assistant = get_object_or_404(OpenAiAssistant, pk=pk)
+    try:
+        is_synced = is_synced_with_openai(assistant)
+    except OpenAiSyncError:
+        is_synced = False
+    return render(request, "assistants/sync_status.html", {"is_synced": is_synced})
+
+
 class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
     permission_required = "assistants.change_openaiassistant"
 
@@ -168,7 +177,7 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
-        return HttpResponseRedirect(reverse("assistants:home", args=[self.request.team.slug]))
+        return HttpResponse(status=204)
 
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
