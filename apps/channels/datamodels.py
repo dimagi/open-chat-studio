@@ -20,7 +20,7 @@ class BaseMessage(BaseModel):
 
 
 class TelegramMessage(BaseMessage):
-    media_id: str | None
+    media_id: str | None = None
     content_type_unparsed: str | None = Field(default=None)
     message_id: int
 

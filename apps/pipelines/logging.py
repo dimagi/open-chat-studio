@@ -46,8 +46,9 @@ class PipelineLoggingCallbackHandler(BaseCallbackHandler):
                 input = inputs
             elif "messages" in inputs:
                 input = inputs["messages"][-1]
+            node_name = kwargs.get("name", serialized.get("name") if serialized else None)
             self.logger.info(
-                f"{kwargs.get('name', serialized.get('name'))} starting",
+                f"{node_name} starting",
                 input=input,
             )
 

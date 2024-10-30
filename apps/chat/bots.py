@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
-from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationBufferMemory
+from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import chain
 from pydantic import ValidationError
 

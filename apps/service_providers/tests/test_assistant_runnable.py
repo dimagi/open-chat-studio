@@ -590,5 +590,6 @@ def _create_run(
         status=status,
         thread_id=thread_id,
         tools=[],
+        parallel_tool_calls=False,
     )
     return run
