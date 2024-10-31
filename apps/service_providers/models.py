@@ -173,11 +173,12 @@ class LlmProviderModel(BaseTeamModel):
         return self.team is not None
 
     def delete(self, *args, **kwargs):
-        experiments = self.experiment_set.values_list("name", flat=True).all()
+        experiments = self.experiment_set.values_list("id", "name").all()
         if experiments:
+            experiment_info = [f"{id}: {name}" for id, name in experiments]
             raise DjangoValidationError(
                 f"Cannot delete LLM Provider Model {self.name} "
-                "as it is in use by experiments: {', '.join(experiments)}"
+                f"as it is in use by experiments: {', '.join(experiment_info)}"
             )
         return super().delete(*args, **kwargs)
 

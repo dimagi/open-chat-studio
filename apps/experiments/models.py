@@ -667,7 +667,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
-    @cached_property
+    @property
     def max_token_limit(self) -> int:
         return self.llm_provider_model.max_token_limit
 
