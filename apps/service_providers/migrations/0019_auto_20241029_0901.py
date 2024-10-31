@@ -200,7 +200,7 @@ def _create_custom_llm_provider_models(apps, schema_editor):
             continue
 
         if experiment.llm_provider is None and experiment.pipeline:
-            # _handle_pipeline(LlmProviderModel, pipeline)
+            # Pipelines are handled separately
             continue
 
         _handle_llm_experiment(LlmProviderModel, experiment)
