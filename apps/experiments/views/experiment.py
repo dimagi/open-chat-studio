@@ -925,7 +925,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
             )
-            if verify_user:
+            if verify_user and consent.identifier_type == "email":
                 return _verify_user_or_start_session(
                     identifier=identifier,
                     request=request,
