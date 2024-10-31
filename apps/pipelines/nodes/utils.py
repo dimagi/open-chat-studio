@@ -1,6 +1,7 @@
 from typing import Any
 
 import pydantic
+from pydantic.fields import FieldInfo
 
 
 def get_input_types_for_node(node_class):
@@ -22,7 +23,9 @@ def get_input_types_for_node(node_class):
             type_ = info.annotation.__args__[0]
         else:
             type_ = info.annotation
-        new_input = InputParam(name=field_name, type=str(type_), default=info.default)
+
+        help_text = _get_from_field_info_json_schema(info, "help_text")
+        new_input = InputParam(name=field_name, type=str(type_), default=info.default, help_text=help_text)
         inputs.append(new_input)
 
     return NodeInputType(
@@ -31,3 +34,8 @@ def get_input_types_for_node(node_class):
         input_params=inputs,
         node_description=getattr(node_class, "__node_description__", ""),
     ).model_dump()
+
+
+def _get_from_field_info_json_schema(field_info: FieldInfo, key: str) -> any:
+    if json_schema_extra := getattr(field_info, "json_schema_extra"):
+        return json_schema_extra.get(key, None)
