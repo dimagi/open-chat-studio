@@ -79,7 +79,7 @@ class OpenAiAssistant(BaseTeamModel):
 
     @property
     def tools_enabled(self):
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or self.custom_actions.exists()
 
 
 @audit_fields(
