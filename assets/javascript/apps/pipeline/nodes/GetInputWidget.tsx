@@ -56,7 +56,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
-        <InputField label="Temperature">
+        <InputField label="Temperature" help_text={inputParam.help_text}>
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
@@ -69,7 +69,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
       );
     case "SourceMaterialId":
       return (
-        <InputField label="Source Material">
+        <InputField label="Source Material" help_text={inputParam.help_text}>
           <SourceMaterialIdWidget
             parameterValues={parameterValues}
             onChange={updateParamValue}
@@ -83,7 +83,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
       return <></>;
     case "LlmModel":
       return (
-        <InputField label="LLM">
+        <InputField label="LLM" help_text={inputParam.help_text}>
           <LlmWidget
             id={id}
             parameterValues={parameterValues}
@@ -105,6 +105,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             inputParam={inputParam}
             historyType={concatenate(params[inputParam.name])}
             historyName={concatenate(params["history_name"])}
+            help_text={inputParam.help_text}
           ></HistoryTypeWidget>
       );
     }
@@ -113,7 +114,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
     }
     case "MaxTokenLimit": {
       return (
-        <InputField label="Maximum Token Limit">
+        <InputField label="Maximum Token Limit" help_text={inputParam.help_text}>
           <MaxTokenLimitWidget
             onChange={updateParamValue}
             inputParam={inputParam}
@@ -129,14 +130,15 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           humanName={humanName}
           name={inputParam.name}
           onChange={updateParamValue}
-          value={params[inputParam.name] || ""}>
+          value={params[inputParam.name] || ""}
+          help_text={inputParam.help_text}>
         </ExpandableTextWidget>
       );
     }
     default: {
       const humanName = inputParam.name.replace(/_/g, " ");
       return (
-        <InputField label={humanName}>
+        <InputField label={humanName} help_text={inputParam.help_text}>
           <input
             className="input input-bordered w-full"
             name={inputParam.name}

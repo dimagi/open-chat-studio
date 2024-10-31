@@ -61,10 +61,12 @@ export function ExpandableTextWidget({
   name,
   onChange,
   value,
+  help_text
 }: {
   humanName: string;
   name: string;
   value: string | string[];
+  help_text: string;
   onChange: ChangeEventHandler;
 }) {
   const modalId = useId();
@@ -79,7 +81,7 @@ export function ExpandableTextWidget({
     </>
   )
   return (
-    <InputField label={label}>
+    <InputField label={label} help_text={help_text}>
       <textarea
         className="textarea textarea-bordered resize-none textarea-sm w-full"
         rows={3}
@@ -269,16 +271,18 @@ export function HistoryTypeWidget({
   inputParam,
   historyType,
   historyName,
+  help_text,
   onChange,
 }: {
   inputParam: InputParam;
   historyType: string;
   historyName: string;
+  help_text: string;
   onChange: ChangeEventHandler;
 }) {
   return (
     <div className="flex join">
-      <InputField label="History">
+      <InputField label="History" help_text={help_text}>
         <select
           className="select select-bordered join-item"
           name={inputParam.name}
@@ -292,7 +296,7 @@ export function HistoryTypeWidget({
         </select>
       </InputField>
       {historyType == "named" && (
-        <InputField label="History Name">
+        <InputField label="History Name" help_text={help_text}>
           <input
             className="input input-bordered join-item"
             name="history_name"
@@ -327,13 +331,14 @@ export function MaxTokenLimitWidget({
   );
 }
 
-export function InputField({label, children}: React.PropsWithChildren<{ label: string | ReactNode }>) {
+export function InputField({label, help_text, children}: React.PropsWithChildren<{ label: string | ReactNode, help_text: string }>) {
   return (
     <>
       <div className="form-control w-full capitalize">
         <label className="label font-bold">{label}</label>
         {children}
       </div>
+      <small className="text-muted">{help_text}</small>
     </>
   );
 }

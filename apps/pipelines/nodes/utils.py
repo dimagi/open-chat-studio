@@ -8,6 +8,7 @@ def get_input_types_for_node(node_class):
         name: str
         type: str
         default: Any = None
+        help_text: str | None = None
 
     class NodeInputType(pydantic.BaseModel):
         name: str
