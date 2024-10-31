@@ -3,9 +3,9 @@ from typing import ClassVar
 
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
-from langchain.chat_models.base import BaseChatModel
 from langchain_anthropic import ChatAnthropic
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
+from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config

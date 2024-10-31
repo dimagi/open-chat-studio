@@ -7,7 +7,7 @@ export function getNodeId(nodeType: string) {
   return nodeType + "-" + uid.rnd();
 }
 
-export function classNames(...classes: Array<string>): string {
+export function classNames(...classes: Array<string | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
 
@@ -25,3 +25,8 @@ export const getCachedData: () => typeof localCache = () => {
   }
   return localCache;
 };
+
+export function concatenate(value: string | string[] | null | undefined): string {
+  if (!value) return "";
+  return Array.isArray(value) ? value.join("") : value;
+}

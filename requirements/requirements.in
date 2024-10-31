@@ -30,11 +30,13 @@ fbmessenger
 ffmpeg # Audio transcription
 httpx
 jinja2
-langchain
+langchain>=0.3,<0.4
+langchain-core>=0.3,<0.4
 langchain-anthropic
 langchain-openai
+langchain-community>=0.3,<0.4
 langfuse
-langgraph
+langgraph>=0.2.20,<0.3
 loguru
 openai
 pandas

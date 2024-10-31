@@ -85,7 +85,7 @@ from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.prompt import validate_prompt_variables
+from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
 @login_and_team_required
@@ -313,7 +313,7 @@ class ExperimentForm(forms.ModelForm):
         validate_prompt_variables(
             form_data=cleaned_data,
             prompt_key="prompt_text",
-            known_vars={"source_material", "participant_data", "current_datetime"},
+            known_vars=set(PromptVars.values),
         )
         return cleaned_data
 
@@ -930,7 +930,7 @@ def start_session_public(request, team_slug: str, experiment_id: str):
                 participant_identifier=identifier,
                 timezone=request.session.get("detected_tz", None),
             )
-            if verify_user:
+            if verify_user and consent.identifier_type == "email":
                 return _verify_user_or_start_session(
                     identifier=identifier,
                     request=request,

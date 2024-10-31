@@ -7,6 +7,6 @@ LlmProviderId = TypeAliasType("LlmProviderId", int)
 LlmProviderModelId = TypeAliasType("LlmProviderModelId", int)
 LlmTemperature = TypeAliasType("LlmTemperature", float)
 NumOutputs = TypeAliasType("NumOutputs", int)
-PipelineJinjaTemplate = TypeAliasType("PipelineJinjaTemplate", str)
-Prompt = TypeAliasType("Prompt", str)
 SourceMaterialId = TypeAliasType("SourceMaterialId", int)
+
+ExpandableText = TypeAliasType("ExpandableText", str)

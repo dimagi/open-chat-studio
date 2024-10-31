@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 
 from celery.app import shared_task
-from langchain.schema import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import Attachment, BaseMessage

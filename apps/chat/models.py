@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from django.db import models
 from django.utils.functional import classproperty
-from langchain.schema import BaseMessage, messages_from_dict
+from langchain_core.messages import BaseMessage, messages_from_dict
 
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File

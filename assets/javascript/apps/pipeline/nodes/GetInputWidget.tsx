@@ -1,15 +1,11 @@
 import {
-  HistoryNameWidget,
   HistoryTypeWidget,
-  KeywordsWidget,
-  LlmProviderIdWidget,
-  LlmProviderModelWidget,
-  MaxTokenLimitWidget,
   SourceMaterialIdWidget,
-  TextWidget
+  ExpandableTextWidget,
+  InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
 import React from "react";
-import {getCachedData} from "../utils";
+import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
 
@@ -17,8 +13,32 @@ type InputWidgetParams = {
   id: string;
   inputParam: InputParam;
   params: NodeParams;
-  setParams: React.Dispatch<React.SetStateAction<NodeParams>>;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  nodeType: string;
+}
+
+const nodeTypeToInputParamsMap: Record<string, string[]> = {
+  "RouterNode": ["llm_model", "history_type", "prompt"],
+  "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
+  "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
+  "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
+  "LLMResponse": ["llm_model", "history_type"],
+};
+
+export const showAdvancedButton = (nodeType: string) => {
+  return nodeTypeToInputParamsMap[nodeType] !== undefined;
+}
+
+export const getNodeInputWidget = (params: InputWidgetParams) => {
+  if (!params.nodeType) {
+    return <></>;
+  }
+
+  const allowedInNode = nodeTypeToInputParamsMap[params.nodeType];
+  if (allowedInNode && !allowedInNode.includes(params.inputParam.name)) {
+    return <></>;
+  }
+  return getInputWidget(params);
 }
 
 /**
@@ -30,7 +50,7 @@ type InputWidgetParams = {
  * @param updateParamValue - The function to update the value of the input parameter.
  * @returns The input widget for the specified parameter type.
  */
-export const getInputWidget = ({id, inputParam, params, setParams, updateParamValue}: InputWidgetParams) => {
+export const getInputWidget = ({id, inputParam, params, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
   if (inputParam.name == "llm_model" || inputParam.name == "max_token_limit"){
     /*
@@ -40,11 +60,11 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
      */
     return
   }
+
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
-        <>
-          <div className="m-1 font-medium text-center">Temperature</div>
+        <InputField label="Temperature">
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
@@ -53,148 +73,75 @@ export const getInputWidget = ({id, inputParam, params, setParams, updateParamVa
             type="number"
             step=".1"
           ></input>
-        </>
+        </InputField>
       );
-    case "LlmProviderId":
-      return (
-        <>
-          <div className="m-1 font-medium text-center">LLM Provider</div>
-          <LlmProviderIdWidget
-            parameterValues={parameterValues}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-            setParams={setParams}
-            id={id}
-          />
-        </>
-      );
-      case "LlmProviderModelId":
-          return (
-              <>
-                  <div className="m-1 font-medium text-center">LLM Model</div>
-                  <LlmProviderModelWidget
-                      parameterValues={parameterValues}
-                      inputParam={inputParam}
-                      value={params[inputParam.name]}
-                      onChange={updateParamValue}
-                      providerId={
-                          Array.isArray(params.llm_provider_id)
-                              ? params.llm_provider_id.join("")
-                              : params.llm_provider_id
-                      }
-                  />
-              </>
-          );
     case "SourceMaterialId":
       return (
-        <>
-          <div className="m-1 font-medium text-center">Source Material</div>
+        <InputField label="Source Material">
           <SourceMaterialIdWidget
             parameterValues={parameterValues}
             onChange={updateParamValue}
             inputParam={inputParam}
             value={params[inputParam.name]}
           />
-        </>
+        </InputField>
+      );
+      case "LlmProviderModelId":
+          //   this is handled in the LlmModel widget
+      return <></>;
+      case "LlmProviderId":
+      return (
+        <InputField label="LLM">
+          <LlmWidget
+            id={id}
+            parameterValues={parameterValues}
+            inputParam={inputParam}
+            providerId={concatenate(params.llm_provider_id)}
+            providerModelId={concatenate(params.llm_provider_model_id)}
+            ></LlmWidget>
+        </InputField>
       );
     case "NumOutputs":
+      return <></>;
+    case "Keywords": {
+      return <KeywordsWidget nodeId={id} params={params}/>
+    }
+    case "HistoryType": {
       return (
-        <>
-          <div className="m-1 font-medium text-center">Number of Outputs</div>
+          <HistoryTypeWidget
+            onChange={updateParamValue}
+            inputParam={inputParam}
+            historyType={concatenate(params[inputParam.name])}
+            historyName={concatenate(params["history_name"])}
+          ></HistoryTypeWidget>
+      );
+    }
+    case "HistoryName": {
+      return <></>;
+    }
+    case "ExpandableText": {
+      const humanName = inputParam.name.replace(/_/g, " ");
+      return (
+        <ExpandableTextWidget
+          humanName={humanName}
+          name={inputParam.name}
+          onChange={updateParamValue}
+          value={params[inputParam.name] || ""}>
+        </ExpandableTextWidget>
+      );
+    }
+    default: {
+      const humanName = inputParam.name.replace(/_/g, " ");
+      return (
+        <InputField label={humanName}>
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
             onChange={updateParamValue}
             value={params[inputParam.name]}
-            type="number"
-            step="1"
-            min="1"
-            max="10"
+            type="text"
           ></input>
-        </>
-      );
-    case "Keywords": {
-      const length =
-        parseInt(
-          Array.isArray(params.num_outputs)
-            ? params.num_outputs.join("")
-            : params.num_outputs,
-        ) || 1;
-      return (
-        <>
-          {Array.from({length: length}, (_, index) => {
-            return (
-              <KeywordsWidget
-                index={index}
-                keywords={
-                  Array.isArray(params.keywords) ? params["keywords"] : []
-                }
-                setParams={setParams}
-                id={id}
-                key={`${inputParam.name}-${index}`}
-              ></KeywordsWidget>
-            );
-          })}
-        </>
-      );
-    }
-    case "HistoryType": {
-      return (
-        <>
-          <div className="m-1 font-medium text-center">History Type</div>
-          <HistoryTypeWidget
-            onChange={updateParamValue}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-          ></HistoryTypeWidget>
-        </>
-      );
-    }
-    case "HistoryName": {
-      if (params["history_type"] !== "named") {
-        return <></>;
-      }
-      return (
-        <>
-          <div className="m-1 font-medium text-center">History Name</div>
-          <HistoryNameWidget
-            onChange={updateParamValue}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-          ></HistoryNameWidget>
-        </>
-      );
-    }
-    case "MaxTokenLimit": {
-      return (
-        <>
-          <div className="m-1 font-medium text-center">
-            Maximum Token Limit
-          </div>
-          <MaxTokenLimitWidget
-            onChange={updateParamValue}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-          ></MaxTokenLimitWidget>
-        </>
-      );
-    }
-    default: {
-      const humanName = inputParam.human_name
-        ? inputParam.human_name
-        : inputParam.name.replace(/_/g, " ");
-      return (
-        <>
-          <div className="m-1 font-medium text-center capitalize">
-            {humanName}
-          </div>
-          <TextWidget
-            humanName={humanName}
-            name={inputParam.name}
-            onChange={updateParamValue}
-            value={params[inputParam.name] || ""}
-          ></TextWidget>
-        </>
+        </InputField>
       );
     }
   }

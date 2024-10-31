@@ -1,21 +1,66 @@
 import React, {
   ChangeEvent,
   ChangeEventHandler,
-  Dispatch,
-  SetStateAction,
+  ReactNode,
   useId,
 } from "react";
 import { InputParam } from "./types/nodeInputTypes";
 import { NodeParameterValues } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
-import { NodeParams } from "./types/nodeParams";
 import { NodeProps } from "reactflow";
+import {concatenate} from "./utils";
+import {NodeParams} from "./types/nodeParams";
+import {Node} from "reactflow";
 
 export function TextModal({
+  modalId,
   humanName,
   name,
   value,
   onChange,
+}: {
+  modalId: string;
+  humanName: string;
+  name: string;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <dialog
+      id={modalId}
+      className="modal nopan nodelete nodrag noflow nowheel"
+    >
+      <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+        <div className="flex-grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+            {humanName}
+          </h4>
+          <textarea
+            className="textarea textarea-bordered textarea-lg w-full flex-grow resize-none"
+            name={name}
+            onChange={onChange}
+            value={value}
+          ></textarea>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        {/* Allows closing the modal by clicking outside of it */}
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
+export function ExpandableTextWidget({
+  humanName,
+  name,
+  onChange,
+  value,
 }: {
   humanName: string;
   name: string;
@@ -23,169 +68,179 @@ export function TextModal({
   onChange: ChangeEventHandler;
 }) {
   const modalId = useId();
-  return (
-    <>
-      <dialog
-        id={modalId}
-        className="modal nopan nodelete nodrag noflow nowheel"
-      >
-              <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
-          <form method="dialog">
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
-              ✕
-            </button>
-          </form>
-          <div className="flex-grow h-full w-full">
-            <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
-              {humanName}
-            </h4>
-            <textarea
-              className="textarea textarea-bordered textarea-lg h-[80%] w-full"
-              name={name}
-              onChange={onChange}
-              value={value}
-            ></textarea>
-            <form method="dialog" className="modal-backdrop">
-              <button className="pg-button-primary mt-2">Save</button>
-            </form>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          {/* Allows closing the modal by clicking outside of it */}
-          <button>close</button>
-        </form>
-      </dialog>
-      <button
-        className="btn btn-ghost"
-        onClick={() =>
-          (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
-        }
-      >
-        <i className="fa-solid fa-expand-alt"></i>
-      </button>
+  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
+  const label = (
+    <>{humanName}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${humanName}`}>
+        <button className="btn btn-xs btn-ghost" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
     </>
-  );
-}
-
-export function TextWidget({
-  humanName,
-  name,
-  onChange,
-  value,
-}: {
-  humanName: string;
-  name: string;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
+  )
   return (
-    <div className="join">
+    <InputField label={label}>
       <textarea
-        className="input input-bordered join-item nopan nodelete nodrag noflow textarea nowheel w-full resize-none"
+        className="textarea textarea-bordered resize-none textarea-sm w-full"
+        rows={3}
         name={name}
         onChange={onChange}
         value={value}
       ></textarea>
-      <div className="join-item">
-        <TextModal
-          humanName={humanName}
-          name={name}
-          value={value}
-          onChange={onChange}
-        ></TextModal>
-      </div>
-    </div>
+      <TextModal
+        modalId={modalId}
+        humanName={humanName}
+        name={name}
+        value={value}
+        onChange={onChange}>
+      </TextModal>
+    </InputField>
   );
 }
 
-export function KeywordsWidget({
-  index,
-  keywords,
-  setParams,
-  id,
-}: {
-  index: number;
-  keywords: string[];
-  setParams: Dispatch<SetStateAction<NodeParams>>;
-  id: NodeProps["id"];
-}) {
+export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodeParams}) {
   const setNode = usePipelineStore((state) => state.setNode);
-  const updateParamValue = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setParams((prevParams) => {
-      const { name, value } = event.target;
-      const updatedList = [...(prevParams[name] || [])];
-      updatedList[index] = value;
-      const newParams = { ...prevParams, [name]: updatedList };
-      setNode(id, (old) => ({
-        ...old,
-        data: {
-          ...old.data,
-          params: newParams,
+
+  function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
+    return {
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          ["keywords"]: keywords,
+          ["num_outputs"]: numOutputs,
         },
-      }));
-      return newParams;
+      },
+    };
+  }
+
+  const addKeyword = () => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || []), ""];
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
     });
+  }
+
+  const updateKeyword = (index: number, value: string) => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || [])];
+      updatedList[index] = value;
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs);
+      }
+    );
   };
-  const humanName = `Output ${index + 1} Keyword`;
+
+  const deleteKeyword = (index: number) => {
+    setNode(nodeId, (old) => {
+      const updatedList = [...(old.data.params["keywords"] || [])];
+      updatedList.splice(index, 1);
+      return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
+    });
+  }
+
+  const length =parseInt(concatenate(params.num_outputs)) || 1;
+  const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
   return (
     <>
-      <div className="m-1 font-medium text-center">{humanName}</div>
-      <TextWidget
-        humanName={humanName}
-        name="keywords"
-        onChange={updateParamValue}
-        value={keywords ? keywords[index] : ""}
-      ></TextWidget>
+      <div className="form-control w-full capitalize">
+        <label className="label font-bold">
+          Outputs
+          <div className="tooltip tooltip-left" data-tip="Add Keyword">
+            <button className="btn btn-xs btn-ghost" onClick={() => addKeyword()}>
+              <i className="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        </label>
+      </div>
+      <div className="ml-2">
+        {Array.from({length: length}, (_, index) => {
+          const value = keywords ? keywords[index] || "" : "";
+          const label = (
+            <>{`Output Keyword ${index + 1}`}
+              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
+                  <i className="fa-solid fa-minus"></i>
+                </button>
+              </div>
+            </>
+          )
+          return (
+            <div className="form-control w-full capitalize" key={index}>
+              <label className="label">{label}</label>
+              <input
+                className="input input-bordered w-full"
+                name="keywords"
+                onChange={(event) => updateKeyword(index, event.target.value)}
+                value={value}
+              ></input>
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }
 
-export function LlmProviderIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  setParams,
-  id,
-}: {
+export function LlmWidget({
+                            id,
+                            parameterValues,
+                            inputParam,
+                            providerId,
+                            providerModelId,
+                          }: {
+  id: NodeProps["id"];
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
-  value: string | string[];
-  setParams: Dispatch<SetStateAction<NodeParams>>;
-  id: NodeProps["id"];
+  providerId: string;
+  providerModelId: string;
 }) {
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const { value } = event.target;
-    setParams((prevParams) => {
-      const newParams = {
-        ...prevParams,
-        llm_provider_id: value,
-        llm_model: "",
-      };
-      setNode(id, (old) => ({
-        ...old,
-        data: {
-          ...old.data,
-          params: newParams,
+    const [providerId, providerModelId] = value.split('|:|');
+    setNode(id, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          llm_provider_id: providerId,
+          llm_provider_model_id: providerModelId,
         },
-      }));
-      return newParams;
-    });
+      },
+    }));
   };
+
+  const makeValue = (providerId: string, providerModelId: string) => {
+      return providerId + '|:|' + providerModelId;
+  };
+
+  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+    if (!acc[provModel.type]) {
+          acc[provModel.type] = [];
+      }
+      acc[provModel.type].push(provModel);
+      return acc;
+  }, {});
+
   return (
     <select
       className="select select-bordered w-full"
       name={inputParam.name}
       onChange={updateParamValue}
-      value={value}
+      value={makeValue(providerId, providerModelId)}
     >
       <option value="" disabled>
-        Select a provider
+        Select a model
       </option>
-      {parameterValues.LlmProviderId.map((opt) => (
-        <option key={opt.id} value={opt.id}>
-          {opt.name}
-        </option>
+      {parameterValues.LlmProviderId.map((provider) => (
+        providerModelsByType[provider.type] &&
+        providerModelsByType[provider.type].map((providerModel) => (
+          <option key={provider.id + providerModel.id} value={makeValue(provider.id, providerModel.id)}>
+            {providerModel.name}
+          </option>
+        ))
       ))}
     </select>
   );
@@ -269,64 +324,52 @@ export function SourceMaterialIdWidget({
 
 export function HistoryTypeWidget({
   inputParam,
-  value,
+  historyType,
+  historyName,
   onChange,
 }: {
   inputParam: InputParam;
-  value: string | string[];
+  historyType: string;
+  historyName: string;
   onChange: ChangeEventHandler;
 }) {
   return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="none">No History</option>
-      <option value="node">Node</option>
-      <option value="global">Global</option>
-      <option value="named">Named</option>
-    </select>
-  );
+    <div className="flex join">
+      <InputField label="History">
+        <select
+          className="select select-bordered join-item"
+          name={inputParam.name}
+          onChange={onChange}
+          value={historyType}
+        >
+          <option value="none">No History</option>
+          <option value="node">Node</option>
+          <option value="global">Global</option>
+          <option value="named">Named</option>
+        </select>
+      </InputField>
+      {historyType == "named" && (
+        <InputField label="History Name">
+          <input
+            className="input input-bordered join-item"
+            name="history_name"
+            onChange={onChange}
+            value={historyName || ""}
+          ></input>
+        </InputField>
+      )}
+    </div>
+)
+  ;
 }
 
-export function HistoryNameWidget({
-  inputParam,
-  value,
-  onChange,
-}: {
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
+export function InputField({label, children}: React.PropsWithChildren<{ label: string | ReactNode }>) {
   return (
-    <textarea
-      className="textarea textarea-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    ></textarea>
-  );
-}
-
-export function MaxTokenLimitWidget({
-  inputParam,
-  value,
-  onChange,
-}: {
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <input
-      className="input input-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-      type="number"
-      step="1"
-    ></input>
+    <>
+      <div className="form-control w-full capitalize">
+        <label className="label font-bold">{label}</label>
+        {children}
+      </div>
+    </>
   );
 }

@@ -122,7 +122,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
 
     state = PipelineState(
         messages=["Ice is not a liquid. When it is melted it turns into water."],
-        experiment_session_id=1,
+        experiment_session=None,
     )
     runnable.invoke(state)
     assert len(mail.outbox) == 1
@@ -347,7 +347,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "B ({{ input}})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -369,7 +369,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "C ({{input }})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -380,7 +380,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "A ({{ input }})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -454,7 +454,7 @@ def test_conditional_node(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "said hello"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -465,7 +465,7 @@ def test_conditional_node(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "didn't say hello, said {{ input }}"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },

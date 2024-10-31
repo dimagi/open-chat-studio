@@ -1,8 +1,8 @@
 import dataclasses
 from collections.abc import Sequence
+from datetime import datetime
 from unittest.mock import patch
 
-import freezegun
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
@@ -19,6 +19,7 @@ from apps.service_providers.llm_service.state import ChatExperimentState
 from apps.utils.factories.channels import ChannelPlatform, ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
+from apps.utils.time import pretty_date
 
 
 @pytest.fixture()
@@ -63,7 +64,6 @@ def runnable(request, session):
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable(runnable, session, fake_llm_service):
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     result = chain.invoke("hi")
@@ -80,7 +80,6 @@ def test_runnable(runnable, session, fake_llm_service):
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_llm_service):
     experiment_version = session.experiment.create_new_version()
     experiment_version.get_llm_service = lambda: fake_llm_service
@@ -93,7 +92,6 @@ def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_l
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_source_material(runnable, session, fake_llm_service):
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with {source_material}"
@@ -105,7 +103,6 @@ def test_runnable_with_source_material(runnable, session, fake_llm_service):
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_source_material_missing(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with {source_material}"
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
@@ -156,7 +153,6 @@ def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 def test_runnable_with_history(runnable, session, chat, fake_llm_service):
     experiment = session.experiment
     experiment.llm_provider_model.max_token_limit = 0  # disable compression
@@ -175,7 +171,6 @@ def test_runnable_with_history(runnable, session, chat, fake_llm_service):
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
 @pytest.mark.parametrize(
     ("participant_with_user", "is_web_session", "considered_authorized"),
     [(True, True, True), (False, True, False), (True, False, True), (False, False, True)],
@@ -216,8 +211,9 @@ def test_runnable_with_participant_data(
 
 
 @pytest.mark.django_db()
-@freezegun.freeze_time("2024-02-08 13:00:08.877096+00:00")
-def test_runnable_with_current_datetime(runnable, session, fake_llm_service):
+@patch("apps.service_providers.llm_service.state.ExperimentState.get_current_datetime")
+def test_runnable_with_current_datetime(get_current_datetime, runnable, session, fake_llm_service):
+    get_current_datetime.return_value = pretty_date(datetime.fromisoformat("2024-02-08 13:00:08.877096+00:00"))
     session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with current datetime: {current_datetime}"
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
