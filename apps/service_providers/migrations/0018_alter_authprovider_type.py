@@ -16,6 +16,7 @@ class Migration(migrations.Migration):
                 choices=[
                     ("basic", "Basic"),
                     ("api_key", "API Key"),
+                    ("bearer", "Bearer Auth"),
                     ("commcare", "CommCare"),
                 ],
                 max_length=255,
