@@ -187,9 +187,9 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         return ChatPromptTemplate.from_messages(
             [
                 ("system", self.state.get_prompt()),
+                MessagesPlaceholder("custom_action_specs", optional=True),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
-                MessagesPlaceholder("custom_action_specs", optional=True),
             ]
         )
 
