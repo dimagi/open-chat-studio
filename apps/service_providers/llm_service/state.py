@@ -115,7 +115,7 @@ class ExperimentState(RunnableState):
         for action in custom_actions:
             additional_prompt = ""
             if action.prompt:
-                additional_prompt = "\n- Additional Instructions: {action.prompt}"
+                additional_prompt = f"\n- Additional Instructions: {action.prompt}"
             prompt += dedent(
                 f"""
                 Service: {action.name}

@@ -1,4 +1,5 @@
 import json
+from functools import cached_property
 
 from django.db import models
 from django.urls import reverse
@@ -34,9 +35,9 @@ class CustomAction(BaseTeamModel):
     def __str__(self):
         return self.name
 
-    @property
+    @cached_property
     def api_schema_json(self):
-        return json.dumps(self.api_schema)
+        return json.dumps(self.api_schema, sort_keys=True)
 
     def get_absolute_url(self):
         return reverse("custom_actions:edit", args=[self.team.slug, self.pk])

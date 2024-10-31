@@ -8,6 +8,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.custom_actions.models import CustomAction
 from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
@@ -110,6 +111,44 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm_servi
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with "
     assert fake_llm_service.llm.get_call_messages()[0][0] == SystemMessage(content=expected_system__prompt)
+
+
+@pytest.mark.django_db()
+def test_runnable_with_custom_actions(session, fake_llm_service):
+    action = CustomAction.objects.create(
+        team=session.team,
+        name="Custom Action",
+        description="Custom action description",
+        prompt="Custom action prompt",
+        api_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Weather API", "version": "1.0.0"},
+            "servers": [{"url": "https://api.weather.com"}],
+            "paths": {
+                "/weather": {
+                    "get": {
+                        "summary": "Get weather",
+                    }
+                }
+            },
+        },
+    )
+    session.experiment.custom_actions.add(action)
+    session.experiment.tools = []
+    # build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
+    state = ChatExperimentState(session.experiment, session)
+    chain = AgentExperimentRunnable(state=state)
+    result = chain.invoke("hi")
+    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    messages = fake_llm_service.llm.get_calls()[0].args[0]
+    assert len(messages) == 3
+    assert messages == [
+        SystemMessage(content="You are a helpful assistant"),
+        HumanMessage(content=state.get_custom_actions_prompt([action])),
+        HumanMessage(content="hi"),
+    ]
+
+    assert fake_llm_service.llm.get_calls()[0].kwargs["tools"][0]["function"]["name"] == "openapi_request_tool"
 
 
 @pytest.mark.django_db()
