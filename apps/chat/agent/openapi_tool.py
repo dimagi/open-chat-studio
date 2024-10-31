@@ -1,12 +1,9 @@
-import json
-
 import httpx
 from celery.utils.text import dedent
-from django.utils.text import slugify
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.service_providers.auth_service import AuthService
+from apps.custom_actions.models import CustomAction
 
 
 class OpenAPIToolInput(BaseModel):
@@ -18,47 +15,54 @@ class OpenAPIToolInput(BaseModel):
 
 
 class OpenAPITool(BaseTool):
-    """A custom tool for making API requests based on OpenAPI specifications."""
+    """A custom tool for making API requests based on OpenAPI specifications. This is a single tool that
+    can handle multiple API endpoints and methods. The tool is configured with a list of CustomAction objects,
+    each of which represents an API service with its own OpenAPI schema. The tool will determine which action
+    to use based on the endpoint and method provided in the input. The tool will then make the API request
+    using the appropriate action and return the response."""
 
-    spec: dict
-    """The OpenAPI spec"""
+    custom_actions: list[CustomAction]
 
-    auth_service: AuthService
-    """AuthService used to make the requests"""
+    name: str = "openapi_request_tool"
+    description: str = dedent(
+        """
+        Makes HTTP requests to API endpoints defined in the OpenAPI specification shown below.
+        Authentication and request formatting are handled based on the OpenAPI schema.
 
-    additional_instructions: str = ""
-    """Any additional information about the service which may assist the model"""
-
-    # The rest of the fields are set automatically
-    _base_url: str
-    name: str = ""
-    description: str = ""
+        Generate the full API request details for answering the user question.
+        You should build the API request in order to get a response that is as short as possible, while still
+        getting the necessary information to answer the question. Pay attention to deliberately exclude
+        any unnecessary pieces of data in the API call.
+        """
+    )
     args_schema: type[OpenAPIToolInput] = OpenAPIToolInput
     handle_tool_error: bool = True
+    executors: list["ActionExecutor"] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._base_url = self.spec["servers"][0]["url"]
-        self.name = "openapi_request_tool_for_" + slugify(self.spec["info"]["title"])
-        spec_json = json.dumps(self.spec)
-        self.description = dedent(
-            f"""
-            Makes HTTP requests to API endpoints defined in the OpenAPI specification shown below.
-            Authentication and request formatting are handled based on the OpenAPI schema.
-
-            OpenAPI Spec:
-            {spec_json}
-            
-            Generate the full API request details for answering the user question.
-            You should build the API request in order to get a response that is as short as possible, while still
-            getting the necessary information to answer the question. Pay attention to deliberately exclude
-            any unnecessary pieces of data in the API call.
-            """
-        ) + (f"\n{self.additional_instructions}" if self.additional_instructions else "")
+        self.executors = [ActionExecutor(action) for action in self.custom_actions]
 
     def _run(self, endpoint: str, method: str, params: dict | None, data: dict | None, headers: dict | None) -> str:
+        for executor in self.executors:
+            if executor.can_run(endpoint, method):
+                return executor.run(endpoint, method, params, data, headers)
+        raise ToolException(f"Endpoint {endpoint} with method {method} not found in OpenAPI spec")
+
+
+class ActionExecutor:
+    def __init__(self, action: CustomAction):
+        self.action = action
+        self.auth_service = action.get_auth_service()
+        self.spec = action.api_schema
+        self.base_url = self.spec["servers"][0]["url"]
+
+    def can_run(self, endpoint: str, method: str) -> bool:
+        return self._validate_endpoint(endpoint, method)
+
+    def run(self, endpoint: str, method: str, params: dict | None, data: dict | None, headers: dict | None) -> str:
         if not self._validate_endpoint(endpoint, method):
             raise ToolException(f"Endpoint {endpoint} with method {method} not found in OpenAPI spec")
 
@@ -94,7 +98,7 @@ class OpenAPITool(BaseTool):
 
     def _build_url(self, endpoint: str) -> str:
         """Build the full URL for the API request."""
-        return f"{self._base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
     def _validate_endpoint(self, endpoint: str, method: str) -> bool:
         """

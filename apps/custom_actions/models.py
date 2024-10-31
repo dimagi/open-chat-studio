@@ -1,3 +1,5 @@
+import json
+
 from django.db import models
 from django.urls import reverse
 from field_audit import audit_fields
@@ -31,6 +33,10 @@ class CustomAction(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def api_schema_json(self):
+        return json.dumps(self.api_schema)
 
     def get_absolute_url(self):
         return reverse("custom_actions:edit", args=[self.team.slug, self.pk])

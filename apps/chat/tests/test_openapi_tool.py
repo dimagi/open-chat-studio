@@ -1,4 +1,4 @@
-import json
+import re
 from contextlib import nullcontext as does_not_raise
 
 import pytest
@@ -6,7 +6,7 @@ import tenacity
 from langchain_core.tools import ToolException
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from apps.chat.agent.tools import get_custom_action_tools
+from apps.chat.agent.openapi_tool import OpenAPITool
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.auth_service import AuthService
 
@@ -41,16 +41,14 @@ class TestOpenAPITool:
             prompt="custom_instructions",
             api_schema=self.spec,
         )
-        [tool] = get_custom_action_tools([action])
-        tool.handle_tool_error = False  # raise exceptions in tests
-        return tool
+        # raise exceptions in tests
+        return OpenAPITool(custom_actions=[action], handle_tool_error=False)
 
-    def test_tool_function_schema(self):
+    def test_spec(self):
         tool = self._get_tool()
-        tool_spec = convert_to_openai_tool(tool, strict=True)
-        assert "weather-api" in tool_spec["function"]["name"]
-        assert "custom_instructions" in tool_spec["function"]["description"]
-        assert json.dumps(self.spec) in tool_spec["function"]["description"]
+        openai_tool = convert_to_openai_tool(tool, strict=True)
+        assert len(openai_tool["function"]["description"]) < 1024, "Description must be less than 1024 characters"
+        assert re.match(r"^[a-zA-Z0-9_-]{1,64}$", openai_tool["function"]["name"]), "Name must match regex"
 
     @pytest.mark.parametrize(
         ("tool_call", "url_params", "error_expectation"),
@@ -111,7 +109,7 @@ class TestOpenAPITool:
         tool = self._get_tool()
         auth_service = AuthService()
         auth_service.__dict__["_default_retry_wait"] = lambda: tenacity.wait_none()
-        tool.auth_service = auth_service
+        tool.executors[0].auth_service = auth_service
 
         expected_url = "https://api.weather.com/weather?location=Cape+Town"
         for response in responses:

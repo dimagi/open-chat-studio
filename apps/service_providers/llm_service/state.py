@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
+from textwrap import dedent
 
 from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
@@ -48,6 +49,10 @@ class RunnableState(metaclass=ABCMeta):
 
     @abstractmethod
     def get_prompt(self):
+        pass
+
+    @abstractmethod
+    def get_custom_actions_prompt(self, custom_actions):
         pass
 
 
@@ -99,6 +104,24 @@ class ExperimentState(RunnableState):
 
     def get_tools(self):
         return get_tools(self.session, self.experiment)
+
+    def get_custom_actions_prompt(self, custom_actions):
+        if not custom_actions:
+            return ""
+        prompt = (
+            "The following APIs may be used to gather additional information. Use the 'openapi_request_tool'"
+            " to make requests to these APIs."
+        )
+        for action in custom_actions:
+            prompt += dedent(
+                f"""
+                Service: {action.name}
+                - Additional Instructions: {action.prompt}
+                - OpenAPI Spec: {action.api_schema_json}
+
+                """
+            )
+        return prompt
 
 
 class ChatRunnableState(RunnableState):
@@ -202,6 +225,8 @@ class AssistantExperimentState(ExperimentState, AssistantState):
             participant_data=self.get_participant_data(),
             current_datetime=self.get_current_datetime(),
         )
+
+        instructions += self.get_custom_actions_prompt(self.experiment.assistant.custom_actions.all())
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.experiment.assistant.include_file_info and code_interpreter_attachments:

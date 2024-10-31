@@ -11,7 +11,7 @@ from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -177,6 +177,9 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
         if "current_datetime" in prompt.input_variables:
             context["current_datetime"] = self.state.get_current_datetime()
 
+        if custom_actions_prompt := self.state.get_custom_actions_prompt(self.experiment.custom_actions.all()):
+            context["custom_action_specs"] = [HumanMessage(custom_actions_prompt)]
+
         return RunnableLambda(lambda inputs: context | inputs, name="add_prompt_context")
 
     @property
@@ -186,6 +189,7 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
                 ("system", self.state.get_prompt()),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
+                MessagesPlaceholder("custom_action_specs", optional=True),
             ]
         )
 
