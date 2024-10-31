@@ -190,6 +190,7 @@ class ExperimentForm(forms.ModelForm):
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    custom_actions = forms.ModelMultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False, queryset=None)
 
     class Meta:
         model = Experiment
@@ -221,6 +222,7 @@ class ExperimentForm(forms.ModelForm):
             "trace_provider",
             "participant_allowlist",
             "debug_mode_enabled",
+            "custom_actions",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -261,6 +263,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
+        self.fields["custom_actions"].queryset = team.customaction_set
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
