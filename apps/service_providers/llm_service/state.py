@@ -113,11 +113,13 @@ class ExperimentState(RunnableState):
             " to make requests to these APIs."
         )
         for action in custom_actions:
+            additional_prompt = ""
+            if action.prompt:
+                additional_prompt = "\n- Additional Instructions: {action.prompt}"
             prompt += dedent(
                 f"""
                 Service: {action.name}
-                - Additional Instructions: {action.prompt}
-                - OpenAPI Spec: {action.api_schema_json}
+                - OpenAPI Spec: {action.api_schema_json}{additional_prompt}
 
                 """
             )
