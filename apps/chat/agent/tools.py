@@ -6,6 +6,7 @@ from django.db import transaction
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
+from apps.chat.agent.openapi_tool import OpenAPITool
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
@@ -233,6 +234,9 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
     for tool_name in tool_names:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
+
+    tools.extend(get_custom_action_tools(experiment.custom_actions.all()))
+
     return tools
 
 
@@ -241,4 +245,17 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
     for tool_name in assistant.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=None))
+    tools.extend(get_custom_action_tools(assistant.custom_actions.all()))
+    return tools
+
+
+def get_custom_action_tools(custom_actions) -> list[BaseTool]:
+    tools = []
+    for custom_action in custom_actions:
+        tool = OpenAPITool(
+            spec=custom_action.api_schema,
+            auth_service=custom_action.get_auth_service(),
+            additional_instructions=custom_action.prompt,
+        )
+        tools.append(tool)
     return tools

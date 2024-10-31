@@ -34,3 +34,11 @@ class CustomAction(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("custom_actions:edit", args=[self.team.slug, self.pk])
+
+    def get_auth_service(self):
+        if self.auth_provider:
+            return self.auth_provider.get_auth_service()
+
+        from apps.service_providers import auth_service
+
+        return auth_service.AuthService()

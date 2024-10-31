@@ -4,12 +4,15 @@ import httpx
 import pydantic
 import tenacity
 
-from apps.service_providers.auth_service.schemes import ApiKeyAuth, CommCareAuth
+from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
 
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self) -> httpx.Client:
         return httpx.Client(**self._get_http_client_kwargs())
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {}
 
     def call_with_retries(self, func, *args, **kwargs) -> Any:
         controller = self.get_retry_controller()
@@ -46,7 +49,14 @@ class ApiKeyAuthService(AuthService):
     value: str
 
     def _get_http_client_kwargs(self) -> dict:
-        return {"auth": ApiKeyAuth(self.key, self.value)}
+        return {"auth": HeaderAuth(self.key, self.value)}
+
+
+class BearTokenAuthService(AuthService):
+    token: str
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {"auth": HeaderAuth("Authorization", f"Bearer {self.token}")}
 
 
 class CommCareAuthService(AuthService):
