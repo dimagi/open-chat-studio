@@ -1,7 +1,7 @@
 import httpx
 
 
-class ApiKeyAuth(httpx.Auth):
+class HeaderAuth(httpx.Auth):
     def __init__(self, key: str, value: str):
         self.key = key
         self.value = value

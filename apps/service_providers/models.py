@@ -296,6 +296,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 class AuthProviderType(models.TextChoices):
     basic = "basic", _("Basic")
     api_key = "api_key", _("API Key")
+    bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
 
     @property
@@ -305,6 +306,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.BasicAuthConfigForm
             case AuthProviderType.api_key:
                 return forms.ApiKeyAuthConfigForm
+            case AuthProviderType.bearer:
+                return forms.BearerAuthConfigForm
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
         raise Exception(f"No config form configured for {self}")
@@ -315,6 +318,8 @@ class AuthProviderType(models.TextChoices):
                 return auth_service.BasicAuthService(**config)
             case AuthProviderType.api_key:
                 return auth_service.ApiKeyAuthService(**config)
+            case AuthProviderType.bearer:
+                return auth_service.BearTokenAuthService(**config)
             case AuthProviderType.commcare:
                 return auth_service.CommCareAuthService(**config)
         raise Exception(f"No messaging service configured for {self}")

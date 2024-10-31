@@ -203,6 +203,12 @@ class ApiKeyAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     value = forms.CharField(label=_("API Key"))
 
 
+class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["token"]
+
+    token = forms.CharField(label=_("Bearer Token"))
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 
