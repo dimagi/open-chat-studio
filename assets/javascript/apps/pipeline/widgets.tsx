@@ -5,7 +5,7 @@ import React, {
   useId,
 } from "react";
 import { InputParam } from "./types/nodeInputTypes";
-import { NodeParameterValues } from "./types/nodeParameterValues";
+import { NodeParameterValues, LlmProviderModel } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import { NodeProps } from "reactflow";
 import {concatenate} from "./utils";
@@ -216,13 +216,14 @@ export function LlmWidget({
       return providerId + '|:|' + providerModelId;
   };
 
+  type ProviderModelsByType = { [type: string]: LlmProviderModel[] };
   const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
           acc[provModel.type] = [];
       }
       acc[provModel.type].push(provModel);
       return acc;
-  }, {});
+  }, {} as ProviderModelsByType);
 
   return (
     <select
@@ -246,53 +247,6 @@ export function LlmWidget({
   );
 }
 
-export function LlmProviderModelWidget({
-    parameterValues,
-    inputParam,
-    value,
-    onChange,
-    providerId,
-}: {
-    parameterValues: NodeParameterValues;
-    inputParam: InputParam;
-    value: string | string[];
-    onChange: ChangeEventHandler;
-    providerId: string;
-}) {
-
-    const providerTypeById = parameterValues.LlmProviderId.reduce((acc, prov) => {
-        acc[prov.id] = prov.type;
-        return acc;
-    }, {});
-  const providerType = providerTypeById[providerId];
-
-  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
-      if (!acc[provModel.type]) {
-          acc[provModel.type] = [];
-      }
-      acc[provModel.type].push(provModel);
-      return acc;
-  }, {});
-
-    return (
-        <select
-            className="select select-bordered w-full"
-            name={inputParam.name}
-            onChange={onChange}
-            value={value}
-        >
-            <option value="" disabled>
-                Select a provider model
-            </option>
-            { providerId &&
-                providerModelsByType[providerType].map((model) => (
-                    <option key={model.id} value={model.id}>
-                        {model.name}
-                    </option>
-                ))}
-        </select>
-    );
-}
 
 export function SourceMaterialIdWidget({
   parameterValues,
