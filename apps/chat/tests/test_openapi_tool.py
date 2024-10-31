@@ -77,6 +77,12 @@ class TestOpenAPITool:
                 pytest.raises(ToolException),
                 id="incorrect-method",
             ),
+            pytest.param(
+                {"endpoint": "https://api.weather.com/weather", "method": "get"},
+                "",
+                None,
+                id="endpoint-with-base-url",
+            ),
         ],
     )
     def test_custom_action_execution(self, httpx_mock, tool_call: dict, url_params, error_expectation):

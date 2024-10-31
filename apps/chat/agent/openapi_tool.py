@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlparse
+
 import httpx
 from celery.utils.text import dedent
 from langchain_core.tools import BaseTool, ToolException
@@ -60,9 +62,11 @@ class ActionExecutor:
         self.base_url = self.spec["servers"][0]["url"]
 
     def can_run(self, endpoint: str, method: str) -> bool:
+        endpoint, params = self._clean_endpoint(endpoint)
         return self._validate_endpoint(endpoint, method)
 
     def run(self, endpoint: str, method: str, params: dict | None, data: dict | None, headers: dict | None) -> str:
+        endpoint, params = self._clean_endpoint(endpoint, params)
         if not self._validate_endpoint(endpoint, method):
             raise ToolException(f"Endpoint {endpoint} with method {method} not found in OpenAPI spec")
 
@@ -131,3 +135,18 @@ class ActionExecutor:
             if not (spec_part.startswith("{") and spec_part.endswith("}")) and spec_part != req_part:
                 return False
         return True
+
+    def _clean_endpoint(self, endpoint, params=None):
+        """Parse the endpoint and extract query parameters if present."""
+        try:
+            parsed = urlparse(endpoint)
+            if parsed.netloc:
+                if not self.base_url.startswith(f"{parsed.scheme}://{parsed.netloc}"):
+                    raise ToolException("Endpoint is not a relative path")
+            endpoint = parsed.path
+            if parsed.query:
+                params = (params or {}) | parse_qs(parsed.query)
+        except Exception:
+            pass
+
+        return endpoint, params
