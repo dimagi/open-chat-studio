@@ -91,6 +91,10 @@ class ToolResources(BaseModel):
 
     objects = AuditingManager()
 
+    def copy_files_to_tool(self, tool_resource: "ToolResources"):
+        for file in self.files.all():
+            file.toolresource_set.add(tool_resource)
+
     @property
     def label(self):
         return self.tool_type.replace("_", " ").title()

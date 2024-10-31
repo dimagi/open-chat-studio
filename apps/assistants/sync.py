@@ -216,6 +216,14 @@ def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: Ope
             if ocs_file_search.extra.get("vector_store_id") != vector_store_id:
                 ocs_file_search.extra["vector_store_id"] = vector_store_id
                 ocs_file_search.save()
+
+            # If there's another assistant using the same vector store, simply copy the files over to this one
+            if tool_resource := ToolResources.objects.filter(
+                assistant__team_id=assistant.team_id, tool_type="file_search", extra__vector_store_id=vector_store_id
+            ).exlcude(id=ocs_file_search.id):
+                tool_resource.copy_files_to_tool(ocs_file_search)
+                return
+
             client = assistant.llm_provider.get_llm_service().get_raw_client()
             file_ids = (
                 file.id
