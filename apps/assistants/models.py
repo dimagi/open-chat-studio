@@ -45,6 +45,11 @@ class OpenAiAssistant(BaseTeamModel):
         verbose_name="LLM Model",
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    custom_actions = models.ManyToManyField(
+        "custom_actions.CustomAction",
+        related_name="assistants",
+        blank=True,
+    )
 
     files = models.ManyToManyField("files.File", blank=True)
 

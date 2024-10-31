@@ -22,6 +22,7 @@ INSTRUCTIONS_HELP_TEXT = """
 class OpenAiAssistantForm(forms.ModelForm):
     builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    custom_actions = forms.ModelMultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False, queryset=None)
 
     class Meta:
         model = OpenAiAssistant
@@ -35,6 +36,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "llm_model",
             "temperature",
             "top_p",
+            "custom_actions",
         ]
         labels = {
             "builtin_tools": "Enable Built-in Tools",
@@ -55,6 +57,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
+        self.fields["custom_actions"].queryset = request.team.customaction_set.all()
 
     def clean(self):
         cleaned_data = super().clean()
