@@ -6,6 +6,7 @@ from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
 
 
@@ -45,7 +46,4 @@ class CustomAction(BaseTeamModel):
     def get_auth_service(self):
         if self.auth_provider:
             return self.auth_provider.get_auth_service()
-
-        from apps.service_providers import auth_service
-
-        return auth_service.AuthService()
+        return anonymous_auth_service
