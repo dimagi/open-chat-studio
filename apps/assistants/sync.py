@@ -175,22 +175,17 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     for resource in tool_resources:
         openai_file_ids = []
         if resource.tool_type == "code_interpreter":
-            try:
-                openai_file_ids = client.beta.assistants.retrieve(
-                    assistant.assistant_id
-                ).tool_resources.code_interpreter.file_ids
-            except AttributeError:
+            assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
+            if hasattr(assistant_data, "tool_resources") and hasattr(assistant_data.tool_resources, "code_interpreter"):
+                openai_file_ids = assistant_data.tool_resources.code_interpreter.file_ids
+            else:
                 openai_file_ids = []
         elif resource.tool_type == "file_search":
-            try:
-                openai_vector_store_id = resource.extra.get("vector_store_id")
-                if not openai_vector_store_id:
-                    continue
-                openai_file_ids = [
-                    file.id
-                    for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id).data
-                ]
-            except AttributeError:
+            openai_vector_store_id = resource.extra.get("vector_store_id")
+            if openai_vector_store_id:
+                vector_store_data = client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)
+                openai_file_ids = [file.id for file in getattr(vector_store_data, "data", [])]
+            else:
                 openai_file_ids = []
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if set(ocs_file_ids) != set(openai_file_ids):
