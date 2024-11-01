@@ -1,4 +1,4 @@
-from .main import ApiKeyAuthService, AuthService, BasicAuthService, BearTokenAuthService, CommCareAuthService
+from .main import ApiKeyAuthService, AuthService, BasicAuthService, BearerTokenAuthService, CommCareAuthService
 
 anonymous_auth_service = AuthService()
 
@@ -8,5 +8,5 @@ __all__ = [
     "CommCareAuthService",
     "BasicAuthService",
     "ApiKeyAuthService",
-    "BearTokenAuthService",
+    "BearerTokenAuthService",
 ]

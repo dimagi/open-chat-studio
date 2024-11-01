@@ -52,7 +52,7 @@ class ApiKeyAuthService(AuthService):
         return {"auth": HeaderAuth(self.key, self.value)}
 
 
-class BearTokenAuthService(AuthService):
+class BearerTokenAuthService(AuthService):
     token: str
 
     def _get_http_client_kwargs(self) -> dict:

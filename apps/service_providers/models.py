@@ -319,10 +319,10 @@ class AuthProviderType(models.TextChoices):
             case AuthProviderType.api_key:
                 return auth_service.ApiKeyAuthService(**config)
             case AuthProviderType.bearer:
-                return auth_service.BearTokenAuthService(**config)
+                return auth_service.BearerTokenAuthService(**config)
             case AuthProviderType.commcare:
                 return auth_service.CommCareAuthService(**config)
-        raise Exception(f"No messaging service configured for {self}")
+        raise Exception(f"No auth service configured for {self}")
 
 
 class AuthProviderManager(AuditingManager):
