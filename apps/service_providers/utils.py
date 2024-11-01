@@ -51,7 +51,7 @@ class ServiceProvider(ServiceProviderType, Enum):
 
     @property
     def table(self) -> tables.Table:
-        return make_table(self.slug, self.model, fields=self.primary_fields)
+        return make_table(self.slug, self.label, self.model, fields=self.primary_fields)
 
     @property
     def provider_type_field(self) -> str:
