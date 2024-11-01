@@ -48,7 +48,7 @@ class TestOpenAPITool:
         tool = self._get_tool()
         openai_tool = convert_to_openai_tool(tool, strict=True)
         assert len(openai_tool["function"]["description"]) < 1024, "Description must be less than 1024 characters"
-        assert re.match(r"^[a-zA-Z0-9_-]{1,64}$", openai_tool["function"]["name"]), "Name must match regex"
+        assert re.match(r"^[a-zA-Z0-9_-]{1,64}$", openai_tool["function"]["name"])
 
     @pytest.mark.parametrize(
         ("tool_call", "url_params", "error_expectation"),

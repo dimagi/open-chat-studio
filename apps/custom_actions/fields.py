@@ -6,7 +6,7 @@ from django.forms import Textarea
 from django.forms.fields import CharField, InvalidJSONInput, JSONString
 
 
-class JSONORYAMLField(CharField):
+class JSONOrYAMLField(CharField):
     """A field that accepts JSON or YAML input and returns a Python object."""
 
     default_error_messages = {

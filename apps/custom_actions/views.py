@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -15,27 +16,27 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, **kwargs):
         return {
             "active_tab": "custom_actions",
             "title": "Custom Actions",
-            # "info_link": settings.DOCUMENTATION_LINKS["consent"],
-            "new_object_url": reverse("custom_actions:new", args=[team_slug]),
-            "table_url": reverse("custom_actions:table", args=[team_slug]),
+            "new_object_url": reverse("custom_actions:new", args=[kwargs["team_slug"]]),
+            "table_url": reverse("custom_actions:table", args=[kwargs["team_slug"]]),
         }
 
 
-class CustomActionTableView(SingleTableView):
+class CustomActionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = CustomAction
     paginate_by = 25
     table_class = CustomActionTable
     template_name = "table/single_table.html"
+    permission_required = "custom_actions.view_customaction"
 
     def get_queryset(self):
         return CustomAction.objects.filter(team=self.request.team)
 
 
-class CreateCustomAction(CreateView):
+class CreateCustomAction(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "generic/object_form.html"
@@ -44,6 +45,7 @@ class CreateCustomAction(CreateView):
         "button_text": "Create",
         "active_tab": "custom_actions",
     }
+    permission_required = "custom_actions.add_customaction"
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "request": self.request}
@@ -56,7 +58,7 @@ class CreateCustomAction(CreateView):
         return super().form_valid(form)
 
 
-class EditCustomAction(UpdateView):
+class EditCustomAction(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "generic/object_form.html"
@@ -65,6 +67,7 @@ class EditCustomAction(UpdateView):
         "button_text": "Update",
         "active_tab": "custom_actions",
     }
+    permission_required = "custom_actions.change_customaction"
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "request": self.request}
@@ -76,7 +79,9 @@ class EditCustomAction(UpdateView):
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
-class DeleteCustomAction(LoginAndTeamRequiredMixin, View):
+class DeleteCustomAction(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "custom_actions.delete_customaction"
+
     def delete(self, request, team_slug: str, pk: int):
         consent_form = get_object_or_404(CustomAction, id=pk, team=request.team)
         consent_form.delete()

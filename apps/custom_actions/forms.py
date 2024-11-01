@@ -1,18 +1,20 @@
 from django import forms
 
-from apps.custom_actions.fields import JSONORYAMLField
+from apps.custom_actions.fields import JSONOrYAMLField
 from apps.custom_actions.models import CustomAction
+from apps.service_providers.models import AuthProvider
 
 
 class CustomActionForm(forms.ModelForm):
-    description = forms.CharField(widget=forms.Textarea(attrs={"rows": "3"}), required=False)
+    description = forms.CharField(widget=forms.Textarea(attrs={"rows": "3"}), required=False, max_length=1000)
     prompt = forms.CharField(
         widget=forms.Textarea(attrs={"rows": "3"}),
         required=False,
         label="Additional Prompt",
         help_text="Use this field to provide additional instructions to the LLM",
+        max_length=1000,
     )
-    api_schema = JSONORYAMLField(
+    api_schema = JSONOrYAMLField(
         widget=forms.Textarea(attrs={"rows": "10"}),
         required=True,
         label="API Schema",
@@ -21,7 +23,7 @@ class CustomActionForm(forms.ModelForm):
         initial={},
     )
     auth_provider = forms.ModelChoiceField(
-        queryset=None,
+        AuthProvider.objects.none(),
         required=False,
         label="Auth",
         help_text="Select an authentication to use for this action.",
