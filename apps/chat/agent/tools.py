@@ -235,7 +235,9 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
 
-    tools.extend(get_custom_action_tool(experiment.custom_actions.all()))
+    custom_actions = experiment.custom_actions.select_related("auth_provider").all()
+    if custom_actions:
+        tools.append(OpenAPITool(custom_actions=list(custom_actions)))
 
     return tools
 
@@ -245,12 +247,9 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
     for tool_name in assistant.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=None))
-    tools.extend(get_custom_action_tool(assistant.custom_actions.all()))
+
+    custom_actions = assistant.custom_actions.select_related("auth_provider").all()
+    if custom_actions:
+        tools.append(OpenAPITool(custom_actions=list(custom_actions)))
+
     return tools
-
-
-def get_custom_action_tool(custom_actions) -> list[BaseTool]:
-    if not custom_actions:
-        return []
-
-    return [OpenAPITool(custom_actions=list(custom_actions))]
