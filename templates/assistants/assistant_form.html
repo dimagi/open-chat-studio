@@ -13,11 +13,6 @@
   </div>
 {% endblock %}
 {% block pre_form %}
-  {% if files_out_of_sync %}
-    <div id="sync-notification" class="flex w-full shadow-md !rounded-none alert m-1">
-      <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open Chat Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, please upload the necessary files on this page.</p>
-    </div>
-  {% endif %}
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}

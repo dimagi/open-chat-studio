@@ -126,13 +126,6 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
     button_text = "Update"
     permission_required = "assistants.change_openaiassistant"
 
-    def get(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if are_files_in_sync_with_openai(self.object):
-            context = self.get_context_data(files_out_of_sync=True)
-            return self.render_to_response(context)
-        return super().get(request, *args, **kwargs)
-
     @transaction.atomic()
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -155,10 +148,8 @@ def check_sync_status(request, team_slug, pk):
         is_synced = is_synced_with_openai(assistant)
     except OpenAiSyncError:
         is_synced = False
-    context = {
-        "is_synced": is_synced,
-        "object": assistant,
-    }
+    files_in_sync = are_files_in_sync_with_openai(assistant)
+    context = {"is_synced": is_synced, "object": assistant, "are_files_synced": files_in_sync}
     return render(request, "assistants/sync_status.html", context)
 
 
