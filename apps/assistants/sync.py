@@ -201,16 +201,17 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
 
 def check_tool_enabled(tool_type: str, tool_resources: list, client, assistant_data):
     """Check if a specific tool type is enabled in OpenAI."""
-    if tool_type in tool_resources:
+    if tool_type in [resource.tool_type for resource in tool_resources]:
         return True
     try:
+        assistant_tool_resources = assistant_data.tool_resources
         if tool_type == "code_interpreter":
-            tool_resources_data = assistant_data.tool_resources
+            tool_resources_data = assistant_tool_resources.code_interpreter
         elif tool_type == "file_search":
-            tool_resources_data = client.beta.vector_stores.files
+            tool_resources_data = assistant_tool_resources.file_search
         else:
             return False
-        return bool(tool_resources_data)
+        return tool_resources_data is not None
     except Exception:
         return False
 
