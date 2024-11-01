@@ -171,7 +171,7 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
             sync_from_openai(assistant)
         except OpenAiSyncError as e:
             messages.error(request, f"Error syncing assistant: {e}")
-        return check_sync_status(request, team_slug, pk)
+        return HttpResponse(headers={"HX-Refresh": "true"})
 
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
