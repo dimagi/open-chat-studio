@@ -451,7 +451,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             file_name = file.name
         except File.DoesNotExist:
             client = self.state.raw_client
-            openai_file = client.files.retrieve(file_id=file_id)
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
