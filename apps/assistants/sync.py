@@ -171,11 +171,11 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
     tool_resources = assistant.tool_resources.all()
     client = assistant.llm_provider.get_llm_service().get_raw_client()
+    assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
 
     for resource in tool_resources:
         openai_file_ids = []
         if resource.tool_type == "code_interpreter":
-            assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
             if hasattr(assistant_data, "tool_resources") and hasattr(assistant_data.tool_resources, "code_interpreter"):
                 openai_file_ids = assistant_data.tool_resources.code_interpreter.file_ids
             else:
@@ -199,13 +199,13 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     return True
 
 
-def check_tool_enabled(tool_type: str, tool_resources: list, client, assistant_id: str):
+def check_tool_enabled(tool_type: str, tool_resources: list, client, assistant_data):
     """Check if a specific tool type is enabled in OpenAI."""
     if tool_type in tool_resources:
         return True
     try:
         if tool_type == "code_interpreter":
-            tool_resources_data = client.beta.assistants.retrieve(assistant_id).tool_resources
+            tool_resources_data = assistant_data.tool_resources
         elif tool_type == "file_search":
             tool_resources_data = client.beta.vector_stores.files
         else:
