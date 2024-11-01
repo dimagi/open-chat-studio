@@ -3,43 +3,45 @@ from contextlib import nullcontext as does_not_raise
 
 import pytest
 import tenacity
-from langchain_core.tools import ToolException
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_community.utilities.openapi import OpenAPISpec
+from langchain_core.tools import Tool, ToolException
+from langchain_core.utils.function_calling import convert_to_openai_function, convert_to_openai_tool
 
+from apps.chat.agent.openapi_schema import openapi_spec_op_to_function_def
 from apps.chat.agent.openapi_tool import OpenAPITool
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.auth_service import AuthService
 
+WEATHER_OPENAPI_SPEC = {
+    "openapi": "3.0.0",
+    "info": {"title": "Weather API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.weather.com"}],
+    "paths": {
+        "/weather": {
+            "get": {
+                "summary": "Get weather",
+                "parameters": [
+                    {
+                        "name": "location",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string"},
+                        "description": "The location to get the weather for",
+                    }
+                ],
+            }
+        }
+    },
+}
+
 
 class TestOpenAPITool:
-    spec = {
-        "openapi": "3.0.0",
-        "info": {"title": "Weather API", "version": "1.0.0"},
-        "servers": [{"url": "https://api.weather.com"}],
-        "paths": {
-            "/weather": {
-                "get": {
-                    "summary": "Get weather",
-                    "parameters": [
-                        {
-                            "name": "location",
-                            "in": "query",
-                            "required": True,
-                            "schema": {"type": "string"},
-                            "description": "The location to get the weather for",
-                        }
-                    ],
-                }
-            }
-        },
-    }
-
     def _get_tool(self):
         action = CustomAction(
             name="Weather Service",
             description="Get the weather for a specific location",
             prompt="custom_instructions",
-            api_schema=self.spec,
+            api_schema=WEATHER_OPENAPI_SPEC,
         )
         # raise exceptions in tests
         return OpenAPITool(custom_actions=[action], handle_tool_error=False)
@@ -130,3 +132,47 @@ class TestOpenAPITool:
         }
         with error_expectation:
             assert tool.invoke(tool_call) == '{"current": "sunny"}'
+
+
+def test_openai_function_to_pydantic():
+    test_openapi_spec_op_to_function_def(
+        WEATHER_OPENAPI_SPEC,
+        "/weather",
+        "get",
+        {
+            "name": "weather_get",
+            "description": "Get weather",
+            "parameters": {
+                "properties": {
+                    "params": {
+                        "properties": {
+                            "location": {"description": "The location to get the weather for", "type": "string"}
+                        },
+                        "required": ["location"],
+                        "type": "object",
+                        "additionalProperties": False,
+                    }
+                },
+                "required": ["params"],
+                "type": "object",
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    )
+
+
+def test_openapi_spec_op_to_function_def(spec: dict, path: str, method: str, expected_function: dict):
+    """This does a round trip from OpenAPI spec to OpenAI function definition because it's hard
+    to validate the pydantic model that's produced by `openapi_spec_op_to_function_def`.
+    """
+    spec = OpenAPISpec.from_spec_dict(spec)
+    function_def = openapi_spec_op_to_function_def(spec, path, method)
+    tool = Tool(
+        name=function_def["name"],
+        description=function_def["description"],
+        args_schema=function_def["args_schema"],
+        func=lambda x: x,
+    )
+    openai_function = convert_to_openai_function(tool, strict=True)
+    assert openai_function == expected_function
