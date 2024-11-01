@@ -166,6 +166,14 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
             delete_file_from_openai(client, file)
 
 
+def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:
+    """Checks if a tool is configured in OpenAI but missing in OCS."""
+    tool_configured_in_openai = hasattr(assistant_data.tool_resources, tool_name) and getattr(
+        assistant_data.tool_resources, tool_name
+    )
+    return tool_configured_in_openai and tool_name not in local_tool_types
+
+
 @wrap_openai_errors
 def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
@@ -173,10 +181,18 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
 
+    # ensure same tools are configured in OCS as in OpenAI
+    local_tool_types = {resource.tool_type for resource in tool_resources}
+    if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
+        return False
+    if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
+        return False
+
+    # ensure files match
     for resource in tool_resources:
         openai_file_ids = []
         if resource.tool_type == "code_interpreter":
-            if hasattr(assistant_data, "tool_resources") and hasattr(assistant_data.tool_resources, "code_interpreter"):
+            if hasattr(assistant_data.tool_resources, "code_interpreter"):
                 openai_file_ids = assistant_data.tool_resources.code_interpreter.file_ids
             else:
                 openai_file_ids = []
@@ -190,30 +206,7 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if set(ocs_file_ids) != set(openai_file_ids):
             return False
-
-    if not check_tool_enabled(
-        "code_interpreter", tool_resources, client, assistant.assistant_id
-    ) or not check_tool_enabled("file_search", tool_resources, client, assistant.assistant_id):
-        return False
-
     return True
-
-
-def check_tool_enabled(tool_type: str, tool_resources: list, client, assistant_data):
-    """Check if a specific tool type is enabled in OpenAI."""
-    if tool_type in [resource.tool_type for resource in tool_resources]:
-        return True
-    try:
-        assistant_tool_resources = assistant_data.tool_resources
-        if tool_type == "code_interpreter":
-            tool_resources_data = assistant_tool_resources.code_interpreter
-        elif tool_type == "file_search":
-            tool_resources_data = assistant_tool_resources.file_search
-        else:
-            return False
-        return tool_resources_data is not None
-    except Exception:
-        return False
 
 
 @wrap_openai_errors
