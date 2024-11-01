@@ -16,7 +16,7 @@
   "homepage": "http://example.com/",
   "devDependencies": {
     "@babel/cli": "^7.25.9",
-    "@babel/compat-data": "^7.25.8",
+    "@babel/compat-data": "^7.26.2",
     "@babel/core": "^7.25.8",
     "@babel/preset-env": "^7.25.8",
     "@babel/preset-react": "^7.25.9",
