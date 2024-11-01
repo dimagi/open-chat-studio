@@ -39,7 +39,7 @@ class OpenAPITool(BaseTool):
     )
     args_schema: type[OpenAPIToolInput] = OpenAPIToolInput
     handle_tool_error: bool = True
-    executors: list["ActionExecutor"] = []
+    executors: list["ActionExecutor"] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -60,6 +60,13 @@ class ActionExecutor:
         self.auth_service = action.get_auth_service()
         self.spec = action.api_schema
         self.base_url = self.spec["servers"][0]["url"]
+        self._endpoint_method_map = self._build_endpoint_method_map()
+
+    def _build_endpoint_method_map(self):
+        endpoint_method_map = {}
+        for path, operations in self.spec["paths"].items():
+            endpoint_method_map[path] = [op.lower() for op in operations.keys()]
+        return endpoint_method_map
 
     def can_run(self, endpoint: str, method: str) -> bool:
         endpoint, params = self._clean_endpoint(endpoint)
@@ -115,9 +122,9 @@ class ActionExecutor:
         Returns:
             bool: True if endpoint exists in spec, False otherwise
         """
-        for path, operations in self.spec["paths"].items():
+        for path, methods in self._endpoint_method_map.items():
             if self._paths_match(endpoint, path):
-                return method.lower() in [op.lower() for op in operations.keys()]
+                return method.lower() in methods
         return False
 
     def _paths_match(self, request_path: str, spec_path: str) -> bool:
