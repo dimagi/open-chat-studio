@@ -23,17 +23,28 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
         spec (OpenAPISpec): The OpenAPI specification.
         path (str): The path of the operation.
         method (str): The HTTP method of the operation.
+
+    Example Model:
+
+        class GetWeatherModel(BaseModel):
+            params: ParamsModel
+            path_params: PathParamsModel
+            headers: HeadersModel
+            cookies: CookiesModel
+            data: BodyModel
     """
 
-    path_params = {(p.name, p.param_in): p for p in spec.get_parameters_for_path(path)}
-    request_args = {}
     op = spec.get_operation(path, method)
-    op_params = path_params.copy()
-    for param in spec.get_parameters_for_operation(op):
-        op_params[(param.name, param.param_in)] = param
+    path_params = {(p.name, p.param_in): p for p in spec.get_parameters_for_path(path)}
+    op_params = {(p.name, p.param_in): p for p in spec.get_parameters_for_operation(op)}
+
+    # Group parameters by location
     params_by_type = defaultdict(list)
-    for name_loc, p in op_params.items():
+    for name_loc, p in {**path_params, **op_params}.items():
         params_by_type[name_loc[1]].append(p)
+
+    # Get model for each parameter location
+    request_args = {}
     param_loc_to_arg_name = {
         "query": "params",
         "header": "headers",
@@ -43,21 +54,18 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
     for param_loc, arg_name in param_loc_to_arg_name.items():
         if params_by_type[param_loc]:
             request_args[arg_name] = _openapi_params_to_pydantic_model(arg_name, params_by_type[param_loc], spec)
+
+    # Get model for request body
     request_body = spec.get_request_body_for_operation(op)
     if request_body and request_body.content:
-        media_types = {}
-        for media_type, media_type_object in request_body.content.items():
-            if media_type_object.media_type_schema:
-                schema = spec.get_schema(media_type_object.media_type_schema)
-                schema.title = "body"
-                media_types[media_type] = _schema_to_pydantic_field_type(spec, schema)
-        if len(media_types) == 1:
-            media_type, schema_model = list(media_types.items())[0]
-            key = "json" if media_type == "application/json" else "data"
-            request_args[key] = schema_model
+        if "application/json" in request_body.content:
+            schema = spec.get_schema(request_body.content["application/json"].media_type_schema)
+            schema.title = "body"
+            request_args["data"] = _schema_to_pydantic_field_type(spec, schema)
         else:
-            raise ValueError("Multiple media types are not supported")
+            raise ValueError("Only application/json request bodies are supported")
 
+    # Assemble final model
     api_op = APIOperation.from_openapi_spec(spec, path, method)
     function_name = api_op.operation_id
     args_schema = _create_model(

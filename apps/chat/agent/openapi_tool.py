@@ -1,11 +1,16 @@
+import json
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 from celery.utils.text import dedent
+from langchain.chains.openai_functions.openapi import _format_url
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.chat.agent.openapi_schema import FunctionDef
 from apps.custom_actions.models import CustomAction
+from apps.service_providers.auth_service import AuthService
 
 
 class OpenAPIToolInput(BaseModel):
@@ -157,3 +162,28 @@ class ActionExecutor:
             pass
 
         return endpoint, params
+
+
+class OpenAPIOperationExecutor:
+    def __init__(self, auth_service: AuthService, function_def: FunctionDef):
+        self.auth_service = auth_service
+        self.function_def = function_def
+
+    def call_api(self, **kwargs) -> Any:
+        method = self.function_def["method"]
+        url = self.function_def["url"]
+        path_params = kwargs.pop("path_params", {})
+        url = _format_url(url, path_params)
+        if "data" in kwargs and isinstance(kwargs["data"], dict):
+            kwargs["data"] = json.dumps(kwargs["data"])
+
+        with self.auth_service.get_http_client() as client:
+            try:
+                return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
+            except httpx.HTTPError as e:
+                raise ToolException(f"Error making request: {str(e)}")
+
+    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> str:
+        response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
+        response.raise_for_status()
+        return response.text
