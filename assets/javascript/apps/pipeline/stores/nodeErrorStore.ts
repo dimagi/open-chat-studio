@@ -5,7 +5,8 @@ type ErrorStoreType = {
     errors: {[nodeId: string]: {[name: string]: string}},
     setFieldError: (nodeId: string, fieldName: string, errorMsg: string) => void;
     fieldError: (nodeId: string, fieldName: string) => string | undefined;
-    clearFieldErrors: (nodeId: string, fieldName: string) => undefined;
+    clearFieldErrors: (nodeId: string, fieldName: string) => void;
+    hasErrors: (nodeId: string) => boolean;
 }
 
 const useNodeErrorStore = create<ErrorStoreType>((set, get) => ({
@@ -31,6 +32,9 @@ const useNodeErrorStore = create<ErrorStoreType>((set, get) => ({
                 delete get().errors[nodeId];
             }
         }
+    },
+    hasErrors: (nodeId: string): boolean =>  {
+        return nodeId in get().errors;
     }
 }))
 

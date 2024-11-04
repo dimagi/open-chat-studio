@@ -7,6 +7,7 @@ import {NodeData} from "./types/nodeParams";
 import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
+import useNodeErrorStore from "./stores/nodeErrorStore";
 
 export type PipelineNode = Node<NodeData>;
 
@@ -15,6 +16,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
+  const nodeHasErrors = useNodeErrorStore((state) => state.hasErrors);
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -36,6 +38,12 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
+  const defaultBorder = nodeHasErrors(id) ? "border-red-500 " : ""
+  const nodeBorder = classNames(
+    selected ? "border-primary" : defaultBorder,
+    "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
+  )
+
   return (
     <>
       <NodeToolbar position={Position.Top}>
@@ -55,10 +63,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div
-        className={classNames(
-          selected ? "border border-primary" : "border",
-          "px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
-        )}
+        className={nodeBorder}
       >
         <div className="m-1 text-lg font-bold text-center">{data.label}</div>
         <NodeInput nodeId={id} />
