@@ -10,6 +10,7 @@ def get_input_types_for_node(node_class):
         type: str
         default: Any = None
         help_text: str | None = None
+        validators: list = []
 
     class NodeInputType(pydantic.BaseModel):
         name: str
@@ -25,7 +26,14 @@ def get_input_types_for_node(node_class):
             type_ = info.annotation
 
         help_text = _get_from_field_info_json_schema(info, "help_text")
-        new_input = InputParam(name=field_name, type=str(type_), default=info.default, help_text=help_text)
+        validators = _get_from_field_info_json_schema(info, "validators", [])
+        new_input = InputParam(
+            name=field_name,
+            type=str(type_),
+            default=info.default,
+            help_text=help_text,
+            validators=[validator.model_dump() for validator in validators],
+        )
         inputs.append(new_input)
 
     return NodeInputType(
@@ -36,6 +44,7 @@ def get_input_types_for_node(node_class):
     ).model_dump()
 
 
-def _get_from_field_info_json_schema(field_info: FieldInfo, key: str) -> any:
+def _get_from_field_info_json_schema(field_info: FieldInfo, key: str, default=None) -> any:
     if json_schema_extra := getattr(field_info, "json_schema_extra"):
-        return json_schema_extra.get(key, None)
+        return json_schema_extra.get(key, default)
+    return default

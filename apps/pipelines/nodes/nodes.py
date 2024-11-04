@@ -16,6 +16,7 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.nodes import validators
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
     ExpandableText,
@@ -64,7 +65,9 @@ class RenderTemplate(PipelineNode):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
-    llm_temperature: LlmTemperature = 1.0
+    llm_temperature: LlmTemperature = Field(
+        default=1.0, validators=[validators.Required(), validators.GreaterThan(value=0), validators.LesserThan(value=2)]
+    )
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
     max_token_limit: MaxTokenLimit = 8192
@@ -102,6 +105,7 @@ class LLMResponseWithPrompt(LLMResponse):
     prompt: ExpandableText = Field(
         default="You are a helpful assistant. Answer the user's query as best you can: {input}",
         help_text="Use {input} to designate the user's query",
+        validators=[validators.Required()],
     )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
@@ -380,7 +384,9 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
-        default="{'name': 'the name of the user'}", help_text="Only valid json will be accepted"
+        default='{"name": "the name of the user"}',
+        help_text="Only valid json will be accepted",
+        validators=[validators.Required(), validators.ValidJson()],
     )
 
 
@@ -388,7 +394,9 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: ExpandableText = Field(
-        default="{'name': 'the name of the user'}", help_text="Only valid json will be accepted"
+        default='{"name": "the name of the user"}',
+        help_text="Only valid json will be accepted",
+        validators=[validators.Required(), validators.ValidJson()],
     )
     key_name: str | None = None
 
