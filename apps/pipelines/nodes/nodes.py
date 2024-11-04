@@ -40,7 +40,7 @@ class RenderTemplate(PipelineNode):
     __node_description__ = "Renders a template"
     template_string: ExpandableText = Field(
         help_text="Use {input} to designate the node's input",
-        validators=[validators.VariableRequired(variable="{input}")],
+        validators=[validators.Required(), validators.VariableRequired(variable="{input}")],
     )
 
     def _process(self, input, **kwargs) -> str:
