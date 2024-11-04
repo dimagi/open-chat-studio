@@ -38,7 +38,10 @@ from apps.utils.time import pretty_date
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
-    template_string: ExpandableText = Field(help_text="Use {input} to designate the node's input")
+    template_string: ExpandableText = Field(
+        help_text="Use {input} to designate the node's input",
+        validators=[validators.VariableRequired(variable="{input}")],
+    )
 
     def _process(self, input, **kwargs) -> str:
         def all_variables(in_):
@@ -203,8 +206,10 @@ class LLMResponseWithPrompt(LLMResponse):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str = Field(help_text="A list of email addresses, comma-separated")
-    subject: str
+    recipient_list: str = Field(
+        help_text="A list of email addresses, comma-separated", validators=[validators.CommaSeparatedEmails()]
+    )
+    subject: str = Field(validators=[validators.Required()])
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
@@ -224,7 +229,7 @@ class Passthrough(PipelineNode):
 class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
     __node_description__ = "Verifies whether the input is a certain value or not"
-    input_equals: str
+    input_equals: str = Field(validators=[validators.Required()])
 
     def process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -242,7 +247,9 @@ class RouterNode(Passthrough, LLMResponseMixin):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     prompt: ExpandableText = Field(
-        default="You are an extremely helpful router {input}", help_text="Use {input} to designate the user's query"
+        default="You are an extremely helpful router {input}",
+        help_text="Use {input} to designate the user's query",
+        validators=[validators.Required(), validators.VariableRequired(variable="{input}")],
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []

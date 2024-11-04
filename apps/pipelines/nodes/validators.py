@@ -33,3 +33,15 @@ class LesserThan(BaseValidator):
 
 class ValidJson(BaseValidator):
     name: str = "valid_json"
+
+
+class VariableRequired(BaseValidator):
+    name: str = "variable_required"
+    variable: str
+
+    def model_post_init(self, *args, **kwargs):
+        self.params["variable"] = self.variable
+
+
+class CommaSeparatedEmails(BaseValidator):
+    name: str = "comma_separated_emails"
