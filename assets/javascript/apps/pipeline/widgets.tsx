@@ -61,12 +61,14 @@ export function ExpandableTextWidget({
   name,
   onChange,
   value,
-  help_text
+  help_text,
+  inputError
 }: {
   humanName: string;
   name: string;
   value: string | string[];
   help_text: string;
+  inputError: string | undefined
   onChange: ChangeEventHandler;
 }) {
   const modalId = useId();
@@ -81,7 +83,7 @@ export function ExpandableTextWidget({
     </>
   )
   return (
-    <InputField label={label} help_text={help_text}>
+    <InputField label={label} help_text={help_text} inputError={inputError}>
       <textarea
         className="textarea textarea-bordered resize-none textarea-sm w-full"
         rows={3}
@@ -331,14 +333,17 @@ export function MaxTokenLimitWidget({
   );
 }
 
-export function InputField({label, help_text, children}: React.PropsWithChildren<{ label: string | ReactNode, help_text: string }>) {
+export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{ label: string | ReactNode, help_text: string, inputError?: string | undefined }>) {
   return (
     <>
       <div className="form-control w-full capitalize">
         <label className="label font-bold">{label}</label>
         {children}
       </div>
-      <small className="text-muted">{help_text}</small>
+      <div className="flex flex-col">
+        {<small className="text-red-500">{inputError}</small>}
+        <small className="text-muted">{help_text}</small>
+      </div>
     </>
   );
 }
