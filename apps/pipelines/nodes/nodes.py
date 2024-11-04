@@ -63,14 +63,17 @@ class RenderTemplate(PipelineNode):
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: LlmProviderId
-    llm_model: LlmModel
+    llm_provider_id: LlmProviderId = Field(validators=[validators.Required()])
+    llm_model: LlmModel = Field(validators=[validators.Required()])
     llm_temperature: LlmTemperature = Field(
         default=1.0, validators=[validators.Required(), validators.GreaterThan(value=0), validators.LesserThan(value=2)]
     )
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = 8192
+    max_token_limit: MaxTokenLimit = Field(
+        default=8192,
+        validators=[validators.Required(), validators.GreaterThan(value=100), validators.LesserThan(value=100_00)],
+    )
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
