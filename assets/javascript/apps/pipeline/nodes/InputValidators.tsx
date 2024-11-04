@@ -18,14 +18,17 @@ function required(inputValue: number, validatorParams: Record<string, any>): str
 }
 
 /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-function checkJson(inputValue: any, validatorParams: Record<string, any>): string | void {
-    if (!inputValue) {
-        return
-    }
+function checkDataSchema(inputValue: any, validatorParams: Record<string, any>): string | void {
+    const errorMsg = "Invalid schema";
     try {
         JSON.parse(inputValue);
     } catch {
-        return "Invalid JSON format";
+        return errorMsg;
+    }
+
+    const value = JSON.parse(inputValue);
+    if (Array.isArray(inputValue) || Object.keys(value).length === 0) {
+        return errorMsg;
     }
 }
 
@@ -71,7 +74,7 @@ export const validators: Record<string, ValidatorMethod> = {
     "required": required,
     "greater_than": greaterThan,
     "lesser_than": lesserThan,
-    "valid_json": checkJson,
+    "valid_schema": checkDataSchema,
     "variable_required": variableRequired,
     "comma_separated_emails": commaSeparatedEmails
   }

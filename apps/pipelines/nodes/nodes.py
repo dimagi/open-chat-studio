@@ -395,7 +395,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
-        help_text="Only valid json will be accepted",
+        help_text="Use key-value pairs",
         validators=[validators.Required(), validators.ValidJson()],
     )
 
@@ -405,7 +405,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
-        help_text="Only valid json will be accepted",
+        help_text="Use key-value pairs",
         validators=[validators.Required(), validators.ValidJson()],
     )
     key_name: str | None = None

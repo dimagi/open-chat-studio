@@ -32,7 +32,7 @@ class LesserThan(BaseValidator):
 
 
 class ValidJson(BaseValidator):
-    name: str = "valid_json"
+    name: str = "valid_schema"
 
 
 class VariableRequired(BaseValidator):
