@@ -1,3 +1,25 @@
+type ValidateFieldParams = {
+    value: any;
+    nodeId: string;
+    fieldName: string;
+    validators: ValidatorSpec[];
+    clearErrorFunc: (nodeId: string, fieldName: string) => void;
+    setErrorFunc: (nodeId: string, fieldName: string, errorMsg: string) => void;
+}
+
+export function validateFieldValue({value, nodeId, fieldName, validators, clearErrorFunc, setErrorFunc}: ValidateFieldParams): void {
+    clearErrorFunc(nodeId, fieldName);
+    for (const {name, params} of validators) {
+        const validatorFunc = validatorFuncs[name];
+        if (validatorFunc) {
+            const errorMsg = validatorFunc(value, params);
+            if(errorMsg) {
+                setErrorFunc(nodeId, fieldName, errorMsg);
+            }
+        }
+        };
+  }
+
 function greaterThan(inputValue: number, validatorParams: Record<string, any>): string | void {
     const value = validatorParams.value;
     if (inputValue && inputValue < value) {
@@ -70,7 +92,7 @@ export type ValidatorSpec = {
 
 type ValidatorMethod = (inputValue: any, validatorParams: Record<string, any>) => string | void;
 
-export const validators: Record<string, ValidatorMethod> = {
+export const validatorFuncs: Record<string, ValidatorMethod> = {
     "required": required,
     "greater_than": greaterThan,
     "lesser_than": lesserThan,

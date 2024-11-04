@@ -5,11 +5,11 @@ import {
   ExpandableTextWidget,
   InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
-import React, {ChangeEvent } from "react";
+import React, {useEffect, ChangeEvent } from "react";
 import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
-import {validators, ValidatorSpec} from "./InputValidators";
+import {validateFieldValue} from "./InputValidators";
 import useNodeErrorStore from "../stores/nodeErrorStore";
 
 
@@ -33,16 +33,23 @@ export const showAdvancedButton = (nodeType: string) => {
   return nodeTypeToInputParamsMap[nodeType] !== undefined;
 }
 
-export const getNodeInputWidget = (params: InputWidgetParams) => {
-  if (!params.nodeType) {
+export const getNodeInputWidget = (param: InputWidgetParams) => {
+  const setFieldError = useNodeErrorStore((state) => state.setFieldError);
+  const clearFieldErrors = useNodeErrorStore((state) => state.clearFieldErrors);
+
+  if (!param.nodeType) {
     return <></>;
   }
 
-  const allowedInNode = nodeTypeToInputParamsMap[params.nodeType];
-  if (allowedInNode && !allowedInNode.includes(params.inputParam.name)) {
+  // Validate [all] inputs so we know when there's errors on load
+  const {id, inputParam, params} = param;
+  validateFieldValue({value: params[inputParam.name], nodeId: id, fieldName: inputParam.name, validators: inputParam.validators, clearErrorFunc: clearFieldErrors, setErrorFunc: setFieldError});
+
+  const allowedInNode = nodeTypeToInputParamsMap[param.nodeType];
+  if (allowedInNode && !allowedInNode.includes(param.inputParam.name)) {
     return <></>;
   }
-  return getInputWidget(params);
+  return getInputWidget(param);
 }
 
 /**
@@ -56,27 +63,18 @@ export const getNodeInputWidget = (params: InputWidgetParams) => {
  */
 export const getInputWidget = ({id, inputParam, params, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
+  const fieldError = useNodeErrorStore((state) => state.fieldError);
   const setFieldError = useNodeErrorStore((state) => state.setFieldError);
   const clearFieldErrors = useNodeErrorStore((state) => state.clearFieldErrors);
-  const fieldError = useNodeErrorStore((state) => state.fieldError);
-
-  function validateInput(value: any, inputValidators: ValidatorSpec[]) {
-    clearFieldErrors(id, inputParam.name);
-    for (const {name, params} of inputValidators) {
-      const validatorFunc = validators[name];
-      if (name in validators) {
-        const errorMsg = validatorFunc(value, params);
-        if(errorMsg) {
-          setFieldError(id, inputParam.name, errorMsg);
-        }
-      }
-    };
-  }
 
   const onChangeCallbacks = (event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => {
     updateParamValue(event);
-    validateInput(event.target.value, inputParam.validators);
+    validateFieldValue({value: event.target.value, nodeId: id, fieldName: inputParam.name, validators: inputParam.validators, clearErrorFunc: clearFieldErrors, setErrorFunc: setFieldError});
   }
+
+  useEffect(() => {
+      validateFieldValue({value: params[inputParam.name], nodeId: id, fieldName: inputParam.name, validators: inputParam.validators, clearErrorFunc: clearFieldErrors, setErrorFunc: setFieldError});
+  }, []);
 
   const inputError = fieldError(id, inputParam.name);
 
