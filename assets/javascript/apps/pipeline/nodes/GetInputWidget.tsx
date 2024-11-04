@@ -9,7 +9,7 @@ import React, {ChangeEvent } from "react";
 import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
-import {validators, Validator} from "./InputValidators";
+import {validators, ValidatorSpec} from "./InputValidators";
 import useNodeErrorStore from "../stores/nodeErrorStore";
 
 
@@ -60,17 +60,17 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
   const clearFieldErrors = useNodeErrorStore((state) => state.clearFieldErrors);
   const fieldError = useNodeErrorStore((state) => state.fieldError);
 
-  const validateInput = (value: any, inputValidators: Validator[]) => {
+  function validateInput(value: any, inputValidators: ValidatorSpec[]) {
     clearFieldErrors(id, inputParam.name);
-    inputValidators.forEach((validatorSpec) => {
-      const validatorFunc = validators[validatorSpec.name];
-      if (validatorFunc) {
-        const errorMsg = validatorFunc(value, validatorSpec.params);
+    for (const {name, params} of inputValidators) {
+      const validatorFunc = validators[name];
+      if (name in validators) {
+        const errorMsg = validatorFunc(value, params);
         if(errorMsg) {
-            setFieldError(id, inputParam.name, errorMsg);
+          setFieldError(id, inputParam.name, errorMsg);
         }
       }
-  });
+    };
   }
 
   const onChangeCallbacks = (event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => {

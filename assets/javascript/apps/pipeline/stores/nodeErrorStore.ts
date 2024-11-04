@@ -1,24 +1,15 @@
 import { create } from 'zustand'
 
-export type FieldError = {
-    name: string;
-    errorMsg: string
-  }
-  
-  export type NodeError = {
-    nodeId: string;
-    fields: FieldError[]
-  }
 
 type ErrorStoreType = {
-    errors: NodeError[],
+    errors: {[nodeId: string]: {[name: string]: string}},
     setFieldError: (nodeId: string, fieldName: string, errorMsg: string) => void;
     fieldError: (nodeId: string, fieldName: string) => string | undefined;
     clearFieldErrors: (nodeId: string, fieldName: string) => undefined;
 }
 
 const useNodeErrorStore = create<ErrorStoreType>((set, get) => ({
-    errors: [],
+    errors: {},
     setFieldError: (nodeId: string, fieldName: string, errorMsg: string) => {
         const currentErrors = get().errors;
         const updatedErrors = {
@@ -33,7 +24,13 @@ const useNodeErrorStore = create<ErrorStoreType>((set, get) => ({
         return nodeError ? nodeError[fieldName] : "";
     },
     clearFieldErrors: (nodeId: string, fieldName: string) => {
-        get().setFieldError(nodeId, fieldName, "");
+        if (nodeId in get().errors) {
+            delete get().errors[nodeId][fieldName];
+            // Remove `nodeId` when there's not more field errors
+            if (Object.keys(get().errors[nodeId]).length === 0) {
+                delete get().errors[nodeId];
+            }
+        }
     }
 }))
 

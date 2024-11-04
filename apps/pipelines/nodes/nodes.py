@@ -111,7 +111,7 @@ class LLMResponseWithPrompt(LLMResponse):
     prompt: ExpandableText = Field(
         default="You are a helpful assistant. Answer the user's query as best you can: {input}",
         help_text="Use {input} to designate the user's query",
-        validators=[validators.Required()],
+        validators=[validators.Required(), validators.VariableRequired(variable="{input}")],
     )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:

@@ -38,7 +38,7 @@ function variableRequired(inputValue: any, validatorParams: Record<string, any>)
 }
 
 /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-function commaSeparatedEmails(inputValue: any, validatorParams: Record<string, any>): string | void {
+function commaSeparatedEmails(inputValue: string, validatorParams: Record<string, any>): string | void {
     if (!inputValue) {
         return
     }
@@ -60,12 +60,14 @@ function commaSeparatedEmails(inputValue: any, validatorParams: Record<string, a
       }
 }
 
-export type Validator = {
+export type ValidatorSpec = {
     name: string;
     params: Record<string, any>
 }
 
-export const validators = {
+type ValidatorMethod = (inputValue: any, validatorParams: Record<string, any>) => string | void;
+
+export const validators: Record<string, ValidatorMethod> = {
     "required": required,
     "greater_than": greaterThan,
     "lesser_than": lesserThan,
