@@ -25,7 +25,7 @@ class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class CustomActionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = CustomAction
     paginate_by = 25
     table_class = CustomActionTable
@@ -36,7 +36,7 @@ class CustomActionTableView(LoginAndTeamRequiredMixin, SingleTableView, Permissi
         return CustomAction.objects.filter(team=self.request.team)
 
 
-class CreateCustomAction(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "generic/object_form.html"
@@ -58,7 +58,7 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, CreateView, PermissionRequir
         return super().form_valid(form)
 
 
-class EditCustomAction(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "generic/object_form.html"
@@ -79,7 +79,7 @@ class EditCustomAction(LoginAndTeamRequiredMixin, UpdateView, PermissionRequired
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
-class DeleteCustomAction(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "custom_actions.delete_customaction"
 
     def delete(self, request, team_slug: str, pk: int):
