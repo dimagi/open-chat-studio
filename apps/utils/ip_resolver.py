@@ -15,9 +15,9 @@ def resolve_to_ips(hostname, port=80):
             proto=socket.IPPROTO_TCP,  # Restrict to TCP
         )
     except socket.gaierror as e:
-        raise CannotResolveHost(f"{hostname}: {str(e)}")
-    except TimeoutError:
-        raise CannotResolveHost(f"{hostname}: DNS resolution timed out")
+        raise CannotResolveHost(hostname, e)
+    except TimeoutError as e:
+        raise CannotResolveHost(hostname, e)
     finally:
         socket.setdefaulttimeout(None)  # Reset timeout
 
@@ -33,4 +33,10 @@ def extract_ip(addr_info):
 
 
 class CannotResolveHost(Exception):
-    pass
+    def __init__(self, hostname, original_error=None):
+        self.hostname = hostname
+        self.original_error = original_error
+        message = f"Failed to resolve hostname: {hostname}"
+        if original_error:
+            message += f" ({str(original_error)})"
+        super().__init__(message)

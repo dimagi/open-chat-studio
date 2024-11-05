@@ -1,4 +1,7 @@
+from urllib.parse import urljoin
+
 from django import forms
+from django.core.validators import URLValidator
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
@@ -61,13 +64,26 @@ def validate_api_schema(api_schema):
     if not server_url:
         raise forms.ValidationError("No server URL found in the schema.")
 
+    url_validator = URLValidator(schemes=["https"])
+
+    # Fist pass with Django's URL validator
+    try:
+        url_validator(server_url)
+    except forms.ValidationError:
+        raise forms.ValidationError("The server URL is invalid. Ensure that the URL is a valid HTTPS URL")
+
     try:
         validate_user_input_url(server_url)
     except InvalidURL as e:
-        raise forms.ValidationError(str(e))
+        raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
 
     paths = api_schema.get("paths", {})
     if not paths:
         raise forms.ValidationError("No paths found in the schema.")
 
+    for path in paths:
+        try:
+            url_validator(urljoin(server_url, path))
+        except forms.ValidationError:
+            raise forms.ValidationError(f"Invalid path: {path}")
     return api_schema

@@ -25,12 +25,24 @@ class TestValidateApiSchema:
         validate_api_schema(_make_openapi_schema({"/test": {}}, server_url="https://example.com"))
 
     def test_invalid_server_url(self):
-        with pytest.raises(ValidationError, match="Invalid URL. Ensure that the URL is a valid HTTPS URL"):
+        with pytest.raises(
+            ValidationError, match="The server URL is invalid. Ensure that the URL is a valid HTTPS URL"
+        ):
             validate_api_schema(_make_openapi_schema({"/test": {}}, server_url="http://example.com"))
 
     def test_missing_paths(self):
         with pytest.raises(ValidationError, match="No paths found in the schema."):
             validate_api_schema(_make_openapi_schema({}, server_url="https://example.com"))
+
+    def test_invalid_path_format(self):
+        with pytest.raises(ValidationError, match="Invalid path: invalid path"):
+            validate_api_schema(_make_openapi_schema({"invalid path": {}}))
+
+    def test_malformed_server_url(self):
+        with pytest.raises(
+            ValidationError, match="The server URL is invalid. Ensure that the URL is a valid HTTPS URL"
+        ):
+            validate_api_schema(_make_openapi_schema({"/test": {}}, server_url="https://not a url"))
 
 
 def _make_openapi_schema(paths: dict, server_url="https://example.com"):
