@@ -77,6 +77,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
   }, []);
 
   const inputError = fieldError(id, inputParam.name);
+  const paramValue = params[inputParam.name] || "";
 
   switch (inputParam.type) {
     case "LlmTemperature":
@@ -86,7 +87,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             className="input input-bordered w-full"
             name={inputParam.name}
             onChange={onChangeCallbacks}
-            value={params[inputParam.name]}
+            value={paramValue}
             type="number"
             step=".1"
           ></input>
@@ -99,7 +100,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             parameterValues={parameterValues}
             onChange={onChangeCallbacks}
             inputParam={inputParam}
-            value={params[inputParam.name]}
+            value={paramValue}
           />
         </InputField>
       );
@@ -128,7 +129,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           <HistoryTypeWidget
             onChange={onChangeCallbacks}
             inputParam={inputParam}
-            historyType={concatenate(params[inputParam.name])}
+            historyType={concatenate(paramValue)}
             historyName={concatenate(params["history_name"])}
             help_text={inputParam.help_text}
           ></HistoryTypeWidget>
@@ -143,7 +144,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           <MaxTokenLimitWidget
             onChange={onChangeCallbacks}
             inputParam={inputParam}
-            value={params[inputParam.name]}
+            value={paramValue}
           ></MaxTokenLimitWidget>
         </InputField>
       );
@@ -155,7 +156,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           humanName={humanName}
           name={inputParam.name}
           onChange={onChangeCallbacks}
-          value={params[inputParam.name] || ""}
+          value={paramValue}
           help_text={inputParam.help_text}
           inputError={inputError}>
         </ExpandableTextWidget>
@@ -169,7 +170,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             className="input input-bordered w-full"
             name={inputParam.name}
             onChange={onChangeCallbacks}
-            value={params[inputParam.name]}
+            value={paramValue}
             type="text"
           ></input>
         </InputField>
