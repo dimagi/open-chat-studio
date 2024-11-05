@@ -27,10 +27,7 @@ class JsonOrYamlField(CharField):
         elif isinstance(value, list | dict | int | float | JSONString):
             return value
         try:
-            if value.strip().startswith(("{", "[")):
-                converted = json.loads(value, cls=self.decoder)
-            else:
-                converted = yaml.safe_load(value)
+            converted = self._json_or_yml_to_python(value)
         except (json.JSONDecodeError, yaml.YAMLError):
             raise ValidationError(
                 self.error_messages["invalid"],
@@ -48,12 +45,15 @@ class JsonOrYamlField(CharField):
         if data is None:
             return None
         try:
-            if data.strip().startswith(("{", "[")):
-                return json.loads(data, cls=self.decoder)
-            else:
-                return yaml.safe_load(data)
+            return self._json_or_yml_to_python(data)
         except (json.JSONDecodeError, yaml.YAMLError):
             return InvalidJSONInput(data)
+
+    def _json_or_yml_to_python(self, data):
+        if data.strip().startswith(("{", "[")):
+            return json.loads(data, cls=self.decoder)
+        else:
+            return yaml.safe_load(data)
 
     def prepare_value(self, value):
         if isinstance(value, InvalidJSONInput):
