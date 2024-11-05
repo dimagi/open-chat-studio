@@ -16,6 +16,10 @@ from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_use
 
 
 class FunctionDef(BaseModel):
+    """
+    Represents a function definition for an OpenAPI operation.
+    """
+
     name: str
     description: str
     method: str
@@ -39,6 +43,19 @@ class OpenAPIOperationExecutor:
         self.function_def = function_def
 
     def call_api(self, **kwargs) -> Any:
+        """Make an HTTP request to an external service. The exact inputs to this function are the
+        parameters defined in the OpenAPI spec, but we expect the following kwargs:
+
+        params: query params
+        path_params: path params
+        headers: headers
+        cookies: cookies
+        data: request body
+
+        All of these will be pydantic models.
+
+        See `openapi_spec_op_to_function_def` for how these models are generated.
+        """
         method = self.function_def.method
         path_params = kwargs.pop("path_params", None)
 
