@@ -20,8 +20,8 @@ class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "custom_actions",
             "title": "Custom Actions",
-            "new_object_url": reverse("custom_actions:new", args=[kwargs["team_slug"]]),
-            "table_url": reverse("custom_actions:table", args=[kwargs["team_slug"]]),
+            "new_object_url": reverse("custom_actions:new", args=[self.kwargs["team_slug"]]),
+            "table_url": reverse("custom_actions:table", args=[self.kwargs["team_slug"]]),
         }
 
 
