@@ -28,8 +28,6 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
-async-timeout==4.0.3
-    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -295,6 +293,8 @@ openai==1.52.1
     # via
     #   -r requirements.in
     #   langchain-openai
+openapi-pydantic==0.5.0
+    # via -r requirements.in
 orjson==3.10.0
     # via langsmith
 packaging==23.2
@@ -327,6 +327,7 @@ pydantic==2.9.2
     #   langfuse
     #   langsmith
     #   openai
+    #   openapi-pydantic
     #   pydantic-settings
 pydantic-core==2.23.4
     # via pydantic
