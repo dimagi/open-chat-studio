@@ -115,7 +115,7 @@ class PipelineGraph(pydantic.BaseModel):
                 node_instance = self.nodes_by_id[edge.source].pipeline_node_instance
                 state_graph.add_conditional_edges(
                     edge.source,
-                    node_instance.process_conditional,
+                    partial(node_instance.process_conditional, node_id=edge.source),
                     self.conditional_edge_map[edge.source],
                 )
             seen_sources.add(edge.source)

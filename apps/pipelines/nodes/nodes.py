@@ -219,7 +219,7 @@ class BooleanNode(Passthrough):
     __node_description__ = "Verifies whether the input is a certain value or not"
     input_equals: str
 
-    def process_conditional(self, state: PipelineState) -> Literal["true", "false"]:
+    def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
             return "true"
         return "false"
@@ -229,17 +229,33 @@ class BooleanNode(Passthrough):
         return {"output_true": "true", "output_false": "false"}
 
 
-class RouterNode(Passthrough, LLMResponseMixin):
+class RouterNode(Passthrough, HistoryMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
     prompt: ExpandableText = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
-    def process_conditional(self, state: PipelineState):
-        prompt = PromptTemplate.from_template(template=self.prompt)
+    def process_conditional(self, state: PipelineState, node_id=None):
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+        )
+
+        node_input = state["messages"][-1]
+        context = {"input": node_input}
+
+        if self.history_type != PipelineChatHistoryTypes.NONE:
+            input_messages = prompt.invoke(context).to_messages()
+            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+
         chain = prompt | self.get_chat_model()
-        result = chain.invoke(state["messages"][-1], config=self._config)
+
+        result = chain.invoke(context, config=self._config)
+        keyword = self._get_keyword(result)
+        self._save_history(state["experiment_session"], node_id, node_input, keyword)
+        return keyword
+
+    def _get_keyword(self, result):
         keyword = result.content.lower().strip()
         if keyword in [k.lower() for k in self.keywords]:
             return keyword.lower()
