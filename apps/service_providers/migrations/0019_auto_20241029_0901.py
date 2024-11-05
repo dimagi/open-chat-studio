@@ -12,23 +12,64 @@ def _create_llm_provider_models(apps, schema_editor):
     _create_default_llm_provider_models(apps, schema_editor)
     _create_custom_llm_provider_models(apps, schema_editor)
 
-DefaultLlmProviderModel = namedtuple('DefaultLlmProviderModel', ["type", "name", "max_token_limit"])
 
 DEFAULT_LLM_PROVIDER_MODELS = {
-    DefaultLlmProviderModel("openai", "gpt-4o-mini", 8192),
-    DefaultLlmProviderModel("anthropic", "claude", 8192),
+    "azure": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-4",
+        "gpt-4-32k",
+        "gpt-35-turbo",
+        "gpt-35-turbo-16k",
+    ],
+    "anthropic": [
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307",
+        "claude-2.0",
+        "claude-2.1",
+        "claude-instant-1.2"
+    ],
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o-mini-2024-07-18",
+        "gpt-4o",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-2024-05-13",
+        "o1-preview",
+        "o1-preview-2024-09-12",
+        "o1-mini",
+        "o1-mini-2024-09-12",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-4-turbo-preview",
+        "gpt-4-0125-preview",
+        "gpt-4-1106-preview",
+        "gpt-4-0613",
+        "gpt-4-32k",
+        "gpt-4-32k-0613",
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-0125",
+        "gpt-3.5-turbo-1106",
+        "gpt-3.5-turbo-0613",
+        "gpt-3.5-turbo-16k",
+        "gpt-3.5-turbo-16k-0613"
+    ]
 }
 
 def _create_default_llm_provider_models(apps, schema_editor):
     LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
-    for default_provider_model in DEFAULT_LLM_PROVIDER_MODELS:
-        LlmProviderModel.objects.create(
-            team=None,
-            type=default_provider_model.type,
-            name=default_provider_model.name,
-            max_token_limit=default_provider_model.max_token_limit,
-        )
-    # TODO: Get list of current global models
+    for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
+        for provider_model in provider_models:
+            LlmProviderModel.objects.create(
+                team=None,
+                type=provider_type,
+                name=provider_model,
+                max_token_limit=8192,
+            )
 
 def _handle_pipeline_node(LlmProvider, LlmProviderModel, node):
     try:
@@ -151,7 +192,7 @@ def _handle_llm_experiment(LlmProviderModel, experiment):
             team__isnull=True,
             type=experiment.llm_provider.type,
             name=experiment.llm,
-            max_token_limit=experiment.max_token_limit
+            max_token_limit=experiment.max_token_limit_old
         )
         experiment.llm_provider_model = global_provider_model
         experiment.save()
@@ -164,7 +205,7 @@ def _handle_llm_experiment(LlmProviderModel, experiment):
             team=experiment.team,
             type=experiment.llm_provider.type,
             name=experiment.llm,
-            max_token_limit=experiment.max_token_limit
+            max_token_limit=experiment.max_token_limit_old
         )
         experiment.llm_provider_model = custom_provider_model
         experiment.save()
@@ -176,7 +217,7 @@ def _handle_llm_experiment(LlmProviderModel, experiment):
         team=experiment.team,
         type=experiment.llm_provider.type,
         name=experiment.llm,
-        max_token_limit=experiment.max_token_limit,
+        max_token_limit=experiment.max_token_limit_old,
     )
     experiment.llm_provider_model = new_custom_provider_model
     experiment.save()
