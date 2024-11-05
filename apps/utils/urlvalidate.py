@@ -52,26 +52,22 @@ def _validate_url(url, allow_http=False):
 
 
 def sanitize_ip(ip_address):
-    if ip_address.is_loopback:
-        raise PossibleSSRFAttempt("is_loopback")
-    elif ip_address.is_reserved:
-        raise PossibleSSRFAttempt("is_reserved")
-    elif ip_address.is_link_local:
-        raise PossibleSSRFAttempt("is_link_local")
-    elif ip_address.is_multicast:
-        raise PossibleSSRFAttempt("is_multicast")
-    elif ip_address.is_private:
-        raise PossibleSSRFAttempt("is_private")
-    elif not ip_address.is_global:
-        raise PossibleSSRFAttempt("not is_global")
+    if not ip_address.is_global or any(
+        [
+            ip_address.is_loopback,
+            ip_address.is_reserved,
+            ip_address.is_link_local,
+            ip_address.is_multicast,
+            ip_address.is_private,
+        ]
+    ):
+        raise PossibleSSRFAttempt(f"Unsafe IP address: {ip_address}")
     else:
         return ip_address
 
 
 class PossibleSSRFAttempt(Exception):
-    def __init__(self, reason):
-        super().__init__("Invalid URL")
-        self.reason = reason
+    pass
 
 
 class InvalidURL(Exception):
