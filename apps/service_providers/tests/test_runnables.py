@@ -128,8 +128,16 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
                 "/weather": {
                     "get": {
                         "summary": "Get weather",
+                    },
+                    "post": {
+                        "summary": "Update weather",
+                    },
+                },
+                "/pollen": {
+                    "get": {
+                        "summary": "Get pollen count",
                     }
-                }
+                },
             },
         },
     )
@@ -141,14 +149,15 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     messages = fake_llm_service.llm.get_calls()[0].args[0]
-    assert len(messages) == 3
+    assert len(messages) == 2
     assert messages == [
         SystemMessage(content="You are a helpful assistant"),
-        HumanMessage(content=state.get_custom_actions_prompt([action])),
         HumanMessage(content="hi"),
     ]
 
-    assert fake_llm_service.llm.get_calls()[0].kwargs["tools"][0]["function"]["name"] == "weather_get"
+    tools_ = fake_llm_service.llm.get_calls()[0].kwargs["tools"]
+    assert len(tools_) == 3, tools_
+    assert sorted([tool["function"]["name"] for tool in tools_]) == ["pollen_get", "weather_get", "weather_post"]
 
 
 @pytest.mark.django_db()
