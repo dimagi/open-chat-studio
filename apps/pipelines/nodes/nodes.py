@@ -16,7 +16,7 @@ from apps.chat.conversation import compress_chat_history, compress_pipeline_chat
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes import validators
+from apps.pipelines.nodes import validation
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
     ExpandableText,
@@ -40,7 +40,7 @@ class RenderTemplate(PipelineNode):
     __node_description__ = "Renders a template"
     template_string: ExpandableText = Field(
         help_text="Use {input} to designate the node's input",
-        validators=[validators.Required(), validators.VariableRequired(variable="{input}")],
+        validators=[validation.Required(), validation.VariableRequired(variable="{input}")],
     )
 
     def _process(self, input, **kwargs) -> str:
@@ -69,7 +69,7 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = Field(
-        default=1.0, validators=[validators.Required(), validators.GreaterThan(value=0), validators.LesserThan(value=2)]
+        default=1.0, validators=[validation.Required(), validation.GreaterThan(value=0), validation.LesserThan(value=2)]
     )
 
     def get_llm_service(self):
@@ -92,7 +92,7 @@ class HistoryMixin(LLMResponseMixin):
     history_name: HistoryName | None = None
     max_token_limit: MaxTokenLimit = Field(
         default=8192,
-        validators=[validators.Required(), validators.GreaterThan(value=0), validators.LesserThan(value=100_00)],
+        validators=[validation.Required(), validation.GreaterThan(value=0), validation.LesserThan(value=100_00)],
     )
 
     def _get_history_name(self, node_id):
@@ -206,9 +206,9 @@ class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
     recipient_list: str = Field(
-        help_text="A list of email addresses, comma-separated", validators=[validators.CommaSeparatedEmails()]
+        help_text="A list of email addresses, comma-separated", validators=[validation.CommaSeparatedEmails()]
     )
-    subject: str = Field(validators=[validators.Required()])
+    subject: str = Field(validators=[validation.Required()])
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
@@ -228,7 +228,7 @@ class Passthrough(PipelineNode):
 class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
     __node_description__ = "Verifies whether the input is a certain value or not"
-    input_equals: str = Field(validators=[validators.Required()])
+    input_equals: str = Field(validators=[validation.Required()])
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -246,7 +246,7 @@ class RouterNode(Passthrough, HistoryMixin):
     prompt: ExpandableText = Field(
         default="You are an extremely helpful router {input}",
         help_text="Use {input} to designate the user's query",
-        validators=[validators.Required(), validators.VariableRequired(variable="{input}")],
+        validators=[validation.Required(), validation.VariableRequired(variable="{input}")],
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
@@ -409,7 +409,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
         help_text="Use key-value pairs",
-        validators=[validators.Required(), validators.ValidSchema()],
+        validators=[validation.Required(), validation.ValidSchema()],
     )
 
 
@@ -419,7 +419,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
         help_text="Use key-value pairs",
-        validators=[validators.Required(), validators.ValidSchema()],
+        validators=[validation.Required(), validation.ValidSchema()],
     )
     key_name: str | None = None
 
