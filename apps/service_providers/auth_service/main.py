@@ -43,33 +43,33 @@ class AuthService(pydantic.BaseModel):
 
 class BasicAuthService(AuthService):
     username: str
-    password: str
+    password: pydantic.SecretStr
 
     def _get_http_client_kwargs(self) -> dict:
-        return {"auth": httpx.BasicAuth(self.username, self.password)}
+        return {"auth": httpx.BasicAuth(self.username, self.password.get_secret_value())}
 
 
 class ApiKeyAuthService(AuthService):
     key: str
-    value: str
+    value: pydantic.SecretStr
 
     def _get_http_client_kwargs(self) -> dict:
-        return {"auth": HeaderAuth(self.key, self.value)}
+        return {"auth": HeaderAuth(self.key, self.value.get_secret_value())}
 
 
 class BearerTokenAuthService(AuthService):
-    token: str
+    token: pydantic.SecretStr
 
     def _get_http_client_kwargs(self) -> dict:
-        return {"auth": HeaderAuth("Authorization", f"Bearer {self.token}")}
+        return {"auth": HeaderAuth("Authorization", f"Bearer {self.token.get_secret_value()}")}
 
 
 class CommCareAuthService(AuthService):
     username: str
-    api_key: str
+    api_key: pydantic.SecretStr
 
     def _get_http_client_kwargs(self) -> dict:
-        return {"auth": CommCareAuth(self.username, self.api_key)}
+        return {"auth": CommCareAuth(self.username, self.api_key.get_secret_value())}
 
 
 class wait_or(tenacity.wait.wait_base):
