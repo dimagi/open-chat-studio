@@ -396,6 +396,7 @@ def _make_openapi_schema(properties, name="Test API", path="/test", method="get"
     return {
         "openapi": openapi_version,
         "info": {"title": name, "version": "1.0.0"},
+        "servers": [{"url": "https://example.com"}],
         "paths": {
             path: {
                 method: {

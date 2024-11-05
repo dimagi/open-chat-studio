@@ -1,5 +1,4 @@
 import enum
-import json
 from collections import defaultdict
 from typing import Any
 
@@ -7,7 +6,7 @@ import httpx
 from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.tools import Tool, ToolException
+from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
@@ -21,12 +20,11 @@ class FunctionDef(BaseModel):
     url: str
     args_schema: type[BaseModel]
 
-    def build_tool(self, auth_service) -> Tool:
+    def build_tool(self, auth_service) -> BaseTool:
         executor = OpenAPIOperationExecutor(auth_service, self)
-        return Tool(
+        return StructuredTool(
             name=self.name,
             description=self.description,
-            executor=executor,
             args_schema=self.args_schema,
             handle_tool_error=True,
             func=executor.call_api,
@@ -41,10 +39,13 @@ class OpenAPIOperationExecutor:
     def call_api(self, **kwargs) -> Any:
         method = self.function_def.method
         url = self.function_def.url
-        path_params = kwargs.pop("path_params", {})
-        url = _format_url(url, path_params)
-        if "data" in kwargs and isinstance(kwargs["data"], dict):
-            kwargs["data"] = json.dumps(kwargs["data"])
+        path_params = kwargs.pop("path_params", None)
+        if path_params:
+            url = _format_url(url, path_params.model_dump())
+        if "data" in kwargs:
+            kwargs["json"] = kwargs.pop("data")
+
+        kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
         with self.auth_service.get_http_client() as client:
             try:
@@ -115,11 +116,12 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
         function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
     )
 
+    url = api_op.base_url.rstrip("/") + "/" + api_op.path.lstrip("/")
     return FunctionDef(
         name=function_name,
         description=api_op.description,
         method=method,
-        url=api_op.base_url + api_op.path,
+        url=url,
         args_schema=args_schema,
     )
 
