@@ -221,6 +221,7 @@ class ExperimentForm(forms.ModelForm):
             "trace_provider",
             "participant_allowlist",
             "debug_mode_enabled",
+            "citations_enabled",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -237,6 +238,7 @@ class ExperimentForm(forms.ModelForm):
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
                 "This is applicable only for router bots."
             ),
+            "citations_enabled": "Whether to include cited sources in responses",
         }
 
     def __init__(self, request, *args, **kwargs):
