@@ -76,12 +76,12 @@ def _handle_pipeline_node(LlmProvider, LlmProviderModel, node):
         llm_provider_id = node.params['llm_provider_id']
         llm_model = node.params['llm_model']
     except KeyError as exc:
-        logger.warn(f"Error occured while migrating node {node.id}: {exc}")
+        logger.error(f"Error occured while migrating node {node.id}: {exc}")
         return
     try:
         llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     except LlmProvider.DoesNotExist:
-        logger.warn(f"Could not find provider with id {llm_provider_id}")
+        logger.error(f"Could not find provider with id {llm_provider_id}")
         return
 
     try:
