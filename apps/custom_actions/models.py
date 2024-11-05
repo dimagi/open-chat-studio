@@ -2,7 +2,9 @@ import json
 from functools import cached_property
 
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -55,7 +57,10 @@ class CustomAction(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         self.server_url = self.api_schema.get("servers", [{}])[0].get("url", "")
-        self.operations = self._get_operations_from_spec()
+        try:
+            self.operations = self._get_operations_from_spec()
+        except Exception as e:
+            raise ValidationError(f"Invalid OpenAPI schema: {e}")
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -111,12 +116,18 @@ class CustomActionOperation(models.Model):
     class Meta:
         ordering = ("operation_id",)
         constraints = [
+            models.CheckConstraint(
+                check=Q(experiment__isnull=False) | Q(assistant__isnull=False),
+                name="experiment_or_assistant_required",
+            ),
             models.UniqueConstraint(
-                fields=["experiment", "custom_action", "operation_id"],
+                fields=["custom_action", "operation_id"],
+                condition=Q(experiment__isnull=False),
                 name="unique_experiment_custom_action_operation",
             ),
             models.UniqueConstraint(
-                fields=["assistant", "custom_action", "operation_id"],
+                fields=["custom_action", "operation_id"],
+                condition=Q(assistant__isnull=False),
                 name="unique_assistant_custom_action_operation",
             ),
         ]

@@ -40,7 +40,10 @@ def clean_custom_action_operations(form):
     operations = form.cleaned_data["custom_action_operations"]
     parsed_operations = []
     for op in operations:
-        action_id, operation_id = op.split(":", 1)
+        try:
+            action_id, operation_id = op.split(":", 1)
+        except ValueError:
+            raise ValidationError("Invalid format for custom action operation")
         try:
             action_id = int(action_id)
         except ValueError:

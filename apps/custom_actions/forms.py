@@ -59,11 +59,10 @@ class CustomActionForm(forms.ModelForm):
 
     def clean_allowed_operations(self):
         operations = self.cleaned_data["allowed_operations"]
-        all_operations = {op.operation_id for op in self.instance.operations}
-        for operation in operations:
-            if operation not in all_operations:
-                raise forms.ValidationError("Invalid operation selected.")
-
+        all_operations = set(self.instance.get_operations_by_id())
+        invalid_operations = set(operations) - all_operations
+        if invalid_operations:
+            raise forms.ValidationError(f"Invalid operations selected: {', '.join(sorted(invalid_operations))}")
         return operations
 
 
