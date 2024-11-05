@@ -1,0 +1,14 @@
+<script>
+  document.body.addEventListener('htmx:responseError', function(evt) {
+    alertify
+      .alert(evt.detail.xhr.responseText, function(){
+        alertify.message('OK');
+      }).setting({
+        title: 'Error',
+        transition: 'fade',
+        onok: function() {},
+      }).show();
+    ;
+
+  });
+</script>
