@@ -1,4 +1,6 @@
+import itertools
 import logging
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -6,6 +8,7 @@ from django.db import transaction
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
+from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
@@ -231,14 +234,12 @@ TOOL_CLASS_MAP = {
 
 def get_tools(experiment_session, experiment) -> list[BaseTool]:
     tools = []
-    tool_names = experiment.assistant.tools if experiment.assistant else experiment.tools
-    for tool_name in tool_names:
+    tool_holder = experiment.assistant if experiment.assistant else experiment
+    for tool_name in tool_holder.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
 
-    custom_actions = experiment.custom_actions.select_related("auth_provider").all()
-    for action in custom_actions:
-        tools.extend(get_tools_for_custom_action(action))
+    tools.extend(get_custom_action_tools(tool_holder))
 
     return tools
 
@@ -249,14 +250,17 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=None))
 
-    custom_actions = assistant.custom_actions.select_related("auth_provider").all()
-    for action in custom_actions:
-        tools.extend(get_tools_for_custom_action(action))
+    tools.extend(get_custom_action_tools(assistant))
 
     return tools
 
 
-def get_tools_for_custom_action(custom_action):
+def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list[BaseTool]:
+    custom_actions = action_holder.custom_actions.select_related("auth_provider").all()
+    return list(itertools.chain.from_iterable(get_tools_for_custom_action(action) for action in custom_actions))
+
+
+def get_tools_for_custom_action(custom_action) -> Generator[BaseTool, None, None]:
     spec = OpenAPISpec.from_spec_dict(custom_action.api_schema)
     if not spec.paths:
         return

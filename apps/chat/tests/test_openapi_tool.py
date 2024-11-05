@@ -3,7 +3,7 @@ from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import Tool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
-from apps.chat.agent.openapi_schema import openapi_spec_op_to_function_def
+from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 
 
 def test_openapi_spec_to_openai_function():
@@ -384,9 +384,9 @@ def _get_openai_function_from_openapi_spec(spec: dict, path: str, method: str):
     spec = OpenAPISpec.from_spec_dict(spec)
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     tool = Tool(
-        name=function_def["name"],
-        description=function_def["description"],
-        args_schema=function_def["args_schema"],
+        name=function_def.name,
+        description=function_def.description,
+        args_schema=function_def.args_schema,
         func=lambda x: x,
     )
     return convert_to_openai_function(tool, strict=True)

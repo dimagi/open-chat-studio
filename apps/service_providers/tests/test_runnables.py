@@ -148,7 +148,7 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
         HumanMessage(content="hi"),
     ]
 
-    assert fake_llm_service.llm.get_calls()[0].kwargs["tools"][0]["function"]["name"] == "openapi_request_tool"
+    assert fake_llm_service.llm.get_calls()[0].kwargs["tools"][0]["function"]["name"] == "weather_get"
 
 
 @pytest.mark.django_db()
