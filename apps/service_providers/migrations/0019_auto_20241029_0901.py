@@ -195,11 +195,11 @@ def _create_custom_llm_provider_models(apps, schema_editor):
         _handle_pipeline_node(LlmProvider, LlmProviderModel, node)
 
     for experiment in Experiment.objects.select_related("llm_provider").all():
-        if experiment.llm_provider is None and experiment.assistant:
+        if experiment.assistant:
             _handle_assistant(LlmProviderModel, experiment.assistant)
             continue
 
-        if experiment.llm_provider is None and experiment.pipeline:
+        if experiment.pipeline:
             # Pipelines are handled separately
             continue
 
