@@ -1,4 +1,4 @@
-import {Validator} from "../nodes/InputValidators";
+import {ValidatorSpec} from "../nodes/InputValidators";
 
 
 export type InputParam = {
@@ -7,7 +7,7 @@ export type InputParam = {
   type: string;
   default?: unknown;
   help_text: string;
-  validators: Validator[]
+  validators: ValidatorSpec[]
 };
 
 export type NodeInputTypes = {
