@@ -24,7 +24,8 @@ class CustomActionForm(forms.ModelForm):
         required=True,
         label="API Schema",
         help_text="Paste in the OpenAPI schema for the API you want to interact with. "
-        "This will be used to generate the API calls for the LLM. Accepts YAML or JSON.",
+        "The API must use HTTPS. This will be used to generate the API calls for the LLM. "
+        "Accepts YAML or JSON.",
         initial={},
     )
     auth_provider = forms.ModelChoiceField(
