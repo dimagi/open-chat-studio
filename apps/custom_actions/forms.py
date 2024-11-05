@@ -1,8 +1,11 @@
+import sentry_sdk
 from django import forms
+from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JSONOrYAMLField
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.models import AuthProvider
+from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_user_input_url
 
 
 class CustomActionForm(forms.ModelForm):
@@ -45,24 +48,30 @@ class CustomActionForm(forms.ModelForm):
 def validate_api_schema(api_schema):
     """Perform very basic validation on the API schema."""
 
+    try:
+        OpenAPISpec.from_spec_dict(api_schema)
+    except ValueError:
+        raise forms.ValidationError("Invalid OpenAPI schema.")
+
     servers = api_schema.get("servers", [])
     if not servers:
         raise forms.ValidationError("No servers found in the schema.")
     if len(servers) > 1:
         raise forms.ValidationError("Multiple servers found in the schema. Only one is allowed.")
-    server = servers[0].get("url")
-    if not server or not server.startswith("https"):
-        raise forms.ValidationError("Invalid server URL. Must start with 'https'.")
+    server_url = servers[0].get("url")
+    if not server_url:
+        raise forms.ValidationError("No server URL found in the schema.")
+
+    try:
+        validate_user_input_url(server_url)
+    except InvalidURL as e:
+        raise forms.ValidationError(str(e))
+    except PossibleSSRFAttempt as e:
+        sentry_sdk.capture_exception(e)
+        raise forms.ValidationError("Invalid server URL. Ensure that the URL starts with 'https'.")
 
     paths = api_schema.get("paths", {})
     if not paths:
         raise forms.ValidationError("No paths found in the schema.")
-    for path, path_items in paths.items():
-        if not path.startswith("/"):
-            raise forms.ValidationError("Paths must start with a forward slash.")
-
-        for method, operation in path_items.items():
-            if method != "get":
-                raise forms.ValidationError(f"Invalid method {method} for path {path}. Only 'get' is allowed.")
 
     return api_schema

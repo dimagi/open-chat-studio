@@ -9,7 +9,12 @@ from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self) -> httpx.Client:
-        return httpx.Client(**self._get_http_client_kwargs())
+        kwargs = {
+            **self._get_http_client_kwargs(),
+            "timeout": 10,
+            "limits": httpx.Limits(max_keepalive_connections=5, max_connections=10),
+        }
+        return httpx.Client(**kwargs)
 
     def _get_http_client_kwargs(self) -> dict:
         return {}
