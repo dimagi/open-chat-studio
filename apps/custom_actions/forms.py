@@ -2,7 +2,6 @@ from urllib.parse import urljoin
 
 from django import forms
 from django.core.validators import URLValidator
-from django.utils.safestring import mark_safe
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
@@ -51,8 +50,7 @@ class CustomActionForm(forms.ModelForm):
             for op in self.instance.operations:
                 grouped_ops.setdefault(op.path, []).append(op)
             self.fields["allowed_operations"].choices = [
-                (mark_safe(f"{path}<br/>"), [(op.operation_id, str(op)) for op in ops])
-                for path, ops in grouped_ops.items()
+                (path, [(op.operation_id, str(op)) for op in ops]) for path, ops in grouped_ops.items()
             ]
 
     def clean_api_schema(self):
