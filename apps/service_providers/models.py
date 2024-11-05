@@ -143,7 +143,7 @@ class LlmProviderModel(BaseTeamModel):
         null=True,
         blank=True,
     )  # Optional FK relationship to team. If this is
-    # null, then it is a "global" model that is managed in Django admin. Team,
+    # null, then it is a "global" model that is managed in Django admin.
 
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
 
