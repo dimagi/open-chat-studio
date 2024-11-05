@@ -136,6 +136,7 @@ class FakeLlmSimpleTokenCount(FakeLlm):
 class FakeLlmEcho(FakeLlmSimpleTokenCount):
     """Echos the input"""
 
+    include_system_message: bool = True
     responses: list = []
 
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
@@ -149,7 +150,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
         except StopIteration:
             return user_message
 
-        return f"{system_message} {user_message}"
+        return f"{system_message} {user_message}" if self.include_system_message else user_message
 
 
 @contextmanager
@@ -176,7 +177,8 @@ def build_fake_llm_service(responses, token_counts, fake_llm=None):
     return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
 
 
-def build_fake_llm_echo_service(token_counts=None):
+def build_fake_llm_echo_service(token_counts=None, include_system_message=True):
     if token_counts is None:
         token_counts = [0]
-    return FakeLlmService(llm=FakeLlmEcho(), token_counter=FakeTokenCounter(token_counts=token_counts))
+    llm = FakeLlmEcho(include_system_message=include_system_message)
+    return FakeLlmService(llm=llm, token_counter=FakeTokenCounter(token_counts=token_counts))

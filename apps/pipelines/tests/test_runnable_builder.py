@@ -493,7 +493,7 @@ def test_conditional_node(pipeline, experiment_session):
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
-    service = build_fake_llm_echo_service()
+    service = build_fake_llm_echo_service(include_system_message=False)
     get_llm_service.return_value = service
 
     data = {
@@ -563,7 +563,7 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
                     "type": "RouterNode",
                     "label": "Router",
                     "params": {
-                        "prompt": "{ input }",
+                        "prompt": "You are a router",
                         "keywords": ["A", "b", "c", "d"],
                         "num_outputs": "4",
                         "llm_provider_id": provider.id,
