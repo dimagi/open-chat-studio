@@ -8,7 +8,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.custom_actions.models import CustomAction
+from apps.custom_actions.models import CustomAction, CustomActionOperation
 from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
@@ -141,7 +141,10 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
             },
         },
     )
-    session.experiment.custom_actions.add(action)
+    CustomActionOperation.objects.create(
+        custom_action=action, experiment=session.experiment, operation_id="weather_get"
+    )
+    CustomActionOperation.objects.create(custom_action=action, experiment=session.experiment, operation_id="pollen_get")
     session.experiment.tools = []
     state = ChatExperimentState(session.experiment, session)
     chain = AgentExperimentRunnable(state=state)
@@ -155,8 +158,8 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     ]
 
     tools_ = fake_llm_service.llm.get_calls()[0].kwargs["tools"]
-    assert len(tools_) == 3, tools_
-    assert sorted([tool["function"]["name"] for tool in tools_]) == ["pollen_get", "weather_get", "weather_post"]
+    assert len(tools_) == 2, tools_
+    assert sorted([tool["function"]["name"] for tool in tools_]) == ["pollen_get", "weather_get"]
 
 
 @pytest.mark.django_db()
