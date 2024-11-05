@@ -1,19 +1,61 @@
 import enum
+import json
 from collections import defaultdict
-from typing import TypedDict
+from typing import Any
 
+import httpx
+from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
+from langchain_core.tools import Tool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
+from apps.service_providers.auth_service import AuthService
 
-class FunctionDef(TypedDict):
+
+class FunctionDef(BaseModel):
     name: str
     description: str
     method: str
     url: str
     args_schema: type[BaseModel]
+
+    def build_tool(self, auth_service) -> Tool:
+        executor = OpenAPIOperationExecutor(auth_service, self)
+        return Tool(
+            name=self.name,
+            description=self.description,
+            executor=executor,
+            args_schema=self.args_schema,
+            handle_tool_error=True,
+            func=executor.call_api,
+        )
+
+
+class OpenAPIOperationExecutor:
+    def __init__(self, auth_service: AuthService, function_def: FunctionDef):
+        self.auth_service = auth_service
+        self.function_def = function_def
+
+    def call_api(self, **kwargs) -> Any:
+        method = self.function_def.method
+        url = self.function_def.url
+        path_params = kwargs.pop("path_params", {})
+        url = _format_url(url, path_params)
+        if "data" in kwargs and isinstance(kwargs["data"], dict):
+            kwargs["data"] = json.dumps(kwargs["data"])
+
+        with self.auth_service.get_http_client() as client:
+            try:
+                return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
+            except httpx.HTTPError as e:
+                raise ToolException(f"Error making request: {str(e)}")
+
+    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> str:
+        response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
+        response.raise_for_status()
+        return response.text
 
 
 def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -> FunctionDef:

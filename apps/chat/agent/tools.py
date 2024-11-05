@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
+from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
-from apps.chat.agent.openapi_tool import OpenAPITool
+from apps.chat.agent.openapi_schema import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
@@ -236,8 +237,8 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
         tools.append(tool_cls(experiment_session=experiment_session))
 
     custom_actions = experiment.custom_actions.select_related("auth_provider").all()
-    if custom_actions:
-        tools.append(OpenAPITool(custom_actions=list(custom_actions)))
+    for action in custom_actions:
+        tools.extend(get_tools_for_custom_action(action))
 
     return tools
 
@@ -249,7 +250,19 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
         tools.append(tool_cls(experiment_session=None))
 
     custom_actions = assistant.custom_actions.select_related("auth_provider").all()
-    if custom_actions:
-        tools.append(OpenAPITool(custom_actions=list(custom_actions)))
+    for action in custom_actions:
+        tools.extend(get_tools_for_custom_action(action))
 
     return tools
+
+
+def get_tools_for_custom_action(custom_action):
+    spec = OpenAPISpec.from_spec_dict(custom_action.api_schema)
+    if not spec.paths:
+        return
+
+    auth_service = custom_action.get_auth_service()
+    for path in spec.paths:
+        for method in spec.get_methods_for_path(path):
+            function_def = openapi_spec_op_to_function_def(spec, path, method)
+            yield function_def.build_tool(auth_service)
