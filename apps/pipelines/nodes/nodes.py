@@ -65,9 +65,6 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
     llm_temperature: LlmTemperature = 1.0
-    history_type: HistoryType = PipelineChatHistoryTypes.NONE
-    history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = 8192
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -84,52 +81,10 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
 
 
-class LLMResponse(PipelineNode, LLMResponseMixin):
-    __human_name__ = "LLM response"
-    __node_description__ = "Calls an LLM with the given input"
-
-    def _process(self, input, **kwargs) -> str:
-        llm = self.get_chat_model()
-        output = llm.invoke(input, config=self._config)
-        return output.content
-
-
-class LLMResponseWithPrompt(LLMResponse):
-    __human_name__ = "LLM response with prompt"
-    __node_description__ = "Calls an LLM with a prompt"
-
-    source_material_id: SourceMaterialId | None = None
-    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
-
-    def _process(self, input, state: PipelineState, node_id: str) -> str:
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
-        )
-        context = self._get_context(input, state, prompt, node_id)
-        if self.history_type != PipelineChatHistoryTypes.NONE:
-            input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
-        chain = prompt | super().get_chat_model()
-        output = chain.invoke(context, config=self._config)
-        self._save_history(state["experiment_session"], node_id, input, output.content)
-        return output.content
-
-    def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
-        session: ExperimentSession = state["experiment_session"]
-        context = {"input": input}
-
-        if "source_material" in prompt.input_variables and self.source_material_id is None:
-            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
-        if "source_material" in prompt.input_variables and self.source_material_id:
-            context["source_material"] = self._get_source_material().material
-
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self._get_participant_data(session)
-
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self._get_current_datetime(session)
-
-        return context
+class HistoryMixin(LLMResponseMixin):
+    history_type: HistoryType = PipelineChatHistoryTypes.NONE
+    history_name: HistoryName | None = None
+    max_token_limit: MaxTokenLimit = 8192
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -174,6 +129,54 @@ class LLMResponseWithPrompt(LLMResponse):
         )
         message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=node_id)
         return message
+
+
+class LLMResponse(PipelineNode, LLMResponseMixin):
+    __human_name__ = "LLM response"
+    __node_description__ = "Calls an LLM with the given input"
+
+    def _process(self, input, **kwargs) -> str:
+        llm = self.get_chat_model()
+        output = llm.invoke(input, config=self._config)
+        return output.content
+
+
+class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
+    __human_name__ = "LLM response with prompt"
+    __node_description__ = "Calls an LLM with a prompt"
+
+    source_material_id: SourceMaterialId | None = None
+    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+
+    def _process(self, input, state: PipelineState, node_id: str) -> str:
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+        )
+        context = self._get_context(input, state, prompt, node_id)
+        if self.history_type != PipelineChatHistoryTypes.NONE:
+            input_messages = prompt.invoke(context).to_messages()
+            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+        chain = prompt | super().get_chat_model()
+        output = chain.invoke(context, config=self._config)
+        self._save_history(state["experiment_session"], node_id, input, output.content)
+        return output.content
+
+    def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
+        session: ExperimentSession = state["experiment_session"]
+        context = {"input": input}
+
+        if "source_material" in prompt.input_variables and self.source_material_id is None:
+            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
+        if "source_material" in prompt.input_variables and self.source_material_id:
+            context["source_material"] = self._get_source_material().material
+
+        if "participant_data" in prompt.input_variables:
+            context["participant_data"] = self._get_participant_data(session)
+
+        if "current_datetime" in prompt.input_variables:
+            context["current_datetime"] = self._get_current_datetime(session)
+
+        return context
 
     def _get_participant_data(self, session):
         if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
