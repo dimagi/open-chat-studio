@@ -11,11 +11,21 @@ class CustomActionOperationInfo(TypedDict):
 
 
 def get_custom_action_operation_choices(team):
-    return [
-        (make_model_id(None, action["id"], operation), f"{action['name']}: {operation}")
-        for action in team.customaction_set.all().values("id", "name", "operation_ids")
-        for operation in action["operation_ids"]
-    ]
+    """Make grouped choices for operations allowed by custom actions."""
+    choices = []
+    for action in team.customaction_set.defer("api_schema", "prompt").all():
+        group = []
+        all_ops = action.get_operations_by_id()
+        for operation_id in action.allowed_operations:
+            operation = all_ops.get(operation_id)
+            if not operation:
+                continue
+
+            model_id = make_model_id(None, action.id, operation_id)
+            group.append((model_id, f"{action.name}: {operation.description}"))
+        if group:
+            choices.append((action.name, group))
+    return choices
 
 
 def initialize_form_for_custom_actions(team, form):
@@ -51,7 +61,7 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         raise FieldDoesNotExist(f"{holder.__class__.__name__} does not have a custom_action_operations field")
 
     def _clear_query_cache():
-        holder.refresh_from_db(fields=["custom_actions", "custom_action_operations"])
+        holder.refresh_from_db(fields=["custom_action_operations"])
 
     model_field = holder._meta.get_field("custom_action_operations")
     holder_kwarg = model_field.remote_field.name

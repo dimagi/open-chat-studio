@@ -2,6 +2,7 @@ from urllib.parse import urljoin
 
 from django import forms
 from django.core.validators import URLValidator
+from django.utils.safestring import mark_safe
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
@@ -34,18 +35,38 @@ class CustomActionForm(forms.ModelForm):
         label="Auth",
         help_text="Select an authentication to use for this action.",
     )
+    allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "api_schema")
+        fields = ("name", "description", "auth_provider", "prompt", "api_schema", "allowed_operations")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["auth_provider"].queryset = request.team.authprovider_set.all()
+        if not self.instance or not self.instance.id:
+            del self.fields["allowed_operations"]
+        else:
+            grouped_ops = {}
+            for op in self.instance.operations:
+                grouped_ops.setdefault(op.path, []).append(op)
+            self.fields["allowed_operations"].choices = [
+                (mark_safe(f"{path}<br/>"), [(op.operation_id, str(op)) for op in ops])
+                for path, ops in grouped_ops.items()
+            ]
 
     def clean_api_schema(self):
         api_schema = self.cleaned_data["api_schema"]
         return validate_api_schema(api_schema)
+
+    def clean_allowed_operations(self):
+        operations = self.cleaned_data["allowed_operations"]
+        all_operations = {op.operation_id for op in self.instance.operations}
+        for operation in operations:
+            if operation not in all_operations:
+                raise forms.ValidationError("Invalid operation selected.")
+
+        return operations
 
 
 def validate_api_schema(api_schema):

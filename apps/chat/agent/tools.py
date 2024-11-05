@@ -257,7 +257,7 @@ def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list
     operations = action_holder.custom_action_operations.select_related(
         "custom_action", "custom_action__auth_provider"
     ).all()
-    return filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations])
+    return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 
 
 def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
@@ -267,7 +267,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
         return
 
     auth_service = custom_action.get_auth_service()
-    ops_by_id = custom_action.get_operations_mapping()
+    ops_by_id = custom_action.get_operations_by_id()
     operation = ops_by_id.get(custom_action_operation.operation_id)
     if not operation:
         return
