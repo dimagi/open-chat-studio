@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class ChannelForm(forms.ModelForm):
+    name = forms.CharField(required=False, help_text="If you leave this blank, it will default to the experiment name")
+
     class Meta:
         model = ExperimentChannel
         fields = ["name", "platform", "messaging_provider"]
@@ -131,7 +133,12 @@ class TelegramChannelForm(ExtraFormBase):
 
 class WhatsappChannelForm(WebhookUrlFormBase):
     number = forms.CharField(
-        label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
+        label="Number",
+        max_length=20,
+        help_text=(
+            "This is the number you got from your provider and should be in any of the formats: "
+            "+27812345678, +27-81-234-5678, +27 81 234 5678"
+        ),
     )
 
     def clean_number(self):

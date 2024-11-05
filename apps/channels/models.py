@@ -151,6 +151,11 @@ class ExperimentChannel(BaseTeamModel):
     def __str__(self):
         return f"Channel: {self.name} ({self.platform})"
 
+    def save(self, *args, **kwargs):
+        if not self.name:
+            self.name = self.experiment.name
+        return super().save(*args, **kwargs)
+
     @property
     def platform_enum(self):
         return ChannelPlatform(self.platform)
