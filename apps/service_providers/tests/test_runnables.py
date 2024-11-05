@@ -143,7 +143,6 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     )
     session.experiment.custom_actions.add(action)
     session.experiment.tools = []
-    # build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
     state = ChatExperimentState(session.experiment, session)
     chain = AgentExperimentRunnable(state=state)
     result = chain.invoke("hi")
