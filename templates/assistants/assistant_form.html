@@ -38,7 +38,7 @@
           {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
           {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
           {% with files_title=resource.label|add:" Files" %}
-            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type %}
+            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type multiple=True%}
           {% endwith %}
         </div>
       {% endfor %}

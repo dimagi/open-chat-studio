@@ -1,15 +1,17 @@
 import logging
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.forms import modelform_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template import loader
 from django.utils.decorators import method_decorator
 from django.views import View
 
+from apps.files.forms import MultipleFileFieldForm
 from apps.files.models import File
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -40,7 +42,7 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
     permission_required = "files.add_file"
 
     def post(self, request, team_slug: str, **kwargs):
-        form = modelform_factory(File, fields=("file",))(
+        form = forms.modelform_factory(File, fields=("file",))(
             request.POST,
             request.FILES,
         )
@@ -81,6 +83,59 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         file.team = self.request.team
         file.save()
         return file
+
+
+class BaseAddMultipleFilesHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "files.add_file"
+
+    def post(self, request, team_slug: str, **kwargs):
+        form = MultipleFileFieldForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                files = self.form_valid(form)
+            except Exception as e:
+                logger.exception("Error saving file")
+                return self.get_error_response(e)
+            return self.get_success_response(files)
+        return self.get_error_response(form.errors.as_text())
+
+    def get_success_response(self, files):
+        content = ""
+        for file in files:
+            context = {
+                "file": file,
+                "delete_url": self.get_delete_url(file),
+            }
+            content += loader.render_to_string("files/partials/file_item.html", context, self.request)
+        return HttpResponse(content)
+
+    def get_error_response(self, error):
+        messages.error(self.request, "Error uploading files")
+        return render(
+            self.request,
+            "files/partials/file_item_error.html",
+            {
+                "error": error,
+            },
+        )
+
+    def get_delete_url(self, file):
+        raise NotImplementedError()
+
+    def form_valid(self, form):
+        files = form.cleaned_data["file"]
+        return File.objects.bulk_create(
+            [
+                File(
+                    team=self.request.team,
+                    name=f.name,
+                    file=f,
+                    content_size=f.size,
+                    content_type=File.get_content_type(f),
+                )
+                for f in files
+            ]
+        )
 
 
 class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
