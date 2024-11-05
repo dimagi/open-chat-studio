@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Any
 
 import httpx
+import sentry_sdk
 from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -11,6 +12,7 @@ from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
 from apps.service_providers.auth_service import AuthService
+from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_user_input_url
 
 
 class FunctionDef(BaseModel):
@@ -38,15 +40,14 @@ class OpenAPIOperationExecutor:
 
     def call_api(self, **kwargs) -> Any:
         method = self.function_def.method
-        url = self.function_def.url
         path_params = kwargs.pop("path_params", None)
-        if path_params:
-            url = _format_url(url, path_params.model_dump())
+
         if "data" in kwargs:
             kwargs["json"] = kwargs.pop("data")
 
         kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
+        url = self._get_url(path_params)
         with self.auth_service.get_http_client() as client:
             try:
                 return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
@@ -57,6 +58,21 @@ class OpenAPIOperationExecutor:
         response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
         response.raise_for_status()
         return response.text
+
+    def _get_url(self, path_params):
+        url = self.function_def.url
+        if path_params:
+            url = _format_url(url, path_params.model_dump())
+
+        try:
+            validate_user_input_url(url)
+        except InvalidURL as e:
+            raise ToolException(str(e))
+        except PossibleSSRFAttempt as e:
+            sentry_sdk.capture_exception(e)
+            raise ToolException("Invalid URL")
+
+        return url
 
 
 def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -> FunctionDef:
