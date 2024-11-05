@@ -4,7 +4,6 @@ from typing import Any
 from urllib.parse import urljoin
 
 import httpx
-import sentry_sdk
 from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -13,7 +12,7 @@ from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
 from apps.service_providers.auth_service import AuthService
-from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_user_input_url
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
 class FunctionDef(BaseModel):
@@ -86,9 +85,6 @@ class OpenAPIOperationExecutor:
             validate_user_input_url(url)
         except InvalidURL as e:
             raise ToolException(str(e))
-        except PossibleSSRFAttempt as e:
-            sentry_sdk.capture_exception(e)
-            raise ToolException("Invalid URL")
 
         return url
 

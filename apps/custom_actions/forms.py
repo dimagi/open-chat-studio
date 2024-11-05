@@ -1,11 +1,10 @@
-import sentry_sdk
 from django import forms
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.models import AuthProvider
-from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_user_input_url
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
 class CustomActionForm(forms.ModelForm):
@@ -66,9 +65,6 @@ def validate_api_schema(api_schema):
         validate_user_input_url(server_url)
     except InvalidURL as e:
         raise forms.ValidationError(str(e))
-    except PossibleSSRFAttempt as e:
-        sentry_sdk.capture_exception(e)
-        raise forms.ValidationError("Invalid server URL. Ensure that the URL starts with 'https'.")
 
     paths = api_schema.get("paths", {})
     if not paths:

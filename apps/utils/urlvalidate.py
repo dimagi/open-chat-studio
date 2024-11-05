@@ -1,17 +1,41 @@
 # Copied from CommCare HQ: https://github.com/dimagi/commcare-hq/blob/master/corehq/util/urlvalidate/urlvalidate.py#L6
+import logging
 from urllib.parse import urlparse
 
-from .ip_resolver import resolve_to_ips
+from .ip_resolver import CannotResolveHost, resolve_to_ips
+
+log = logging.getLogger(__name__)
 
 
 def validate_user_input_url(url, allow_http=False):
     """
     Raises an exception if the supplied URL is considered invalid or unsafe
 
-    raise PossibleSSRFAttempt if the url resolves to a non-public ip address
-    raise CannotResolveHost if the url host does not resolve
-    raise InvalidURL if `url` can't be parsed as a URL (i.e. if it doesn't even "look" like a URL)
+    raise InvalidURL if `url` is not a valid URL or can't be resolved
     """
+    try:
+        _validate_url(url, allow_http)
+    except PossibleSSRFAttempt as e:
+        log.exception(
+            "Error resolving host: %s",
+            str(e),
+            extra={
+                "url": url,
+            },
+        )
+        raise InvalidURL("Invalid URL. Ensure that the URL is a valid HTTPS URL")
+    except CannotResolveHost as e:
+        log.exception(
+            "Error resolving host: %s",
+            str(e),
+            extra={
+                "url": url,
+            },
+        )
+        raise InvalidURL("Unable to validate URL")
+
+
+def _validate_url(url, allow_http=False):
     parsed_url = urlparse(url)
     hostname = parsed_url.hostname
     scheme = parsed_url.scheme
