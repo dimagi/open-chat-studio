@@ -4,10 +4,22 @@ import socket
 
 
 def resolve_to_ips(hostname, port=80):
+    if len(hostname) > 255:
+        raise CannotResolveHost("hostname too long")
+
     try:
-        address_tuples = socket.getaddrinfo(hostname, port)
-    except socket.gaierror:
-        raise CannotResolveHost(hostname)
+        socket.setdefaulttimeout(10)
+        address_tuples = socket.getaddrinfo(
+            hostname,
+            port,
+            proto=socket.IPPROTO_TCP,  # Restrict to TCP
+        )
+    except socket.gaierror as e:
+        raise CannotResolveHost(f"{hostname}: {str(e)}")
+    except TimeoutError:
+        raise CannotResolveHost(f"{hostname}: DNS resolution timed out")
+    finally:
+        socket.setdefaulttimeout(None)  # Reset timeout
 
     return [extract_ip(addr_info) for addr_info in address_tuples]
 
