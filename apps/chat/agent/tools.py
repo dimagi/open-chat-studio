@@ -7,7 +7,7 @@ from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
-from apps.chat.agent.openapi_schema import openapi_spec_op_to_function_def
+from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
