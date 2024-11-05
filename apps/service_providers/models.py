@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.functional import classproperty
 from django.utils.translation import gettext
@@ -16,6 +17,7 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
+from apps.pipelines.models import Node
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
 from apps.teams.models import BaseTeamModel, Team
 
@@ -173,12 +175,30 @@ class LlmProviderModel(BaseTeamModel):
         return self.team is not None
 
     def delete(self, *args, **kwargs):
-        experiments = self.experiment_set.values_list("id", "name").all()
-        if experiments:
-            experiment_info = [f"{id}: {name}" for id, name in experiments]
+        related_object_strings = []
+        for field in self._meta.get_fields():
+            if field.one_to_many and field.auto_created:
+                related_objects = getattr(self, field.get_accessor_name(), None)
+                if related_objects and related_objects.exists():
+                    for obj in related_objects.all():
+                        related_model_name = obj._meta.verbose_name
+                        obj_name = obj.name
+                        related_object_strings.append(f"{related_model_name}: {obj_name}")
+
+        pipeline_nodes = (
+            Node.objects.filter(
+                Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
+            )
+            .values_list("pipeline__name", flat=True)
+            .all()
+        )
+        for pipeline_node in pipeline_nodes:
+            related_object_strings.append(f"Pipeline: {pipeline_node}")
+
+        if related_object_strings:
             raise DjangoValidationError(
                 f"Cannot delete LLM Provider Model {self.name} "
-                f"as it is in use by experiments: {', '.join(experiment_info)}"
+                f"as it is in use by the following objects: {', '.join(related_object_strings)}"
             )
         return super().delete(*args, **kwargs)
 

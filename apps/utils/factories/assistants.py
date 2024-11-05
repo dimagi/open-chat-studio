@@ -1,5 +1,7 @@
 import factory
 
+from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
+
 
 class OpenAiAssistantFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -9,3 +11,4 @@ class OpenAiAssistantFactory(factory.django.DjangoModelFactory):
     llm_provider = factory.SubFactory(
         "apps.utils.factories.service_provider_factories.LlmProviderFactory", team=factory.SelfAttribute("..team")
     )
+    llm_provider_model = factory.SubFactory(LlmProviderModelFactory, team=factory.SelfAttribute("..team"))
