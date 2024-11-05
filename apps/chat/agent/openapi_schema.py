@@ -1,3 +1,4 @@
+import enum
 from collections import defaultdict
 from typing import TypedDict
 
@@ -165,25 +166,41 @@ def _schema_to_pydantic_field_type(spec: OpenAPISpec, schema: Schema) -> type:
         if not schema.items.title:
             schema.items.title = f"{schema.title}Items"
         return list[_schema_to_pydantic(spec, schema.items)]
-    elif schema.type == DataType.STRING:
+    elif schema.enum:
+        return _get_enum_type(schema)
+    else:
+        return _get_basic_type(schema.type)
+
+
+def _get_enum_type(schema) -> type[enum.Enum]:
+    if schema.type == DataType.STRING:
+        type_ = enum.StrEnum(_make_model_name(schema.title, "Enum"), [(v, v) for v in schema.enum if v])
+        type_.__doc__ = schema.description
+        return type_
+    else:
+        raise ValueError(f"Unsupported enum type: {schema.type}")
+
+
+def _get_basic_type(data_type: DataType) -> type:
+    if data_type == DataType.STRING:
         return str
-    elif schema.type == DataType.INTEGER:
+    elif data_type == DataType.INTEGER:
         return int
-    elif schema.type == DataType.NUMBER:
+    elif data_type == DataType.NUMBER:
         return float
-    elif schema.type == DataType.BOOLEAN:
+    elif data_type == DataType.BOOLEAN:
         return bool
     else:
-        raise ValueError(f"Unsupported type: {schema.type}")
+        raise ValueError(f"Unsupported type: {data_type}")
 
 
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
     return create_model(_make_model_name(name), **properties, **kwargs)
 
 
-def _make_model_name(name):
+def _make_model_name(name, suffix="Model"):
     name = name.title().replace("-", "").replace("_", "")
-    return f"{name}Model"
+    return f"{name}{suffix}"
 
 
 def _copy_meta(source, target):

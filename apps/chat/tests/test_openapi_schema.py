@@ -70,6 +70,41 @@ def test_openai_function_with_optional_params():
     )
 
 
+def test_openai_function_with_enum_params():
+    spec = _make_openapi_schema(
+        {
+            "parameters": [
+                {
+                    "name": "enum_param",
+                    "in": "query",
+                    "required": True,
+                    "schema": {"type": "string", "enum": ["value1", "value2"]},
+                    "description": "An enum parameter",
+                }
+            ],
+        }
+    )
+    function_spec = _get_openai_function_from_openapi_spec(spec, "/test", "get")
+    assert function_spec == _get_function_schema(
+        "test_get",
+        "GET /test endpoint",
+        {
+            "params": {
+                "properties": {
+                    "enum_param": {
+                        "description": "An enum parameter",
+                        "type": "string",
+                        "enum": ["value1", "value2"],
+                    }
+                },
+                "required": ["enum_param"],
+                "type": "object",
+                "additionalProperties": False,
+            },
+        },
+    )
+
+
 def test_openai_function_with_path_params():
     spec = _make_openapi_schema(
         {
