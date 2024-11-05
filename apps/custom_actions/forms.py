@@ -2,7 +2,7 @@ import sentry_sdk
 from django import forms
 from langchain_community.utilities.openapi import OpenAPISpec
 
-from apps.custom_actions.fields import JSONOrYAMLField
+from apps.custom_actions.fields import JsonOrYamlField
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, PossibleSSRFAttempt, validate_user_input_url
@@ -17,7 +17,7 @@ class CustomActionForm(forms.ModelForm):
         help_text="Use this field to provide additional instructions to the LLM",
         max_length=1000,
     )
-    api_schema = JSONOrYAMLField(
+    api_schema = JsonOrYamlField(
         widget=forms.Textarea(attrs={"rows": "10"}),
         required=True,
         label="API Schema",
