@@ -232,8 +232,6 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, LLMResponseMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
-    llm_provider_id: LlmProviderId
-    llm_model: LlmModel
     prompt: ExpandableText = "You are an extremely helpful router {input}"
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
