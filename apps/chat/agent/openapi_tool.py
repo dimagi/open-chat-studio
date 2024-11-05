@@ -1,6 +1,7 @@
 import enum
 from collections import defaultdict
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 import sentry_sdk
@@ -149,7 +150,7 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
         function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
     )
 
-    url = api_op.base_url.rstrip("/") + "/" + api_op.path.lstrip("/")
+    url = urljoin(api_op.base_url, api_op.path)
     return FunctionDef(
         name=function_name,
         description=api_op.description,
