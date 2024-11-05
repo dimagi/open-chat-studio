@@ -564,7 +564,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}
-    form_kwargs = {"team": request.team}
+    form_kwargs = {"experiment": experiment}
     for platform in available_platforms:
         if platform.form(**form_kwargs):
             platform_forms[platform] = platform.form(**form_kwargs)
@@ -652,7 +652,7 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(data=request.POST)
+    form = ChannelForm(experiment=experiment, data=request.POST)
     if not form.is_valid():
         messages.error(request, "Form has errors: " + form.errors.as_text())
     else:

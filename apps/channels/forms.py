@@ -26,12 +26,14 @@ class ChannelForm(forms.ModelForm):
         widgets = {"platform": forms.HiddenInput()}
 
     def __init__(self, *args, **kwargs):
-        team = kwargs.pop("team", None)
+        experiment = kwargs.pop("experiment", None)
+        initial: dict = kwargs.get("initial", {})
+        initial.setdefault("name", experiment.name)
         super().__init__(*args, **kwargs)
         if self.is_bound:
             return
         platform = self.initial["platform"]
-        self._populate_available_message_providers(team, platform)
+        self._populate_available_message_providers(experiment.team, platform)
 
     def _populate_available_message_providers(self, team: Team, platform: ChannelPlatform):
         provider_types = MessagingProviderType.platform_supported_provider_types(platform)
