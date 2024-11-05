@@ -31,7 +31,7 @@ class LesserThan(BaseValidator):
         self.params["value"] = self.value
 
 
-class ValidJson(BaseValidator):
+class ValidSchema(BaseValidator):
     name: str = "valid_schema"
 
 

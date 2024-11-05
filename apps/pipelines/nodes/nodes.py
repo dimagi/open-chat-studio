@@ -409,7 +409,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
         help_text="Use key-value pairs",
-        validators=[validators.Required(), validators.ValidJson()],
+        validators=[validators.Required(), validators.ValidSchema()],
     )
 
 
@@ -419,7 +419,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
         help_text="Use key-value pairs",
-        validators=[validators.Required(), validators.ValidJson()],
+        validators=[validators.Required(), validators.ValidSchema()],
     )
     key_name: str | None = None
 
