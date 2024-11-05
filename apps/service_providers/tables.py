@@ -40,16 +40,13 @@ def _make_url_factory(provider_type):
 
 
 class LlmProviderModelTable(tables.Table):
-    def show_delete(request, record) -> bool:
-        return not record.experiment_set.exists()
-
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="service_providers:llm_provider_model_edit"),
             actions.delete_action(
                 url_name="service_providers:llm_provider_model_delete",
                 confirm_message="Are you sure you want to delete this custom LLM Provider Model?",
-                display_condition=show_delete,
+                display_condition=lambda request, record: not record.has_related_objects(),
             ),
         ]
     )

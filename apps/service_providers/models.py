@@ -174,6 +174,19 @@ class LlmProviderModel(BaseTeamModel):
     def is_custom(self):
         return self.team is not None
 
+    def has_related_objects(self):
+        for field in self._meta.get_fields():
+            if field.one_to_many and field.auto_created:
+                related_objects = getattr(self, field.get_accessor_name(), None)
+                if related_objects and related_objects.exists():
+                    return True
+        if Node.objects.filter(
+            Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
+        ).exists():
+            return True
+
+        return False
+
     def delete(self, *args, **kwargs):
         related_object_strings = []
         for field in self._meta.get_fields():
