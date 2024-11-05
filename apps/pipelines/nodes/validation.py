@@ -1,10 +1,5 @@
 from pydantic import BaseModel, Field
 
-"""
-validators: [{"name": "", params: {}}]
-
-"""
-
 
 class BaseValidator(BaseModel):
     name: str
