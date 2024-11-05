@@ -36,6 +36,11 @@ from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.custom_actions.utils import (
+    clean_custom_action_operations,
+    initialize_form_for_custom_actions,
+    set_custom_actions,
+)
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -190,7 +195,7 @@ class ExperimentForm(forms.ModelForm):
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
-    custom_actions = forms.ModelMultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False, queryset=None)
+    custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = Experiment
@@ -222,7 +227,6 @@ class ExperimentForm(forms.ModelForm):
             "trace_provider",
             "participant_allowlist",
             "debug_mode_enabled",
-            "custom_actions",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -263,7 +267,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
-        self.fields["custom_actions"].queryset = team.customaction_set
+        initialize_form_for_custom_actions(team, self)
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
@@ -281,6 +285,9 @@ class ExperimentForm(forms.ModelForm):
         for identifier in self.cleaned_data["participant_allowlist"]:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
+
+    def clean_custom_action_operations(self):
+        return clean_custom_action_operations(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -321,6 +328,7 @@ class ExperimentForm(forms.ModelForm):
         experiment.owner = self.request.user
         if commit:
             experiment.save()
+            set_custom_actions(experiment, self.cleaned_data.get("custom_action_operations"))
             self.save_m2m()
         return experiment
 

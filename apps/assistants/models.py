@@ -49,6 +49,7 @@ class OpenAiAssistant(BaseTeamModel):
         "custom_actions.CustomAction",
         related_name="assistants",
         blank=True,
+        through="custom_actions.CustomActionOperation",
     )
 
     files = models.ManyToManyField("files.File", blank=True)

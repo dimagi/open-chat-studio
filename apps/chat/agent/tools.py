@@ -1,6 +1,4 @@
-import itertools
 import logging
-from collections.abc import Generator
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -256,17 +254,23 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
 
 
 def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list[BaseTool]:
-    custom_actions = action_holder.custom_actions.select_related("auth_provider").all()
-    return list(itertools.chain.from_iterable(get_tools_for_custom_action(action) for action in custom_actions))
+    operations = action_holder.custom_action_operations.select_related(
+        "custom_action", "custom_action__auth_provider"
+    ).all()
+    return filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations])
 
 
-def get_tools_for_custom_action(custom_action) -> Generator[BaseTool, None, None]:
+def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
+    custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action.api_schema)
     if not spec.paths:
         return
 
     auth_service = custom_action.get_auth_service()
-    for path in spec.paths:
-        for method in spec.get_methods_for_path(path):
-            function_def = openapi_spec_op_to_function_def(spec, path, method)
-            yield function_def.build_tool(auth_service)
+    ops_by_id = custom_action.get_operations_mapping()
+    operation = ops_by_id.get(custom_action_operation.operation_id)
+    if not operation:
+        return
+
+    function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
+    return function_def.build_tool(auth_service)

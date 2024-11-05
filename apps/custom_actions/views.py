@@ -61,7 +61,7 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
 class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = CustomAction
     form_class = CustomActionForm
-    template_name = "generic/object_form.html"
+    template_name = "custom_actions/custom_action_form.html"
     extra_context = {
         "title": "Update Custom Action",
         "button_text": "Update",

@@ -577,6 +577,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         "custom_actions.CustomAction",
         related_name="experiments",
         blank=True,
+        through="custom_actions.CustomActionOperation",
     )
     echo_transcript = models.BooleanField(
         default=True,
