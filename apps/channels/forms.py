@@ -136,7 +136,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         label="Number",
         max_length=20,
         help_text=(
-            "This is the number you got from your provider and should be in any of the formats: "
+            "This is the WhatsApp Business Number you got from your provider and should be in any of the formats: "
             "+27812345678, +27-81-234-5678, +27 81 234 5678"
         ),
     )
