@@ -6,6 +6,7 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.assistants.models import ToolResources
 from apps.chat.models import Chat
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
@@ -16,6 +17,7 @@ from apps.experiments.models import (
     SafetyLayer,
     SyntheticVoice,
 )
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -723,6 +725,13 @@ class TestExperimentModel:
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
         experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
+        files = FileFactory.create_batch(2)
+        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
+        code_resource.files.set(files[:1])
+
+        search_resource = ToolResources.objects.create(tool_type="file_search", assistant=experiment.assistant)
+        search_resource.files.set(files[1:])
         experiment.save()
         return experiment
 
@@ -736,7 +745,8 @@ class TestExperimentModel:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    def test_create_experiment_version(self):
+    @patch("apps.assistants.sync.push_assistant_to_openai", return_value=None)
+    def test_create_experiment_version(self, mock_push):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -767,6 +777,7 @@ class TestExperimentModel:
                 "version_description",
                 "safety_layers",
                 "pipeline",
+                "assistant",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -780,6 +791,7 @@ class TestExperimentModel:
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
+        self._assert_assistant_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
@@ -793,6 +805,13 @@ class TestExperimentModel:
         assert original_experiment.pipeline.version_number == 2
         for node in original_experiment.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
+
+    def _assert_assistant_is_duplicated(self, original_experiment, new_version):
+        assert new_version.assistant.working_version == original_experiment.assistant
+        assert new_version.assistant.version_number == 1
+        assert original_experiment.assistant.version_number == 2
+        assert new_version.assistant.tool_resources.filter(tool_type="file_search").first().files.count() == 1
+        assert new_version.assistant.tool_resources.filter(tool_type="code_interpreter").first().files.count() == 1
 
     def test_copy_attr_to_new_version(self):
         """
