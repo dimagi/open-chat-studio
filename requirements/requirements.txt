@@ -263,7 +263,7 @@ langsmith==0.1.137
     #   langchain-core
 loguru==0.7.2
     # via -r requirements.in
-markdown==3.5.1
+markdown==3.7
     # via -r requirements.in
 markdown-it-py==3.0.0
     # via rich
