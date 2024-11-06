@@ -195,7 +195,7 @@ httpx==0.24.1
     #   langsmith
     #   openai
     #   taskbadger
-huggingface-hub==0.20.2
+huggingface-hub==0.26.2
     # via
     #   tokenizers
     #   transformers
@@ -447,7 +447,7 @@ tiktoken==0.8.0
     # via
     #   -r requirements.in
     #   langchain-openai
-tokenizers==0.15.0
+tokenizers==0.20.2
     # via
     #   anthropic
     #   transformers
@@ -458,7 +458,7 @@ tqdm==4.66.3
     #   huggingface-hub
     #   openai
     #   transformers
-transformers==4.39.3
+transformers==4.46.1
     # via -r requirements.in
 turn-python==0.2.0
     # via -r requirements.in
