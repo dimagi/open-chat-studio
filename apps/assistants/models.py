@@ -45,11 +45,6 @@ class OpenAiAssistant(BaseTeamModel):
         verbose_name="LLM Model",
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
-    custom_actions = models.ManyToManyField(
-        "custom_actions.CustomAction",
-        related_name="assistants",
-        blank=True,
-    )
 
     files = models.ManyToManyField("files.File", blank=True)
 
@@ -82,7 +77,7 @@ class OpenAiAssistant(BaseTeamModel):
         return len(self.tools) > 0 or self.has_custom_actions()
 
     def has_custom_actions(self):
-        return self.custom_actions.exists()
+        return self.custom_action_operations.exists()
 
 
 @audit_fields(

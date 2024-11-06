@@ -34,18 +34,36 @@ class CustomActionForm(forms.ModelForm):
         label="Auth",
         help_text="Select an authentication to use for this action.",
     )
+    allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "api_schema")
+        fields = ("name", "description", "auth_provider", "prompt", "api_schema", "allowed_operations")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["auth_provider"].queryset = request.team.authprovider_set.all()
+        if not self.instance or not self.instance.id:
+            del self.fields["allowed_operations"]
+        else:
+            grouped_ops = {}
+            for op in self.instance.operations:
+                grouped_ops.setdefault(op.path, []).append(op)
+            self.fields["allowed_operations"].choices = [
+                (path, [(op.operation_id, str(op)) for op in ops]) for path, ops in grouped_ops.items()
+            ]
 
     def clean_api_schema(self):
         api_schema = self.cleaned_data["api_schema"]
         return validate_api_schema(api_schema)
+
+    def clean_allowed_operations(self):
+        operations = self.cleaned_data["allowed_operations"]
+        all_operations = set(self.instance.get_operations_by_id())
+        invalid_operations = set(operations) - all_operations
+        if invalid_operations:
+            raise forms.ValidationError(f"Invalid operations selected: {', '.join(sorted(invalid_operations))}")
+        return operations
 
 
 def validate_api_schema(api_schema):

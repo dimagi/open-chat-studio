@@ -1,0 +1,15 @@
+{% extends "generic/object_form.html" %}
+{% block form_actions %}
+  <div class="text-sm mt-2">
+    {% if object and object.operation_ids %}
+      <p>This spec contains the following API actions:</p>
+      <ul class="list-disc list-inside">
+        {% for operation in object.operation_ids %}
+          <li>{{ operation }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  {{ block.super }}
+{% endblock form_actions %}
