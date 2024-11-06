@@ -65,7 +65,7 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
+        return OpenAiAssistant.objects.filter(team=self.request.team, is_archived=False).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -92,7 +92,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return reverse("assistants:home", args=[self.request.team.slug])
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team)
+        return OpenAiAssistant.objects.filter(team=self.request.team, is_archived=False)
 
 
 class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
@@ -187,8 +187,8 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
+        assistant.archive()
+        messages.success(request, "Assistant Archived")
         return HttpResponse()
 
 
