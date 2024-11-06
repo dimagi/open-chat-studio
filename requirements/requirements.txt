@@ -131,6 +131,8 @@ django-appconf==1.0.5
     # via django-cryptography-django5
 django-celery-beat==2.7.0
     # via -r requirements.in
+django-cleanup==9.0.0
+    # via -r requirements.in
 django-cryptography-django5==2.2
     # via -r requirements.in
 django-environ==0.11.2
