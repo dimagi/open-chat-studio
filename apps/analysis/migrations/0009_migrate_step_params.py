@@ -4,12 +4,6 @@ from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 
-from apps.analysis.migration_utils import migrate_step_params
-
-
-def _migrate_step_params(apps, schema_editor):
-    Analysis = apps.get_model("analysis", "Analysis")
-    migrate_step_params(Analysis)
 
 
 class Migration(migrations.Migration):
@@ -17,6 +11,4 @@ class Migration(migrations.Migration):
         ("analysis", "0008_rungroup_approved_rungroup_created_by_rungroup_notes_and_more"),
     ]
 
-    operations = [
-        migrations.RunPython(_migrate_step_params, reverse_code=migrations.RunPython.noop)
-    ]
+    operations = []

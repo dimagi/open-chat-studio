@@ -13,8 +13,6 @@ from apps.teams.utils import get_current_team
 SUPER_ADMIN_GROUP = "Super Admin"
 TEAM_ADMIN_GROUP = "Team Admin"
 EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
-ANALYSIS_ADMIN_GROUP = "Analysis Admin"
-ANALYSIS_USER_GROUP = "Analysis Users"
 EVENT_ADMIN_GROUP = "Event Admin"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
@@ -22,7 +20,6 @@ PIPELINE_ADMIN_GROUP = "Pipeline Admin"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
-    ANALYSIS_ADMIN_GROUP,
     ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
     EVENT_ADMIN_GROUP,
@@ -51,7 +48,6 @@ class TeamBackend(ModelBackend):
 
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
-    "analysis": ["analysis", "rungroup", "analysisrun", "resource"],
     "assistants": ["openaiassistant", "toolresources"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
@@ -165,21 +161,6 @@ GROUPS = [
         [
             AppPermSetDef("chat", [VIEW]),
             AppPermSetDef("annotations", [VIEW]),
-        ],
-    ),
-    GroupDef(
-        ANALYSIS_ADMIN_GROUP,
-        [
-            AppPermSetDef("analysis", ALL),
-        ],
-    ),
-    GroupDef(
-        ANALYSIS_USER_GROUP,
-        [
-            ModelPermSetDef("analysis", "analysis", [VIEW]),
-            ModelPermSetDef("analysis", "rungroup", [VIEW, CHANGE, ADD]),
-            ModelPermSetDef("analysis", "analysisrun", [VIEW, CHANGE, ADD]),
-            ModelPermSetDef("analysis", "resource", [VIEW, CHANGE, ADD]),
         ],
     ),
     GroupDef(

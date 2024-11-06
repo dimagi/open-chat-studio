@@ -1,2 +1,0 @@
-class StepError(Exception):
-    pass
