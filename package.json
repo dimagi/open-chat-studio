@@ -51,7 +51,7 @@
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
     "axios": "^1.7.7",
-    "chart.js": "^4.4.5",
+    "chart.js": "^4.4.6",
     "daisyui": "^4.12.13",
     "htmx.org": "^1.9.12",
     "js-cookie": "^3.0.5",
