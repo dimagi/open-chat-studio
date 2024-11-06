@@ -16,6 +16,23 @@
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}
+  {% if object.pk %}
+    <div id="sync-wrapper" class="flex w-full gap-2"
+         hx-get="{% url 'assistants:check_sync_status' request.team.slug object.pk %}"
+         hx-trigger="load"
+         hx-target="#sync-wrapper"
+         hx-swap="innerHTML">
+      <div id="sync-status" class="flex w-full gap-2">
+        <span class="indicator" id="sync-indicator"></span>
+        <span id="sync-message">Checking sync status...</span>
+      </div>
+      <div id="sync-container">
+      {% comment %}
+        This section will be replaced by the content returned from the check_sync_status view.
+      {% endcomment %}
+      </div>
+    </div>
+  {% endif %}
 {% endblock pre_form %}
 {% block form %}
   {{ form.non_field_errors }}

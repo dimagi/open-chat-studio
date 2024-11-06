@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
@@ -20,9 +20,11 @@ from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFor
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
+    are_files_in_sync_with_openai,
     delete_file_from_openai,
     delete_openai_assistant,
     import_openai_assistant,
+    is_synced_with_openai,
     push_assistant_to_openai,
     sync_from_openai,
 )
@@ -138,6 +140,29 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
             form.add_error(None, str(e))
             return self.form_invalid(form)
         return response
+
+
+def check_sync_status(request, team_slug, pk):
+    assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+    try:
+        is_synced = is_synced_with_openai(assistant)
+    except OpenAiSyncError:
+        is_synced = False
+    files_in_sync = are_files_in_sync_with_openai(assistant)
+    context = {"is_synced": is_synced, "object": assistant, "are_files_synced": files_in_sync}
+    return render(request, "assistants/sync_status.html", context)
+
+
+class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
+    permission_required = "assistants.change_openaiassistant"
+
+    def post(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team__slug=team_slug, pk=pk)
+        try:
+            sync_from_openai(assistant)
+        except OpenAiSyncError as e:
+            messages.error(request, f"Error syncing assistant: {e}")
+        return HttpResponse(headers={"HX-Refresh": "true"})
 
 
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
