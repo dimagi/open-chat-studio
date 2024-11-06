@@ -8,6 +8,7 @@ import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import useNodeErrorStore from "./stores/nodeErrorStore";
+import ajv from "./schemas"
 
 export type PipelineNode = Node<NodeData>;
 
@@ -17,6 +18,14 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeHasErrors = useNodeErrorStore((state) => state.hasErrors);
+
+  const validate = ajv.getSchema(data.type);
+  if (validate) {
+    const valid = validate(data.params)
+    if (!valid) console.log(data.type, validate.errors)
+  } else {
+    console.error(`No schema found for node type: ${data.type}`)
+  }
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,

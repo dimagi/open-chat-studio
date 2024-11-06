@@ -13,15 +13,15 @@ INDEX_TEMPLATE = """
 * DO NOT MODIFY IT BY HAND. Instead, modify the pipeline node classes in Python,
 * and run generate_pipeline_schemas to regenerate this file.
 */
-{%- for node in nodes -%}
+import Ajv from "ajv"
+{% for node in nodes -%}
 import {{node}} from "../schemas/{{node}}.json"
 {% endfor %}
 
-export const NodeTypeSchemas: Record<string, any> = {
-    {%- for node in nodes %}
-    {{node}}: {{node}},
-    {%- endfor %}
-};
+export const ajv = new Ajv()
+{% for node in nodes -%}
+ajv.addSchema({{node}}, "{{node}}");
+{% endfor %}
 """
 
 
