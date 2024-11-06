@@ -2,13 +2,7 @@
   "properties": {
     "input_equals": {
       "title": "Input Equals",
-      "type": "string",
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        }
-      ]
+      "type": "string"
     }
   },
   "required": [

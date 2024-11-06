@@ -1,26 +1,14 @@
 {
   "$defs": {
     "ExpandableText": {
+      "pattern": "\\{input\\}",
       "type": "string"
     }
   },
   "properties": {
     "template_string": {
       "$ref": "#/$defs/ExpandableText",
-      "help_text": "Use {input} to designate the node's input",
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        },
-        {
-          "name": "variable_required",
-          "params": {
-            "variable": "{input}"
-          },
-          "variable": "{input}"
-        }
-      ]
+      "description": "Use {input} to designate the node's input"
     }
   },
   "required": [

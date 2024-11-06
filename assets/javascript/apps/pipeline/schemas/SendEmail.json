@@ -1,25 +1,14 @@
 {
   "properties": {
     "recipient_list": {
-      "help_text": "A list of email addresses, comma-separated",
+      "description": "A list of email addresses, comma-separated",
+      "pattern": "^((\\w+([-+.']\\w+)*@\\w+([-.]\\w+)*\\.\\w+([-.]\\w+)*)*([,])*)*$",
       "title": "Recipient List",
-      "type": "string",
-      "validators": [
-        {
-          "name": "comma_separated_emails",
-          "params": {}
-        }
-      ]
+      "type": "string"
     },
     "subject": {
       "title": "Subject",
-      "type": "string",
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        }
-      ]
+      "type": "string"
     }
   },
   "required": [

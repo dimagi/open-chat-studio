@@ -10,6 +10,8 @@
       "type": "integer"
     },
     "LlmTemperature": {
+      "exclusiveMaximum": 2.0,
+      "exclusiveMinimum": 0.0,
       "type": "number"
     }
   },
@@ -22,32 +24,12 @@
     },
     "llm_temperature": {
       "$ref": "#/$defs/LlmTemperature",
-      "default": 1.0,
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        },
-        {
-          "name": "greater_than",
-          "params": {
-            "value": 0
-          },
-          "value": 0
-        },
-        {
-          "name": "lesser_than",
-          "params": {
-            "value": 2
-          },
-          "value": 2
-        }
-      ]
+      "default": 1.0
     },
     "data_schema": {
       "$ref": "#/$defs/ExpandableText",
       "default": "{\"name\": \"the name of the user\"}",
-      "help_text": "Use key-value pairs",
+      "description": "Use key-value pairs",
       "validators": [
         {
           "name": "required",

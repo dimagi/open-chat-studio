@@ -39,8 +39,8 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
     template_string: ExpandableText = Field(
-        help_text="Use {input} to designate the node's input",
-        validators=[validation.Required(), validation.VariableRequired(variable="{input}")],
+        description="Use {input} to designate the node's input",
+        pattern=r"\{input\}",
     )
 
     def _process(self, input, **kwargs) -> str:
@@ -68,9 +68,7 @@ class RenderTemplate(PipelineNode):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_model: LlmModel
-    llm_temperature: LlmTemperature = Field(
-        default=1.0, validators=[validation.Required(), validation.GreaterThan(value=0), validation.LesserThan(value=2)]
-    )
+    llm_temperature: LlmTemperature = Field(default=1.0, gt=0, lt=2)
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -90,10 +88,7 @@ class LLMResponseMixin(BaseModel):
 class HistoryMixin(LLMResponseMixin):
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = Field(
-        default=8192,
-        validators=[validation.Required(), validation.GreaterThan(value=0), validation.LesserThan(value=100_00)],
-    )
+    max_token_limit: MaxTokenLimit = Field(default=8192, gt=0, lt=100_00)
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -206,9 +201,10 @@ class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
     recipient_list: str = Field(
-        help_text="A list of email addresses, comma-separated", validators=[validation.CommaSeparatedEmails()]
+        description="A list of email addresses, comma-separated",
+        pattern=r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)*([,])*)*$",
     )
-    subject: str = Field(validators=[validation.Required()])
+    subject: str
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
@@ -228,7 +224,7 @@ class Passthrough(PipelineNode):
 class BooleanNode(Passthrough):
     __human_name__ = "Boolean Node"
     __node_description__ = "Verifies whether the input is a certain value or not"
-    input_equals: str = Field(validators=[validation.Required()])
+    input_equals: str
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
@@ -245,8 +241,8 @@ class RouterNode(Passthrough, HistoryMixin):
     __node_description__ = "Routes the input to one of the linked nodes"
     prompt: ExpandableText = Field(
         default="You are an extremely helpful router {input}",
-        help_text="Use {input} to designate the user's query",
-        validators=[validation.Required(), validation.VariableRequired(variable="{input}")],
+        description="Use {input} to designate the user's query",
+        pattern=r"\{input\}",
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
@@ -408,7 +404,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
-        help_text="Use key-value pairs",
+        description="Use key-value pairs",
         validators=[validation.Required(), validation.ValidSchema()],
     )
 

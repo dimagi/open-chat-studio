@@ -1,6 +1,7 @@
 {
   "$defs": {
     "ExpandableText": {
+      "pattern": "\\{input\\}",
       "type": "string"
     },
     "HistoryName": {
@@ -20,9 +21,13 @@
       "type": "integer"
     },
     "LlmTemperature": {
+      "exclusiveMaximum": 2.0,
+      "exclusiveMinimum": 0.0,
       "type": "number"
     },
     "MaxTokenLimit": {
+      "exclusiveMaximum": 10000,
+      "exclusiveMinimum": 0,
       "type": "integer"
     },
     "NumOutputs": {
@@ -38,27 +43,7 @@
     },
     "llm_temperature": {
       "$ref": "#/$defs/LlmTemperature",
-      "default": 1.0,
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        },
-        {
-          "name": "greater_than",
-          "params": {
-            "value": 0
-          },
-          "value": 0
-        },
-        {
-          "name": "lesser_than",
-          "params": {
-            "value": 2
-          },
-          "value": 2
-        }
-      ]
+      "default": 1.0
     },
     "history_type": {
       "$ref": "#/$defs/HistoryType",
@@ -77,45 +62,12 @@
     },
     "max_token_limit": {
       "$ref": "#/$defs/MaxTokenLimit",
-      "default": 8192,
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        },
-        {
-          "name": "greater_than",
-          "params": {
-            "value": 0
-          },
-          "value": 0
-        },
-        {
-          "name": "lesser_than",
-          "params": {
-            "value": 10000
-          },
-          "value": 10000
-        }
-      ]
+      "default": 8192
     },
     "prompt": {
       "$ref": "#/$defs/ExpandableText",
       "default": "You are an extremely helpful router {input}",
-      "help_text": "Use {input} to designate the user's query",
-      "validators": [
-        {
-          "name": "required",
-          "params": {}
-        },
-        {
-          "name": "variable_required",
-          "params": {
-            "variable": "{input}"
-          },
-          "variable": "{input}"
-        }
-      ]
+      "description": "Use {input} to designate the user's query"
     },
     "num_outputs": {
       "$ref": "#/$defs/NumOutputs",
