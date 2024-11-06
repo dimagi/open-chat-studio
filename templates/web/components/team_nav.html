@@ -70,16 +70,6 @@
       </a>
     {% endif %}
   </li>
-  {% flag "pipelines" %}
-    <li>
-      {% if perms.analysis.view_analysis %}
-        <a href="{% url 'analysis:home' request.team.slug %}" {% if active_tab == 'analysis' %}class="active"{% endif %}>
-          <i class="fa-solid fa-magnifying-glass-chart"></i>
-          {% translate "Analysis Pipelines" %}<span class="badge badge-sm">beta</span>
-        </a>
-      {% endif %}
-    </li>
-  {% endflag %}
   {% flag "pipelines-v2" %}
     <li>
       {% if perms.pipelines.view_pipeline %}
