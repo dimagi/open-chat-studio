@@ -100,6 +100,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         "openai_file_ids",
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
+        "trace_info",
     }
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")

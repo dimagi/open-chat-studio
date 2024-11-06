@@ -100,6 +100,15 @@ class ExperimentState(RunnableState):
     def get_tools(self):
         return get_tools(self.session, self.experiment)
 
+    def get_trace_metadata(self) -> dict:
+        if self.experiment.trace_provider:
+            trace_info = self.experiment.trace_provider.get_service().get_current_trace_info()
+            if trace_info:
+                return {
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.experiment.trace_provider.type},
+                }
+        return {}
+
 
 class ChatRunnableState(RunnableState):
     @abstractmethod
@@ -136,9 +145,7 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
 
     def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         chat_message = ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
+            chat=self.session.chat, message_type=type_.value, content=message, metadata=self.get_trace_metadata()
         )
         if experiment_tag:
             tag, _ = Tag.objects.get_or_create(
@@ -254,7 +261,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
-        metadata = {"openai_thread_checkpoint": True}
+        metadata = {"openai_thread_checkpoint": True, **self.get_trace_metadata()}
         if annotation_file_ids:
             metadata["openai_file_ids"] = annotation_file_ids
 
