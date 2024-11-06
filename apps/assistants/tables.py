@@ -41,6 +41,16 @@ class OpenAiAssistantTable(tables.Table):
         ]
     )
 
+    def render_actions(self, record):
+        actions_to_render = []
+        for action in self.actions.actions:
+            if action.name in ["assistants:edit", "assistants:sync"]:
+                if record.working_version is None:
+                    actions_to_render.append(action)
+            else:
+                actions_to_render.append(action)
+        return self.actions.render(actions_to_render, record)
+
     class Meta:
         model = OpenAiAssistant
         fields = ("name", "assistant_id")
