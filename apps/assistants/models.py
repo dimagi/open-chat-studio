@@ -109,6 +109,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 )
                 new_tool_resource.files.set(files)
                 new_tool_resource.extra = tool_resource.extra
+                new_tool_resource.save()
 
         push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
         return assistant_version
