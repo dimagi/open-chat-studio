@@ -16,7 +16,12 @@ import RouterNode from "../schemas/RouterNode.json"
 import SendEmail from "../schemas/SendEmail.json"
 
 
-export const ajv = new Ajv()
+const ajv = new Ajv({
+    // this is needed 'validators' and 'help_text' fields in the schema. Ideally these would be replaced with
+    // JSON schema validations and using the 'description' field in the schema.
+    strict: false,
+    allErrors: true,
+});
 ajv.addSchema(BooleanNode, "BooleanNode");
 ajv.addSchema(ExtractParticipantData, "ExtractParticipantData");
 ajv.addSchema(ExtractStructuredData, "ExtractStructuredData");
@@ -26,3 +31,6 @@ ajv.addSchema(Passthrough, "Passthrough");
 ajv.addSchema(RenderTemplate, "RenderTemplate");
 ajv.addSchema(RouterNode, "RouterNode");
 ajv.addSchema(SendEmail, "SendEmail");
+
+
+export default ajv;

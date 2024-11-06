@@ -18,10 +18,17 @@ import Ajv from "ajv"
 import {{node}} from "../schemas/{{node}}.json"
 {% endfor %}
 
-export const ajv = new Ajv()
+const ajv = new Ajv({
+    // this is needed 'validators' and 'help_text' fields in the schema. Ideally these would be replaced with
+    // JSON schema validations and using the 'description' field in the schema.
+    strict: false,
+    allErrors: true,
+});
 {% for node in nodes -%}
 ajv.addSchema({{node}}, "{{node}}");
 {% endfor %}
+
+export default ajv;
 """
 
 
