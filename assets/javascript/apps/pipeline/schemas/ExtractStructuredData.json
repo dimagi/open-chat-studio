@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ExpandableText": {
+      "type": "string"
+    },
+    "LlmModel": {
+      "type": "string"
+    },
+    "LlmProviderId": {
+      "type": "integer"
+    },
+    "LlmTemperature": {
+      "exclusiveMaximum": 2.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+    }
+  },
+  "properties": {
+    "llm_provider_id": {
+      "$ref": "#/$defs/LlmProviderId"
+    },
+    "llm_model": {
+      "$ref": "#/$defs/LlmModel"
+    },
+    "llm_temperature": {
+      "$ref": "#/$defs/LlmTemperature",
+      "default": 1.0
+    },
+    "data_schema": {
+      "$ref": "#/$defs/ExpandableText",
+      "default": "{\"name\": \"the name of the user\"}",
+      "help_text": "Use key-value pairs",
+      "validators": [
+        {
+          "name": "required",
+          "params": {}
+        },
+        {
+          "name": "valid_schema",
+          "params": {}
+        }
+      ]
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_model"
+  ],
+  "title": "ExtractStructuredData",
+  "type": "object"
+}

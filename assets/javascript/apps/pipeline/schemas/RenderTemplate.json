@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "ExpandableText": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "template_string": {
+      "$ref": "#/$defs/ExpandableText",
+      "help_text": "Use {input} to designate the node's input",
+      "validators": [
+        {
+          "name": "required",
+          "params": {}
+        },
+        {
+          "name": "variable_required",
+          "params": {
+            "variable": "{input}"
+          },
+          "variable": "{input}"
+        }
+      ]
+    }
+  },
+  "required": [
+    "template_string"
+  ],
+  "title": "RenderTemplate",
+  "type": "object"
+}

@@ -1,0 +1,31 @@
+{
+  "properties": {
+    "recipient_list": {
+      "help_text": "A list of email addresses, comma-separated",
+      "title": "Recipient List",
+      "type": "string",
+      "validators": [
+        {
+          "name": "comma_separated_emails",
+          "params": {}
+        }
+      ]
+    },
+    "subject": {
+      "title": "Subject",
+      "type": "string",
+      "validators": [
+        {
+          "name": "required",
+          "params": {}
+        }
+      ]
+    }
+  },
+  "required": [
+    "recipient_list",
+    "subject"
+  ],
+  "title": "SendEmail",
+  "type": "object"
+}

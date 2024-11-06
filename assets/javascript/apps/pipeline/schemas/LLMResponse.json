@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "LlmModel": {
+      "type": "string"
+    },
+    "LlmProviderId": {
+      "type": "integer"
+    },
+    "LlmTemperature": {
+      "exclusiveMaximum": 2.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+    }
+  },
+  "properties": {
+    "llm_provider_id": {
+      "$ref": "#/$defs/LlmProviderId"
+    },
+    "llm_model": {
+      "$ref": "#/$defs/LlmModel"
+    },
+    "llm_temperature": {
+      "$ref": "#/$defs/LlmTemperature",
+      "default": 1.0
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_model"
+  ],
+  "title": "LLMResponse",
+  "type": "object"
+}

@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "input_equals": {
+      "title": "Input Equals",
+      "type": "string",
+      "validators": [
+        {
+          "name": "required",
+          "params": {}
+        }
+      ]
+    }
+  },
+  "required": [
+    "input_equals"
+  ],
+  "title": "BooleanNode",
+  "type": "object"
+}
