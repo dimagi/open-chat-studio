@@ -38,7 +38,7 @@ class Command(BaseCommand):
         base_dir = settings.BASE_DIR / "assets" / "javascript" / "apps" / "pipeline" / "schemas"
         for n in node_classes:
             with open(base_dir / f"{n.__name__}.json", "w") as f:
-                json.dump(n.model_json_schema(), f, indent=2)
+                json.dump(n.model_json_schema(mode="serialization"), f, indent=2)
 
         print(f"Generated {len(node_classes)} schemas in {base_dir}")
 

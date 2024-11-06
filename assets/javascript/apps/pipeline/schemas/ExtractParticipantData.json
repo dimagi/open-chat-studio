@@ -56,7 +56,10 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_model"
+    "llm_model",
+    "llm_temperature",
+    "data_schema",
+    "key_name"
   ],
   "title": "ExtractParticipantData",
   "type": "object"

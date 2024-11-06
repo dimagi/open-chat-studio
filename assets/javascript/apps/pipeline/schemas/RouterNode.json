@@ -80,7 +80,14 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_model"
+    "llm_model",
+    "llm_temperature",
+    "history_type",
+    "history_name",
+    "max_token_limit",
+    "prompt",
+    "num_outputs",
+    "keywords"
   ],
   "title": "RouterNode",
   "type": "object"

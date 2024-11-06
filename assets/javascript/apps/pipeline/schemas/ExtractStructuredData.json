@@ -44,7 +44,9 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_model"
+    "llm_model",
+    "llm_temperature",
+    "data_schema"
   ],
   "title": "ExtractStructuredData",
   "type": "object"

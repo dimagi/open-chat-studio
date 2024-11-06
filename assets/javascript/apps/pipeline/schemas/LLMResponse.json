@@ -26,7 +26,8 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_model"
+    "llm_model",
+    "llm_temperature"
   ],
   "title": "LLMResponse",
   "type": "object"

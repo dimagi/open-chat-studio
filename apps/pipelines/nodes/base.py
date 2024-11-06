@@ -62,8 +62,7 @@ class PipelineNode(BaseModel, ABC):
 
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+    model_config = ConfigDict(arbitrary_types_allowed=True, json_schema_serialization_defaults_required=True)
     _config: RunnableConfig | None = None
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
