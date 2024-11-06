@@ -1,4 +1,4 @@
-from django.conf import settings
+from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables
 
 from apps.assistants.models import OpenAiAssistant
@@ -18,12 +18,14 @@ class OpenAiAssistantTable(tables.Table):
             actions.edit_action(
                 "assistants:edit",
                 required_permissions=["assistants.change_openaiassistant"],
+                display_condition=lambda request, record: record.working_version is None,
             ),
             actions.AjaxAction(
                 "assistants:sync",
                 title="Update from OpenAI",
                 icon_class="fa-solid fa-rotate",
                 required_permissions=["assistants.change_openaiassistant"],
+                display_condition=lambda request, record: record.working_version is None,
             ),
             actions.delete_action(
                 "assistants:delete_local",
@@ -41,19 +43,35 @@ class OpenAiAssistantTable(tables.Table):
         ]
     )
 
-    def render_actions(self, record):
-        actions_to_render = []
-        for action in self.actions.actions:
-            if action.name in ["assistants:edit", "assistants:sync"]:
-                if record.working_version is None:
-                    actions_to_render.append(action)
-            else:
-                actions_to_render.append(action)
-        return self.actions.render(actions_to_render, record)
+    @property
+    def name_linkify(self):
+        return lambda record: record.working_version is not None
+
+    def render_name(self, record):
+        if self.name_linkify(record):
+            return mark_safe(f'<a href="{record.get_absolute_url()}">{record.name}</a>')
+        else:
+            return record.name
 
     class Meta:
         model = OpenAiAssistant
         fields = ("name", "assistant_id")
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {
+            "class": lambda record: " ".join(
+                [
+                    "border-b",
+                    "border-base-300",
+                    "hover:bg-base-200",
+                    "data-[redirect-url]:[&:not([data-redirect-url=''])]:hover:cursor-pointer",
+                    "disabled" if record.working_version is None else "",
+                ]
+            ),
+            "id": lambda record: f"record-{record.id}",
+            "data-redirect-url": lambda record: (
+                record.get_absolute_url()
+                if hasattr(record, "get_absolute_url") and record.working_version is None
+                else ""
+            ),
+        }
         orderable = False
         empty_text = "No assistants found."
