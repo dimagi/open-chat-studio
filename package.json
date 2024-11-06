@@ -38,7 +38,7 @@
     "postcss": "^8.4.47",
     "postcss-import": "^16.1.0",
     "postcss-loader": "^8.1.1",
-    "postcss-nested": "^6.2.0",
+    "postcss-nested": "^7.0.1",
     "sass": "^1.80.4",
     "sass-loader": "^13.3.3",
     "style-loader": "^4.0.0",
