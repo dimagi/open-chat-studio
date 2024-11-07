@@ -192,7 +192,7 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     for resource in tool_resources:
         openai_file_ids = []
         if resource.tool_type == "code_interpreter":
-            if hasattr(assistant_data.tool_resources, "code_interpreter"):
+            if getattr(assistant_data.tool_resources, "code_interpreter", None) is not None:
                 openai_file_ids = assistant_data.tool_resources.code_interpreter.file_ids
             else:
                 openai_file_ids = []
