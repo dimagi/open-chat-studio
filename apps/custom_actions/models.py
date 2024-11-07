@@ -1,6 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
@@ -9,6 +9,7 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from pydantic import BaseModel
 
+from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
 
@@ -88,7 +89,18 @@ class CustomAction(BaseTeamModel):
         return operations
 
 
-class CustomActionOperation(models.Model):
+class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
+    pass
+
+
+class CustomActionOperation(models.Model, VersionsMixin):
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
     experiment = models.ForeignKey(
         "experiments.Experiment",
         on_delete=models.CASCADE,
@@ -106,6 +118,8 @@ class CustomActionOperation(models.Model):
     custom_action = models.ForeignKey(CustomAction, on_delete=models.CASCADE)
     operation_id = models.CharField(max_length=255)
 
+    objects = CustomActionOperationManager()
+
     class Meta:
         ordering = ("operation_id",)
         constraints = [
@@ -114,12 +128,12 @@ class CustomActionOperation(models.Model):
                 name="experiment_or_assistant_required",
             ),
             models.UniqueConstraint(
-                fields=["custom_action", "operation_id"],
+                fields=["experiment", "custom_action", "operation_id"],
                 condition=Q(experiment__isnull=False),
                 name="unique_experiment_custom_action_operation",
             ),
             models.UniqueConstraint(
-                fields=["custom_action", "operation_id"],
+                fields=["assistant", "custom_action", "operation_id"],
                 condition=Q(assistant__isnull=False),
                 name="unique_assistant_custom_action_operation",
             ),
@@ -132,6 +146,18 @@ class CustomActionOperation(models.Model):
         holder_id = self.experiment_id if self.experiment_id else self.assistant_id
         holder_id = holder_id if with_holder else ""
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
+
+    @transaction.atomic()
+    def create_new_version(self, new_experiment=None, new_assistant=None):
+        if not (new_experiment or new_assistant):
+            raise ValueError("Either new_experiment or new_assistant must be provided")
+        if new_experiment and new_assistant:
+            raise ValueError("Only one of new_experiment or new_assistant can be provided")
+        new_instance = super().create_new_version(save=False)
+        new_instance.experiment = new_experiment
+        new_instance.assistant = new_assistant
+        new_instance.save()
+        return new_instance
 
 
 def make_model_id(holder_id, custom_action_id, operation_id):

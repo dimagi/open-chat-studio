@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
@@ -38,10 +39,9 @@ class VersionsObjectManagerMixin:
         return super().get_queryset()
 
     def get_queryset(self):
-        return (
+        query = (
             super()
             .get_queryset()
-            .filter(is_archived=False)
             .annotate(
                 is_version=Case(
                     When(working_version_id__isnull=False, then=True),
@@ -50,6 +50,13 @@ class VersionsObjectManagerMixin:
                 )
             )
         )
+        try:
+            self.model._meta.get_field("is_archived")
+        except FieldDoesNotExist:
+            pass
+        else:
+            query = query.filter(is_archived=False)
+        return query
 
 
 class PromptObjectManager(AuditingManager):
@@ -692,6 +699,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
@@ -744,6 +752,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def _copy_trigger_to_new_version(self, trigger_queryset, new_version):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
+
+    def _copy_custom_action_operations_to_new_version(self, new_version):
+        for operation in self.custom_action_operations.all():
+            operation.create_new_version(new_experiment=new_version)
 
     @property
     def is_public(self) -> bool:
