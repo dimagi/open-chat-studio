@@ -449,7 +449,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             file_name = file.name
         except File.DoesNotExist:
             client = self.state.raw_client
-            openai_file = client.files.retrieve(file_id=file_id)
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
@@ -540,7 +539,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         # Allow builtin tools but not custom tools when not running as an agent
         # This is to prevent using tools when using the assistant to generate responses
         # for automated messages e.g. reminders
-        custom_tools = self.state.experiment.assistant.tools
+        custom_tools = self.state.experiment.assistant.tools_enabled
         builtin_tools = self.state.experiment.assistant.builtin_tools
         if custom_tools and builtin_tools:
             return {"tools": [{"type": tool} for tool in builtin_tools]}

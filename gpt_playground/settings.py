@@ -83,6 +83,7 @@ PROJECT_APPS = [
     "apps.users",
     "apps.api",
     "apps.chat",
+    "apps.custom_actions",
     "apps.experiments",
     "apps.web",
     "apps.teams",

@@ -5,7 +5,7 @@ from django_tables2 import tables
 from apps.generics import actions
 
 
-def make_table(provider_type, model, fields=("type", "name")):
+def make_table(provider_type: str, label: str, model, fields=("type", "name")):
     meta_attrs = {
         "model": model,
         "fields": fields,
@@ -22,7 +22,7 @@ def make_table(provider_type, model, fields=("type", "name")):
                 actions.delete_action(
                     url_name="service_providers:delete",
                     url_factory=_make_url_factory(provider_type),
-                    confirm_message="Continuing with this action will remove this tag from any tagged entity",
+                    confirm_message=f"This will remove the {label} from any places it is being used",
                 ),
             ]
         ),

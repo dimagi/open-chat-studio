@@ -626,7 +626,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def tools_enabled(self):
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or self.custom_action_operations.exists()
 
     @property
     def event_triggers(self):
