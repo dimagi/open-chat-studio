@@ -5,6 +5,7 @@ from django.core.validators import URLValidator
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
+from apps.custom_actions.form_utils import get_operations_from_spec
 from apps.custom_actions.models import CustomAction
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
@@ -57,12 +58,26 @@ class CustomActionForm(forms.ModelForm):
         api_schema = self.cleaned_data["api_schema"]
         return validate_api_schema(api_schema)
 
-    def clean_allowed_operations(self):
+    def clean(self):
+        from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+
         operations = self.cleaned_data["allowed_operations"]
-        all_operations = set(self.instance.get_operations_by_id())
-        invalid_operations = set(operations) - all_operations
+        schema = self.cleaned_data["api_schema"]
+        spec = OpenAPISpec.from_spec_dict(schema)
+        operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
+        invalid_operations = set(operations) - set(operations_by_id)
         if invalid_operations:
-            raise forms.ValidationError(f"Invalid operations selected: {', '.join(sorted(invalid_operations))}")
+            raise forms.ValidationError(
+                {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
+            )
+
+        for op_id in operations:
+            op = operations_by_id[op_id]
+            try:
+                openapi_spec_op_to_function_def(spec, op.path, op.method)
+            except ValueError as e:
+                raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
+
         return operations
 
 

@@ -1,6 +1,9 @@
 from typing import TypedDict
 
 from django.core.exceptions import FieldDoesNotExist, ValidationError
+from langchain_community.tools import APIOperation
+from langchain_community.utilities.openapi import OpenAPISpec
+from pydantic import BaseModel
 
 
 class CustomActionOperationInfo(TypedDict):
@@ -93,3 +96,29 @@ def make_model_id(holder_id, custom_action_id, operation_id):
     if holder_id:
         ret = f"{holder_id}:{ret}"
     return ret
+
+
+class APIOperationDetails(BaseModel):
+    operation_id: str
+    description: str
+    path: str
+    method: str
+
+    def __str__(self):
+        return f"{self.method.upper()}: {self.description}"
+
+
+def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
+    spec = OpenAPISpec.from_spec_dict(spec_dict)
+    return get_operations_from_spec(spec)
+
+
+def get_operations_from_spec(spec) -> list[APIOperationDetails]:
+    operations = []
+    for path in spec.paths:
+        for method in spec.get_methods_for_path(path):
+            op = APIOperation.from_openapi_spec(spec, path, method)
+            operations.append(
+                APIOperationDetails(operation_id=op.operation_id, description=op.description, path=path, method=method)
+            )
+    return operations
