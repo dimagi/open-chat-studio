@@ -142,10 +142,10 @@ def resolve_references(openapi_spec: dict) -> dict:
     Resolves all $ref references in an OpenAPI specification document.
 
     Args:
-        openapi_spec (Dict[str, Any]): The OpenAPI specification document.
+        openapi_spec: The OpenAPI specification document.
 
     Returns:
-        Dict[str, Any]: The OpenAPI specification document with all $ref references resolved.
+        The OpenAPI specification document with all $ref references resolved.
     """
 
     def resolve_ref(data: dict, path: str) -> dict:
