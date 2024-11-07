@@ -1,6 +1,3 @@
-import json
-from functools import cached_property
-
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -65,10 +62,6 @@ class CustomAction(BaseTeamModel):
 
     def __str__(self):
         return self.name
-
-    @cached_property
-    def api_schema_json(self):
-        return json.dumps(self.api_schema, sort_keys=True)
 
     def get_absolute_url(self):
         return reverse("custom_actions:edit", args=[self.team.slug, self.pk])
