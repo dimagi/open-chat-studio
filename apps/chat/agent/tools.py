@@ -262,7 +262,7 @@ def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list
 
 def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
     custom_action = custom_action_operation.custom_action
-    spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_spec)
+    spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
         return
 

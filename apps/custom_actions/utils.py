@@ -96,7 +96,7 @@ def make_model_id(holder_id, custom_action_id, operation_id):
     return ret
 
 
-def get_standalone_spec_for_action_operation(action_operation):
+def get_standalone_schema_for_action_operation(action_operation):
     action = action_operation.custom_action
     ops_by_id = action.get_operations_by_id()
     operation = ops_by_id.get(action_operation.operation_id)

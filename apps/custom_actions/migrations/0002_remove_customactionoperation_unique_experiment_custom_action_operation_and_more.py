@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="customactionoperation",
-            name="_operation_spec",
+            name="_operation_schema",
             field=models.JSONField(default=dict),
         ),
         migrations.AddField(
