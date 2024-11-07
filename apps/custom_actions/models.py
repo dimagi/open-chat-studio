@@ -8,22 +8,10 @@ from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
-from langchain_community.tools import APIOperation
-from langchain_community.utilities.openapi import OpenAPISpec
-from pydantic import BaseModel
 
+from apps.custom_actions.utils import APIOperationDetails, get_operations_from_spec_dict, make_model_id
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
-
-
-class APIOperationDetails(BaseModel):
-    operation_id: str
-    description: str
-    path: str
-    method: str
-
-    def __str__(self):
-        return f"{self.method.upper()}: {self.description}"
 
 
 @audit_fields("team", "name", "prompt", "api_schema", audit_special_queryset_writes=True)
@@ -58,7 +46,7 @@ class CustomAction(BaseTeamModel):
     def save(self, *args, **kwargs):
         self.server_url = self.api_schema.get("servers", [{}])[0].get("url", "")
         try:
-            self.operations = self._get_operations_from_spec()
+            self.operations = get_operations_from_spec_dict(self.api_schema)
         except Exception as e:
             raise ValidationError(f"Invalid OpenAPI schema: {e}")
         super().save(*args, **kwargs)
@@ -80,19 +68,6 @@ class CustomAction(BaseTeamModel):
 
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
-
-    def _get_operations_from_spec(self):
-        operations = []
-        spec = OpenAPISpec.from_spec_dict(self.api_schema)
-        for path in spec.paths:
-            for method in spec.get_methods_for_path(path):
-                op = APIOperation.from_openapi_spec(spec, path, method)
-                operations.append(
-                    APIOperationDetails(
-                        operation_id=op.operation_id, description=op.description, path=path, method=method
-                    )
-                )
-        return operations
 
 
 class CustomActionOperation(models.Model):
@@ -139,10 +114,3 @@ class CustomActionOperation(models.Model):
         holder_id = self.experiment_id if self.experiment_id else self.assistant_id
         holder_id = holder_id if with_holder else ""
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
-
-
-def make_model_id(holder_id, custom_action_id, operation_id):
-    ret = f"{custom_action_id}:{operation_id}"
-    if holder_id:
-        ret = f"{holder_id}:{ret}"
-    return ret

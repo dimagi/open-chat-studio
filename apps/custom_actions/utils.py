@@ -1,8 +1,9 @@
 from typing import TypedDict
 
 from django.core.exceptions import FieldDoesNotExist, ValidationError
-
-from apps.custom_actions.models import CustomActionOperation, make_model_id
+from langchain_community.tools import APIOperation
+from langchain_community.utilities.openapi import OpenAPISpec
+from pydantic import BaseModel
 
 
 class CustomActionOperationInfo(TypedDict):
@@ -60,6 +61,8 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         holder: The holder model instance, an Experiment or an OpenAiAssistant.
         custom_action_infos: A list of dictionaries containing the custom action information.
     """
+    from apps.custom_actions.models import CustomActionOperation
+
     if not hasattr(holder, "custom_action_operations"):
         raise FieldDoesNotExist(f"{holder.__class__.__name__} does not have a custom_action_operations field")
 
@@ -86,3 +89,36 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         CustomActionOperation.objects.filter(id__in=old_ids).delete()
 
     _clear_query_cache()
+
+
+class APIOperationDetails(BaseModel):
+    operation_id: str
+    description: str
+    path: str
+    method: str
+
+    def __str__(self):
+        return f"{self.method.upper()}: {self.description}"
+
+
+def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
+    spec = OpenAPISpec.from_spec_dict(spec_dict)
+    return get_operations_from_spec(spec)
+
+
+def get_operations_from_spec(spec) -> list[APIOperationDetails]:
+    operations = []
+    for path in spec.paths:
+        for method in spec.get_methods_for_path(path):
+            op = APIOperation.from_openapi_spec(spec, path, method)
+            operations.append(
+                APIOperationDetails(operation_id=op.operation_id, description=op.description, path=path, method=method)
+            )
+    return operations
+
+
+def make_model_id(holder_id, custom_action_id, operation_id):
+    ret = f"{custom_action_id}:{operation_id}"
+    if holder_id:
+        ret = f"{holder_id}:{ret}"
+    return ret
