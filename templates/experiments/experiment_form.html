@@ -116,6 +116,9 @@
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "seed_message" "trace_provider" "debug_mode_enabled" %}
+        <span x-show="type == 'assistant'">
+          {% render_form_fields form "citations_enabled" %}
+        </span>
       </div>
     </div>
 {% endblock form %}

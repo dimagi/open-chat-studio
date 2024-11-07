@@ -340,7 +340,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "B ({{ input}})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -362,7 +362,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "C ({{input }})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -373,7 +373,7 @@ def test_branching_pipeline(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "A ({{ input }})"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -447,7 +447,7 @@ def test_conditional_node(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "said hello"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -458,7 +458,7 @@ def test_conditional_node(pipeline, experiment_session):
                     "type": "RenderTemplate",
                     "label": "Render a template",
                     "params": {"template_string": "didn't say hello, said {{ input }}"},
-                    "inputParams": [{"name": "template_string", "type": "PipelineJinjaTemplate"}],
+                    "inputParams": [{"name": "template_string", "type": "ExpandableText"}],
                 },
                 "type": "pipelineNode",
             },
@@ -486,7 +486,7 @@ def test_conditional_node(pipeline, experiment_session):
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_router_node(get_llm_service, provider, pipeline, experiment_session):
-    service = build_fake_llm_echo_service()
+    service = build_fake_llm_echo_service(include_system_message=False)
     get_llm_service.return_value = service
 
     data = {
@@ -556,7 +556,7 @@ def test_router_node(get_llm_service, provider, pipeline, experiment_session):
                     "type": "RouterNode",
                     "label": "Router",
                     "params": {
-                        "prompt": "{ input }",
+                        "prompt": "You are a router",
                         "keywords": ["A", "b", "c", "d"],
                         "llm_model": "claude-3-5-sonnet-20240620",
                         "num_outputs": "4",

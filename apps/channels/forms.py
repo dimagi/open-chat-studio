@@ -18,18 +18,22 @@ logger = logging.getLogger(__name__)
 
 
 class ChannelForm(forms.ModelForm):
+    name = forms.CharField(required=False, help_text="If you leave this blank, it will default to the experiment name")
+
     class Meta:
         model = ExperimentChannel
         fields = ["name", "platform", "messaging_provider"]
         widgets = {"platform": forms.HiddenInput()}
 
     def __init__(self, *args, **kwargs):
-        team = kwargs.pop("team", None)
+        experiment = kwargs.pop("experiment", None)
+        initial: dict = kwargs.get("initial", {})
+        initial.setdefault("name", experiment.name)
         super().__init__(*args, **kwargs)
         if self.is_bound:
             return
         platform = self.initial["platform"]
-        self._populate_available_message_providers(team, platform)
+        self._populate_available_message_providers(experiment.team, platform)
 
     def _populate_available_message_providers(self, team: Team, platform: ChannelPlatform):
         provider_types = MessagingProviderType.platform_supported_provider_types(platform)
@@ -131,7 +135,12 @@ class TelegramChannelForm(ExtraFormBase):
 
 class WhatsappChannelForm(WebhookUrlFormBase):
     number = forms.CharField(
-        label="Number", max_length=20, help_text="e.g. +27812345678, +27-81-234-5678, +27 81 234 5678"
+        label="Number",
+        max_length=20,
+        help_text=(
+            "This is the WhatsApp Business Number you got from your provider and should be in any of the formats: "
+            "+27812345678, +27-81-234-5678, +27 81 234 5678"
+        ),
     )
 
     def clean_number(self):

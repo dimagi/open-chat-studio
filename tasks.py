@@ -37,7 +37,7 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
     args = " -U" if upgrade_all else ""
     has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
     if has_uv.ok:
-        cmd_base = "uv pip compile --no-strip-extras"
+        cmd_base = "uv pip compile --no-strip-extras --no-emit-package setuptools"
     else:
         cmd_base = "pip-compile --resolver=backtracking"
     env = {"CUSTOM_COMPILE_COMMAND": "inv requirements", "UV_CUSTOM_COMPILE_COMMAND": "inv requirements"}

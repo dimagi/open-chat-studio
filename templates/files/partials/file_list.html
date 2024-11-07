@@ -17,7 +17,7 @@
   hx-target="#{{ prefix|default:"" }}fileList"
   hx-params="*"
   >
-  <input type="file" name="file" id="{{ prefix|default:"" }}fileInput" class="hidden">
+  <input type="file" name="file" id="{{ prefix|default:"" }}fileInput" class="hidden" {% if multiple %}multiple{% endif %}>
   <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-show"></span>
 </{% if nested|default:False %}div{% else %}form{% endif %}>
 <ul id="{{ prefix|default:"" }}fileList">

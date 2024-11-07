@@ -11,6 +11,7 @@ import {
 import { create } from "zustand";
 import { PipelineStoreType } from "../types/pipelineStore";
 import usePipelineManagerStore from "./pipelineManagerStore";
+import useEditorStore from "./editorStore";
 import { getNodeId } from "../utils";
 import { cloneDeep } from "lodash";
 
@@ -88,6 +89,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       return
     }
 
+    useEditorStore.getState().closeEditor();
     const nodes = get().nodes.filter((node) =>
         typeof nodeId === "string"
           ? node.id === nodeId
