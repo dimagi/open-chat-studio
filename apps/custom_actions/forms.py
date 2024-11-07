@@ -5,8 +5,8 @@ from django.core.validators import URLValidator
 from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
-from apps.custom_actions.form_utils import get_operations_from_spec
 from apps.custom_actions.models import CustomAction
+from apps.custom_actions.schema_utils import get_operations_from_spec
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 

@@ -6,8 +6,12 @@ from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.custom_actions.form_utils import APIOperationDetails, get_operations_from_spec_dict, make_model_id
-from apps.custom_actions.schema_utils import get_standalone_schema_for_action_operation
+from apps.custom_actions.form_utils import make_model_id
+from apps.custom_actions.schema_utils import (
+    APIOperationDetails,
+    get_operations_from_spec_dict,
+    get_standalone_schema_for_action_operation,
+)
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
