@@ -97,7 +97,7 @@ class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
 class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
     working_version = models.ForeignKey(
         "self",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="versions",
@@ -159,6 +159,9 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
         new_instance.assistant = new_assistant
         new_instance.save()
         return new_instance
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["experiment", "assistant"]
 
 
 def make_model_id(holder_id, custom_action_id, operation_id):
