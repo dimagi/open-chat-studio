@@ -38,7 +38,18 @@ class VersionsObjectManagerMixin:
         return super().get_queryset()
 
     def get_queryset(self):
-        return super().get_queryset().filter(is_archived=False)
+        return (
+            super()
+            .get_queryset()
+            .filter(is_archived=False)
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class PromptObjectManager(AuditingManager):
@@ -70,48 +81,15 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
