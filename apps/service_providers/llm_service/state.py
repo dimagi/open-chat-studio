@@ -51,7 +51,7 @@ class RunnableState(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def set_metadata(self, key: Chat.MetadataKeys, value):
+    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
 
@@ -117,7 +117,7 @@ class ExperimentState(RunnableState):
                 }
         return {}
 
-    def set_metadata(self, key: Chat.MetadataKeys, value):
+    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         if trace_service := self.experiment.get_trace_service():
             trace_service.update_trace({key: value})
         self.chat.set_metadata(key, value)
