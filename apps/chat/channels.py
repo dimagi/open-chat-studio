@@ -552,7 +552,7 @@ class WebChannel(ChannelBase):
 
         try:
             experiment_version = working_experiment.get_version(version)
-            session.chat.set_chat_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
         except Experiment.DoesNotExist:
             raise Http404(f"Experiment with version {version} not found")
 
