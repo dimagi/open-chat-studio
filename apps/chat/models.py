@@ -130,6 +130,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             raise ValueError("Cannot save a summary message")
         super().save(*args, **kwargs)
 
+    @property
+    def trace_info(self):
+        return self.metadata.get("trace_info")
+
     def get_summary_message(self):
         if not self.summary:
             raise ValueError("Message does not have a summary")

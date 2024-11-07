@@ -1,7 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
-from functools import cached_property
+from functools import cache, cached_property
 from uuid import uuid4
 
 import markdown
@@ -674,6 +674,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+
+    @cache
+    def get_trace_service(self):
+        if self.trace_provider:
+            return self.trace_provider.get_service()
 
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))

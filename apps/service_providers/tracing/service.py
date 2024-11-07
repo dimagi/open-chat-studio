@@ -2,6 +2,14 @@ from langchain_core.tracers import LangChainTracer
 from pydantic import BaseModel
 
 
+class ServiceReentryException(Exception):
+    pass
+
+
+class ServiceNotInitializedException(Exception):
+    pass
+
+
 class TraceInfo(BaseModel):
     trace_id: str
     trace_url: str
@@ -19,26 +27,44 @@ class TraceService:
 
 
 class LangFuseTraceService(TraceService):
+    """
+    Notes on langfuse:
+
+    The API is designed to be used with a single set of credentials whereas we need to provide
+    different credentials per call. This is why we don't use the standard 'observe' decorator.
+    """
+
     def __init__(self, config: dict):
         self.config = config
+        self._callback = None
 
     def get_callback(self, participant_id: str, session_id: str):
         from langfuse.callback import CallbackHandler
 
-        return CallbackHandler(user_id=participant_id, session_id=session_id, **self.config)
+        if self._callback:
+            raise ServiceReentryException("Service does not support reentrant use.")
+
+        self._callback = CallbackHandler(user_id=participant_id, session_id=session_id, **self.config)
+        return self._callback
 
     def update_trace(self, metadata: dict):
-        from langfuse.decorators import langfuse_context
+        if not metadata:
+            return
 
-        langfuse_context.update_current_trace(metadata={"key": "value"})
+        if not self._callback:
+            raise ServiceNotInitializedException("Service not initialized.")
 
-    def get_current_trace_info(self) -> TraceInfo:
-        from langfuse.decorators import langfuse_context
+        self._callback.trace.update(metadata=metadata)
 
-        return TraceInfo(
-            trace_id=langfuse_context.get_current_trace_id(),
-            trace_url=langfuse_context.get_current_trace_url(),
-        )
+    def get_current_trace_info(self) -> TraceInfo | None:
+        if not self._callback:
+            raise ServiceNotInitializedException("Service not initialized.")
+
+        if self._callback.trace:
+            return TraceInfo(
+                trace_id=self._callback.trace.id,
+                trace_url=self._callback.trace.get_trace_url(),
+            )
 
 
 class LangSmithTraceService(TraceService):
