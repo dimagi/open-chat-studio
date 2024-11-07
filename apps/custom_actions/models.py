@@ -9,7 +9,8 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from pydantic import BaseModel
 
-from apps.custom_actions.utils import get_standalone_schema_for_action_operation, make_model_id
+from apps.custom_actions.form_utils import make_model_id
+from apps.custom_actions.schema_utils import get_standalone_schema_for_action_operation
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel

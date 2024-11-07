@@ -36,7 +36,7 @@ from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
-from apps.custom_actions.utils import (
+from apps.custom_actions.form_utils import (
     clean_custom_action_operations,
     initialize_form_for_custom_actions,
     set_custom_actions,

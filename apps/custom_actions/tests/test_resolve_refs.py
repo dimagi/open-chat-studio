@@ -1,6 +1,6 @@
 import pytest
 
-from apps.custom_actions.utils import resolve_references
+from apps.custom_actions.schema_utils import resolve_references
 
 
 def test_resolve_simple_reference():
