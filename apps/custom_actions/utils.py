@@ -1,8 +1,7 @@
+from copy import deepcopy
 from typing import TypedDict
 
 from django.core.exceptions import FieldDoesNotExist, ValidationError
-
-from apps.custom_actions.models import CustomActionOperation, make_model_id
 
 
 class CustomActionOperationInfo(TypedDict):
@@ -60,6 +59,8 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         holder: The holder model instance, an Experiment or an OpenAiAssistant.
         custom_action_infos: A list of dictionaries containing the custom action information.
     """
+    from apps.custom_actions.models import CustomActionOperation
+
     if not hasattr(holder, "custom_action_operations"):
         raise FieldDoesNotExist(f"{holder.__class__.__name__} does not have a custom_action_operations field")
 
@@ -86,3 +87,90 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         CustomActionOperation.objects.filter(id__in=old_ids).delete()
 
     _clear_query_cache()
+
+
+def make_model_id(holder_id, custom_action_id, operation_id):
+    ret = f"{custom_action_id}:{operation_id}"
+    if holder_id:
+        ret = f"{holder_id}:{ret}"
+    return ret
+
+
+def get_standalone_spec_for_action_operation(action_operation):
+    action = action_operation.custom_action
+    ops_by_id = action.get_operations_by_id()
+    operation = ops_by_id.get(action_operation.operation_id)
+    if not operation:
+        raise ValidationError("Custom action operation is no longer available")
+
+    return get_standalone_spec(action.api_schema, operation.path, operation.method)
+
+
+def get_standalone_spec(openapi_spec: dict, path: str, method: str):
+    """Returns a standalone OpenAPI spec for a single operation."""
+    openapi_spec = trim_spec(openapi_spec)
+    info = openapi_spec["info"]
+    info["title"] += f" - {method} {path}"
+    info["description"] = f"Standalone OpenAPI spec for {method} {path}"
+    paths = openapi_spec.pop("paths")
+    openapi_spec["paths"] = {path: {method: paths[path][method]}}
+    return openapi_spec
+
+
+def trim_spec(openapi_spec: dict) -> dict:
+    """Removes unnecessary keys from the OpenAPI spec.
+    If there are any refs in the schema, they will be resolved.
+    """
+    openapi_spec = resolve_references(openapi_spec)
+    top_level_keys = ["openapi", "info", "servers", "paths"]
+    for key in list(openapi_spec.keys()):
+        if key not in top_level_keys:
+            del openapi_spec[key]
+
+    operation_keys = ["parameters", "requestBody", "tags", "summary", "description", "operationId"]
+    for path, methods in openapi_spec["paths"].items():
+        for method, details in methods.items():
+            for key in list(details.keys()):
+                if key not in operation_keys:
+                    del details[key]
+
+    return openapi_spec
+
+
+def resolve_references(openapi_spec: dict) -> dict:
+    """
+    Resolves all $ref references in an OpenAPI specification document.
+
+    Args:
+        openapi_spec (Dict[str, Any]): The OpenAPI specification document.
+
+    Returns:
+        Dict[str, Any]: The OpenAPI specification document with all $ref references resolved.
+    """
+
+    def resolve_ref(data: dict, path: str) -> dict:
+        if "$ref" in data:
+            ref = data["$ref"]
+            if not ref[0] == "#":
+                raise ValueError(f"External references are not supported: {ref}")
+
+            ref_path = ref[1:].split("/")[1:]
+            current = openapi_spec
+            for p in ref_path:
+                current = current[p]
+            return deepcopy(current)
+        elif isinstance(data, dict):
+            for k, v in data.items():
+                if isinstance(v, dict | list):
+                    data[k] = resolve_ref(v, f"{path}/{k}")
+                else:
+                    data[k] = v
+        elif isinstance(data, list):
+            for i, item in enumerate(data):
+                if isinstance(item, dict | list):
+                    data[i] = resolve_ref(item, f"{path}/{i}")
+                else:
+                    data[i] = item
+        return data
+
+    return resolve_ref(deepcopy(openapi_spec), "")

@@ -9,6 +9,7 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from pydantic import BaseModel
 
+from apps.custom_actions.utils import get_standalone_spec_for_action_operation, make_model_id
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
@@ -118,6 +119,7 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
     )
     custom_action = models.ForeignKey(CustomAction, on_delete=models.CASCADE)
     operation_id = models.CharField(max_length=255)
+    _operation_spec = models.JSONField(default=dict)
 
     objects = CustomActionOperationManager()
 
@@ -143,6 +145,20 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
     def __str__(self):
         return f"{self.custom_action}: {self.operation_id}"
 
+    @property
+    def operation_spec(self) -> dict:
+        if not self._operation_spec:
+            if self.working_version_id:
+                raise ValueError("Missing OpenAPI spec for versioned operation")
+            return get_standalone_spec_for_action_operation(self)
+        return self._operation_spec
+
+    @operation_spec.setter
+    def operation_spec(self, spec: dict):
+        if not self.working_version_id:
+            raise ValueError("Working Version should not have 'operation_spec' set")
+        self._operation_spec = spec
+
     def get_model_id(self, with_holder=True):
         holder_id = self.experiment_id if self.experiment_id else self.assistant_id
         holder_id = holder_id if with_holder else ""
@@ -157,15 +173,9 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
         new_instance = super().create_new_version(save=False)
         new_instance.experiment = new_experiment
         new_instance.assistant = new_assistant
+        new_instance.operation_spec = get_standalone_spec_for_action_operation(new_instance)
         new_instance.save()
         return new_instance
 
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["experiment", "assistant"]
-
-
-def make_model_id(holder_id, custom_action_id, operation_id):
-    ret = f"{custom_action_id}:{operation_id}"
-    if holder_id:
-        ret = f"{holder_id}:{ret}"
-    return ret
