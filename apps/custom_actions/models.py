@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
+from apps.utils.models import VersioningMixin
 
 
 class APIOperationDetails(BaseModel):
@@ -93,7 +94,7 @@ class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
-class CustomActionOperation(models.Model, VersionsMixin):
+class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,

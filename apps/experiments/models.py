@@ -805,6 +805,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 string = "Unknown route type"
             return string
 
+        def format_custom_action_operation(op) -> str:
+            action = op.custom_action
+            op_details = action.get_operations_by_id().get(op.operation_id)
+            return f"{action.name}: {op_details}"
+
         return Version(
             instance=self,
             fields=[
@@ -884,6 +889,16 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     name="tools",
                     raw_value=set(self.tools),
                     to_display=format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="custom_actions",
+                    queryset=(
+                        self.custom_action_operations.select_related("custom_action")
+                        .defer("custom_action__api_schema")
+                        .all()
+                    ),
+                    to_display=format_custom_action_operation,
                 ),
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
