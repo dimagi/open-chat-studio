@@ -541,6 +541,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             version.compare(prev_version.version)
 
         context["version_details"] = version
+        context["experiment"] = working_experiment
         return context
 
     def form_valid(self, form):
