@@ -653,7 +653,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
-    @cached_property
+    @property
     def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service()
