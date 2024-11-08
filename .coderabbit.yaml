@@ -1,0 +1,17 @@
+language: en-US
+early_access: true
+reviews:
+  high_level_summary: false
+  review_status: false
+  poem: false
+  collapse_walkthrough: true
+  changed_files_summary: false
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        Do not review for Python compatibility below 3.11
+  abort_on_close: true
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+    drafts: true
