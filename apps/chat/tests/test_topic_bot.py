@@ -1,3 +1,4 @@
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 from apps.annotations.models import TagCategories
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentRoute, ExperimentRouteType, SafetyLayer
+from apps.experiments.models import ExperimentRoute, ExperimentRouteType, ExperimentSession, SafetyLayer
 from apps.service_providers.models import TraceProvider
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
@@ -87,3 +88,34 @@ def test_tracing_service():
         )
         assert mock_get_trace_info.call_count == 2
     bot.process_input("test")
+
+
+@pytest.mark.django_db()
+def test_tracing_service_reentry():
+    """This tests simulates successive messages being processed by the bot and
+    verifies that the trace service is not called reentrantly."""
+    session = ExperimentSessionFactory()
+    provider = TraceProvider(type="langfuse", config={})
+
+    def _run_bot_with_wrapped_service(session, response):
+        """This configures the bot with a wrapped trace provider so that we can
+        verify that it was called. The calls to the provider are still passed
+        through to the actual service."""
+        session.experiment.trace_provider = provider
+
+        bot = TopicBot(session)
+        assert bot.trace_service is not None
+
+        # spy on the service
+        mock_service = mock.Mock(wraps=bot.trace_service)
+        bot.trace_service = mock_service
+
+        assert bot.process_input("test") == response
+        mock_service.get_callback.assert_called_once()
+
+    with mock_experiment_llm(None, responses=["response1", "response2"]):
+        _run_bot_with_wrapped_service(session, "response1")
+
+        # reload the session from the DB
+        session = ExperimentSession.objects.get(id=session.id)
+        _run_bot_with_wrapped_service(session, "response2")
