@@ -1,7 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
-from functools import cache, cached_property
+from functools import cached_property
 from uuid import uuid4
 
 import markdown
@@ -653,8 +653,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
-    @cache
-    def get_trace_service(self):
+    @cached_property
+    def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service()
 

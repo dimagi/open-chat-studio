@@ -109,7 +109,7 @@ class ExperimentState(RunnableState):
         return get_tools(self.session, self.experiment)
 
     def get_trace_metadata(self) -> dict:
-        if trace_service := self.experiment.get_trace_service():
+        if trace_service := self.experiment.trace_service:
             trace_info = trace_service.get_current_trace_info()
             if trace_info:
                 return {
@@ -118,7 +118,7 @@ class ExperimentState(RunnableState):
         return {}
 
     def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if trace_service := self.experiment.get_trace_service():
+        if trace_service := self.experiment.trace_service:
             trace_service.update_trace({key: value})
         self.chat.set_metadata(key, value)
 
