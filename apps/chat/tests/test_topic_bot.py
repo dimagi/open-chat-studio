@@ -6,6 +6,7 @@ from apps.annotations.models import TagCategories
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentRoute, ExperimentRouteType, SafetyLayer
+from apps.service_providers.models import TraceProvider
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.langchain import mock_experiment_llm
 
@@ -66,3 +67,23 @@ def test_get_safe_response_creates_ai_message_for_default_messages():
     message = ChatMessage.objects.get(chat__team=session.team, message_type=ChatMessageType.AI)
     assert message.content == "Sorry, I can't answer that. Please try something else."
     assert message.tags.get(category=TagCategories.SAFETY_LAYER_RESPONSE) is not None
+
+
+@pytest.mark.django_db()
+def test_tracing_service():
+    session = ExperimentSessionFactory()
+    provider = TraceProvider(type="langfuse", config={})
+    session.experiment.trace_provider = provider
+    service = "apps.service_providers.tracing.service.LangFuseTraceService"
+    with (
+        patch(f"{service}.get_callback") as mock_get_callback,
+        patch(f"{service}.get_current_trace_info") as mock_get_trace_info,
+        mock_experiment_llm(None, responses=["response"]),
+    ):
+        bot = TopicBot(session)
+        assert bot.process_input("test") == "response"
+        mock_get_callback.assert_called_once_with(
+            participant_id=session.participant.identifier, session_id=str(session.external_id)
+        )
+        assert mock_get_trace_info.call_count == 2
+    bot.process_input("test")
