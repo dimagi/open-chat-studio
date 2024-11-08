@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -16,6 +18,8 @@ from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import VersioningMixin
+
+log = logging.getLogger("ocs.custom_actions")
 
 
 @audit_fields("team", "name", "prompt", "api_schema", audit_special_queryset_writes=True)
@@ -128,14 +132,15 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
     def operation_schema(self) -> dict:
         if not self._operation_schema:
             if self.working_version_id:
-                raise ValueError("Missing OpenAPI spec for versioned operation")
+                log.warning("Versioned model is missing 'operation_schema'")
             return get_standalone_schema_for_action_operation(self)
         return self._operation_schema
 
     @operation_schema.setter
     def operation_schema(self, spec: dict):
         if not self.working_version_id:
-            raise ValueError("Working Version should not have 'operation_schema' set")
+            log.warning("Working Version should not have 'operation_schema' set")
+            return
         self._operation_schema = spec
 
     def get_model_id(self, with_holder=True):
