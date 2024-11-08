@@ -85,9 +85,7 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = None
-        if self.experiment.trace_provider:
-            self.trace_service = self.experiment.trace_provider.get_service()
+        self.trace_service = self.experiment.get_trace_service()
 
         # The chain that generated the AI message
         self.generator_chain = None
