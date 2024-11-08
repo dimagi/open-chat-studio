@@ -161,7 +161,7 @@ def test_openai_function_with_request_body():
         "test_post",
         "POST /test endpoint",
         {
-            "data": {
+            "body_data": {
                 "additionalProperties": False,
                 "properties": {"name": {"type": "string"}},
                 "required": ["name"],
@@ -204,7 +204,7 @@ def test_openai_function_with_refs():
         "test_post",
         "POST /test endpoint",
         {
-            "data": {
+            "body_data": {
                 "additionalProperties": False,
                 "properties": {
                     "coordinates": {

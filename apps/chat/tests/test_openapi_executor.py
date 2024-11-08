@@ -65,7 +65,7 @@ def test_openapi_tool_body(httpx_mock):
         },
     )
     httpx_mock.add_response(url="https://example.com/test", json={"name": "John", "age": 30})
-    _test_tool_call(spec, {"data": {"name": "John", "age": 30}})
+    _test_tool_call(spec, {"body_data": {"name": "John", "age": 30}})
 
 
 def test_openapi_tool_headers(httpx_mock):
