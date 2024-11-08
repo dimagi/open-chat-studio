@@ -50,7 +50,7 @@ class OpenAPIOperationExecutor:
         path_params: path params
         headers: headers
         cookies: cookies
-        data: request body
+        body_data: request body
 
         All of these will be pydantic models.
 
@@ -59,8 +59,8 @@ class OpenAPIOperationExecutor:
         method = self.function_def.method
         path_params = kwargs.pop("path_params", None)
 
-        if "data" in kwargs:
-            kwargs["json"] = kwargs.pop("data")
+        if "body_data" in kwargs:
+            kwargs["json"] = kwargs.pop("body_data")
 
         kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
@@ -109,7 +109,7 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
             path_params: PathParamsModel
             headers: HeadersModel
             cookies: CookiesModel
-            data: BodyModel
+            body_data: BodyModel
     """
 
     op = spec.get_operation(path, method)
@@ -138,8 +138,9 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
     if request_body and request_body.content:
         if "application/json" in request_body.content:
             schema = spec.get_schema(request_body.content["application/json"].media_type_schema)
-            schema.title = "body"
-            request_args["data"] = _schema_to_pydantic_field_type(spec, schema)
+            # note: This was changed from 'data' because it seems to work better :shrug:
+            schema.title = "body_data"
+            request_args["body_data"] = _schema_to_pydantic_field_type(spec, schema)
         else:
             raise ValueError("Only application/json request bodies are supported")
 
