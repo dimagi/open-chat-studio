@@ -50,19 +50,11 @@ class RunnableState(metaclass=ABCMeta):
     def get_prompt(self):
         pass
 
-    @abstractmethod
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        pass
-
 
 class ExperimentState(RunnableState):
     def __init__(self, experiment: Experiment, session: ExperimentSession):
         self.experiment = experiment
         self.session = session
-
-    @property
-    def chat(self):
-        return self.session.chat
 
     @cache
     def get_llm_service(self):
@@ -108,20 +100,6 @@ class ExperimentState(RunnableState):
     def get_tools(self):
         return get_tools(self.session, self.experiment)
 
-    def get_trace_metadata(self) -> dict:
-        if trace_service := self.experiment.get_trace_service():
-            trace_info = trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.experiment.trace_provider.type},
-                }
-        return {}
-
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if trace_service := self.experiment.get_trace_service():
-            trace_service.update_trace({key: value})
-        self.chat.set_metadata(key, value)
-
 
 class ChatRunnableState(RunnableState):
     @abstractmethod
@@ -147,7 +125,7 @@ class ChatRunnableState(RunnableState):
 class ChatExperimentState(ExperimentState, ChatRunnableState):
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
-            self.chat,
+            self.session.chat,
             llm=self.get_chat_model(),
             max_token_limit=self.experiment.max_token_limit,
             input_messages=input_messages,
@@ -158,7 +136,9 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
 
     def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         chat_message = ChatMessage.objects.create(
-            chat=self.chat, message_type=type_.value, content=message, metadata=self.get_trace_metadata()
+            chat=self.session.chat,
+            message_type=type_.value,
+            content=message,
         )
         if experiment_tag:
             tag, _ = Tag.objects.get_or_create(
@@ -177,10 +157,10 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
                 )
 
     def check_cancellation(self):
-        self.chat.refresh_from_db(fields=["metadata"])
+        self.session.chat.refresh_from_db(fields=["metadata"])
         # temporary mechanism to cancel the chat
         # TODO: change this to something specific to the current chat message
-        return self.chat.metadata.get("cancelled", False)
+        return self.session.chat.metadata.get("cancelled", False)
 
 
 class AssistantState(RunnableState):
@@ -194,6 +174,10 @@ class AssistantState(RunnableState):
 
     @abstractmethod
     def get_metadata(self, key: Chat.MetadataKeys):
+        pass
+
+    @abstractmethod
+    def set_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
     @abstractmethod
@@ -230,7 +214,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         return instructions
 
     def get_attachments(self, attachment_type: str):
-        return self.chat.attachments.filter(tool_type__in=attachment_type)
+        return self.session.chat.attachments.filter(tool_type__in=attachment_type)
 
     def get_file_type_info(self, attachments: list):
         if not self.experiment.assistant.include_file_info:
@@ -247,9 +231,16 @@ class AssistantExperimentState(ExperimentState, AssistantState):
     def raw_client(self):
         return self.get_openai_assistant().client
 
+    @property
+    def chat(self):
+        return self.session.chat
+
     def get_metadata(self, key: Chat.MetadataKeys):
         """Chat metadata"""
         return self.chat.get_metadata(key)
+
+    def set_metadata(self, key: Chat.MetadataKeys, value):
+        self.chat.set_metadata(key, value)
 
     def save_message_to_history(
         self,
@@ -263,12 +254,12 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
-        metadata = {"openai_thread_checkpoint": True, **self.get_trace_metadata()}
+        metadata = {"openai_thread_checkpoint": True}
         if annotation_file_ids:
             metadata["openai_file_ids"] = annotation_file_ids
 
         chat_message = ChatMessage.objects.create(
-            chat=self.chat,
+            chat=self.session.chat,
             message_type=type_.value,
             content=message,
             metadata=metadata,

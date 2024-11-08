@@ -100,7 +100,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         "openai_file_ids",
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
-        "trace_info",
     }
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
@@ -129,10 +128,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if self.is_summary:
             raise ValueError("Cannot save a summary message")
         super().save(*args, **kwargs)
-
-    @property
-    def trace_info(self):
-        return self.metadata.get("trace_info")
 
     def get_summary_message(self):
         if not self.summary:
