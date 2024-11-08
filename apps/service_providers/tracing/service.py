@@ -16,6 +16,10 @@ class TraceInfo(BaseModel):
 
 
 class TraceService:
+    def __init__(self, type_, config: dict):
+        self.type = type_
+        self.config = config
+
     def get_callback(self, participant_id: str, session_id: str):
         raise NotImplementedError
 
@@ -34,8 +38,8 @@ class LangFuseTraceService(TraceService):
     different credentials per call. This is why we don't use the standard 'observe' decorator.
     """
 
-    def __init__(self, config: dict):
-        self.config = config
+    def __init__(self, type_, config: dict):
+        super().__init__(type_, config)
         self._callback = None
 
     def get_callback(self, participant_id: str, session_id: str):
@@ -68,9 +72,6 @@ class LangFuseTraceService(TraceService):
 
 
 class LangSmithTraceService(TraceService):
-    def __init__(self, config: dict):
-        self.config = config
-
     def get_callback(self, participant_id: str, session_id: str):
         from langsmith import Client
 

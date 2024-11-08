@@ -56,9 +56,10 @@ class RunnableState(metaclass=ABCMeta):
 
 
 class ExperimentState(RunnableState):
-    def __init__(self, experiment: Experiment, session: ExperimentSession):
+    def __init__(self, experiment: Experiment, session: ExperimentSession, trace_service=None):
         self.experiment = experiment
         self.session = session
+        self.trace_service = trace_service or self.experiment.trace_service
 
     @property
     def chat(self):
@@ -109,17 +110,17 @@ class ExperimentState(RunnableState):
         return get_tools(self.session, self.experiment)
 
     def get_trace_metadata(self) -> dict:
-        if trace_service := self.experiment.trace_service:
-            trace_info = trace_service.get_current_trace_info()
+        if self.trace_service:
+            trace_info = self.trace_service.get_current_trace_info()
             if trace_info:
                 return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.experiment.trace_provider.type},
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
                 }
         return {}
 
     def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if trace_service := self.experiment.trace_service:
-            trace_service.update_trace({key: value})
+        if self.trace_service:
+            self.trace_service.update_trace({key: value})
         self.chat.set_metadata(key, value)
 
 

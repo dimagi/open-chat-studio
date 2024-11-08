@@ -51,9 +51,11 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, disable_tools: bool = False):
+def create_experiment_runnable(
+    experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
+):
     """Create an experiment runnable based on the experiment configuration."""
-    state_kwargs = {"experiment": experiment, "session": session}
+    state_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
     if assistant := experiment.assistant:
         state = AssistantExperimentState(**state_kwargs)
         if assistant.tools_enabled and not disable_tools:
