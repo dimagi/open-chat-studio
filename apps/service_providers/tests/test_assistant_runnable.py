@@ -43,6 +43,7 @@ def session(request):
     session.experiment.assistant = local_assistant
     session.get_participant_data = lambda *args, **kwargs: None
     session.get_participant_timezone = lambda *args, **kwargs: ""
+    session.experiment.get_trace_service = lambda *args, **kwargs: None
     return session
 
 
