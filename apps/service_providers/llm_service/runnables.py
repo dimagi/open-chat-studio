@@ -339,9 +339,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         session_id = self.state.session.id
 
         team = self.state.session.team
-        assistant_file_ids = ToolResources.objects.filter(assistant=self.state.experiment.assistant).values_list(
-            "files"
-        )
+        experiment = self.state.experiment
+        assistant_file_ids = ToolResources.objects.filter(assistant=experiment.assistant).values_list("files")
         assistant_files_ids = File.objects.filter(
             team_id=team.id, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
@@ -376,11 +375,14 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             )
 
                             # Original citation text example:【6:0†source】
-                            message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
-                            if file_link:
-                                message_content_value += f"\n[{idx}]: {file_link}"
+                            if experiment.citations_enabled:
+                                message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
+                                if file_link:
+                                    message_content_value += f"\n[{idx}]: {file_link}"
+                                else:
+                                    message_content_value += f"\n\\[{idx}\\]: {file_name}"
                             else:
-                                message_content_value += f"\n\\[{idx}\\]: {file_name}"
+                                message_content_value = message_content_value.replace(file_ref_text, "")
 
                         elif annotation.type == "file_path":
                             file_path = annotation.file_path
@@ -451,7 +453,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             file_name = file.name
         except File.DoesNotExist:
             client = self.state.raw_client
-            openai_file = client.files.retrieve(file_id=file_id)
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
@@ -542,7 +543,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         # Allow builtin tools but not custom tools when not running as an agent
         # This is to prevent using tools when using the assistant to generate responses
         # for automated messages e.g. reminders
-        custom_tools = self.state.experiment.assistant.tools
+        custom_tools = self.state.experiment.assistant.tools_enabled
         builtin_tools = self.state.experiment.assistant.builtin_tools
         if custom_tools and builtin_tools:
             return {"tools": [{"type": tool} for tool in builtin_tools]}

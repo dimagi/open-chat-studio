@@ -12,7 +12,7 @@ from field_audit.models import AuditingManager
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
-from apps.teams.models import BaseTeamModel, Team
+from apps.teams.models import BaseTeamModel
 from apps.web.meta import absolute_url
 
 WEB = "web"
@@ -58,10 +58,10 @@ class ChannelPlatform(models.TextChoices):
 
         return platform_availability
 
-    def form(self, team: Team):
+    def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm
 
-        return ChannelForm(initial={"platform": self}, team=team)
+        return ChannelForm(initial={"platform": self}, experiment=experiment)
 
     def extra_form(self, *args, **kwargs):
         from apps.channels import forms
@@ -151,6 +151,11 @@ class ExperimentChannel(BaseTeamModel):
     def __str__(self):
         return f"Channel: {self.name} ({self.platform})"
 
+    def save(self, *args, **kwargs):
+        if not self.name:
+            self.name = self.experiment.name
+        return super().save(*args, **kwargs)
+
     @property
     def platform_enum(self):
         return ChannelPlatform(self.platform)
@@ -158,7 +163,7 @@ class ExperimentChannel(BaseTeamModel):
     def form(self, *args, **kwargs):
         from apps.channels.forms import ChannelForm
 
-        return ChannelForm(instance=self, team=self.experiment.team, *args, **kwargs)
+        return ChannelForm(instance=self, experiment=self.experiment, *args, **kwargs)
 
     def extra_form(self, *args, **kwargs):
         return self.platform_enum.extra_form(initial=self.extra_data, channel=self, *args, **kwargs)

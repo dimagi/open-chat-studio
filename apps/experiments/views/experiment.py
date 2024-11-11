@@ -36,6 +36,11 @@ from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.custom_actions.utils import (
+    clean_custom_action_operations,
+    initialize_form_for_custom_actions,
+    set_custom_actions,
+)
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -190,6 +195,7 @@ class ExperimentForm(forms.ModelForm):
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = Experiment
@@ -220,6 +226,7 @@ class ExperimentForm(forms.ModelForm):
             "trace_provider",
             "participant_allowlist",
             "debug_mode_enabled",
+            "citations_enabled",
         ]
         labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
         help_texts = {
@@ -236,6 +243,7 @@ class ExperimentForm(forms.ModelForm):
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
                 "This is applicable only for router bots."
             ),
+            "citations_enabled": "Whether to include cited sources in responses",
         }
 
     def __init__(self, request, *args, **kwargs):
@@ -260,6 +268,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
+        initialize_form_for_custom_actions(team, self)
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
@@ -277,6 +286,9 @@ class ExperimentForm(forms.ModelForm):
         for identifier in self.cleaned_data["participant_allowlist"]:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
+
+    def clean_custom_action_operations(self):
+        return clean_custom_action_operations(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -323,6 +335,7 @@ class ExperimentForm(forms.ModelForm):
         experiment.owner = self.request.user
         if commit:
             experiment.save()
+            set_custom_actions(experiment, self.cleaned_data.get("custom_action_operations"))
             self.save_m2m()
         return experiment
 
@@ -569,7 +582,7 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     platform_forms = {}
-    form_kwargs = {"team": request.team}
+    form_kwargs = {"experiment": experiment}
     for platform in available_platforms:
         if platform.form(**form_kwargs):
             platform_forms[platform] = platform.form(**form_kwargs)
@@ -657,7 +670,7 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
 def create_channel(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(data=request.POST)
+    form = ChannelForm(experiment=experiment, data=request.POST)
     if not form.is_valid():
         messages.error(request, "Form has errors: " + form.errors.as_text())
     else:

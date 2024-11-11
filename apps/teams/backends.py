@@ -55,6 +55,7 @@ CONTENT_TYPES = {
     "assistants": ["openaiassistant", "toolresources"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
+    "custom_actions": ["customaction", "customactionoperation"],
     "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
     "experiments": [
         "consentform",
@@ -155,6 +156,7 @@ GROUPS = [
         TEAM_ADMIN_GROUP,
         [
             AppPermSetDef("teams", ALL),
+            AppPermSetDef("custom_actions", ALL),
             AppPermSetDef("service_providers", ALL),
         ],
     ),

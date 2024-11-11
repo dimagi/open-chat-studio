@@ -1,3 +1,12 @@
-from .main import AuthService, CommCareAuthService
+from .main import ApiKeyAuthService, AuthService, BasicAuthService, BearerTokenAuthService, CommCareAuthService
 
-__all__ = ["AuthService", "CommCareAuthService"]
+anonymous_auth_service = AuthService()
+
+__all__ = [
+    "anonymous_auth_service",
+    "AuthService",
+    "CommCareAuthService",
+    "BasicAuthService",
+    "ApiKeyAuthService",
+    "BearerTokenAuthService",
+]

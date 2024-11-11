@@ -9,6 +9,7 @@ celery[redis]
 django-allauth
 django-allauth-2fa
 django-anymail
+django-cleanup
 # original django-cryptography is not compatible with Django 5 and does not seem to be maintained
 # https://github.com/georgemarshall/django-cryptography/issues/74
 django-cryptography-django5
@@ -39,6 +40,7 @@ langfuse
 langgraph>=0.2.20,<0.3
 loguru
 openai
+openapi_pydantic
 pandas
 psycopg[binary]
 pyTelegramBotAPI==4.12.0

@@ -16,10 +16,31 @@
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID: {{ object.assistant_id }}</h2>
   {% endif %}
+  {% if object.pk %}
+    <div id="sync-wrapper" class="flex w-full gap-2"
+         hx-get="{% url 'assistants:check_sync_status' request.team.slug object.pk %}"
+         hx-trigger="load"
+         hx-target="#sync-wrapper"
+         hx-swap="innerHTML">
+      <div id="sync-status" class="flex w-full gap-2">
+        <span class="indicator" id="sync-indicator"></span>
+        <span id="sync-message">Checking sync status...</span>
+      </div>
+      <div id="sync-container">
+      {% comment %}
+        This section will be replaced by the content returned from the check_sync_status view.
+      {% endcomment %}
+      </div>
+    </div>
+  {% endif %}
 {% endblock pre_form %}
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "instructions" "include_file_info" "llm_provider" "llm_provider_model" "temperature" "top_p" "tools" "builtin_tools" %}
+  {% render_form_fields form "name" "instructions" "include_file_info" %}
+  {% render_form_fields form "llm_provider" "llm_provider_model" "temperature" "top_p" %}
+  <div class="sm:grid sm:grid-cols-2 md:grid-cols-3">
+    {% render_form_fields form "tools" "builtin_tools" "custom_action_operations" %}
+  </div>
   {% if not object.id %}
     <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}

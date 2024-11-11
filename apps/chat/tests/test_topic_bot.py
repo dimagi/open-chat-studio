@@ -63,6 +63,6 @@ def test_get_safe_response_creates_ai_message_for_default_messages():
 
     bot = TopicBot(session)
     bot._get_safe_response(layer)
-    message = ChatMessage.objects.get(message_type=ChatMessageType.AI)
+    message = ChatMessage.objects.get(chat__team=session.team, message_type=ChatMessageType.AI)
     assert message.content == "Sorry, I can't answer that. Please try something else."
     assert message.tags.get(category=TagCategories.SAFETY_LAYER_RESPONSE) is not None

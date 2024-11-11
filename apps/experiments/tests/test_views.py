@@ -147,8 +147,9 @@ def test_prompt_variable_validation(tools, source_material, prompt_str, expectat
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team")
-def test_form_fields(_get_for_team_mock):
+@mock.patch("apps.experiments.views.experiment.initialize_form_for_custom_actions", mock.Mock())
+@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team", mock.Mock())
+def test_form_fields():
     path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
     form_html = path.read_text()
     request = mock.Mock()

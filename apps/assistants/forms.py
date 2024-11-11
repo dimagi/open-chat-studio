@@ -2,6 +2,11 @@ from django import forms
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
+from apps.custom_actions.utils import (
+    clean_custom_action_operations,
+    initialize_form_for_custom_actions,
+    set_custom_actions,
+)
 from apps.experiments.models import AgentTools
 from apps.files.forms import get_file_formset
 from apps.utils.prompt import validate_prompt_variables
@@ -22,6 +27,7 @@ INSTRUCTIONS_HELP_TEXT = """
 class OpenAiAssistantForm(forms.ModelForm):
     builtin_tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=get_assistant_tool_options())
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = OpenAiAssistant
@@ -55,6 +61,10 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
+        initialize_form_for_custom_actions(request.team, self)
+
+    def clean_custom_action_operations(self):
+        return clean_custom_action_operations(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -66,8 +76,13 @@ class OpenAiAssistantForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        self.instance.team = self.request.team
-        return super().save(commit)
+        assistant = super().save(commit=False)
+        assistant.team = self.request.team
+        if commit:
+            assistant.save()
+            set_custom_actions(assistant, self.cleaned_data.get("custom_action_operations"))
+            self.save_m2m()
+        return assistant
 
 
 class ImportAssistantForm(forms.Form):

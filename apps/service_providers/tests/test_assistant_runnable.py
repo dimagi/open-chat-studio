@@ -40,6 +40,8 @@ def session(request):
     if request.param:
         local_assistant.tools = list(TOOL_CLASS_MAP.keys())
 
+    local_assistant.has_custom_actions = lambda *args, **kwargs: False
+
     session.experiment.assistant = local_assistant
     session.get_participant_data = lambda *args, **kwargs: None
     session.get_participant_timezone = lambda *args, **kwargs: ""
@@ -57,6 +59,7 @@ def db_session(request):
     return session
 
 
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
@@ -90,6 +93,7 @@ def test_assistant_conversation_new_chat(
     assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
@@ -123,6 +127,7 @@ def test_assistant_conversation_existing_chat(
     assert result.output == "ai response"
 
 
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
@@ -196,6 +201,7 @@ def test_assistant_includes_file_type_information(
     assert create_and_run.call_args.kwargs["instructions"] == expected_instructions
 
 
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
@@ -212,6 +218,7 @@ def test_assistant_runnable_raises_error(session):
             assistant_runnable.invoke("test")
 
 
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
@@ -262,6 +269,7 @@ def test_assistant_runnable_handles_cancellation_status(session):
         ),
     ],
 )
+@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
     "apps.service_providers.llm_service.state.AssistantExperimentState.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
