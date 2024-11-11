@@ -18,12 +18,12 @@ Assistant
                 |__________code_interpreter
                 |               |__________file1
                 |               |__________file2
-                |               
+                |
                 |__________file_search
                                 |__________vector_store1
                                 |               |_________file1
                                 |               |_________file2
-                                |               
+                                |
                                 |__________vector_store1
 
 
@@ -41,12 +41,12 @@ Assistant
                             |__________code_interpreter
                             |               |__________file1
                             |               |__________file2
-                            |               
+                            |
                             |__________file_search
                                             |__________vector_store1
                                             |               |_________file1
                                             |               |_________file2
-                                            |               
+                                            |
                                             |__________vector_store1
 
 Note that a thread-level tool resource will only function if it is enabled at the assistant level. For example,
@@ -221,15 +221,9 @@ def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResourc
     elif resource.tool_type == "file_search":
         openai_vector_store_id = resource.extra.get("vector_store_id")
         if openai_vector_store_id:
-            kwargs = {}
-            while True:
-                vector_store_data = client.beta.vector_stores.files.list(
-                    vector_store_id=openai_vector_store_id, limit=100, **kwargs
-                )
-                openai_file_ids.extend([file.id for file in getattr(vector_store_data, "data", [])])
-                if not vector_store_data.has_more:
-                    break
-                kwargs["after"] = vector_store_data.last_id
+            openai_file_ids.extend(
+                [file.id for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)]
+            )
     return openai_file_ids
 
 

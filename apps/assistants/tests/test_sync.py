@@ -274,10 +274,7 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
 def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     tool_type = "file_search"
     openai_files = FileObjectFactory.create_batch(2)
-    file_list.side_effect = [
-        SyncCursorPage(data=[FileObjectFactory(id=openai_files[0].id)], has_more=True, last_id=openai_files[0].id),
-        SyncCursorPage(data=[FileObjectFactory(id=openai_files[1].id)], has_more=False),
-    ]
+    file_list.return_value = [FileObjectFactory(id=file.id) for file in openai_files]
 
     remote_assistant = AssistantFactory()
     vector_store_id = "vs_123"
@@ -295,14 +292,10 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     resource = ToolResources.objects.create(
         tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": vector_store_id}
     )
+    # Test out of sync
     resource.files.set([files[0]])
-
     assert are_files_in_sync_with_openai(local_assistant) is False
 
-    # Update local files to match remote files
-    file_list.side_effect = [
-        SyncCursorPage(data=[FileObjectFactory(id=openai_files[0].id)], has_more=True, last_id=openai_files[0].id),
-        SyncCursorPage(data=[FileObjectFactory(id=openai_files[1].id)], has_more=False),
-    ]
+    # Test in sync
     resource.files.set(files)
     assert are_files_in_sync_with_openai(local_assistant) is True

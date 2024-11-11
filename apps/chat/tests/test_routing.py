@@ -6,10 +6,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentRoute
+from apps.service_providers.models import TraceProvider
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.langchain import build_fake_llm_service, mock_experiment_llm
 
 
 @pytest.mark.django_db()
@@ -38,6 +39,26 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
     ]
     message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
     assert list(message.tags.values_list("name", flat=True)) == [expected_tag]
+
+
+@pytest.mark.django_db()
+def test_experiment_routing_with_tracing():
+    experiment = _make_experiment_with_routing()
+    session = ExperimentSessionFactory(experiment=experiment)
+    provider = TraceProvider(type="langfuse", config={})
+    session.experiment.trace_provider = provider
+    with mock_experiment_llm(None, responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service:
+        bot = TopicBot(session)
+        response = bot.process_input("Hi")
+    assert response == "How can I help today?"
+    assert fake_service.llm.get_call_messages() == [
+        [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
+        [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
+    ]
+    human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
+    assert "trace_info" in human_message.metadata
+    ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
+    assert "trace_info" in ai_message.metadata
 
 
 @pytest.mark.django_db()

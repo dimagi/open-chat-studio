@@ -679,6 +679,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 raise ValueError("llm_provider_model is not set for this Assistant")
             return self.assistant.llm_provider_model.name
 
+    @property
+    def trace_service(self):
+        if self.trace_provider:
+            return self.trace_provider.get_service()
+
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 

@@ -506,7 +506,7 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
     if messages_created:
         assert state.raw_client.beta.threads.messages.create.call_count == len(messages)
     assert state.raw_client.beta.threads.create.called == thread_created
-    assert state.set_metadata.called == thread_created
+    assert state.set_chat_metadata.called == thread_created
 
 
 @pytest.mark.django_db()
