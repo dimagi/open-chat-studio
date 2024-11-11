@@ -18,7 +18,7 @@ from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -66,12 +66,13 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "llm_models").all()
+        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
+        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "input_types": _pipeline_node_input_types(),
-            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers),
+            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers),
         }
 
@@ -86,13 +87,17 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
-def _pipeline_node_parameter_values(team, llm_providers):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
 
     return {
-        "LlmProviderId": [{"id": provider["id"], "name": provider["name"]} for provider in llm_providers],
-        "LlmModel": {provider["id"]: provider["llm_models"] for provider in llm_providers},
+        "LlmProviderId": [
+            {"id": provider["id"], "name": provider["name"], "type": provider["type"]} for provider in llm_providers
+        ],
+        "LlmProviderModelId": [
+            {"id": provider.id, "type": provider.type, "name": str(provider)} for provider in llm_provider_models
+        ],
         "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
     }
 
@@ -104,15 +109,9 @@ def _pipeline_node_default_values(llm_providers):
     except (IndexError, KeyError):
         provider_id = None
 
-    try:
-        llm_model = llm_providers[0]["llm_models"][0]
-    except (IndexError, KeyError):
-        llm_model = None
     return {
         "LlmProviderId": provider_id,
-        "LlmModel": llm_model,
         "LlmTemperature": 0.7,
-        "MaxTokenLimit": 8192,
     }
 
 

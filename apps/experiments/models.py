@@ -457,6 +457,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
     llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
@@ -534,11 +542,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
     )
-    max_token_limit = models.PositiveIntegerField(
+    max_token_limit_old = models.PositiveIntegerField(
         default=8192,
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
-    )
+    )  # TODO Remove this after migration to llm_provider_model is complete
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,
@@ -638,6 +646,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
+    @property
+    def max_token_limit(self) -> int:
+        if self.llm_provider:
+            return self.llm_provider_model.max_token_limit
+        elif self.assistant:
+            return self.assistant.llm_provider_model.max_token_limit
+
     @cached_property
     def default_version(self) -> "Experiment":
         """Returns the default experiment, or if there is none, the working experiment"""
@@ -645,13 +660,24 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_chat_model(self):
         service = self.get_llm_service()
-        return service.get_chat_model(self.llm, self.temperature)
+        provider_model_name = self.get_llm_provider_model_name()
+        return service.get_chat_model(provider_model_name, self.temperature)
 
     def get_llm_service(self):
         if self.llm_provider:
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+
+    def get_llm_provider_model_name(self):
+        if self.llm_provider:
+            if not self.llm_provider_model:
+                raise ValueError("llm_provider_model is not set for this Experiment")
+            return self.llm_provider_model.name
+        elif self.assistant:
+            if not self.assistant.llm_provider_model:
+                raise ValueError("llm_provider_model is not set for this Assistant")
+            return self.assistant.llm_provider_model.name
 
     @property
     def trace_service(self):
@@ -810,7 +836,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 ),
                 # Language Model
                 VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
@@ -828,11 +854,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     group_name="Safety",
                     name="input_formatter",
                     raw_value=self.input_formatter,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="max_token_limit",
-                    raw_value=self.max_token_limit,
                 ),
                 # Consent
                 VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),

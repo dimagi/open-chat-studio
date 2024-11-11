@@ -8,7 +8,7 @@ from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -37,7 +37,11 @@ class TasksTest(TestCase):
                     "openai_api_key": "123123123",
                 },
             ),
-            llm="gpt-4",
+            llm_provider_model=LlmProviderModel.objects.create(
+                team=self.team,
+                type="openai",
+                name="gpt-4",
+            ),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel",

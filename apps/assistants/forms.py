@@ -38,7 +38,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "builtin_tools",
             "tools",
             "llm_provider",
-            "llm_model",
+            "llm_provider_model",
             "temperature",
             "top_p",
         ]
@@ -54,7 +54,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["llm_provider"].widget.attrs = {
             "x-model.number.fill": "llmProvider",
         }
-        self.fields["llm_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["include_file_info"].help_text = """If checked, extra information about uploaded files will
             be appended to the instructions. This will give the assistant knowledge about the file types."""
         self.fields["builtin_tools"].required = False

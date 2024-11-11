@@ -36,7 +36,7 @@
     <div role="tablist" class="tabs tabs-bordered grid-flow-col auto-cols-max mt-4">
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Language Model" x-bind:checked="type === 'llm'" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "llm_provider" "llm" "temperature" "prompt_text" %}
+        {% render_form_fields form "llm_provider" "llm_provider_model" "temperature" "prompt_text" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="OpenAI Assistant" x-bind:checked="type === 'assistant'" x-show="type === 'assistant'" {% if experiment_type != "assistant" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
@@ -50,7 +50,7 @@
       {% endflag %}
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
-        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" "max_token_limit" %}
+        {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" %}
       </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Consent" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
@@ -155,8 +155,8 @@
 
         llmProviderId: null,
         llmProvider: null,
-        llm: '{{experiment.llm|default:form.llm.value|default:'null'}}',
-        llm_options: [],
+        llm_provider_model: '{{experiment.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model_options: [],
 
         init() {
 
@@ -169,7 +169,7 @@
 
           this.$watch('llmProviderId', () => {
             this.llmProvider = llmModelOptions[this.llmProviderId];
-            this.llm_options = llmModelOptions[this.llmProviderId].models;
+            this.llm_provider_model_options = llmModelOptions[this.llmProviderId].models;
           })
         }
       }));

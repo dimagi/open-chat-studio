@@ -1,16 +1,24 @@
-type LlmProviderIdOptions = {
+type LlmProvider = {
   id: string;
   name: string;
+  type: string;
+};
+
+export type LlmProviderModel = {
+  id: string;
+  name: string;
+  type: string;
 };
 
 type LlmModel = Record<string, [string]>;
-type SourceMaterialIdOptions = {
+type SourceMaterial = {
   id: string;
   topic: string;
 };
 
 export type NodeParameterValues = {
-  LlmProviderId: LlmProviderIdOptions[];
+  LlmProviderId: LlmProvider[];
+  LlmProviderModelId: LlmProviderModel[];
   LlmModel: LlmModel;
-  SourceMaterialId: SourceMaterialIdOptions[];
+  SourceMaterialId: SourceMaterial[];
 };

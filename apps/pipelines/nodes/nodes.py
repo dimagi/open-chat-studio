@@ -22,15 +22,15 @@ from apps.pipelines.nodes.types import (
     HistoryName,
     HistoryType,
     Keywords,
-    LlmModel,
     LlmProviderId,
+    LlmProviderModelId,
     LlmTemperature,
-    MaxTokenLimit,
     NumOutputs,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.time import pretty_date
 
 
@@ -63,7 +63,7 @@ class RenderTemplate(PipelineNode):
 
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
-    llm_model: LlmModel
+    llm_provider_model_id: LlmProviderModelId
     llm_temperature: LlmTemperature = 1.0
 
     def get_llm_service(self):
@@ -77,14 +77,19 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    def get_llm_provider_model(self):
+        try:
+            return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
+        except LlmProviderModel.DoesNotExist:
+            raise PipelineNodeBuildError(f"LLM provider model with id {self.llm_provider_model_id} does not exist")
+
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
+        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
 
 
 class HistoryMixin(LLMResponseMixin):
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = 8192
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -99,7 +104,7 @@ class HistoryMixin(LLMResponseMixin):
             return compress_chat_history(
                 chat=session.chat,
                 llm=self.get_chat_model(),
-                max_token_limit=self.max_token_limit,
+                max_token_limit=self.get_llm_provider_model().max_token_limit,
                 input_messages=input_messages,
             )
 
@@ -111,7 +116,7 @@ class HistoryMixin(LLMResponseMixin):
             return []
         return compress_pipeline_chat_history(
             pipeline_chat_history=history,
-            max_token_limit=self.max_token_limit,
+            max_token_limit=self.get_llm_provider_model().max_token_limit,
             llm=self.get_chat_model(),
             input_messages=input_messages,
         )
@@ -336,14 +341,15 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        llm_provider_model = self.get_llm_provider_model()
+        model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
         self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
-            encoding = tiktoken.encoding_for_model(self.llm_model)
+            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
             encoding_name = encoding.name
         except KeyError:
             # The same encoder we use for llm.get_num_tokens_from_messages

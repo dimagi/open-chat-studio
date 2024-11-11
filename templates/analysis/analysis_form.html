@@ -62,11 +62,11 @@
     document.addEventListener('alpine:init', () => {
       Alpine.data('analysis', () => ({
         llmProvider: null,
-        llm_model: '{{analysis.llm_model|default:'null'}}',
-        llm_model_options: [],
+        llm_provider_model: '{{analysis.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model_options: [],
         init() {
           this.$watch('llmProvider', () => {
-            this.llm_model_options = llmModelOptions[this.llmProvider].models;
+            this.llm_provider_model_options = llmModelOptions[this.llmProvider].models;
           })
         }
       }));

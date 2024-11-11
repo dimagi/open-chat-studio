@@ -125,7 +125,7 @@ def chat_completions(request, experiment_id: str):
             }
         ],
         "created": int(time.time()),
-        "model": session.experiment.llm,
+        "model": session.experiment.llm_provider_model.name,
         "object": "chat.completion",
     }
     return Response(data=completion)

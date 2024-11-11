@@ -205,7 +205,7 @@ def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm
 @pytest.mark.django_db()
 def test_runnable_with_history(runnable, session, chat, fake_llm_service):
     experiment = session.experiment
-    experiment.max_token_limit = 0  # disable compression
+    experiment.llm_provider_model.max_token_limit = 0  # disable compression
     session.chat = chat
     assert chat.messages.count() == 1
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))

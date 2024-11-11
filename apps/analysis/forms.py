@@ -12,7 +12,7 @@ class AnalysisForm(forms.ModelForm):
             "source",
             "pipeline",
             "llm_provider",
-            "llm_model",
+            "llm_provider_model",
         ]
         widgets = {
             "source": forms.Select(choices=get_source_pipeline_options()),
@@ -26,4 +26,4 @@ class AnalysisForm(forms.ModelForm):
         self.fields["llm_provider"].widget.attrs = {
             "x-model.number.fill": "llmProvider",
         }
-        self.fields["llm_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
