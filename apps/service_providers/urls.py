@@ -6,7 +6,6 @@ app_name = "service_providers"
 
 urlpatterns = [
     path("llm_provider_model/table/", views.LlmProviderModelTableView.as_view(), name="llm_provider_model_table"),
-    # TODO: Define these views
     path("llm_provider_model/create/", views.LlmProviderModelView.as_view(), name="llm_provider_model_new"),
     path("llm_provider_model/<int:pk>/", views.LlmProviderModelView.as_view(), name="llm_provider_model_edit"),
     path(
