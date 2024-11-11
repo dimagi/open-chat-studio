@@ -649,9 +649,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def max_token_limit(self) -> int:
         if self.llm_provider:
-            return self.llm_provider.max_token_limit
+            return self.llm_provider_model.max_token_limit
         elif self.assistant:
-            return self.assistant.llm_provider.max_token_limit
+            return self.assistant.llm_provider_model.max_token_limit
 
     @cached_property
     def default_version(self) -> "Experiment":
