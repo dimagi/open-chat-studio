@@ -7,26 +7,15 @@
 
     <h1 class="pg-title">{% translate "Global Admin Dashboard" %}</h1>
     <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">
-      <div class="pg-columns">
-        <div class="pg-column">
+      <div class="flex items-center gap-4" x-data="{ range_type: '{{ form.range_type.data }}' }">
+        {% render_field form.range_type xmodel="range_type" %}
+        <div class="flex" x-show="range_type === 'custom'" x-cloak>
           {% render_field form.start %}
-        </div>
-        <div class="pg-column">
           {% render_field form.end %}
         </div>
       </div>
     </form>
     <div class="mt-4" id="charts"></div>
-    <div class="flex space-x-3">
-      <a class="btn" href="{% url "ocs_admin:export_usage" %}">
-        <i class="fa-solid fa-download"></i>
-        Usage Data
-      </a>
-      <a class="btn" href="{% url "ocs_admin:export_whatsapp" %}">
-        <i class="fa-solid fa-download"></i>
-        WhatsApp Numbers
-      </a>
-    </div>
   </section>
 {% endblock %}
 {% block page_js %}
