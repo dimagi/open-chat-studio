@@ -221,10 +221,10 @@ def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResourc
     elif resource.tool_type == "file_search":
         openai_vector_store_id = resource.extra.get("vector_store_id")
         if openai_vector_store_id:
-            [
-                openai_file_ids.append(file.id)
+            openai_file_ids.extend([
+                file.id
                 for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)
-            ]
+            ])
     return openai_file_ids
 
 
