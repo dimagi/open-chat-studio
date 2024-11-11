@@ -653,6 +653,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
+    @property
+    def trace_service(self):
+        if self.trace_provider:
+            return self.trace_provider.get_service()
+
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
 
