@@ -54,12 +54,12 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
     def related_analyses(self, obj):
         analyses = Analysis.objects.filter(llm_provider_model_id=str(obj.id))
         analysis_urls = [
-            f"<a href={reverse('admin:analysis_analysis_change',args=[analysis.id])} >{str(analyses)}</a>"
+            f"<a href={reverse('admin:analysis_analysis_change',args=[analysis.id])} >{str(analysis)}</a>"
             for analysis in analyses
         ]
         return format_html("<br>".join(analysis_urls))
 
-    related_assistants.short_description = "Analysis Usage"
+    related_analyses.short_description = "Analysis Usage"
 
     def related_nodes(self, obj):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))

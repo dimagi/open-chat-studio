@@ -117,7 +117,8 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
-class LlmProviderModelTableView(SingleTableView):
+class LlmProviderModelTableView(PermissionRequiredMixin, SingleTableView):
+    permission_required = "service_providers.view_llmprovidermodel"
     paginate_by = 25
     template_name = "table/single_table.html"
     model = LlmProviderModel
@@ -179,8 +180,13 @@ class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObject
             form.instance.team = self.request.team
         return super().form_valid(form)
 
+    def get_queryset(self):
+        return LlmProviderModel.objects.filter(team=self.request.team)
+
 
 @require_http_methods(["DELETE"])
+@login_required
+@permission_required("service_providers.delete_llmprovidermodel")
 def delete_llm_provider_model(request, team_slug: str, pk: int):
     llm_provider_model = get_object_or_404(LlmProviderModel, team=request.team, pk=pk)
     try:

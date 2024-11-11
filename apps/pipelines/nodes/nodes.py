@@ -341,14 +341,15 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        llm_provider_model = self.get_llm_provider_model()
+        model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
         self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
-            encoding = tiktoken.encoding_for_model(self.get_llm_provider_model().name)
+            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
             encoding_name = encoding.name
         except KeyError:
             # The same encoder we use for llm.get_num_tokens_from_messages

@@ -669,7 +669,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def max_token_limit(self) -> int:
-        return self.llm_provider_model.max_token_limit
+        if self.llm_provider:
+            return self.llm_provider.max_token_limit
+        elif self.assistant:
+            return self.assistant.llm_provider.max_token_limit
 
     @cached_property
     def default_version(self) -> "Experiment":
@@ -678,13 +681,24 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_chat_model(self):
         service = self.get_llm_service()
-        return service.get_chat_model(self.llm_provider_model.name, self.temperature)
+        provider_model_name = self.get_llm_provider_model_name()
+        return service.get_chat_model(provider_model_name, self.temperature)
 
     def get_llm_service(self):
         if self.llm_provider:
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+
+    def get_llm_provider_model_name(self):
+        if self.llm_provider:
+            if not self.llm_provider_model:
+                raise ValueError("llm_provider_model is not set for this Experiment")
+            return self.llm_provider_model.name
+        elif self.assistant:
+            if not self.assistant.llm_provider_model:
+                raise ValueError("llm_provider_model is not set for this Assistant")
+            return self.assistant.llm_provider_model.name
 
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))

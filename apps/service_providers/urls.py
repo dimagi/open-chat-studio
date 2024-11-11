@@ -10,7 +10,7 @@ urlpatterns = [
     path("llm_provider_model/create/", views.LlmProviderModelView.as_view(), name="llm_provider_model_new"),
     path("llm_provider_model/<int:pk>/", views.LlmProviderModelView.as_view(), name="llm_provider_model_edit"),
     path(
-        "llm_provider_model/<int:pk>/delete",
+        "llm_provider_model/<int:pk>/delete/",
         views.delete_llm_provider_model,
         name="llm_provider_model_delete",
     ),

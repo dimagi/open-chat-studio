@@ -1,6 +1,7 @@
 from django import forms
 from django.core.validators import URLValidator
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
@@ -226,9 +227,29 @@ class LlmProviderModelForm(forms.ModelForm):
         fields = ("type", "name", "max_token_limit")
 
     def __init__(self, team, *args, **kwargs):
+        self.team = team
         super().__init__(*args, **kwargs)
         types = LlmProvider.objects.filter(team=team).values_list("type", flat=True).all()
         self.fields["type"].choices = [choice for choice in LlmProviderTypes.choices if choice[0] in types]
         if len(types) == 0:
             url = reverse("service_providers:new", kwargs={"team_slug": team.slug, "provider_type": "llm"})
-            self.fields["type"].help_text = f"You must create an <a href={url}>LLM provider</a> first"
+            self.fields["type"].help_text = format_html(
+                _('You must create an <a class="link" href="{}">LLM provider</a> first'), url
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        name = cleaned_data.get("name")
+        max_token_limit = cleaned_data.get("max_token_limit")
+
+        if name and max_token_limit:
+            if (
+                LlmProviderModel.objects.filter(team=self.team, name=name, max_token_limit=max_token_limit)
+                .exclude(pk=self.instance.pk if self.instance else None)
+                .exists()
+            ):
+                raise forms.ValidationError(
+                    {"__all__": _("A model with this name and max token limit already exists for your team")}
+                )
+
+        return cleaned_data
