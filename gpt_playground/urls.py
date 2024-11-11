@@ -38,6 +38,7 @@ team_urlpatterns = [
     path("service_providers/", include("apps.service_providers.urls")),
     path("analysis/", include("apps.analysis.urls")),
     path("assistants/", include("apps.assistants.urls")),
+    path("actions/", include("apps.custom_actions.urls")),
     path("pipelines/", include("apps.pipelines.urls")),
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls")),

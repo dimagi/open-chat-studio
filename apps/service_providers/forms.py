@@ -189,6 +189,26 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     api_key = forms.CharField(label=_("API Key"))
 
 
+class BasicAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["password"]
+
+    username = forms.CharField(label=_("Username"))
+    password = forms.CharField(label=_("Password"))
+
+
+class ApiKeyAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["value"]
+
+    key = forms.CharField(label=_("Header Name"))
+    value = forms.CharField(label=_("API Key"))
+
+
+class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["token"]
+
+    token = forms.CharField(label=_("Bearer Token"))
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 

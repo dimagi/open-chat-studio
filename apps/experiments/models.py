@@ -38,7 +38,18 @@ class VersionsObjectManagerMixin:
         return super().get_queryset()
 
     def get_queryset(self):
-        return super().get_queryset().filter(is_archived=False)
+        return (
+            super()
+            .get_queryset()
+            .filter(is_archived=False)
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
 
 
 class PromptObjectManager(AuditingManager):
@@ -70,48 +81,15 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
@@ -648,7 +626,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def tools_enabled(self):
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or self.custom_action_operations.exists()
 
     @property
     def event_triggers(self):
@@ -674,6 +652,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return self.llm_provider.get_llm_service()
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+
+    @property
+    def trace_service(self):
+        if self.trace_provider:
+            return self.trace_provider.get_service()
 
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))

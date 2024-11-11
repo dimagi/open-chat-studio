@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
+        data["tools"] = [convert_to_openai_tool(tool, strict=True) for tool in internal_tools]
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -164,6 +164,84 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
 
         for file in resource.files.all():
             delete_file_from_openai(client, file)
+
+
+def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:
+    """Checks if a tool is configured in OpenAI but missing in OCS."""
+    tool_configured_in_openai = hasattr(assistant_data.tool_resources, tool_name) and getattr(
+        assistant_data.tool_resources, tool_name
+    )
+    return tool_configured_in_openai and tool_name not in local_tool_types
+
+
+@wrap_openai_errors
+def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
+    """Checks if the files for an assistant in OCS match the files in OpenAI."""
+    tool_resources = assistant.tool_resources.all()
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+    assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
+
+    # ensure same tools are configured in OCS as in OpenAI
+    local_tool_types = {resource.tool_type for resource in tool_resources}
+    if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
+        return False
+    if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
+        return False
+
+    # ensure files match
+    for resource in tool_resources:
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource)
+        ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
+        if set(ocs_file_ids) != set(openai_file_ids):
+            return False
+    return True
+
+
+def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResources) -> list[str]:
+    """
+    Retrieve file IDs from OpenAI based on the specified tool resource type.
+
+    Args:
+        client: The OpenAI client instance used to interact with the OpenAI API.
+        assistant_data: The assistant data containing tool resources.
+        resource (ToolResources): The tool resource object specifying the type of tool and additional parameters.
+
+    Returns:
+        list[str]: A list of file IDs retrieved from OpenAI.
+
+    The function handles two types of tool resources:
+    - "code_interpreter": Returns file IDs directly from the code interpreter tool resource if available.
+    - "file_search": Retrieves file IDs from the OpenAI vector store using the provided vector store ID.
+    """
+    openai_file_ids = []
+    if resource.tool_type == "code_interpreter":
+        code_interpreter = getattr(assistant_data.tool_resources, "code_interpreter", None)
+        if code_interpreter is not None and code_interpreter.file_ids:
+            return code_interpreter.file_ids
+    elif resource.tool_type == "file_search":
+        openai_vector_store_id = resource.extra.get("vector_store_id")
+        if openai_vector_store_id:
+            kwargs = {}
+            while True:
+                vector_store_data = client.beta.vector_stores.files.list(
+                    vector_store_id=openai_vector_store_id, limit=100, **kwargs
+                )
+                openai_file_ids.extend([file.id for file in getattr(vector_store_data, "data", [])])
+                if not vector_store_data.has_more:
+                    break
+                kwargs["after"] = vector_store_data.last_id
+    return openai_file_ids
+
+
+@wrap_openai_errors
+def is_synced_with_openai(assistant: OpenAiAssistant):
+    client = assistant.llm_provider.get_llm_service().get_raw_client()
+    openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
+    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
+        current_value = getattr(assistant, key, None)
+        if current_value != value:
+            return False
+    return True
 
 
 def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:

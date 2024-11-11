@@ -131,6 +131,8 @@ django-appconf==1.0.5
     # via django-cryptography-django5
 django-celery-beat==2.7.0
     # via -r requirements.in
+django-cleanup==9.0.0
+    # via -r requirements.in
 django-cryptography-django5==2.2
     # via -r requirements.in
 django-environ==0.11.2
@@ -195,7 +197,7 @@ httpx==0.24.1
     #   langsmith
     #   openai
     #   taskbadger
-huggingface-hub==0.20.2
+huggingface-hub==0.26.2
     # via
     #   tokenizers
     #   transformers
@@ -228,7 +230,7 @@ jsonschema-specifications==2023.7.1
     # via jsonschema
 kombu==5.3.3
     # via celery
-langchain==0.3.4
+langchain==0.3.7
     # via
     #   -r requirements.in
     #   langchain-community
@@ -236,7 +238,7 @@ langchain-anthropic==0.2.3
     # via -r requirements.in
 langchain-community==0.3.3
     # via -r requirements.in
-langchain-core==0.3.12
+langchain-core==0.3.15
     # via
     #   -r requirements.in
     #   langchain
@@ -293,6 +295,8 @@ openai==1.52.1
     # via
     #   -r requirements.in
     #   langchain-openai
+openapi-pydantic==0.5.0
+    # via -r requirements.in
 orjson==3.10.0
     # via langsmith
 packaging==23.2
@@ -325,6 +329,7 @@ pydantic==2.9.2
     #   langfuse
     #   langsmith
     #   openai
+    #   openapi-pydantic
     #   pydantic-settings
 pydantic-core==2.23.4
     # via pydantic
@@ -447,7 +452,7 @@ tiktoken==0.8.0
     # via
     #   -r requirements.in
     #   langchain-openai
-tokenizers==0.15.0
+tokenizers==0.20.2
     # via
     #   anthropic
     #   transformers
@@ -458,7 +463,7 @@ tqdm==4.66.3
     #   huggingface-hub
     #   openai
     #   transformers
-transformers==4.39.3
+transformers==4.46.1
     # via -r requirements.in
 turn-python==0.2.0
     # via -r requirements.in

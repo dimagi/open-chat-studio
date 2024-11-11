@@ -1,0 +1,16 @@
+{% if not are_files_synced %}
+    <div id="sync-notification" class="flex w-full shadow-md !rounded-none alert m-1">
+        <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open Chat Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, please upload the necessary files on this page.</p>
+    </div>
+{% endif %}
+{% if is_synced %}
+    <span id="sync-indicator" style="background-color: green; color: white; border-radius: 9999px; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center;">
+        <i class="fas fa-check" style="margin-right: 0.25rem;"></i>In Sync
+    </span>
+{% else %}
+    <span id="sync-indicator" style="background-color: red; color: white; border-radius: 9999px; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center;">
+        <i class="fas fa-times" style="margin-right: 0.25rem;"></i>Out of Sync
+    </span>
+    <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
+            hx-target="#sync-container" class="btn btn-sm btn-primary">Sync Now</button>
+{% endif %}

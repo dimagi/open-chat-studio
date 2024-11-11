@@ -107,7 +107,7 @@ class AjaxAction(Action):
 
 def edit_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any], str] = None,
+    url_factory: Callable[[str, Any, Any, Any], str] = None,
     required_permissions: list = None,
     display_condition: callable = None,
     template: str | None = None,
@@ -127,7 +127,7 @@ def edit_action(
 
 def delete_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any], str] = None,
+    url_factory: Callable[[str, Any, Any, Any], str] = None,
     required_permissions: list = None,
     display_condition: callable = None,
     confirm_message: str = None,
