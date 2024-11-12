@@ -146,13 +146,13 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
 @login_and_team_required
 def check_sync_status(request, team_slug, pk):
     assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-    is_synced = False
+    is_synced = True
     files_in_sync = True
     if assistant.assistant_id:
         try:
             is_synced = is_synced_with_openai(assistant)
         except OpenAiSyncError:
-            pass
+            is_synced = False
         files_in_sync = are_files_in_sync_with_openai(assistant)
     context = {"is_synced": is_synced, "object": assistant, "are_files_synced": files_in_sync}
     return render(request, "assistants/sync_status.html", context)
