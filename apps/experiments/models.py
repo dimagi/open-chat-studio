@@ -648,10 +648,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def max_token_limit(self) -> int:
-        if self.llm_provider:
-            return self.llm_provider_model.max_token_limit
-        elif self.assistant:
+        if self.assistant:
             return self.assistant.llm_provider_model.max_token_limit
+        elif self.llm_provider:
+            return self.llm_provider_model.max_token_limit
 
     @cached_property
     def default_version(self) -> "Experiment":
@@ -664,24 +664,24 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return service.get_chat_model(provider_model_name, self.temperature)
 
     def get_llm_service(self):
-        if self.llm_provider:
-            return self.llm_provider.get_llm_service()
-        elif self.assistant:
+        if self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+        elif self.llm_provider:
+            return self.llm_provider.get_llm_service()
 
     def get_llm_provider_model_name(self, raises=True):
-        if self.llm_provider:
-            if not self.llm_provider_model:
-                if raises:
-                    raise ValueError("llm_provider_model is not set for this Experiment")
-                return None
-            return self.llm_provider_model.name
-        elif self.assistant:
+        if self.assistant:
             if not self.assistant.llm_provider_model:
                 if raises:
                     raise ValueError("llm_provider_model is not set for this Assistant")
                 return None
             return self.assistant.llm_provider_model.name
+        elif self.llm_provider:
+            if not self.llm_provider_model:
+                if raises:
+                    raise ValueError("llm_provider_model is not set for this Experiment")
+                return None
+            return self.llm_provider_model.name
 
     @property
     def trace_service(self):
