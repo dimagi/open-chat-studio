@@ -211,6 +211,10 @@ class AssistantState(RunnableState):
 
 
 class AssistantExperimentState(ExperimentState, AssistantState):
+    @property
+    def callback_handler(self):
+        return self.get_llm_service().get_callback_handler(self.experiment.assistant.llm_provider_model.name)
+
     def get_assistant_instructions(self):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
