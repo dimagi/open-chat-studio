@@ -78,7 +78,7 @@ class CustomActionForm(forms.ModelForm):
             except ValueError as e:
                 raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
 
-        return operations
+        return {**self.cleaned_data, "allowed_operations": operations}
 
 
 def validate_api_schema(api_schema):
