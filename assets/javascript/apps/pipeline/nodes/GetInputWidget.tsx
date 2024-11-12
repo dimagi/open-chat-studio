@@ -4,7 +4,7 @@ import {
   ExpandableTextWidget,
   InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
-import React, {ChangeEvent } from "react";
+import React from "react";
 import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
