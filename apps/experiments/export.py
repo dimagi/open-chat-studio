@@ -65,7 +65,7 @@ def experiment_to_message_export_rows(experiment: Experiment, tags: list[str] = 
                 _format_tags(message.chat.tags.all()),
                 _format_comments(message.chat.comments.all()),
                 session.external_id,
-                experiment.llm_provider_model.name if experiment.llm_provider_model else None,
+                experiment.get_llm_provider_model_name(raises=False),
                 experiment.public_id,
                 experiment.name,
                 session.participant.name,
