@@ -98,6 +98,9 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     def has_custom_actions(self):
         return self.custom_action_operations.exists()
 
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["assistant_id", "version_number"]
+
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
         from .sync import push_assistant_to_openai
