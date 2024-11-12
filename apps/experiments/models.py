@@ -613,9 +613,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return f"{self.name} ({self.version_display})"
 
     def save(self, *args, **kwargs):
-        if self.working_version is None and self.is_default_version is True:
-            raise ValueError("A working experiment cannot be a default version")
-        return super().save(*args, **kwargs)
+        if not self.pk:
+            with transaction.atomic():
+                super().save(*args, **kwargs)
+                if self.working_version is None and not self.versions.exists():
+                    self.create_new_version()
+        else:
+            if self.working_version is None and self.is_default_version is True:
+                raise ValueError("A working experiment cannot be a default version")
+            return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
