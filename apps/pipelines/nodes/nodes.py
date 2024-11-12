@@ -37,7 +37,9 @@ from apps.utils.time import pretty_date
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
-    template_string: ExpandableText
+    template_string: ExpandableText = Field(
+        pattern=r"\{input\}",
+    )
 
     def _process(self, input, **kwargs) -> str:
         def all_variables(in_):
@@ -64,7 +66,7 @@ class RenderTemplate(PipelineNode):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_provider_model_id: LlmProviderModelId
-    llm_temperature: LlmTemperature = 1.0
+    llm_temperature: LlmTemperature = Field(default=1.0, gt=0.0, le=2.0)
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -151,7 +153,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     __node_description__ = "Calls an LLM with a prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: ExpandableText = Field(
+        default="You are a helpful assistant. Answer the user's query as best you can: {input}",
+        pattern=r"\{input\}",
+    )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
@@ -201,7 +206,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str
+    recipient_list: str = Field(
+        pattern=r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)*([,])*)*$",
+    )
     subject: str
 
     def _process(self, input, **kwargs) -> str:
@@ -237,7 +244,10 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, HistoryMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
-    prompt: ExpandableText = "You are an extremely helpful router {input}"
+    prompt: ExpandableText = Field(
+        default="You are an extremely helpful router {input}",
+        pattern=r"\{input\}",
+    )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
@@ -397,13 +407,17 @@ class ExtractStructuredDataNodeMixin:
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+    )
 
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+    )
     key_name: str | None = None
 
     def get_reference_data(self, state) -> dict:
