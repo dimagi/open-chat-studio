@@ -12,11 +12,14 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
   dirty: false,
   isSaving: false,
   isLoading: true,
+  errors: {},
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
+        // TODO: Remove this below and read erros from the ReactFlowJsonObject
+        set({errors: pipeline.data?.errors});
         set({isLoading: false});
       }
     }).catch((e) => {
@@ -53,9 +56,11 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     }
     return new Promise<void>((resolve, reject) => {
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
-        .then((updatedFlow) => {
-          if (updatedFlow) {
+        .then((response) => {
+          if (response) {
+            pipeline.data = response.data;
             set({currentPipeline: pipeline, dirty: false});
+            set({errors: response.data?.errors});
             resolve();
           }
         })
@@ -66,6 +71,10 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
         set({isSaving: false});
       });
     });
+  },
+  getFieldError: (nodeId: string, fieldName: string) => {
+    const nodeError = get().errors[nodeId];
+    return nodeError ? nodeError[fieldName] : "";
   },
 }));
 
