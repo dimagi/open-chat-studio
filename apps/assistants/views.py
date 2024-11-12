@@ -66,7 +66,7 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team, is_archived=False).order_by("name")
+        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -93,7 +93,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return reverse("assistants:home", args=[self.request.team.slug])
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team, is_archived=False)
+        return OpenAiAssistant.objects.filter(team=self.request.team)
 
 
 class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):

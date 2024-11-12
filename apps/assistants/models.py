@@ -6,12 +6,12 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.experiments.models import VersionsMixin
+from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
 
-class OpenAiAssistantManager(AuditingManager):
+class OpenAiAssistantManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
