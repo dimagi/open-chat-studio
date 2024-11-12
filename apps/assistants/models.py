@@ -110,6 +110,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         self.save(update_fields=["version_number"])
         assistant_version = super().create_new_version(save=False, *args, **kwargs)
         assistant_version.version_number = version_number
+        assistant_version.assistant_id = ""
         assistant_version.save()
         files = [file.duplicate() for file in self.files.all()]
         assistant_version.files.set(files)
