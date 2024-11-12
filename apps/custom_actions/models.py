@@ -1,4 +1,5 @@
 import logging
+from typing import Self
 
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -162,4 +163,10 @@ class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
         return new_instance
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["experiment", "assistant"]
+        return super().get_fields_to_exclude() + ["experiment", "assistant", "_operation_schema"]
+
+    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
+        changes = super().compare_with_model(new, exclude_fields)
+        if self.operation_schema != new.operation_schema:
+            changes.add("operation_schema")
+        return changes
