@@ -39,7 +39,7 @@
               </a>
             </div>
           {% endif %}
-          <div class="tooltip" data-tip="Start Web Session">
+          <div class="tooltip" data-tip="Start Web Session Working Version">
             <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}" class="inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary join-item">
