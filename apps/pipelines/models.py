@@ -102,9 +102,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         flow = Flow(**self.data)
         flow_nodes_by_id = {node.id: node for node in flow.nodes}
         nodes = []
+        errors = {}
+
         for node in self.node_set.all():
             node_class = getattr(pipeline_nodes, node.type)
             input_types = get_input_types_for_node(node_class)
+            try:
+                node_class(**node.params)
+            except pydantic.ValidationError as e:
+                errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+
             nodes.append(
                 FlowNode(
                     id=node.flow_id,
@@ -119,6 +126,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 )
             )
         flow.nodes = nodes
+        flow.errors = errors
         return flow.model_dump()
 
     @cached_property

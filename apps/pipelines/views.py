@@ -143,7 +143,8 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.data = data.data.model_dump()
         pipeline.save()
         pipeline.set_nodes(data.data.nodes)
-        return JsonResponse({"data": {"message": "Pipeline saved"}})
+        pipeline.refresh_from_db(fields=["node_set"])
+        return JsonResponse({"data": pipeline.flow_data})
 
     try:
         pipeline = Pipeline.objects.get(pk=pk)
