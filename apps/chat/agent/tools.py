@@ -6,7 +6,6 @@ from django.db import transaction
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
@@ -253,7 +252,7 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
     return tools
 
 
-def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list[BaseTool]:
+def get_custom_action_tools(action_holder) -> list[BaseTool]:
     operations = action_holder.custom_action_operations.select_related(
         "custom_action", "custom_action__auth_provider"
     ).all()
