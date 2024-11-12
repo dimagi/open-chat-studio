@@ -669,14 +669,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
         elif self.assistant:
             return self.assistant.llm_provider.get_llm_service()
 
-    def get_llm_provider_model_name(self):
+    def get_llm_provider_model_name(self, raises=True):
         if self.llm_provider:
             if not self.llm_provider_model:
-                raise ValueError("llm_provider_model is not set for this Experiment")
+                if raises:
+                    raise ValueError("llm_provider_model is not set for this Experiment")
+                return None
             return self.llm_provider_model.name
         elif self.assistant:
             if not self.assistant.llm_provider_model:
-                raise ValueError("llm_provider_model is not set for this Assistant")
+                if raises:
+                    raise ValueError("llm_provider_model is not set for this Assistant")
+                return None
             return self.assistant.llm_provider_model.name
 
     @property

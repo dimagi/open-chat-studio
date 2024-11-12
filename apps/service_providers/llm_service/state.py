@@ -71,12 +71,12 @@ class ExperimentState(RunnableState):
 
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(
-            self.experiment.llm_provider_model.name, self.experiment.temperature
+            self.experiment.get_llm_provider_model_name(), self.experiment.temperature
         )
 
     @property
     def callback_handler(self):
-        return self.get_llm_service().get_callback_handler(self.experiment.llm_provider_model.name)
+        return self.get_llm_service().get_callback_handler(self.experiment.get_llm_provider_model_name())
 
     def format_input(self, input: str) -> str:
         if self.experiment.input_formatter:
@@ -211,10 +211,6 @@ class AssistantState(RunnableState):
 
 
 class AssistantExperimentState(ExperimentState, AssistantState):
-    @property
-    def callback_handler(self):
-        return self.get_llm_service().get_callback_handler(self.experiment.assistant.llm_provider_model.name)
-
     def get_assistant_instructions(self):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
