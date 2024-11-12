@@ -51,10 +51,13 @@ def prompt_builder_load_source_material(request, team_slug: str):
 def experiments_prompt_builder(request, team_slug: str):
     llm_providers = list(request.team.llmprovider_set.all())
     default_llm_provider = llm_providers[0] if llm_providers else None
-    default_llm_provider_model = None
+    default_llm_provider_model_id = None
     if default_llm_provider:
-        default_llm_provider_model = (
-            LlmProviderModel.objects.for_team(request.team).filter(type=default_llm_provider.type).first()
+        default_llm_provider_model_id = (
+            LlmProviderModel.objects.for_team(request.team)
+            .filter(type=default_llm_provider.type)
+            .values_list("id", flat=True)
+            .first()
         )
 
     return TemplateResponse(
@@ -64,7 +67,7 @@ def experiments_prompt_builder(request, team_slug: str):
             "llm_options": get_llm_provider_choices(request.team),
             "llm_providers": llm_providers,
             "default_llm_provider": default_llm_provider,
-            "default_llm_model": default_llm_provider_model,
+            "default_llm_provider_model_id": default_llm_provider_model_id,
             "active_tab": "prompt_builder",
         },
     )
@@ -117,7 +120,8 @@ def get_prompt_builder_history(request, team_slug: str):
             "temperature": history_data.get("temperature", 0.7),
             "prompt": history_data.get("prompt", ""),
             "inputFormatter": history_data.get("inputFormatter", ""),
-            "model": history_data.get("model", "gpt-4"),
+            "provider": history_data.get("provider"),
+            "providerModelId": history_data.get("providerModelId"),
             "messages": history_data.get("messages", []),
         }
 

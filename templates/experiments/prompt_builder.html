@@ -65,7 +65,7 @@
                     Alpine.effect(() => {
                         if (this.currentState && this.currentState.provider !== undefined) {
                             this.llm_models = llmModelOptions[this.currentState.provider].models
-                            this.currentState.model = this.llm_models[0].value;
+                            this.currentState.providerModelId = this.llm_models[0].value;
                         }
                     });
                 },
@@ -112,7 +112,7 @@
                                 prompt: '',
                                 inputFormatter: '',
                                 provider: {{ default_llm_provider.id|default:'null' }},
-                                model: '{{ default_llm_model|default:'null' }}',
+                                providerModelId: {{ default_llm_provider_model_id|default:'null' }},
                                 messages: []
                             }
                         ]
@@ -136,7 +136,8 @@
                         nowState.temperature = destinationState.temperature;
                         nowState.prompt = destinationState.prompt;
                         nowState.inputFormatter = destinationState.inputFormatter;
-                        nowState.model = destinationState.model;
+                        nowState.provider = destinationState.provider;
+                        nowState.providerModelId = destinationState.providerModelId;
                         nowState.messages = destinationState.messages;
 
                     // Point us to 'now' and reset previous state tracker
