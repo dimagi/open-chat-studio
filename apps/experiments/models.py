@@ -13,7 +13,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -789,8 +789,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
             trigger.create_new_version(new_experiment=new_version)
 
     def _copy_custom_action_operations_to_new_version(self, new_version):
-        for operation in self.custom_action_operations.all():
+        for operation in self.get_custom_action_operations():
             operation.create_new_version(new_experiment=new_version)
+
+    def get_custom_action_operations(self) -> models.QuerySet:
+        if self.is_working_version:
+            # only include operations that are still enabled by the action
+            return self.custom_action_operations.select_related("custom_action").filter(
+                custom_action__allowed_operations__contains=[F("operation_id")]
+            )
+        else:
+            return self.custom_action_operations.select_related("custom_action")
 
     @property
     def is_public(self) -> bool:
@@ -923,11 +932,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 VersionField(
                     group_name="Tools",
                     name="custom_actions",
-                    queryset=(
-                        self.custom_action_operations.select_related("custom_action")
-                        .defer("custom_action__api_schema")
-                        .all()
-                    ),
+                    queryset=self.get_custom_action_operations(),
                     to_display=format_custom_action_operation,
                 ),
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),

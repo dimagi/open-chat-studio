@@ -87,6 +87,10 @@ class OpenAiAssistant(BaseTeamModel):
     def has_custom_actions(self):
         return self.custom_action_operations.exists()
 
+    def get_custom_action_operations(self) -> models.QuerySet:
+        # TODO: update this once assistant versioning is merged
+        return self.custom_action_operations.select_related("custom_action")
+
 
 @audit_fields(
     "assistant_id",

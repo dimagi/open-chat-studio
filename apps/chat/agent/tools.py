@@ -254,9 +254,7 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
 
 
 def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list[BaseTool]:
-    operations = action_holder.custom_action_operations.select_related(
-        "custom_action", "custom_action__auth_provider"
-    ).all()
+    operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 
 
