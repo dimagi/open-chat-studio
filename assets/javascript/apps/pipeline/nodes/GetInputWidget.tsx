@@ -4,10 +4,12 @@ import {
   ExpandableTextWidget,
   InputField, LlmWidget, KeywordsWidget,
 } from "../widgets";
-import React from "react";
+import React, {ChangeEvent } from "react";
 import {getCachedData, concatenate} from "../utils";
 import {InputParam} from "../types/nodeInputTypes";
 import {NodeParams} from "../types/nodeParams";
+import usePipelineManagerStore from "../stores/pipelineManagerStore";
+
 
 type InputWidgetParams = {
   id: string;
@@ -29,16 +31,16 @@ export const showAdvancedButton = (nodeType: string) => {
   return nodeTypeToInputParamsMap[nodeType] !== undefined;
 }
 
-export const getNodeInputWidget = (params: InputWidgetParams) => {
-  if (!params.nodeType) {
+export const getNodeInputWidget = (param: InputWidgetParams) => {
+  if (!param.nodeType) {
     return <></>;
   }
 
-  const allowedInNode = nodeTypeToInputParamsMap[params.nodeType];
-  if (allowedInNode && !allowedInNode.includes(params.inputParam.name)) {
+  const allowedInNode = nodeTypeToInputParamsMap[param.nodeType];
+  if (allowedInNode && !allowedInNode.includes(param.inputParam.name)) {
     return <></>;
   }
-  return getInputWidget(params);
+  return getInputWidget(param);
 }
 
 /**
@@ -61,15 +63,19 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
     return
   }
 
+  const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
+  const inputError = getFieldError(id, inputParam.name);
+  const paramValue = params[inputParam.name] || "";
+
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
-        <InputField label="Temperature">
+        <InputField label="Temperature" help_text={inputParam.help_text} inputError={inputError}>
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
             onChange={updateParamValue}
-            value={params[inputParam.name]}
+            value={paramValue}
             type="number"
             step=".1"
           ></input>
@@ -77,12 +83,12 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
       );
     case "SourceMaterialId":
       return (
-        <InputField label="Source Material">
+        <InputField label="Source Material" help_text={inputParam.help_text} inputError={inputError}>
           <SourceMaterialIdWidget
             parameterValues={parameterValues}
             onChange={updateParamValue}
             inputParam={inputParam}
-            value={params[inputParam.name]}
+            value={paramValue}
           />
         </InputField>
       );
@@ -91,7 +97,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
       return <></>;
       case "LlmProviderId":
       return (
-        <InputField label="LLM">
+        <InputField label="LLM" help_text={inputParam.help_text} inputError={inputError}>
           <LlmWidget
             id={id}
             parameterValues={parameterValues}
@@ -111,8 +117,9 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           <HistoryTypeWidget
             onChange={updateParamValue}
             inputParam={inputParam}
-            historyType={concatenate(params[inputParam.name])}
+            historyType={concatenate(paramValue)}
             historyName={concatenate(params["history_name"])}
+            help_text={inputParam.help_text}
           ></HistoryTypeWidget>
       );
     }
@@ -126,19 +133,21 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           humanName={humanName}
           name={inputParam.name}
           onChange={updateParamValue}
-          value={params[inputParam.name] || ""}>
+          value={paramValue}
+          help_text={inputParam.help_text}
+          inputError={inputError}>
         </ExpandableTextWidget>
       );
     }
     default: {
       const humanName = inputParam.name.replace(/_/g, " ");
       return (
-        <InputField label={humanName}>
+        <InputField label={humanName} help_text={inputParam.help_text} inputError={inputError}>
           <input
             className="input input-bordered w-full"
             name={inputParam.name}
             onChange={updateParamValue}
-            value={params[inputParam.name]}
+            value={paramValue}
             type="text"
           ></input>
         </InputField>
