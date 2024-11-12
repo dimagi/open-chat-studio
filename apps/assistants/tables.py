@@ -18,10 +18,7 @@ def get_assistant_row_attrs():
 
 class OpenAiAssistantTable(tables.Table):
     name = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
+        linkify=False,
         orderable=True,
     )
     actions = actions.ActionsColumn(
@@ -54,13 +51,9 @@ class OpenAiAssistantTable(tables.Table):
         ]
     )
 
-    @property
-    def name_linkify(self):
-        return lambda record: record.working_version is not None
-
     def render_name(self, record):
-        if self.name_linkify(record):
-            return mark_safe(f'<a href="{record.get_absolute_url()}">{record.name}</a>')
+        if record.working_version is None:
+            return mark_safe(f'<a href="{record.get_absolute_url()}" class="link">{record.name}</a>')
         else:
             return record.name
 
