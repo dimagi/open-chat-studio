@@ -49,7 +49,7 @@ def get_response_for_webchat_task(
 @shared_task
 def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> dict[str, str | int]:
     llm_service = LlmProvider.objects.get(id=data_dict["provider"]).get_llm_service()
-    llm_provider_model = LlmProviderModel.objects.get(id=data_dict["model"])
+    llm_provider_model = LlmProviderModel.objects.get(id=data_dict["providerModelId"])
     messages_history = data_dict["messages"]
 
     user = CustomUser.objects.get(id=user_id)
