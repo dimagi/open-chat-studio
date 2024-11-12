@@ -9,4 +9,5 @@ class ToolResourcesAdmin(admin.TabularInline):
 
 @admin.register(OpenAiAssistant)
 class OpenAiAssistantAdmin(admin.ModelAdmin):
+    list_display = ("name", "team", "llm_provider", "llm_provider_model", "include_file_info")
     inlines = [ToolResourcesAdmin]

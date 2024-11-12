@@ -465,7 +465,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
-    llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.SET_NULL,
@@ -542,11 +541,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
     )
-    max_token_limit_old = models.PositiveIntegerField(
-        default=8192,
-        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
-        "If 0, compression will be disabled which may result in errors or high LLM costs.",
-    )  # TODO Remove this after migration to llm_provider_model is complete
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,

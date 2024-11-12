@@ -79,7 +79,6 @@ class ExperimentAdmin(admin.ModelAdmin):
         "team",
         "owner",
         "source_material",
-        "llm",
         "llm_provider",
         "llm_provider_model",
         "version_family",

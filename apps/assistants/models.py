@@ -19,7 +19,7 @@ class OpenAiAssistantManager(AuditingManager):
     "instructions",
     "builtin_tools",
     "llm_provider",
-    "llm_model",
+    "llm_provider_model",
     "temperature",
     "top_p",
     audit_special_queryset_writes=True,
@@ -45,11 +45,6 @@ class OpenAiAssistant(BaseTeamModel):
         null=True,
         blank=True,
         help_text="The LLM model to use",
-        verbose_name="LLM Model",
-    )
-    llm_model = models.CharField(
-        max_length=255,
-        help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)

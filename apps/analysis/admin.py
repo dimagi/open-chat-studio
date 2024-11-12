@@ -5,7 +5,7 @@ from .models import Analysis, AnalysisRun, Resource, RunGroup
 
 @admin.register(Analysis)
 class AnalysisAdmin(admin.ModelAdmin):
-    list_display = ("name", "team", "source", "pipeline", "llm_provider", "llm_model")
+    list_display = ("name", "team", "source", "pipeline", "llm_provider", "llm_provider_model")
     search_fields = ("name",)
 
 

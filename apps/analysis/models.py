@@ -69,11 +69,6 @@ class Analysis(BaseTeamModel):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
-    llm_model = models.CharField(
-        max_length=255,
-        help_text="The LLM model to use.",
-        verbose_name="LLM Model",
-    )
     config = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
 
     def __str__(self):
