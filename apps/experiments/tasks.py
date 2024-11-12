@@ -9,7 +9,7 @@ from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
@@ -49,6 +49,7 @@ def get_response_for_webchat_task(
 @shared_task
 def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> dict[str, str | int]:
     llm_service = LlmProvider.objects.get(id=data_dict["provider"]).get_llm_service()
+    llm_provider_model = LlmProviderModel.objects.get(id=data_dict["model"])
     messages_history = data_dict["messages"]
 
     user = CustomUser.objects.get(id=user_id)
@@ -67,7 +68,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     source_material = SourceMaterial.objects.filter(id=data_dict["sourceMaterialID"]).first()
     source_material_material = source_material.material if source_material else ""
 
-    llm = llm_service.get_chat_model(data_dict["model"], float(data_dict["temperature"]))
+    llm = llm_service.get_chat_model(llm_provider_model.name, float(data_dict["temperature"]))
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
     input_formatter = data_dict["inputFormatter"]
