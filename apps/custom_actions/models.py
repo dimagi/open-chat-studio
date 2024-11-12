@@ -18,7 +18,7 @@ from apps.custom_actions.schema_utils import (
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
-from apps.utils.models import VersioningMixin
+from apps.utils.models import BaseModel
 
 log = logging.getLogger("ocs.custom_actions")
 
@@ -79,7 +79,7 @@ class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
     pass
 
 
-class CustomActionOperation(models.Model, VersionsMixin, VersioningMixin):
+class CustomActionOperation(BaseModel, VersionsMixin):
     working_version = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
