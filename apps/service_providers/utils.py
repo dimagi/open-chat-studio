@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+from collections import defaultdict
 from enum import Enum
 from typing import Any
 
@@ -15,6 +16,7 @@ from .models import (
     AuthProvider,
     AuthProviderType,
     LlmProvider,
+    LlmProviderModel,
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
@@ -43,7 +45,7 @@ class ServiceProviderType:
 
 
 class ServiceProvider(ServiceProviderType, Enum):
-    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type", "llm_models"]
+    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type"]
     voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
     auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
@@ -115,9 +117,21 @@ def formfield_for_dbfield(db_field: Field, provider: ServiceProvider, **kwargs):
 
 def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]:
     providers = {}
+    provider_models_by_type = defaultdict(list)
+    for provider_model in LlmProviderModel.objects.for_team(team):
+        provider_models_by_type[provider_model.type].append(
+            {
+                "value": provider_model.id,
+                "text": str(provider_model),
+            }
+        )
+
+    if not provider_models_by_type:
+        return {}
+
     for provider in team.llmprovider_set.all():
         providers[provider.id] = {
-            "models": [{"value": model, "text": model} for model in sorted(provider.llm_models)],
+            "models": provider_models_by_type[provider.type],
             "supports_assistants": provider.type_enum.supports_assistants,
         }
     return providers

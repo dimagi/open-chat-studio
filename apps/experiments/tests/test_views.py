@@ -36,7 +36,7 @@ from apps.utils.factories.experiment import (
     ParticipantFactory,
     SourceMaterialFactory,
 )
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
 
@@ -61,7 +61,7 @@ def test_create_experiment_success(client, team_with_users):
         "consent_form": consent_form.id,
         "temperature": 0.7,
         "llm_provider": LlmProviderFactory(team=team_with_users).id,
-        "llm": "gpt-3.5",
+        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
         "tools": [AgentTools.ONE_OFF_REMINDER],
@@ -82,7 +82,7 @@ def test_create_experiment_success(client, team_with_users):
         (False, True, True, True, {}),
         (False, False, True, True, {"prompt_text"}),
         (False, True, False, True, {"llm_provider"}),
-        (False, True, True, False, {"llm"}),
+        (False, True, True, False, {"llm_provider_model"}),
     ],
 )
 def test_experiment_form_with_assistants(
@@ -92,6 +92,7 @@ def test_experiment_form_with_assistants(
     request = mock.Mock()
     request.team = team_with_users
     llm_provider = LlmProviderFactory(team=team_with_users)
+    llm_provider_model = LlmProviderModelFactory(team=team_with_users, type=llm_provider.type)
     form = ExperimentForm(
         request,
         data={
@@ -100,7 +101,7 @@ def test_experiment_form_with_assistants(
             "assistant": assistant.id if with_assistant else None,
             "prompt_text": "text" if with_prompt else None,
             "llm_provider": llm_provider.id if with_llm_provider else None,
-            "llm": "gpt4" if with_llm_model else None,
+            "llm_provider_model": llm_provider_model.id if with_llm_model else None,
             "temperature": 0.7,
             "max_token_limit": 10,
             "consent_form": ConsentFormFactory(team=team_with_users).id,

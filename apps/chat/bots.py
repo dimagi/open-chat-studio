@@ -85,9 +85,7 @@ class TopicBot:
         self.default_tag = None
         self.terminal_chain = None
         self.processor_experiment = None
-        self.trace_service = None
-        if self.experiment.trace_provider:
-            self.trace_service = self.experiment.trace_provider.get_service()
+        self.trace_service = self.experiment.trace_service
 
         # The chain that generated the AI message
         self.generator_chain = None
@@ -95,7 +93,9 @@ class TopicBot:
 
     def _initialize(self):
         for child_route in self.child_experiment_routes:
-            child_runnable = create_experiment_runnable(child_route.child, self.session, self.disable_tools)
+            child_runnable = create_experiment_runnable(
+                child_route.child, self.session, self.disable_tools, trace_service=self.trace_service
+            )
             self.child_chains[child_route.keyword.lower().strip()] = child_runnable
             if child_route.is_default:
                 self.default_child_chain = child_runnable
@@ -104,13 +104,17 @@ class TopicBot:
         if self.child_chains and not self.default_child_chain:
             self.default_tag, self.default_child_chain = list(self.child_chains.items())[0]
 
-        self.chain = create_experiment_runnable(self.experiment, self.session, self.disable_tools)
+        self.chain = create_experiment_runnable(
+            self.experiment, self.session, self.disable_tools, trace_service=self.trace_service
+        )
 
         terminal_route = (
             ExperimentRoute.objects.select_related("child").filter(parent=self.experiment, type="terminal").first()
         )
         if terminal_route:
-            self.terminal_chain = create_experiment_runnable(terminal_route.child, self.session)
+            self.terminal_chain = create_experiment_runnable(
+                terminal_route.child, self.session, trace_service=self.trace_service
+            )
 
         # load up the safety bots. They should not be agents. We don't want them using tools (for now)
         self.safety_bots = [

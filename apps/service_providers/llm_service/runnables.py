@@ -51,17 +51,23 @@ class GenerationCancelled(Exception):
         self.output = output
 
 
-def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, disable_tools: bool = False):
+def create_experiment_runnable(
+    experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
+):
     """Create an experiment runnable based on the experiment configuration."""
-    state_kwargs = {"experiment": experiment, "session": session}
+    state_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
     if assistant := experiment.assistant:
         state = AssistantExperimentState(**state_kwargs)
         if assistant.tools_enabled and not disable_tools:
             return AssistantAgentRunnable(state=state)
         return AssistantExperimentRunnable(state=state)
 
-    assert experiment.llm, "Experiment must have an LLM model"
     assert experiment.llm_provider, "Experiment must have an LLM provider"
+    assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
+    assert (
+        experiment.llm_provider.type == experiment.llm_provider_model.type
+    ), "Experiment provider and provider model should be of the same type"
+
     state = ChatExperimentState(**state_kwargs)
     if experiment.tools_enabled and not disable_tools:
         return AgentExperimentRunnable(state=state)
@@ -287,7 +293,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
 
         if not current_thread_id:
-            self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
+            self.state.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
         self.state.save_message_to_history(
@@ -315,7 +321,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                 thread = self.state.raw_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
                 _sync_messages_to_existing_thread(current_thread_id, rest)
-                self.state.set_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
+                self.state.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
         return current_thread_id
 
     @transaction.atomic()

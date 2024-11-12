@@ -17,7 +17,7 @@
       {% if assistant %}enctype="multipart/form-data"{% endif %}
 >
   {% csrf_token %}
-  <div class="flex flex-col" x-data="fileUploads">
+  <div class="flex flex-col" {% if assistant %}x-data="fileUploads"{% endif %}>
     <div class="flex items-center w-full">
       {% if assistant %}
         <div class="mt-1 flex flex-row gap-2">
@@ -73,34 +73,36 @@
       <input name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full" oninput="checkInput()">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
-    <div class="flex flex-col gap-2 text-slate-500">
-      <div x-cloak x-show="code_interpreter_files.length > 0">
-        <h4 class="font-bold">Code Interpreter Files</h4>
-        <div class="ml-5">
-          <template x-for="(file, index) in code_interpreter_files" :key="index">
-            <div class="flex items-center gap-2">
-              <span x-text="index+1"></span><span x-text="file.name"></span>
-              <button type="button" class="btn btn-xs" @click="removeFile(index, 'code_interpreter_files')">
-                <i class="fa-solid fa-trash htmx-hide"></i>
-              </button>
-            </div>
-          </template>
+    {% if assistant %}
+      <div class="flex flex-col gap-2 text-slate-500">
+        <div x-cloak x-show="code_interpreter_files.length > 0">
+          <h4 class="font-bold">Code Interpreter Files</h4>
+          <div class="ml-5">
+            <template x-for="(file, index) in code_interpreter_files" :key="index">
+              <div class="flex items-center gap-2">
+                <span x-text="index+1"></span><span x-text="file.name"></span>
+                <button type="button" class="btn btn-xs" @click="removeFile(index, 'code_interpreter_files')">
+                  <i class="fa-solid fa-trash htmx-hide"></i>
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div x-cloak x-show="file_search_files.length > 0">
+          <h4 class="font-bold">File Search Files</h4>
+          <div class="ml-5">
+            <template x-for="(file, index) in file_search_files" :key="index">
+              <div class="flex items-center gap-2">
+                <span x-text="index+1"></span><span x-text="file.name"></span>
+                <button type="button" class="btn btn-xs" @click="removeFile(index, 'file_search_files')">
+                  <i class="fa-solid fa-trash htmx-hide"></i>
+                </button>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
-      <div x-cloak x-show="file_search_files.length > 0">
-        <h4 class="font-bold">File Search Files</h4>
-        <div class="ml-5">
-          <template x-for="(file, index) in file_search_files" :key="index">
-            <div class="flex items-center gap-2">
-              <span x-text="index+1"></span><span x-text="file.name"></span>
-              <button type="button" class="btn btn-xs" @click="removeFile(index, 'file_search_files')">
-                <i class="fa-solid fa-trash htmx-hide"></i>
-              </button>
-            </div>
-          </template>
-        </div>
-      </div>
-    </div>
+    {% endif %}
   </div>
   <div class="w-full mt-2 text-center">
     <label for="end-experiment-modal" class="btn btn-warning btn-xs" >End Experiment</label>

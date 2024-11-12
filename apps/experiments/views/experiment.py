@@ -203,10 +203,9 @@ class ExperimentForm(forms.ModelForm):
             "name",
             "description",
             "llm_provider",
-            "llm",
+            "llm_provider_model",
             "assistant",
             "pipeline",
-            "max_token_limit",
             "temperature",
             "prompt_text",
             "input_formatter",
@@ -280,7 +279,7 @@ class ExperimentForm(forms.ModelForm):
         }
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-        self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
@@ -303,8 +302,14 @@ class ExperimentForm(forms.ModelForm):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
-            if not cleaned_data.get("llm"):
-                errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
+            if not cleaned_data.get("llm_provider_model"):
+                errors["llm_provider_model"] = "LLM Model is required unless you select an OpenAI Assistant"
+            if cleaned_data.get("llm_provider") and cleaned_data.get("llm_provider_model"):
+                if not cleaned_data["llm_provider"].type == cleaned_data["llm_provider_model"].type:
+                    errors[
+                        "llm_provider_model"
+                    ] = "You must select a provider model that is the same type as the provider"
+
         elif bot_type == "assistant":
             cleaned_data["pipeline"] = None
             if not cleaned_data.get("assistant"):
