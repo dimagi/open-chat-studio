@@ -16,6 +16,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
+from ..teams.decorators import login_and_team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
@@ -142,13 +143,17 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         return response
 
 
+@login_and_team_required
 def check_sync_status(request, team_slug, pk):
     assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-    try:
-        is_synced = is_synced_with_openai(assistant)
-    except OpenAiSyncError:
-        is_synced = False
-    files_in_sync = are_files_in_sync_with_openai(assistant)
+    is_synced = True
+    files_in_sync = True
+    if assistant.assistant_id:
+        try:
+            is_synced = is_synced_with_openai(assistant)
+        except OpenAiSyncError:
+            is_synced = False
+        files_in_sync = are_files_in_sync_with_openai(assistant)
     context = {"is_synced": is_synced, "object": assistant, "are_files_synced": files_in_sync}
     return render(request, "assistants/sync_status.html", context)
 
