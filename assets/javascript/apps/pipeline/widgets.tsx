@@ -5,7 +5,7 @@ import React, {
   useId,
 } from "react";
 import { InputParam } from "./types/nodeInputTypes";
-import { NodeParameterValues } from "./types/nodeParameterValues";
+import { NodeParameterValues, LlmProviderModel } from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import { NodeProps } from "reactflow";
 import {concatenate} from "./utils";
@@ -187,18 +187,18 @@ export function LlmWidget({
                             parameterValues,
                             inputParam,
                             providerId,
-                            model,
+                            providerModelId,
                           }: {
   id: NodeProps["id"];
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
   providerId: string;
-  model: string;
+  providerModelId: string;
 }) {
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const { value } = event.target;
-    const [providerId, model] = value.split('|:|');
+    const [providerId, providerModelId] = value.split('|:|');
     setNode(id, (old) => ({
       ...old,
       data: {
@@ -206,36 +206,47 @@ export function LlmWidget({
         params: {
           ...old.data.params,
           llm_provider_id: providerId,
-          llm_model: model,
+          llm_provider_model_id: providerModelId,
         },
       },
     }));
   };
 
-  const makeValue = (providerId: string, model: string) => {
-    return providerId + '|:|' + model;
-  }
+  const makeValue = (providerId: string, providerModelId: string) => {
+      return providerId + '|:|' + providerModelId;
+  };
+
+  type ProviderModelsByType = { [type: string]: LlmProviderModel[] };
+  const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+    if (!acc[provModel.type]) {
+          acc[provModel.type] = [];
+      }
+      acc[provModel.type].push(provModel);
+      return acc;
+  }, {} as ProviderModelsByType);
+
   return (
     <select
       className="select select-bordered w-full"
       name={inputParam.name}
       onChange={updateParamValue}
-      value={makeValue(providerId, model)}
+      value={makeValue(providerId, providerModelId)}
     >
       <option value="" disabled>
         Select a model
       </option>
       {parameterValues.LlmProviderId.map((provider) => (
-        parameterValues.LlmModel[provider.id] &&
-        parameterValues.LlmModel[provider.id].map((model) => (
-          <option key={provider.id + model} value={makeValue(provider.id, model)}>
-            {provider.name}: {model}
+        providerModelsByType[provider.type] &&
+        providerModelsByType[provider.type].map((providerModel) => (
+          <option key={provider.id + providerModel.id} value={makeValue(provider.id, providerModel.id)}>
+            {providerModel.name}
           </option>
         ))
       ))}
     </select>
   );
 }
+
 
 export function SourceMaterialIdWidget({
   parameterValues,
@@ -304,27 +315,6 @@ export function HistoryTypeWidget({
     </div>
 )
   ;
-}
-
-export function MaxTokenLimitWidget({
-                                      inputParam,
-                                      value,
-                                      onChange,
-                                    }: {
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <input
-      className="input input-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-      type="number"
-      step="1"
-    ></input>
-  );
 }
 
 export function InputField({label, children}: React.PropsWithChildren<{ label: string | ReactNode }>) {

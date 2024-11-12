@@ -41,6 +41,14 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         blank=True,
         verbose_name="LLM Provider",
     )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
     llm_model = models.CharField(
         max_length=255,
         help_text="The LLM model to use.",
@@ -85,7 +93,10 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
     @property
     def tools_enabled(self):
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or self.has_custom_actions()
+
+    def has_custom_actions(self):
+        return self.custom_action_operations.exists()
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):

@@ -36,6 +36,7 @@ IGNORE_APPS = {
     "contenttypes",
     "db",  # heath_check.db
     "django_celery_beat",
+    "django_cleanup",
     "django_otp",
     "django_tables2",
     "drf_spectacular",

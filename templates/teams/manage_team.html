@@ -30,12 +30,23 @@
   {% if not create %}
     {% translate "Large Language Model services" as llm_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
+    {% translate "Custom Large Language Models" as llm_provider_model_subtitle %}
+    {% include 'service_providers/llm_provider_model_form.html' with provider_type="llm_provider_model" title="Custom LLM Models" subtitle=llm_provider_model_subtitle perm="add_llmprovidermodel" %}
     {% translate "Speech to text and visa versa" as speech_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
     {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
     {% translate "Authentication credentials for integrations" as auth_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
+
+    {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
+    {% url "custom_actions:table" request.team.slug as actions_table_url %}
+    {% url "custom_actions:new" request.team.slug as actions_new_url %}
+    {% translate "Allow Experiments to call external services" as actions_subtitle %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle %}
+    {% endwith %}
+
     {% translate "Record trace details of bot activity" as trace_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="tracing" title="Tracing Providers" subtitle=trace_subtitle perm="add_traceprovider" %}
     <section class="app-card">

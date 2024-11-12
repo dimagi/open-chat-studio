@@ -10,4 +10,14 @@
 <div class="w-full h-48 relative">
   <canvas id="participant-chart" class="mt-2"></canvas>
 </div>
+<div class="flex space-x-3">
+  <a class="btn" href="{% url "ocs_admin:export_usage" %}{% querystring %}">
+    <i class="fa-solid fa-download"></i>
+    Usage Data
+  </a>
+  <a class="btn" href="{% url "ocs_admin:export_whatsapp" %}">
+    <i class="fa-solid fa-download"></i>
+    WhatsApp Numbers
+  </a>
+</div>
 {{ chart_data|json_script:'chart_data' }}

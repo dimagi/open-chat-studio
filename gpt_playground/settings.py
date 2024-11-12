@@ -83,6 +83,7 @@ PROJECT_APPS = [
     "apps.users",
     "apps.api",
     "apps.chat",
+    "apps.custom_actions",
     "apps.experiments",
     "apps.web",
     "apps.teams",
@@ -99,7 +100,11 @@ PROJECT_APPS = [
     "apps.participants",
 ]
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
+SPECIAL_APPS = [
+    "django_cleanup"  # according to the docs, this should be the last app installed
+]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + SPECIAL_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

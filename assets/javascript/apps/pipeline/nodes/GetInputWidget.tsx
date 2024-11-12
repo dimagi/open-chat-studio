@@ -1,6 +1,5 @@
 import {
   HistoryTypeWidget,
-  MaxTokenLimitWidget,
   SourceMaterialIdWidget,
   ExpandableTextWidget,
   InputField, LlmWidget, KeywordsWidget,
@@ -53,6 +52,15 @@ export const getNodeInputWidget = (params: InputWidgetParams) => {
  */
 export const getInputWidget = ({id, inputParam, params, updateParamValue}: InputWidgetParams) => {
   const parameterValues = getCachedData().parameterValues;
+  if (inputParam.name == "llm_model" || inputParam.name == "max_token_limit"){
+    /*
+       This is here as we migrated llm_model to llm_provider_model_id, in October 2024.
+       During the migration, we kept the data in llm_model as a safeguard. This check can safely be deleted once a second migration to delete all instances of llm_model has been run.
+       TODO: Remove this check once there are no instances of llm_model or max_token_limit in the node definitions.
+     */
+    return
+  }
+
   switch (inputParam.type) {
     case "LlmTemperature":
       return (
@@ -78,10 +86,10 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           />
         </InputField>
       );
-    case "LlmProviderId":
-    //   this is handled in the LlmModel widget
+      case "LlmProviderModelId":
+          //   this is handled in the LlmModel widget
       return <></>;
-    case "LlmModel":
+      case "LlmProviderId":
       return (
         <InputField label="LLM">
           <LlmWidget
@@ -89,7 +97,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             parameterValues={parameterValues}
             inputParam={inputParam}
             providerId={concatenate(params.llm_provider_id)}
-            model={concatenate(params.llm_model)}
+            providerModelId={concatenate(params.llm_provider_model_id)}
             ></LlmWidget>
         </InputField>
       );
@@ -110,17 +118,6 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
     }
     case "HistoryName": {
       return <></>;
-    }
-    case "MaxTokenLimit": {
-      return (
-        <InputField label="Maximum Token Limit">
-          <MaxTokenLimitWidget
-            onChange={updateParamValue}
-            inputParam={inputParam}
-            value={params[inputParam.name]}
-          ></MaxTokenLimitWidget>
-        </InputField>
-      );
     }
     case "ExpandableText": {
       const humanName = inputParam.name.replace(/_/g, " ");

@@ -34,7 +34,11 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    LlmProviderModelFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -620,8 +624,8 @@ class TestExperimentRoute:
             team=parent.team,
             synthetic_voice=SyntheticVoiceFactory(),
             voice_provider=VoiceProviderFactory(),
-            llm="yoda",
             llm_provider=LlmProviderFactory(),
+            llm_provider_model=LlmProviderModelFactory(name="yoda"),
             prompt_text="this is a change",
         )
         route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)

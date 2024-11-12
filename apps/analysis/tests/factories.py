@@ -2,7 +2,7 @@ import factory
 
 from apps.analysis.models import Analysis, RunGroup
 from apps.analysis.pipelines import TEXT_DATA_PIPE
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -13,6 +13,7 @@ class AnalysisFactory(factory.django.DjangoModelFactory):
     name = factory.Faker("name")
     team = factory.SubFactory(TeamFactory)
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
+    llm_provider_model = factory.SubFactory(LlmProviderModelFactory, team=factory.SelfAttribute("..team"))
     source = TEXT_DATA_PIPE
     pipeline = "test"
 

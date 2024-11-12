@@ -36,6 +36,11 @@ from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.custom_actions.utils import (
+    clean_custom_action_operations,
+    initialize_form_for_custom_actions,
+    set_custom_actions,
+)
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -190,6 +195,7 @@ class ExperimentForm(forms.ModelForm):
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
+    custom_action_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = Experiment
@@ -197,10 +203,9 @@ class ExperimentForm(forms.ModelForm):
             "name",
             "description",
             "llm_provider",
-            "llm",
+            "llm_provider_model",
             "assistant",
             "pipeline",
-            "max_token_limit",
             "temperature",
             "prompt_text",
             "input_formatter",
@@ -263,6 +268,7 @@ class ExperimentForm(forms.ModelForm):
         self.fields["consent_form"].queryset = team.consentform_set.exclude(is_version=True)
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
+        initialize_form_for_custom_actions(team, self)
 
         # Alpine.js bindings
         self.fields["voice_provider"].widget.attrs = {
@@ -273,13 +279,16 @@ class ExperimentForm(forms.ModelForm):
         }
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
-        self.fields["llm"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
         for identifier in self.cleaned_data["participant_allowlist"]:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
+
+    def clean_custom_action_operations(self):
+        return clean_custom_action_operations(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -293,8 +302,14 @@ class ExperimentForm(forms.ModelForm):
                 errors["prompt_text"] = "Prompt text is required unless you select an OpenAI Assistant"
             if not cleaned_data.get("llm_provider"):
                 errors["llm_provider"] = "LLM Provider is required unless you select an OpenAI Assistant"
-            if not cleaned_data.get("llm"):
-                errors["llm"] = "LLM is required unless you select an OpenAI Assistant"
+            if not cleaned_data.get("llm_provider_model"):
+                errors["llm_provider_model"] = "LLM Model is required unless you select an OpenAI Assistant"
+            if cleaned_data.get("llm_provider") and cleaned_data.get("llm_provider_model"):
+                if not cleaned_data["llm_provider"].type == cleaned_data["llm_provider_model"].type:
+                    errors[
+                        "llm_provider_model"
+                    ] = "You must select a provider model that is the same type as the provider"
+
         elif bot_type == "assistant":
             cleaned_data["pipeline"] = None
             if not cleaned_data.get("assistant"):
@@ -320,6 +335,7 @@ class ExperimentForm(forms.ModelForm):
         experiment.owner = self.request.user
         if commit:
             experiment.save()
+            set_custom_actions(experiment, self.cleaned_data.get("custom_action_operations"))
             self.save_m2m()
         return experiment
 

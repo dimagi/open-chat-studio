@@ -50,9 +50,9 @@
                         {% endfor %}
                     </select>
                     <select id="model-selector" class="w-full select select-sm select-bordered"
-                            x-model="$store.promptBuilder.currentState.model">
+                            x-model="$store.promptBuilder.currentState.providerModelId">
                         <template x-for="(option, index) in $store.promptBuilder.llm_models" :key="index">
-                            <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.model"></option>
+                            <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.providerModelId"></option>
                         </template>
                     </select>
                 </div>
@@ -118,7 +118,7 @@
                 'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter,
                 'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
                 'llm_provider': Alpine.store('promptBuilder').currentState.provider,
-                'llm': Alpine.store('promptBuilder').currentState.model,
+                'llm_provider_model': Alpine.store('promptBuilder').currentState.providerModelId,
                 'temperature': Alpine.store('promptBuilder').currentState.temperature,
             })
         })
@@ -193,7 +193,7 @@
             sourceMaterialID: Alpine.store('promptBuilder').currentState.sourceMaterialID,
             sourceMaterialName: Alpine.store('promptBuilder').currentState.sourceMaterialName,
             provider: Alpine.store('promptBuilder').currentState.provider,
-            model: Alpine.store('promptBuilder').currentState.model,
+            providerModelId: Alpine.store('promptBuilder').currentState.providerModelId,
             temperature: Alpine.store('promptBuilder').currentState.temperature,
             messages: messagesArray
         };
