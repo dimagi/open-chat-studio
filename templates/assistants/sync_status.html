@@ -11,25 +11,27 @@
           <div>
             <p><strong>Warning:</strong> The assistant has modifications on OpenAI which are not reflected here.</p>
             <p><strong>Fields that differ:</strong> {{ diffs|join:", " }}</p>
-            <div class="mt-2 tooltip" data-tip="Overwrite this configuration with the data from OpenAI">
-              <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
-                      hx-target="#sync-wrapper" class="btn btn-sm btn-primary">Update from OpenAI
-              </button>
-            </div>
           </div>
         {% endif %}
         {% if file_diffs %}
           <div>
             <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open
               Chat
-              Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, please upload the
-              necessary files on this page.</p>
+              Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, update the assistant
+              from OpenAI and then re-upload the files marked with <i class="fa-solid fa-triangle-exclamation text-warning"></i>.</p>
             <p><strong>Missing files:</strong></p>
             {% for tool_type, files in file_diffs.items %}
               <p class="pl-2"><strong>{{ tool_type }}:</strong> {{ files|join:", " }}</p>
             {% endfor %}
           </div>
         {% endif %}
+        <div>
+          <div class="mt-2 tooltip" data-tip="Overwrite this configuration with the data from OpenAI">
+            <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
+                    hx-target="#sync-wrapper" class="btn btn-sm btn-primary">Update from OpenAI
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   {% else %}
