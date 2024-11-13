@@ -241,6 +241,15 @@ class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     project = forms.CharField(label=_("Project Name"))
 
 
+class LlmProviderModelForm2(forms.ModelForm):
+    class Meta:
+        model = LlmProviderModel
+        fields = ("type", "name", "max_token_limit")
+        widgets = {
+            "type": forms.HiddenInput(),
+        }
+
+
 class LlmProviderModelForm(forms.ModelForm):
     class Meta:
         model = LlmProviderModel

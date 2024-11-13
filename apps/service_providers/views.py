@@ -6,20 +6,21 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, resolve_url
+from django.shortcuts import get_object_or_404, render, resolve_url
 from django.urls import reverse
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import TemplateView
 from django.views.generic.edit import ModelFormMixin, SingleObjectMixin
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.forms import LlmProviderModelForm
+from apps.service_providers.forms import LlmProviderModelForm, LlmProviderModelForm2
 from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
 from apps.service_providers.tables import LlmProviderModelTable
 
 from ..generics.views import BaseTypeSelectFormView
+from ..teams.decorators import login_and_team_required
 from .utils import ServiceProvider, get_service_provider_config_form
 
 
@@ -207,8 +208,35 @@ class LlmProviderView(CreateServiceProvider):
 
     @property
     def extra_context(self):
-        models_by_type = defaultdict(list)
-        for model in LlmProviderModel.objects.filter(team=None):
-            models_by_type[model.type].append(model)
-        models_by_type = {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
-        return {"active_tab": "manage-team", "title": self.provider_type.label, "models_by_type": models_by_type}
+        default_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
+        custom_models_type_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
+        return {
+            "active_tab": "manage-team",
+            "title": self.provider_type.label,
+            "default_models_by_type": default_models_by_type,
+            "custom_models_by_type": custom_models_type_type,
+            "new_model_form": LlmProviderModelForm2(),
+        }
+
+
+def _get_models_by_type(queryset):
+    models_by_type = defaultdict(list)
+    for model in queryset:
+        models_by_type[model.type].append(model)
+    return {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.add_llmprovidermodel")
+def create_llm_provider_model(request, team_slug: str):
+    form = LlmProviderModelForm2(request.POST)
+    if form.is_valid():
+        model = form.save(commit=False)
+        model.team = request.team
+        model.save()
+    return render(
+        request,
+        "service_providers/components/custom_llm_models.html",
+        {"models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team))},
+    )
