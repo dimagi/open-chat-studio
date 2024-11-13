@@ -61,7 +61,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
                         "llm_provider_id": provider.id,
                         "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "node",
-                        "prompt": "Node 1: {input}",
+                        "prompt": "Node 1:",
                     },
                 },
                 "id": "llm-1",
@@ -74,7 +74,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
                     "params": {
                         "llm_provider_id": provider.id,
                         "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 2: {input}",
+                        "prompt": "Node 2:",
                         # No history_type
                     },
                 },

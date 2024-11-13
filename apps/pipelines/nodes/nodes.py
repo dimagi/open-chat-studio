@@ -157,9 +157,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
     source_material_id: SourceMaterialId | None = None
     prompt: ExpandableText = Field(
-        default="You are a helpful assistant. Answer the user's query as best you can: {input}",
-        pattern=r"\{input\}",
-        description="Use {input} to refer to designate input message",
+        default="You are a helpful assistant. Answer the user's query as best you can",
     )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
@@ -256,9 +254,7 @@ class RouterNode(Passthrough, HistoryMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
     prompt: ExpandableText = Field(
-        default="You are an extremely helpful router {input}",
-        pattern=r"\{input\}",
-        description="Use {input} to refer to designate input message",
+        default="You are an extremely helpful router",
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
