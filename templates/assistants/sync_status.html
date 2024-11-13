@@ -14,7 +14,7 @@
                 <i class="fas fa-times mr-1"></i>Out of Sync
             </div>
             <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
-                    hx-target="#sync-container" class="btn btn-sm btn-primary">Sync Now</button>
+                    hx-target="#sync-wrapper" class="btn btn-sm btn-primary">Sync Now</button>
         {% endif %}
     </div>
 </div>
