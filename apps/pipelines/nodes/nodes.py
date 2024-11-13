@@ -41,6 +41,7 @@ class RenderTemplate(PipelineNode):
     __node_description__ = "Renders a template"
     template_string: ExpandableText = Field(
         pattern=r"\{input\}",
+        description="Use {input} to refer to designate input message",
     )
 
     def _process(self, input, **kwargs) -> str:
@@ -158,6 +159,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     prompt: ExpandableText = Field(
         default="You are a helpful assistant. Answer the user's query as best you can: {input}",
         pattern=r"\{input\}",
+        description="Use {input} to refer to designate input message",
     )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
@@ -208,7 +210,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str
+    recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
 
     @field_validator("recipient_list")
@@ -254,6 +256,7 @@ class RouterNode(Passthrough, HistoryMixin):
     prompt: ExpandableText = Field(
         default="You are an extremely helpful router {input}",
         pattern=r"\{input\}",
+        description="Use {input} to refer to designate input message",
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
@@ -430,6 +433,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
+        description="A key-value pair where the key is the name of the field and the value the description",
     )
 
 
@@ -438,6 +442,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
     __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
+        description="A key-value pair where the key is the name of the field and the value the description",
     )
     key_name: str | None = None
 
