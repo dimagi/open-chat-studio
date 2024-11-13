@@ -261,11 +261,14 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
     resource = ToolResources.objects.create(tool_type=tool_type, assistant=local_assistant)
     resource.files.set([files[0]])
 
-    assert are_files_in_sync_with_openai(local_assistant) is False
+    assert are_files_in_sync_with_openai(local_assistant) == (
+        {"code_interpreter": [openai_files[1].id]},
+        {},
+    )
 
     # Update local files to match remote files
     resource.files.set(files)
-    assert are_files_in_sync_with_openai(local_assistant) is True
+    assert are_files_in_sync_with_openai(local_assistant) == ({}, {})
 
 
 @pytest.mark.django_db()
@@ -294,8 +297,8 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     )
     # Test out of sync
     resource.files.set([files[0]])
-    assert are_files_in_sync_with_openai(local_assistant) is False
+    assert are_files_in_sync_with_openai(local_assistant) == ({"file_search": [openai_files[1].id]}, {})
 
     # Test in sync
     resource.files.set(files)
-    assert are_files_in_sync_with_openai(local_assistant) is True
+    assert are_files_in_sync_with_openai(local_assistant) == ({}, {})
