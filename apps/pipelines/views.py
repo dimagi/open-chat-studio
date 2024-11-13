@@ -3,7 +3,7 @@ import inspect
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -73,7 +73,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "pipeline_id": kwargs["pk"],
             "input_types": _pipeline_node_input_types(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
-            "default_values": _pipeline_node_default_values(llm_providers),
+            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
         }
 
 
@@ -102,15 +102,18 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     }
 
 
-def _pipeline_node_default_values(llm_providers):
+def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
     """Returns the default values for each input type"""
-    try:
-        provider_id = llm_providers[0]["id"]
-    except (IndexError, KeyError):
-        provider_id = None
+    llm_provider_model_id = None
+    provider_id = None
+    if len(llm_providers) > 0:
+        provider = llm_providers[0]
+        provider_id = provider["id"]
+        llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
 
     return {
         "LlmProviderId": provider_id,
+        "LlmProviderModelId": llm_provider_model_id.id,
         "LlmTemperature": 0.7,
     }
 
