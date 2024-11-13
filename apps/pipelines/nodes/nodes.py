@@ -1,8 +1,9 @@
 import json
-import re
 from typing import Literal
 
 import tiktoken
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
@@ -212,10 +213,10 @@ class SendEmail(PipelineNode):
 
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
-        email_pattern = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
-        emails = [email.strip() for email in value.split(",")]
-        for email in emails:
-            if not email_pattern.match(email):
+        for email in [email.strip() for email in value.split(",")]:
+            try:
+                validate_email(email)
+            except ValidationError:
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
