@@ -9,7 +9,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic_core import PydanticCustomError
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
@@ -404,7 +405,21 @@ class ExtractStructuredDataNodeMixin:
         return schema
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
+class StructuredDataSchemaValidatorMixin:
+    @field_validator("data_schema")
+    def validate_data_schema(cls, value):
+        try:
+            parsed_value = json.loads(value)
+        except json.JSONDecodeError:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        return value
+
+
+class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
@@ -412,7 +427,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
     )
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
+class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: ExpandableText = Field(
