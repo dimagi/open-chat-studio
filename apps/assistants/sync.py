@@ -184,27 +184,29 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
     # ensure same tools are configured in OCS as in OpenAI
     local_tool_types = {resource.tool_type for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
-        return False
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "code_interpreter")
+        return bool(openai_file_ids)
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
-        return False
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "file_search")
+        return bool(openai_file_ids)
 
     # ensure files match
     for resource in tool_resources:
-        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource)
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource.tool_type)
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if set(ocs_file_ids) != set(openai_file_ids):
             return False
     return True
 
 
-def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResources) -> list[str]:
+def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> list[str]:
     """
     Retrieve file IDs from OpenAI based on the specified tool resource type.
 
     Args:
         client: The OpenAI client instance used to interact with the OpenAI API.
         assistant_data: The assistant data containing tool resources.
-        resource (ToolResources): The tool resource object specifying the type of tool and additional parameters.
+        tool_type: The type of tool resource to retrieve file IDs for.
 
     Returns:
         list[str]: A list of file IDs retrieved from OpenAI.
@@ -213,18 +215,16 @@ def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResourc
     - "code_interpreter": Returns file IDs directly from the code interpreter tool resource if available.
     - "file_search": Retrieves file IDs from the OpenAI vector store using the provided vector store ID.
     """
-    openai_file_ids = []
-    if resource.tool_type == "code_interpreter":
+    if tool_type == "code_interpreter":
         code_interpreter = getattr(assistant_data.tool_resources, "code_interpreter", None)
         if code_interpreter is not None and code_interpreter.file_ids:
             return code_interpreter.file_ids
-    elif resource.tool_type == "file_search":
-        openai_vector_store_id = resource.extra.get("vector_store_id")
-        if openai_vector_store_id:
-            openai_file_ids.extend(
-                [file.id for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)]
-            )
-    return openai_file_ids
+
+    if tool_type == "file_search":
+        vector_store_ids = assistant_data.tool_resources.file_search.vector_store_ids
+        if not vector_store_ids:
+            return []
+        return [file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_ids[0])]
 
 
 @wrap_openai_errors
