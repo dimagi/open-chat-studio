@@ -10,9 +10,10 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -38,10 +39,9 @@ class VersionsObjectManagerMixin:
         return super().get_queryset()
 
     def get_queryset(self):
-        return (
+        query = (
             super()
             .get_queryset()
-            .filter(is_archived=False)
             .annotate(
                 is_version=Case(
                     When(working_version_id__isnull=False, then=True),
@@ -50,6 +50,13 @@ class VersionsObjectManagerMixin:
                 )
             )
         )
+        try:
+            self.model._meta.get_field("is_archived")
+        except FieldDoesNotExist:
+            pass
+        else:
+            query = query.filter(is_archived=False)
+        return query
 
 
 class PromptObjectManager(AuditingManager):
@@ -727,6 +734,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_version)
         self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
@@ -787,6 +795,19 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
 
+    def _copy_custom_action_operations_to_new_version(self, new_version):
+        for operation in self.get_custom_action_operations():
+            operation.create_new_version(new_experiment=new_version)
+
+    def get_custom_action_operations(self) -> models.QuerySet:
+        if self.is_working_version:
+            # only include operations that are still enabled by the action
+            return self.custom_action_operations.select_related("custom_action").filter(
+                custom_action__allowed_operations__contains=[F("operation_id")]
+            )
+        else:
+            return self.custom_action_operations.select_related("custom_action")
+
     @property
     def is_public(self) -> bool:
         """
@@ -834,6 +855,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
             else:
                 string = "Unknown route type"
             return string
+
+        def format_custom_action_operation(op) -> str:
+            action = op.custom_action
+            op_details = action.get_operations_by_id().get(op.operation_id)
+            return f"{action.name}: {op_details}"
 
         return Version(
             instance=self,
@@ -909,6 +935,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     name="tools",
                     raw_value=set(self.tools),
                     to_display=format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="custom_actions",
+                    queryset=self.get_custom_action_operations(),
+                    to_display=format_custom_action_operation,
                 ),
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),

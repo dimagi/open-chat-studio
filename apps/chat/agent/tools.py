@@ -256,23 +256,18 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
 
 
 def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
-    operations = action_holder.custom_action_operations.select_related(
-        "custom_action", "custom_action__auth_provider"
-    ).all()
+    operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 
 
 def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
     custom_action = custom_action_operation.custom_action
-    spec = OpenAPISpec.from_spec_dict(custom_action.api_schema)
+    spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
         return
 
     auth_service = custom_action.get_auth_service()
-    ops_by_id = custom_action.get_operations_by_id()
-    operation = ops_by_id.get(custom_action_operation.operation_id)
-    if not operation:
-        return
-
-    function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
+    path = list(spec.paths)[0]
+    method = spec.get_methods_for_path(path)[0]
+    function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)
