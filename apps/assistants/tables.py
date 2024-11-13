@@ -8,7 +8,7 @@ from apps.generics import actions
 
 def get_assistant_row_attrs():
     def _get_redirect_url(record):
-        return record.get_absolute_url() if record.working_version is None else ""
+        return record.get_absolute_url() if record.working_version_id is None else ""
 
     return {
         **settings.DJANGO_TABLES2_ROW_ATTRS,
@@ -26,14 +26,14 @@ class OpenAiAssistantTable(tables.Table):
             actions.edit_action(
                 "assistants:edit",
                 required_permissions=["assistants.change_openaiassistant"],
-                display_condition=lambda request, record: record.working_version is None,
+                display_condition=lambda request, record: record.working_version_id is None,
             ),
             actions.AjaxAction(
                 "assistants:sync",
                 title="Update from OpenAI",
                 icon_class="fa-solid fa-rotate",
                 required_permissions=["assistants.change_openaiassistant"],
-                display_condition=lambda request, record: record.working_version is None,
+                display_condition=lambda request, record: record.working_version_id is None,
             ),
             actions.delete_action(
                 "assistants:delete_local",
@@ -52,7 +52,7 @@ class OpenAiAssistantTable(tables.Table):
     )
 
     def render_name(self, record):
-        if record.working_version is None:
+        if record.working_version_id is None:
             return mark_safe(f'<a href="{record.get_absolute_url()}" class="link">{record.name}</a>')
         else:
             return record.name

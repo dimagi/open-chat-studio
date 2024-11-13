@@ -176,7 +176,7 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        if assistant.is_a_version and not assistant.is_archived:
+        if assistant.working_version_id is None and not assistant.is_archived:
             messages.warning(request, "Cannot delete an versioned assistant without first archiving.")
             return HttpResponse(status=400)
         try:
