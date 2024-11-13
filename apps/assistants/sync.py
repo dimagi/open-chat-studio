@@ -267,7 +267,6 @@ def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
 
 def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: OpenAiAssistant):
     tools = {tool.type for tool in openai_assistant.tools}
-    print(tools)
     if "code_interpreter" in tools:
         ocs_code_interpreter, _ = ToolResources.objects.get_or_create(assistant=assistant, tool_type="code_interpreter")
         try:
@@ -440,7 +439,6 @@ def create_files_remote(client, files):
 def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
-    print(bytesio)
     openai_file = client.files.create(
         file=(file.name, bytesio),
         purpose="assistants",
