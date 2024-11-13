@@ -21,9 +21,9 @@ from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFor
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
-    are_files_in_sync_with_openai,
     delete_file_from_openai,
     delete_openai_assistant,
+    get_out_of_sync_files,
     import_openai_assistant,
     is_synced_with_openai,
     push_assistant_to_openai,
@@ -157,12 +157,12 @@ def check_sync_status(request, team_slug, pk):
     except OpenAiSyncError as e:
         error = str(e)
         diffs = []
-    missing_files, extra_files = are_files_in_sync_with_openai(assistant)
+    files_missing_local, files_missing_remote = get_out_of_sync_files(assistant)
     context = {
         "diffs": diffs,
         "object": assistant,
-        "missing_files": missing_files,
-        "extra_files": extra_files,
+        "files_missing_local": files_missing_local,
+        "files_missing_remote": files_missing_remote,
         "errors": error,
     }
     return render(request, "assistants/sync_status.html", context)

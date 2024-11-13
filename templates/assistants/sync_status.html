@@ -4,7 +4,7 @@
       <p><strong>Warning:</strong> This assistant has not yet been created on OpenAI.</p>
     </div>
   {% endif %}
-  {% if missing_files or extra_files or diffs %}
+  {% if files_missing_local or files_missing_remote or diffs %}
     <div id="sync-notification" role="alert" class="alert">
       <div class="flex flex-col gap-2">
         {% if diffs %}
@@ -13,25 +13,25 @@
             <p><strong>Fields that differ:</strong> {{ diffs|join:", " }}</p>
           </div>
         {% endif %}
-        {% if missing_files %}
+        {% if files_missing_local %}
           <div>
             <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open
               Chat
               Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, update the assistant
               from OpenAI and then re-upload the files marked with <i class="fa-solid fa-triangle-exclamation text-warning"></i>.</p>
             <p><strong>Missing files:</strong></p>
-            {% for tool_type, files in missing_files.items %}
+            {% for tool_type, files in files_missing_local.items %}
               <p class="pl-2"><strong>{{ tool_type }}:</strong> {{ files|join:", " }}</p>
             {% endfor %}
           </div>
         {% endif %}
-        {% if extra_files %}
+        {% if files_missing_remote %}
           <div>
             <p><strong>Warning:</strong> Some files have been removed from OpenAI but are still present here.
               If you save this assistant the files will be re-uploaded to OpenAI. If you want to remove the files
               from this assistant click the 'update' button below.</p>
             <p><strong>Files:</strong></p>
-            {% for tool_type, files in extra_files.items %}
+            {% for tool_type, files in files_missing_remote.items %}
               <p class="pl-2"><strong>{{ tool_type }}:</strong> {{ files|join:", " }}</p>
             {% endfor %}
           </div>

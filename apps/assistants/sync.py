@@ -175,33 +175,32 @@ def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_t
 
 
 @wrap_openai_errors
-def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+def get_out_of_sync_files(assistant: OpenAiAssistant) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
     tool_resources = assistant.tool_resources.all()
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
 
-    # ensure same tools are configured in OCS as in OpenAI
-    missing_files = {}
-    extra_files = {}
+    files_missing_local = {}
+    files_missing_remote = {}
     local_tool_types = {resource.tool_type: resource for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "code_interpreter")
         if openai_file_ids:
-            missing_files["code_interpreter"] = openai_file_ids
+            files_missing_local["code_interpreter"] = openai_file_ids
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "file_search")
-        missing_files["file_search"] = openai_file_ids
+        files_missing_local["file_search"] = openai_file_ids
 
     # ensure files match
     for resource in tool_resources:
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource.tool_type)
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if missing := set(openai_file_ids) - set(ocs_file_ids):
-            missing_files[resource.tool_type] = list(missing)
+            files_missing_local[resource.tool_type] = list(missing)
         if extra := set(ocs_file_ids) - set(openai_file_ids):
-            extra_files[resource.tool_type] = list(extra)
-    return missing_files, extra_files
+            files_missing_remote[resource.tool_type] = list(extra)
+    return files_missing_local, files_missing_remote
 
 
 def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> list[str]:
