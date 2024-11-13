@@ -6,7 +6,7 @@ from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.custom_actions.fields import JsonOrYamlField
 from apps.custom_actions.models import CustomAction
-from apps.custom_actions.utils import get_operations_from_spec
+from apps.custom_actions.schema_utils import get_operations_from_spec
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -78,7 +78,7 @@ class CustomActionForm(forms.ModelForm):
             except ValueError as e:
                 raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
 
-        return operations
+        return {**self.cleaned_data, "allowed_operations": operations}
 
 
 def validate_api_schema(api_schema):

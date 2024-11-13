@@ -2,6 +2,8 @@ import json
 from typing import Literal
 
 import tiktoken
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
@@ -9,7 +11,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic_core import PydanticCustomError
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
@@ -37,7 +40,9 @@ from apps.utils.time import pretty_date
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
-    template_string: ExpandableText
+    template_string: ExpandableText = Field(
+        description="Use {your_variable_name} to refer to designate input",
+    )
 
     def _process(self, input, **kwargs) -> str:
         def all_variables(in_):
@@ -64,7 +69,7 @@ class RenderTemplate(PipelineNode):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
     llm_provider_model_id: LlmProviderModelId
-    llm_temperature: LlmTemperature = 1.0
+    llm_temperature: LlmTemperature = Field(default=1.0, gt=0.0, le=2.0)
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -151,7 +156,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     __node_description__ = "Calls an LLM with a prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: ExpandableText = Field(
+        default="You are a helpful assistant. Answer the user's query as best you can",
+    )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
@@ -201,8 +208,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str
+    recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
+
+    @field_validator("recipient_list", mode="before")
+    def recipient_list_has_valid_emails(cls, value):
+        value = value or ""
+        for email in [email.strip() for email in value.split(",")]:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
+        return value
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
@@ -237,7 +254,9 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, HistoryMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
-    prompt: ExpandableText = "You are an extremely helpful router {input}"
+    prompt: ExpandableText = Field(
+        default="You are an extremely helpful router",
+    )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
@@ -394,16 +413,36 @@ class ExtractStructuredDataNodeMixin:
         return schema
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
+class StructuredDataSchemaValidatorMixin:
+    @field_validator("data_schema")
+    def validate_data_schema(cls, value):
+        try:
+            parsed_value = json.loads(value)
+        except json.JSONDecodeError:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        return value
+
+
+class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+        description="A JSON object structure where the key is the name of the field and the value the description",
+    )
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
+class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+        description="A JSON object structure where the key is the name of the field and the value the description",
+    )
     key_name: str | None = None
 
     def get_reference_data(self, state) -> dict:

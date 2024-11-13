@@ -1,8 +1,10 @@
+from typing import Self
+
 from django.db import models
 
 
 class VersioningMixin:
-    def compare_with_model(self, new: models.Model, exclude_fields: list[str]) -> set:
+    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set[str]:
         """
         Compares the field values of between `self` and `new`, excluding those in `exclude_fields`
         """

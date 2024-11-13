@@ -7,8 +7,8 @@ from openai.pagination import SyncCursorPage
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
-    are_files_in_sync_with_openai,
     delete_openai_assistant,
+    get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
     sync_from_openai,
@@ -154,7 +154,7 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
     local_assistant.refresh_from_db()
     assert local_assistant.name == remote_assistant.name
     assert local_assistant.instructions == remote_assistant.instructions
-    assert local_assistant.llm_model == remote_assistant.model
+    assert local_assistant.llm_provider_model.name == remote_assistant.model
     assert local_assistant.temperature == remote_assistant.temperature
     assert local_assistant.top_p == remote_assistant.top_p
     assert local_assistant.builtin_tools == ["code_interpreter", "file_search"]
@@ -199,7 +199,7 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     assert imported_assistant.assistant_id == remote_assistant.id
     assert imported_assistant.name == remote_assistant.name
     assert imported_assistant.instructions == remote_assistant.instructions
-    assert imported_assistant.llm_model == remote_assistant.model
+    assert imported_assistant.llm_provider_model.name == remote_assistant.model
     assert imported_assistant.temperature == remote_assistant.temperature
     assert imported_assistant.top_p == remote_assistant.top_p
     assert imported_assistant.builtin_tools == ["code_interpreter", "file_search"]
@@ -261,11 +261,14 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
     resource = ToolResources.objects.create(tool_type=tool_type, assistant=local_assistant)
     resource.files.set([files[0]])
 
-    assert are_files_in_sync_with_openai(local_assistant) is False
+    assert get_out_of_sync_files(local_assistant) == (
+        {"code_interpreter": [openai_files[1].id]},
+        {},
+    )
 
     # Update local files to match remote files
     resource.files.set(files)
-    assert are_files_in_sync_with_openai(local_assistant) is True
+    assert get_out_of_sync_files(local_assistant) == ({}, {})
 
 
 @pytest.mark.django_db()
@@ -294,8 +297,8 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     )
     # Test out of sync
     resource.files.set([files[0]])
-    assert are_files_in_sync_with_openai(local_assistant) is False
+    assert get_out_of_sync_files(local_assistant) == ({"file_search": [openai_files[1].id]}, {})
 
     # Test in sync
     resource.files.set(files)
-    assert are_files_in_sync_with_openai(local_assistant) is True
+    assert get_out_of_sync_files(local_assistant) == ({}, {})

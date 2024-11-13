@@ -57,7 +57,7 @@ def run_context(run, bubble_errors=True):
     """Context manager to create the pipeline context and manage run status."""
     log_handler_factory = LogHandlerFactory(run)
     params = run.group.params
-    params["llm_model"] = run.group.analysis.llm_model
+    params["llm_model"] = run.group.analysis.llm_provider_model.name
     pipeline_context = PipelineContext(
         run, log_handler_factory=log_handler_factory, params=params, create_resources=True
     )

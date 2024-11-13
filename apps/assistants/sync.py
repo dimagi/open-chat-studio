@@ -71,7 +71,7 @@ from openai.types.beta import Assistant
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
 
 
@@ -133,7 +133,7 @@ def sync_from_openai(assistant: OpenAiAssistant):
     """Syncs the local assistant instance with the remote OpenAI assistant."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
-    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
+    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant, team=assistant.team).items():
         setattr(assistant, key, value)
     assistant.save()
     _sync_tool_resources_from_openai(openai_assistant, assistant)
@@ -175,36 +175,42 @@ def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_t
 
 
 @wrap_openai_errors
-def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
+def get_out_of_sync_files(assistant: OpenAiAssistant) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
     tool_resources = assistant.tool_resources.all()
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
 
-    # ensure same tools are configured in OCS as in OpenAI
-    local_tool_types = {resource.tool_type for resource in tool_resources}
+    files_missing_local = {}
+    files_missing_remote = {}
+    local_tool_types = {resource.tool_type: resource for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
-        return False
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "code_interpreter")
+        if openai_file_ids:
+            files_missing_local["code_interpreter"] = openai_file_ids
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
-        return False
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "file_search")
+        files_missing_local["file_search"] = openai_file_ids
 
     # ensure files match
     for resource in tool_resources:
-        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource)
+        openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource.tool_type)
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
-        if set(ocs_file_ids) != set(openai_file_ids):
-            return False
-    return True
+        if missing := set(openai_file_ids) - set(ocs_file_ids):
+            files_missing_local[resource.tool_type] = list(missing)
+        if extra := set(ocs_file_ids) - set(openai_file_ids):
+            files_missing_remote[resource.tool_type] = list(extra)
+    return files_missing_local, files_missing_remote
 
 
-def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResources) -> list[str]:
+def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> list[str]:
     """
     Retrieve file IDs from OpenAI based on the specified tool resource type.
 
     Args:
         client: The OpenAI client instance used to interact with the OpenAI API.
         assistant_data: The assistant data containing tool resources.
-        resource (ToolResources): The tool resource object specifying the type of tool and additional parameters.
+        tool_type: The type of tool resource to retrieve file IDs for.
 
     Returns:
         list[str]: A list of file IDs retrieved from OpenAI.
@@ -213,29 +219,45 @@ def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResourc
     - "code_interpreter": Returns file IDs directly from the code interpreter tool resource if available.
     - "file_search": Retrieves file IDs from the OpenAI vector store using the provided vector store ID.
     """
-    openai_file_ids = []
-    if resource.tool_type == "code_interpreter":
+    if tool_type == "code_interpreter":
         code_interpreter = getattr(assistant_data.tool_resources, "code_interpreter", None)
         if code_interpreter is not None and code_interpreter.file_ids:
             return code_interpreter.file_ids
-    elif resource.tool_type == "file_search":
-        openai_vector_store_id = resource.extra.get("vector_store_id")
-        if openai_vector_store_id:
-            openai_file_ids.extend(
-                [file.id for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)]
-            )
-    return openai_file_ids
+        return []
+
+    if tool_type == "file_search":
+        vector_store_ids = assistant_data.tool_resources.file_search.vector_store_ids
+        if not vector_store_ids:
+            return []
+        return [file.id for file in client.beta.vector_stores.files.list(vector_store_id=vector_store_ids[0])]
 
 
 @wrap_openai_errors
-def is_synced_with_openai(assistant: OpenAiAssistant):
+def is_synced_with_openai(assistant: OpenAiAssistant) -> list[str]:
+    """Checks if the assistant in OCS is in sync with the assistant in OpenAI."""
+
+    diffs = []
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
     for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
         current_value = getattr(assistant, key, None)
         if current_value != value:
-            return False
-    return True
+            diffs.append(key)
+
+    tool_resources = assistant.tool_resources.all()
+
+    local_tool_resources = {resource.tool_type: resource for resource in tool_resources}
+    if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "code_interpreter"):
+        diffs.append("code_interpreter")
+    if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "file_search"):
+        diffs.append("file_search")
+
+    if local_tool := local_tool_resources.get("file_search"):
+        vector_store_ids = openai_assistant.tool_resources.file_search.vector_store_ids
+        if [local_tool.extra.get("vector_store_id")] != vector_store_ids:
+            diffs.append("File search vector store ID")
+
+    return diffs
 
 
 def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
@@ -344,7 +366,7 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
         "instructions": assistant.instructions,
         "name": assistant.name,
         "tools": assistant.formatted_tools,
-        "model": assistant.llm_model,
+        "model": assistant.llm_provider_model.name,
         "temperature": assistant.temperature,
         "top_p": assistant.top_p,
         "metadata": {
@@ -407,13 +429,18 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
         "name": assistant.name or "Untitled Assistant",
         "instructions": assistant.instructions or "",
         "builtin_tools": [tool.type for tool in assistant.tools if tool.type in builtin_tools],
-        # What if the model isn't one of the ones configured for the LLM Provider?
-        "llm_model": assistant.model,
         "temperature": assistant.temperature,
         "top_p": assistant.top_p,
     }
     if team:
         kwargs["team"] = team
+        # If the model doesn't exist when syncing, create a new one
+        llm_provider_model, _ = LlmProviderModel.objects.get_or_create_for_team(
+            team=team,
+            type=str(LlmProviderTypes.openai),
+            name=assistant.model,
+        )
+        kwargs["llm_provider_model"] = llm_provider_model
     if llm_provider:
         kwargs["llm_provider"] = llm_provider
     return kwargs

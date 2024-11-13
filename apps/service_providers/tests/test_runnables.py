@@ -140,6 +140,7 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
                 },
             },
         },
+        allowed_operations=["weather_get"],
     )
     CustomActionOperation.objects.create(
         custom_action=action, experiment=session.experiment, operation_id="weather_get"
@@ -158,8 +159,9 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     ]
 
     tools_ = fake_llm_service.llm.get_calls()[0].kwargs["tools"]
-    assert len(tools_) == 2, tools_
-    assert sorted([tool["function"]["name"] for tool in tools_]) == ["pollen_get", "weather_get"]
+    # we only expect one because the other one is not present in the action's allowed_operations
+    assert len(tools_) == 1, tools_
+    assert sorted([tool["function"]["name"] for tool in tools_]) == ["weather_get"]
 
 
 @pytest.mark.django_db()

@@ -95,6 +95,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 },
             )
 
+    def validate(self) -> dict:
+        """Validate the pipeline nodes and return a dictionary of errors"""
+        from apps.pipelines.nodes import nodes as pipeline_nodes
+
+        errors = {}
+
+        for node in self.node_set.all():
+            node_class = getattr(pipeline_nodes, node.type)
+            try:
+                node_class.model_validate(node.params)
+            except pydantic.ValidationError as e:
+                errors[node.flow_id] = {err["loc"][0]: err["msg"] for err in e.errors()}
+        return errors
+
     @cached_property
     def flow_data(self) -> dict:
         from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -102,9 +116,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         flow = Flow(**self.data)
         flow_nodes_by_id = {node.id: node for node in flow.nodes}
         nodes = []
+
         for node in self.node_set.all():
             node_class = getattr(pipeline_nodes, node.type)
             input_types = get_input_types_for_node(node_class)
+
             nodes.append(
                 FlowNode(
                     id=node.flow_id,

@@ -17,7 +17,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
   function getDefaultParamValues(inputType: NodeInputTypes): Record<string, any> {
     return inputType.input_params.reduce(
       (acc, param) => {
-        acc[param.name] = param.default || defaultValues[param.type];
+        acc[param.name] = param.default || defaultValues[param.type] || null;
         return acc;
       },
       {} as Record<string, any>,

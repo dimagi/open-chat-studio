@@ -2,7 +2,7 @@ from django import forms
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options, get_llm_providers_for_assistants
-from apps.custom_actions.utils import (
+from apps.custom_actions.form_utils import (
     clean_custom_action_operations,
     initialize_form_for_custom_actions,
     set_custom_actions,

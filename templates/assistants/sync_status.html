@@ -1,20 +1,54 @@
 <div class="flex flex-col gap-2">
-    {% if not are_files_synced %}
-        <div id="sync-notification" role="alert" class="alert">
-            <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open Chat Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, please upload the necessary files on this page.</p>
-        </div>
-    {% endif %}
-    <div class="flex flex row items-center gap-2">
-        {% if is_synced %}
-            <div id="sync-indicator" class="badge badge-success">
-                <i class="fas fa-check mr-1"></i>In Sync
-            </div>
-        {% else %}
-            <div id="sync-indicator" class="badge badge-error">
-                <i class="fas fa-times mr-1"></i>Out of Sync
-            </div>
-            <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
-                    hx-target="#sync-container" class="btn btn-sm btn-primary">Sync Now</button>
-        {% endif %}
+  {% if not_pushed %}
+    <div id="sync-notification" role="alert" class="alert">
+      <p><strong>Warning:</strong> This assistant has not yet been created on OpenAI.</p>
     </div>
+  {% endif %}
+  {% if files_missing_local or files_missing_remote or diffs %}
+    <div id="sync-notification" role="alert" class="alert">
+      <div class="flex flex-col gap-2">
+        {% if diffs %}
+          <div>
+            <p><strong>Warning:</strong> The assistant has modifications on OpenAI which are not reflected here.</p>
+            <p><strong>Fields that differ:</strong> {{ diffs|join:", " }}</p>
+          </div>
+        {% endif %}
+        {% if files_missing_local %}
+          <div>
+            <p><strong>Warning:</strong> Your assistant has files that are uploaded to OpenAI but not present in Open
+              Chat
+              Studio. This may lead to unexpected behavior in the assistant. To resolve this issue, update the assistant
+              from OpenAI and then re-upload the files marked with <i class="fa-solid fa-triangle-exclamation text-warning"></i>.</p>
+            <p><strong>Missing files:</strong></p>
+            {% for tool_type, files in files_missing_local.items %}
+              <p class="pl-2"><strong>{{ tool_type }}:</strong> {{ files|join:", " }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if files_missing_remote %}
+          <div>
+            <p><strong>Warning:</strong> Some files have been removed from OpenAI but are still present here.
+              If you save this assistant the files will be re-uploaded to OpenAI. If you want to remove the files
+              from this assistant click the 'update' button below.</p>
+            <p><strong>Files:</strong></p>
+            {% for tool_type, files in files_missing_remote.items %}
+              <p class="pl-2"><strong>{{ tool_type }}:</strong> {{ files|join:", " }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div>
+          <div class="mt-2 tooltip" data-tip="Overwrite this configuration with the data from OpenAI">
+            <button hx-post="{% url 'assistants:sync_while_editing' request.team.slug object.pk %}"
+                    hx-target="#sync-wrapper" class="btn btn-sm btn-primary">Update from OpenAI
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div id="sync-indicator" class="badge badge-success tooltip" data-tip="This Assistant is in sync with OpenAI">
+      <i class="fas fa-check mr-1"></i>In Sync
+    </div>
+  {% endif %}
+</div>
 </div>

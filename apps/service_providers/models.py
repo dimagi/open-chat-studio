@@ -131,6 +131,17 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
 
 
 class LlmProviderModelManager(models.Manager):
+    def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
+        try:
+            return self.for_team(team).get(name=name, type=type, max_token_limit=max_token_limit), False
+        except LlmProviderModel.DoesNotExist:
+            return self.create(
+                team=team,
+                name=name,
+                type=type,
+                max_token_limit=max_token_limit,
+            ), True
+
     def for_team(self, team):
         return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
 

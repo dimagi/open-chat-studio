@@ -7,12 +7,15 @@ import WrappedHandle from "./WrappedHandle";
 export default function NodeOutputs({nodeId, data}: {nodeId: string, data: NodeData}) {
   const outputNames = getOutputNames(data.type, data.params);
   const multipleOutputs = outputNames.length > 1;
+  const generateOutputHandle = (outputIndex: number) => {
+    return multipleOutputs ? `output_${outputIndex}` : "output";
+  };
   return (
     <>
       {multipleOutputs && <div className="divider">Outputs</div>}
       <div className={multipleOutputs ? "": "py-2 mt-2 border-t border-neutral"}>
         {outputNames.map((outputName, index) => (
-          <NodeOutput key={outputName} handleKey={`output_${index}`} nodeId={nodeId} label={outputName} />
+          <NodeOutput key={outputName} handleKey={generateOutputHandle(index)} nodeId={nodeId} label={outputName} />
         ))}
       </div>
     </>
