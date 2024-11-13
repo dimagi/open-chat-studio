@@ -89,6 +89,7 @@ def custom_action(experiment):
         description="Custom action description",
         prompt="Custom action prompt",
         api_schema=ACTION_SCHEMA,
+        allowed_operations=["weather_get"],
     )
 
 
@@ -122,7 +123,5 @@ def test_versioning(custom_action, experiment):
     assert weather_get2._operation_schema == EXPECTED_WEATHER_GET_SCHEMA
     assert weather_get2.operation_schema == EXPECTED_WEATHER_GET_SCHEMA
 
-    pollen_get2 = experiment2.custom_action_operations.get(operation_id="pollen_get")
-    assert pollen_get2.is_a_version
-    assert pollen_get2._operation_schema == EXPECTED_POLLEN_GET_SCHEMA
-    assert pollen_get2.operation_schema == EXPECTED_POLLEN_GET_SCHEMA
+    # versioned operation is not on the allowed list so it's not included in the new version
+    assert not experiment2.custom_action_operations.filter(operation_id="pollen_get").exists()
