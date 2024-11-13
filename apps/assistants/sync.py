@@ -235,6 +235,20 @@ def is_synced_with_openai(assistant: OpenAiAssistant):
         current_value = getattr(assistant, key, None)
         if current_value != value:
             return False
+
+    tool_resources = assistant.tool_resources.all()
+
+    local_tool_resources = {resource.tool_type: resource for resource in tool_resources}
+    if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "code_interpreter"):
+        return False
+    if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "file_search"):
+        return False
+
+    if local_tool := local_tool_resources.get("file_search"):
+        vector_store_ids = openai_assistant.tool_resources.file_search.vector_store_ids
+        if [local_tool.extra.get("vector_store_id")] != vector_store_ids:
+            return False
+
     return True
 
 
