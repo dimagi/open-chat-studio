@@ -21,9 +21,9 @@ from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFor
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
-    are_files_in_sync_with_openai,
     delete_file_from_openai,
     delete_openai_assistant,
+    get_out_of_sync_files,
     import_openai_assistant,
     is_synced_with_openai,
     push_assistant_to_openai,
@@ -66,7 +66,9 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
+        return OpenAiAssistant.objects.filter(
+            team=self.request.team, is_archived=False, working_version_id=None
+        ).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -146,15 +148,23 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
 @login_and_team_required
 def check_sync_status(request, team_slug, pk):
     assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-    is_synced = True
-    files_in_sync = True
-    if assistant.assistant_id:
-        try:
-            is_synced = is_synced_with_openai(assistant)
-        except OpenAiSyncError:
-            is_synced = False
-        files_in_sync = are_files_in_sync_with_openai(assistant)
-    context = {"is_synced": is_synced, "object": assistant, "are_files_synced": files_in_sync}
+    if not assistant.assistant_id:
+        return render(request, "assistants/sync_status.html", {"not_pushed": True})
+
+    error = None
+    try:
+        diffs = is_synced_with_openai(assistant)
+    except OpenAiSyncError as e:
+        error = str(e)
+        diffs = []
+    files_missing_local, files_missing_remote = get_out_of_sync_files(assistant)
+    context = {
+        "diffs": diffs,
+        "object": assistant,
+        "files_missing_local": files_missing_local,
+        "files_missing_remote": files_missing_remote,
+        "errors": error,
+    }
     return render(request, "assistants/sync_status.html", context)
 
 
@@ -176,6 +186,9 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        if assistant.working_version_id is None and not assistant.is_archived:
+            messages.warning(request, "Cannot delete an versioned assistant without first archiving.")
+            return HttpResponse(status=400)
         try:
             delete_openai_assistant(assistant)
         except OpenAiSyncError as e:
@@ -192,8 +205,8 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
+        assistant.archive()
+        messages.success(request, "Assistant Archived")
         return HttpResponse()
 
 

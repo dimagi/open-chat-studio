@@ -1,10 +1,11 @@
-import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
-import React, {ChangeEvent} from "react";
-import {classNames} from "./utils";
+import { Node, NodeProps, NodeToolbar, Position } from "reactflow";
+import React, { ChangeEvent } from "react";
+import { classNames } from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
+import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
-import {NodeData} from "./types/nodeParams";
-import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
+import { NodeData } from "./types/nodeParams";
+import { getNodeInputWidget, showAdvancedButton } from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 
@@ -15,7 +16,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-
+  const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
+  
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
@@ -31,10 +33,16 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       },
     }));
   };
-  
+
   const editNode = () => {
     openEditorForNode(nodeProps);
   }
+
+  const defaultBorder = nodeErrors ? "border-red-500 " : ""
+  const nodeBorder = classNames(
+    selected ? "border-primary" : defaultBorder,
+    "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
+  )
 
   return (
     <>
@@ -55,10 +63,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         </div>
       </NodeToolbar>
       <div
-        className={classNames(
-          selected ? "border border-primary" : "border",
-          "px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
-        )}
+        className={nodeBorder}
       >
         <div className="m-1 text-lg font-bold text-center">{data.label}</div>
         <NodeInput nodeId={id} />
@@ -79,7 +84,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           {showAdvancedButton(data.type) && (
             <div className="mt-2">
               <button className="btn btn-sm btn-ghost w-full"
-                      onClick={() => editNode()}>
+                onClick={() => editNode()}>
                 Advanced
               </button>
             </div>
