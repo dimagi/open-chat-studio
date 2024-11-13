@@ -1,18 +1,20 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, Union
 
 from django.db import transaction
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent import schemas
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.utils.time import pretty_date
+
+if TYPE_CHECKING:
+    from apps.assistants.models import OpenAiAssistant
 
 
 class CustomBaseTool(BaseTool):
@@ -253,7 +255,7 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
     return tools
 
 
-def get_custom_action_tools(action_holder: Experiment | OpenAiAssistant) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
     operations = action_holder.custom_action_operations.select_related(
         "custom_action", "custom_action__auth_provider"
     ).all()
