@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Literal
 
 import tiktoken
@@ -207,10 +208,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str = Field(
-        pattern=r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)*([,])*)*$",
-    )
+    recipient_list: str
     subject: str
+
+    @field_validator("recipient_list")
+    def recipient_list_has_valid_emails(cls, value):
+        pattern = r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)*([,])*)*$"
+        if not re.match(pattern, value):
+            raise PydanticCustomError("invalid_subject", "Invalid list of emails addresses")
+        return value
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
