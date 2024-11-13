@@ -19,7 +19,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
       if (pipeline) {
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
         // TODO: Remove this below and read erros from the ReactFlowJsonObject
-        set({errors: pipeline.data?.errors});
+        set({errors: pipeline.errors});
         set({isLoading: false});
       }
     }).catch((e) => {
@@ -60,7 +60,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
           if (response) {
             pipeline.data = response.data;
             set({currentPipeline: pipeline, dirty: false});
-            set({errors: response.data?.errors});
+            set({errors: response.errors});
             resolve();
           }
         })

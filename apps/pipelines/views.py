@@ -144,7 +144,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.save()
         pipeline.set_nodes(data.data.nodes)
         pipeline.refresh_from_db(fields=["node_set"])
-        return JsonResponse({"data": pipeline.flow_data})
+        return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:
         pipeline = Pipeline.objects.get(pk=pk)
@@ -152,7 +152,16 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline = Pipeline.objects.create(
             id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
         )
-    return JsonResponse({"pipeline": {"id": pipeline.id, "name": pipeline.name, "data": pipeline.flow_data}})
+    return JsonResponse(
+        {
+            "pipeline": {
+                "id": pipeline.id,
+                "name": pipeline.name,
+                "data": pipeline.flow_data,
+                "errors": pipeline.validate(),
+            }
+        }
+    )
 
 
 @login_and_team_required
