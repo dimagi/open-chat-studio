@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables
 
 from apps.assistants.models import OpenAiAssistant
@@ -7,10 +8,7 @@ from apps.generics import actions
 
 class OpenAiAssistantTable(tables.Table):
     name = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
+        linkify=False,
         orderable=True,
     )
     actions = actions.ActionsColumn(
@@ -40,6 +38,9 @@ class OpenAiAssistantTable(tables.Table):
             ),
         ]
     )
+
+    def render_name(self, record):
+        return mark_safe(f'<a href="{record.get_absolute_url()}" class="link">{record.name}</a>')
 
     class Meta:
         model = OpenAiAssistant
