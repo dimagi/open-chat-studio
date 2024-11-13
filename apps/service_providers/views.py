@@ -238,5 +238,8 @@ def create_llm_provider_model(request, team_slug: str):
     return render(
         request,
         "service_providers/components/custom_llm_models.html",
-        {"models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team))},
+        {
+            "models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
+            "for_type": form.cleaned_data["type"],
+        },
     )

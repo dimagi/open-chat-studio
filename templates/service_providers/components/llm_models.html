@@ -1,23 +1,24 @@
 {% define 2 as num_cols %}
-{% if show_delete %}{% define 3 as inner_cols %}{% else %}{% define 2 as inner_cols %}{% endif %}
 {% for type_, models in models_by_type.items %}
-  <div id="models_{{ type_ }}" x-show="type === '{{ type_ }}'" x-cloak class="mt-2">
+  <div id="models_{{ type_ }}" x-show="type === '{{ type_ }}'" class="mt-2"
+       {% if not for_type or type_ != for_type %}style="display:none"{% endif %}
+  >
     <div class="grid grid-cols-{{ num_cols }} gap-x-5">
       {% for i in num_cols|times %}
-        <div class="grid grid-cols-{{ inner_cols }} font-semibold">
+        <div class="grid grid-cols-3 font-semibold">
           <div>Model Name</div>
           <div class="place-self-center">Token Limit</div>
           {% if show_delete %}
-            <div class="place-self-end">Delete</div>
+            <div class="place-self-start">Delete</div>
           {% endif %}
         </div>
       {% endfor %}
       {% for model in models %}
-        <div class="grid grid-cols-{{ inner_cols }}">
+        <div class="grid grid-cols-3">
           <div>{{ model.name }}</div>
           <div class="place-self-center">{{ model.max_token_limit }}</div>
           {% if show_delete %}
-            <div class="place-self-end">
+            <div class="place-self-start">
               <button class="btn btn-xs btn-ghost">
                 <i class="fa-solid fa-trash"></i>
               </button>

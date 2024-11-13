@@ -3,13 +3,26 @@
 {% load i18n %}
 {% block pre_secondary_form %}
   <div class="my-4">
-    <h2 class="font-bold text-lg">Default Models</h2>
+    <h2 class="font-bold text-lg">Default Models
+      {% blocktranslate asvar help_text %}
+        Default models are the published models for this provider. If you need to use a model that isn't in
+        this list, create a custom model.
+      {% endblocktranslate %}
+      {% include "generic/help.html" with help_content=help_text %}
+    </h2>
     {% include "service_providers/components/llm_models.html" with models_by_type=default_models_by_type %}
     <div class="flex justify-between">
-      <h2 class="font-bold text-lg mt-2">Custom Models</h2>
-      <button class="btn btn-primary btn-xs" onclick="new_custom_model.showModal()">
-        <i class="fa-solid fa-plus"></i>
-      </button>
+      <h2 class="font-bold text-lg mt-2">Custom Models
+        {% blocktranslate asvar help_text %}
+          Custom models are specific to this provider type and are available to all providers of the same type.
+        {% endblocktranslate %}
+        {% include "generic/help.html" with help_content=help_text %}
+      </h2>
+      <div class="tooltip" data-tip="Add a new custom model">
+        <button class="btn btn-primary btn-xs" onclick="new_custom_model.showModal()">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>
     </div>
     <div id="custom_model_list">
       {% include "service_providers/components/custom_llm_models.html" with models_by_type=custom_models_by_type %}
@@ -27,7 +40,7 @@
       </div>
       <div class="modal-action">
         <form method="dialog">
-          <button class="btn"
+          <button class="btn btn-primary"
                   hx-post="{% url "service_providers:llm_provider_model_new" request.team.slug %}"
                   hx-include="#new_model_form"
                   hx-target="#custom_model_list"
