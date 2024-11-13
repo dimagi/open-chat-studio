@@ -40,8 +40,7 @@ class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
     template_string: ExpandableText = Field(
-        pattern=r"\{input\}",
-        description="Use {input} to refer to designate input message",
+        description="Use {your_variable_name} to refer to designate input",
     )
 
     def _process(self, input, **kwargs) -> str:
