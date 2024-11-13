@@ -213,11 +213,11 @@ class SendEmail(PipelineNode):
     recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
 
-    @field_validator("recipient_list")
+    @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
-        pattern = r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)*([,])*)*$"
-        if not re.match(pattern, value):
-            raise PydanticCustomError("invalid_subject", "Invalid list of emails addresses")
+        pattern = r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)[, ]*)*$"
+        if not value or not re.match(pattern, value):
+            raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
     def _process(self, input, **kwargs) -> str:

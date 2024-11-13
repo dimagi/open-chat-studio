@@ -36,6 +36,7 @@ class TestSendEmailInputValidation:
     @pytest.mark.parametrize(
         "recipient_list",
         [
+            "",
             "invalid-email",
             "test@example.com,invalid-email",
             "test@example.com,another@example.com,invalid-email",
