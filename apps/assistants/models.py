@@ -1,6 +1,7 @@
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.db.models import F
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -127,12 +128,23 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 new_tool_resource.extra = tool_resource.extra
                 new_tool_resource.save()
 
+        self._copy_custom_action_operations_to_new_version(assistant_version)
+
         push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
         return assistant_version
 
+    def _copy_custom_action_operations_to_new_version(self, new_version):
+        for operation in self.get_custom_action_operations():
+            operation.create_new_version(new_assistant=new_version)
+
     def get_custom_action_operations(self) -> models.QuerySet:
-        # TODO: update this once assistant versioning is merged
-        return self.custom_action_operations.select_related("custom_action")
+        if self.is_working_version:
+            # only include operations that are still enabled by the action
+            return self.custom_action_operations.select_related("custom_action").filter(
+                custom_action__allowed_operations__contains=[F("operation_id")]
+            )
+        else:
+            return self.custom_action_operations.select_related("custom_action")
 
 
 @audit_fields(
