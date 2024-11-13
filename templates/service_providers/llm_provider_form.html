@@ -1,0 +1,26 @@
+{% extends "generic/type_select_form.html" %}
+{% load i18n %}
+{% block pre_secondary_form %}
+  <div class="my-4">
+    <h2 class="font-bold text-lg">Default Models</h2>
+    {% define 3 as num_cols %}
+    {% for type_, models in models_by_type.items %}
+      <div id="models_{{ type_ }}" x-show="type === '{{ type_ }}'" x-cloak class="mt-2">
+        <div class="grid grid-cols-{{ num_cols }} gap-x-5">
+          {% for i in num_cols|times %}
+            <div class="flex justify-between font-semibold">
+              <div>Model Name</div>
+              <div>Token Limit</div>
+            </div>
+          {% endfor %}
+          {% for model in models %}
+            <div class="flex justify-between">
+              <div>{{ model.name }}</div>
+              <div>{{ model.max_token_limit }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock pre_secondary_form %}

@@ -159,6 +159,9 @@ TEMPLATES = [
                 "apps.web.context_processors.google_analytics_id",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
+            "builtins": [
+                "apps.web.templatetags.default_tags",
+            ],
         },
     },
 ]

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -194,3 +196,19 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
     except ValidationError as ex:
         return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()
+
+
+class LlmProviderView(CreateServiceProvider):
+    template = "service_providers/llm_provider_form.html"
+
+    @property
+    def provider_type(self) -> ServiceProvider:
+        return ServiceProvider.llm
+
+    @property
+    def extra_context(self):
+        models_by_type = defaultdict(list)
+        for model in LlmProviderModel.objects.filter(team=None):
+            models_by_type[model.type].append(model)
+        models_by_type = {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
+        return {"active_tab": "manage-team", "title": self.provider_type.label, "models_by_type": models_by_type}
