@@ -16,4 +16,7 @@ export type PipelineManagerStoreType = {
     edges: Edge[],
     viewport: Viewport
   ) => void;
+  // Errors
+  errors: {[nodeId: string]: {[name: string]: string}},
+  getFieldError: (nodeId: string, fieldName: string) => string | undefined;
 };
