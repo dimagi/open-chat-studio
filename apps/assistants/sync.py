@@ -175,7 +175,7 @@ def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_t
 
 
 @wrap_openai_errors
-def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> dict[str, list[str]]:
+def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
     tool_resources = assistant.tool_resources.all()
     client = assistant.llm_provider.get_llm_service().get_raw_client()
@@ -183,6 +183,7 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> dict[str, list[
 
     # ensure same tools are configured in OCS as in OpenAI
     missing_files = {}
+    extra_files = {}
     local_tool_types = {resource.tool_type: resource for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "code_interpreter")
@@ -198,7 +199,9 @@ def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> dict[str, list[
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
         if missing := set(openai_file_ids) - set(ocs_file_ids):
             missing_files[resource.tool_type] = list(missing)
-    return missing_files
+        if extra := set(ocs_file_ids) - set(openai_file_ids):
+            extra_files[resource.tool_type] = list(extra)
+    return missing_files, extra_files
 
 
 def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> list[str]:

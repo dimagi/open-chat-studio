@@ -155,8 +155,14 @@ def check_sync_status(request, team_slug, pk):
     except OpenAiSyncError as e:
         error = str(e)
         diffs = []
-    file_diffs = are_files_in_sync_with_openai(assistant)
-    context = {"diffs": diffs, "object": assistant, "file_diffs": file_diffs, "errors": error}
+    missing_files, extra_files = are_files_in_sync_with_openai(assistant)
+    context = {
+        "diffs": diffs,
+        "object": assistant,
+        "missing_files": missing_files,
+        "extra_files": extra_files,
+        "errors": error,
+    }
     return render(request, "assistants/sync_status.html", context)
 
 
