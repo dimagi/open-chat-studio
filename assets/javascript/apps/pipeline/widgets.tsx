@@ -331,7 +331,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
         {children}
       </div>
       <div className="flex flex-col">
-        {<small className="text-red-500">{inputError}</small>}
+        <small className="text-red-500">{inputError}</small>
         <small className="text-muted">{help_text}</small>
       </div>
     </>

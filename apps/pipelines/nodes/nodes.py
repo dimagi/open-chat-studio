@@ -213,6 +213,7 @@ class SendEmail(PipelineNode):
 
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
+        value = value or ""
         for email in [email.strip() for email in value.split(",")]:
             try:
                 validate_email(email)

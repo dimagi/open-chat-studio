@@ -18,7 +18,6 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     apiClient.getPipeline(pipelineId).then((pipeline) => {
       if (pipeline) {
         set({currentPipeline: pipeline, currentPipelineId: pipelineId});
-        // TODO: Remove this below and read erros from the ReactFlowJsonObject
         set({errors: pipeline.errors});
         set({isLoading: false});
       }
