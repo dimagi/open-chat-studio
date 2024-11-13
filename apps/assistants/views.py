@@ -66,7 +66,9 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
+        return OpenAiAssistant.objects.filter(
+            team=self.request.team, is_archived=False, working_version_id=None
+        ).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
