@@ -66,7 +66,9 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
+        return OpenAiAssistant.objects.filter(
+            team=self.request.team, is_archived=False, working_version_id=None
+        ).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -176,6 +178,9 @@ class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredM
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        if assistant.working_version_id is None and not assistant.is_archived:
+            messages.warning(request, "Cannot delete an versioned assistant without first archiving.")
+            return HttpResponse(status=400)
         try:
             delete_openai_assistant(assistant)
         except OpenAiSyncError as e:
@@ -192,8 +197,8 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
+        assistant.archive()
+        messages.success(request, "Assistant Archived")
         return HttpResponse()
 
 

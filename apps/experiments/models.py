@@ -735,6 +735,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
         self._copy_custom_action_operations_to_new_version(new_version)
+        self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
@@ -744,6 +745,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return
         new_version.pipeline = self.pipeline.create_new_version()
         new_version.save(update_fields=["pipeline"])
+
+    def _copy_assistant_to_new_version(self, new_version):
+        if not self.assistant:
+            return
+        new_version.assistant = self.assistant.create_new_version()
+        new_version.save(update_fields=["assistant"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and

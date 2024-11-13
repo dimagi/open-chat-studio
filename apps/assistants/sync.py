@@ -71,7 +71,7 @@ from openai.types.beta import Assistant
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
 
 
@@ -133,7 +133,7 @@ def sync_from_openai(assistant: OpenAiAssistant):
     """Syncs the local assistant instance with the remote OpenAI assistant."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
-    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
+    for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant, team=assistant.team).items():
         setattr(assistant, key, value)
     assistant.save()
     _sync_tool_resources_from_openai(openai_assistant, assistant)
@@ -221,9 +221,12 @@ def _get_tool_file_ids_from_openai(client, assistant_data, resource: ToolResourc
     elif resource.tool_type == "file_search":
         openai_vector_store_id = resource.extra.get("vector_store_id")
         if openai_vector_store_id:
-            openai_file_ids.extend(
-                [file.id for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)]
-            )
+            try:
+                openai_file_ids.extend(
+                    [file.id for file in client.beta.vector_stores.files.list(vector_store_id=openai_vector_store_id)]
+                )
+            except openai.NotFoundError:
+                pass
     return openai_file_ids
 
 
@@ -344,7 +347,7 @@ def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
         "instructions": assistant.instructions,
         "name": assistant.name,
         "tools": assistant.formatted_tools,
-        "model": assistant.llm_model,
+        "model": assistant.llm_provider_model.name,
         "temperature": assistant.temperature,
         "top_p": assistant.top_p,
         "metadata": {
@@ -407,13 +410,18 @@ def _openai_assistant_to_ocs_kwargs(assistant: Assistant, team=None, llm_provide
         "name": assistant.name or "Untitled Assistant",
         "instructions": assistant.instructions or "",
         "builtin_tools": [tool.type for tool in assistant.tools if tool.type in builtin_tools],
-        # What if the model isn't one of the ones configured for the LLM Provider?
-        "llm_model": assistant.model,
         "temperature": assistant.temperature,
         "top_p": assistant.top_p,
     }
     if team:
         kwargs["team"] = team
+        # If the model doesn't exist when syncing, create a new one
+        llm_provider_model, _ = LlmProviderModel.objects.get_or_create_for_team(
+            team=team,
+            type=str(LlmProviderTypes.openai),
+            name=assistant.model,
+        )
+        kwargs["llm_provider_model"] = llm_provider_model
     if llm_provider:
         kwargs["llm_provider"] = llm_provider
     return kwargs
