@@ -7,6 +7,7 @@ from apps.analysis.models import Analysis, AnalysisRun, RunGroup, RunStatus
 from apps.analysis.tasks import PipelineSplitSignal, RunStatusContext, run_context
 from apps.analysis.tests.demo_steps import Multiply
 from apps.service_providers.models import LlmProvider
+from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
 
 @pytest.fixture()
@@ -22,19 +23,24 @@ def llm_provider(team_with_users):
 
 
 @pytest.fixture()
-def analysis(team_with_users, llm_provider):
+def llm_provider_model(team_with_users):
+    return LlmProviderModelFactory(team=team_with_users, name="test")
+
+
+@pytest.fixture()
+def analysis(team_with_users, llm_provider, llm_provider_model):
     return Analysis.objects.create(
         team=team_with_users,
         name="test",
         source="test",
         llm_provider=llm_provider,
-        llm_model="test",
+        llm_provider_model=llm_provider_model,
     )
 
 
 @pytest.fixture()
-def mock_run_group():
-    analysis = Analysis(llm_provider=LlmProvider(), llm_model="test")
+def mock_run_group(llm_provider_model):
+    analysis = Analysis(llm_provider=LlmProvider(), llm_provider_model=llm_provider_model)
     analysis.llm_provider.get_llm_service = mock.MagicMock()
     group = RunGroup(analysis=analysis, params={})
     group.save = mock.MagicMock()
