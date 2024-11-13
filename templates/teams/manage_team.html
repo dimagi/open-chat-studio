@@ -34,8 +34,6 @@
       {% url "service_providers:llm_new" request.team.slug as new_object_url %}
       {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
     {% endwith %}
-    {% translate "Custom Large Language Models" as llm_provider_model_subtitle %}
-    {% include 'service_providers/llm_provider_model_form.html' with provider_type="llm_provider_model" title="Custom LLM Models" subtitle=llm_provider_model_subtitle perm="add_llmprovidermodel" %}
     {% translate "Speech to text and visa versa" as speech_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
     {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
