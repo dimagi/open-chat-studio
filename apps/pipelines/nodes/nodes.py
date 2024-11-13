@@ -215,9 +215,11 @@ class SendEmail(PipelineNode):
 
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
-        pattern = r"^((\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*)[, ]*)*$"
-        if not value or not re.match(pattern, value):
-            raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
+        email_pattern = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+        emails = [email.strip() for email in value.split(",")]
+        for email in emails:
+            if not email_pattern.match(email):
+                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
     def _process(self, input, **kwargs) -> str:
