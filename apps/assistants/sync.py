@@ -175,28 +175,30 @@ def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_t
 
 
 @wrap_openai_errors
-def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> bool:
+def are_files_in_sync_with_openai(assistant: OpenAiAssistant) -> dict[str, list[str]]:
     """Checks if the files for an assistant in OCS match the files in OpenAI."""
     tool_resources = assistant.tool_resources.all()
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     assistant_data = client.beta.assistants.retrieve(assistant.assistant_id)
 
     # ensure same tools are configured in OCS as in OpenAI
-    local_tool_types = {resource.tool_type for resource in tool_resources}
+    missing_files = {}
+    local_tool_types = {resource.tool_type: resource for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "code_interpreter"):
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "code_interpreter")
-        return bool(openai_file_ids)
+        if openai_file_ids:
+            missing_files["code_interpreter"] = openai_file_ids
     if is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, "file_search"):
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, "file_search")
-        return bool(openai_file_ids)
+        missing_files["file_search"] = openai_file_ids
 
     # ensure files match
     for resource in tool_resources:
         openai_file_ids = _get_tool_file_ids_from_openai(client, assistant_data, resource.tool_type)
         ocs_file_ids = [file.external_id for file in resource.files.all() if file.external_id]
-        if set(ocs_file_ids) != set(openai_file_ids):
-            return False
-    return True
+        if missing := set(openai_file_ids) - set(ocs_file_ids):
+            missing_files[resource.tool_type] = list(missing)
+    return missing_files
 
 
 def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> list[str]:
@@ -219,6 +221,7 @@ def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> li
         code_interpreter = getattr(assistant_data.tool_resources, "code_interpreter", None)
         if code_interpreter is not None and code_interpreter.file_ids:
             return code_interpreter.file_ids
+        return []
 
     if tool_type == "file_search":
         vector_store_ids = assistant_data.tool_resources.file_search.vector_store_ids
@@ -228,28 +231,31 @@ def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> li
 
 
 @wrap_openai_errors
-def is_synced_with_openai(assistant: OpenAiAssistant):
+def is_synced_with_openai(assistant: OpenAiAssistant) -> list[str]:
+    """Checks if the assistant in OCS is in sync with the assistant in OpenAI."""
+
+    diffs = []
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant.assistant_id)
     for key, value in _openai_assistant_to_ocs_kwargs(openai_assistant).items():
         current_value = getattr(assistant, key, None)
         if current_value != value:
-            return False
+            diffs.append(key)
 
     tool_resources = assistant.tool_resources.all()
 
     local_tool_resources = {resource.tool_type: resource for resource in tool_resources}
     if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "code_interpreter"):
-        return False
+        diffs.append("code_interpreter")
     if is_tool_configured_remotely_but_missing_locally(openai_assistant, local_tool_resources, "file_search"):
-        return False
+        diffs.append("file_search")
 
     if local_tool := local_tool_resources.get("file_search"):
         vector_store_ids = openai_assistant.tool_resources.file_search.vector_store_ids
         if [local_tool.extra.get("vector_store_id")] != vector_store_ids:
-            return False
+            diffs.append("File search vector store ID")
 
-    return True
+    return diffs
 
 
 def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
