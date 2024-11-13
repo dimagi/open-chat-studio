@@ -432,7 +432,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
     __node_description__ = "Extract structured data from the input"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
-        description="A key-value pair where the key is the name of the field and the value the description",
+        description="A JSON object structure where the key is the name of the field and the value the description",
     )
 
 
@@ -441,7 +441,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
     __node_description__ = "Extract structured data and saves it as participant data"
     data_schema: ExpandableText = Field(
         default='{"name": "the name of the user"}',
-        description="A key-value pair where the key is the name of the field and the value the description",
+        description="A JSON object structure where the key is the name of the field and the value the description",
     )
     key_name: str | None = None
 
