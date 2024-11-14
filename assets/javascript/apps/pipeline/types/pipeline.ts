@@ -8,4 +8,5 @@ export type PipelineType = {
   description: string;
   date_created?: string;
   updated_at?: string;
+  errors: {[nodeId: string]: {[name: string]: string}},
 };

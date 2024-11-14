@@ -1,10 +1,14 @@
 import dataclasses
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.functional import classproperty
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from field_audit import audit_fields
@@ -13,11 +17,15 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
+from apps.pipelines.models import Node
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
-from apps.teams.models import BaseTeamModel
+from apps.teams.models import BaseTeamModel, Team
 
-from . import forms, llm_service, messaging_service, speech_service
+from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
+
+if TYPE_CHECKING:
+    from apps.service_providers.forms import ProviderTypeConfigForm
 
 
 class MessagingProviderObjectManager(AuditingManager):
@@ -62,7 +70,9 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return empty + [(member.value.slug, member.label) for member in cls]
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case LlmProviderTypes.openai:
                 return forms.OpenAIConfigForm
@@ -120,6 +130,103 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         return self.type_enum.get_llm_service(config)
 
 
+class LlmProviderModelManager(models.Manager):
+    def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
+        try:
+            return self.for_team(team).get(name=name, type=type, max_token_limit=max_token_limit), False
+        except LlmProviderModel.DoesNotExist:
+            return self.create(
+                team=team,
+                name=name,
+                type=type,
+                max_token_limit=max_token_limit,
+            ), True
+
+    def for_team(self, team):
+        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+
+
+class LlmProviderModel(BaseTeamModel):
+    team = models.ForeignKey(
+        Team,
+        verbose_name=gettext("Team"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )  # Optional FK relationship to team. If this is
+    # null, then it is a "global" model that is managed in Django admin.
+
+    type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
+
+    name = models.CharField(
+        max_length=128, help_text="The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'"
+    )
+    max_token_limit = models.PositiveIntegerField(
+        default=8192,
+        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
+        "If 0, compression will be disabled which may result in errors or high LLM costs.",
+    )
+
+    objects = LlmProviderModelManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("team", "name", "type", "max_token_limit"), name="unique_team_name_type_max_token_limit"
+            ),
+        ]
+
+    def __str__(self):
+        label = f"{LlmProviderTypes[self.type].label}: {self.name}"
+        if self.is_custom():
+            label = f"{label} (custom for {self.team.name})"
+        return label
+
+    def is_custom(self):
+        return self.team is not None
+
+    def has_related_objects(self):
+        for field in self._meta.get_fields():
+            if field.one_to_many and field.auto_created:
+                related_objects = getattr(self, field.get_accessor_name(), None)
+                if related_objects and related_objects.exists():
+                    return True
+        if Node.objects.filter(
+            Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
+        ).exists():
+            return True
+
+        return False
+
+    def delete(self, *args, **kwargs):
+        related_object_strings = []
+        for field in self._meta.get_fields():
+            if field.one_to_many and field.auto_created:
+                related_objects = getattr(self, field.get_accessor_name(), None)
+                if related_objects and related_objects.exists():
+                    for obj in related_objects.all():
+                        related_model_name = obj._meta.verbose_name
+                        obj_name = obj.name
+                        related_object_strings.append(f"{related_model_name}: {obj_name}")
+
+        pipeline_nodes = (
+            Node.objects.filter(
+                Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
+            )
+            .values_list("pipeline__name", flat=True)
+            .all()
+        )
+        for pipeline_node in pipeline_nodes:
+            related_object_strings.append(f"Pipeline: {pipeline_node}")
+
+        if related_object_strings:
+            raise DjangoValidationError(
+                f"Cannot delete LLM Provider Model {self.name} "
+                f"as it is in use by the following objects: {', '.join(related_object_strings)}"
+            )
+        return super().delete(*args, **kwargs)
+
+
 class VoiceProviderType(models.TextChoices):
     aws = "aws", _("AWS Polly")
     azure = "azure", _("Azure Text to Speech")
@@ -127,7 +234,9 @@ class VoiceProviderType(models.TextChoices):
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case VoiceProviderType.aws:
                 return forms.AWSVoiceConfigForm
@@ -238,7 +347,9 @@ class MessagingProviderType(models.TextChoices):
     slack = "slack", _("Slack")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case MessagingProviderType.twilio:
                 return forms.TwilioMessagingConfigForm
@@ -294,20 +405,37 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
 
 class AuthProviderType(models.TextChoices):
+    basic = "basic", _("Basic")
+    api_key = "api_key", _("API Key")
+    bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
+            case AuthProviderType.basic:
+                return forms.BasicAuthConfigForm
+            case AuthProviderType.api_key:
+                return forms.ApiKeyAuthConfigForm
+            case AuthProviderType.bearer:
+                return forms.BearerAuthConfigForm
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
         match self:
+            case AuthProviderType.basic:
+                return auth_service.BasicAuthService(**config)
+            case AuthProviderType.api_key:
+                return auth_service.ApiKeyAuthService(**config)
+            case AuthProviderType.bearer:
+                return auth_service.BearerTokenAuthService(**config)
             case AuthProviderType.commcare:
                 return auth_service.CommCareAuthService(**config)
-        raise Exception(f"No messaging service configured for {self}")
+        raise Exception(f"No auth service configured for {self}")
 
 
 class AuthProviderManager(AuditingManager):
@@ -340,7 +468,9 @@ class TraceProviderType(models.TextChoices):
     langsmith = "langsmith", _("LangSmith")
 
     @property
-    def form_cls(self) -> type[forms.ProviderTypeConfigForm]:
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms
+
         match self:
             case TraceProviderType.langfuse:
                 return forms.LangfuseTraceProviderForm
@@ -351,9 +481,9 @@ class TraceProviderType(models.TextChoices):
     def get_service(self, config: dict) -> tracing.TraceService:
         match self:
             case TraceProviderType.langfuse:
-                return tracing.LangFuseTraceService(config)
+                return tracing.LangFuseTraceService(self, config)
             case TraceProviderType.langsmith:
-                return tracing.LangSmithTraceService(config)
+                return tracing.LangSmithTraceService(self, config)
         raise Exception(f"No tracing service configured for {self}")
 
 

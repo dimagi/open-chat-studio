@@ -47,15 +47,22 @@
                             </div>
                           {% endfor %}
                         </div>
-                        <div class="mt-2 pg-text-muted flex justify-between items-center">
+                        <div class="mt-2 pg-text-muted flex justify-between items-center gap-2">
                           <div>
                             <i class="fa-solid fa-clock mr-1"></i>
                             <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
                               {{ message.created_at|date:"DATETIME_FORMAT" }}
                             </time>
                           </div>
+                          {% if message.trace_info %}
+                            <div class="tooltip" data-tip="Open Trace on {{ message.trace_info.trace_provider|title }}">
+                              <a class="btn btn-xs btn-square" href="{{ message.trace_info.trace_url }}" target="_blank">
+                                <i class="fa-regular fa-chart-bar"></i>
+                              </a>
+                            </div>
+                          {% endif %}
                           {% if perms.annotations.add_usercomment %}
-                            <div class="grow ml-8">
+                            <div class="grow">
                               {% include "annotations/tag_ui.html" with object=message %}
                             </div>
                           {% endif %}

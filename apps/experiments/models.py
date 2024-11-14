@@ -10,9 +10,10 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -38,7 +39,24 @@ class VersionsObjectManagerMixin:
         return super().get_queryset()
 
     def get_queryset(self):
-        return super().get_queryset().filter(is_archived=False)
+        query = (
+            super()
+            .get_queryset()
+            .annotate(
+                is_version=Case(
+                    When(working_version_id__isnull=False, then=True),
+                    When(working_version_id__isnull=True, then=False),
+                    output_field=BooleanField(),
+                )
+            )
+        )
+        try:
+            self.model._meta.get_field("is_archived")
+        except FieldDoesNotExist:
+            pass
+        else:
+            query = query.filter(is_archived=False)
+        return query
 
 
 class PromptObjectManager(AuditingManager):
@@ -70,48 +88,15 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
+    pass
 
 
 class SyntheticVoiceObjectManager(AuditingManager):
@@ -479,6 +464,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
     )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The LLM model to use",
+        verbose_name="LLM Model",
+    )
     llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
@@ -556,11 +549,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
     )
-    max_token_limit = models.PositiveIntegerField(
+    max_token_limit_old = models.PositiveIntegerField(
         default=8192,
         help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
         "If 0, compression will be disabled which may result in errors or high LLM costs.",
-    )
+    )  # TODO Remove this after migration to llm_provider_model is complete
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,
@@ -648,7 +641,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def tools_enabled(self):
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or self.custom_action_operations.exists()
 
     @property
     def event_triggers(self):
@@ -660,6 +653,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
+    @property
+    def max_token_limit(self) -> int:
+        if self.assistant:
+            return self.assistant.llm_provider_model.max_token_limit
+        elif self.llm_provider:
+            return self.llm_provider_model.max_token_limit
+
     @cached_property
     def default_version(self) -> "Experiment":
         """Returns the default experiment, or if there is none, the working experiment"""
@@ -667,13 +667,33 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_chat_model(self):
         service = self.get_llm_service()
-        return service.get_chat_model(self.llm, self.temperature)
+        provider_model_name = self.get_llm_provider_model_name()
+        return service.get_chat_model(provider_model_name, self.temperature)
 
     def get_llm_service(self):
-        if self.llm_provider:
-            return self.llm_provider.get_llm_service()
-        elif self.assistant:
+        if self.assistant:
             return self.assistant.llm_provider.get_llm_service()
+        elif self.llm_provider:
+            return self.llm_provider.get_llm_service()
+
+    def get_llm_provider_model_name(self, raises=True):
+        if self.assistant:
+            if not self.assistant.llm_provider_model:
+                if raises:
+                    raise ValueError("llm_provider_model is not set for this Assistant")
+                return None
+            return self.assistant.llm_provider_model.name
+        elif self.llm_provider:
+            if not self.llm_provider_model:
+                if raises:
+                    raise ValueError("llm_provider_model is not set for this Experiment")
+                return None
+            return self.llm_provider_model.name
+
+    @property
+    def trace_service(self):
+        if self.trace_provider:
+            return self.trace_provider.get_service()
 
     def get_api_url(self):
         return absolute_url(reverse("api:openai-chat-completions", args=[self.public_id]))
@@ -714,6 +734,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_version)
+        self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
         return new_version
@@ -723,6 +745,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return
         new_version.pipeline = self.pipeline.create_new_version()
         new_version.save(update_fields=["pipeline"])
+
+    def _copy_assistant_to_new_version(self, new_version):
+        if not self.assistant:
+            return
+        new_version.assistant = self.assistant.create_new_version()
+        new_version.save(update_fields=["assistant"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
@@ -766,6 +794,19 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def _copy_trigger_to_new_version(self, trigger_queryset, new_version):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
+
+    def _copy_custom_action_operations_to_new_version(self, new_version):
+        for operation in self.get_custom_action_operations():
+            operation.create_new_version(new_experiment=new_version)
+
+    def get_custom_action_operations(self) -> models.QuerySet:
+        if self.is_working_version:
+            # only include operations that are still enabled by the action
+            return self.custom_action_operations.select_related("custom_action").filter(
+                custom_action__allowed_operations__contains=[F("operation_id")]
+            )
+        else:
+            return self.custom_action_operations.select_related("custom_action")
 
     @property
     def is_public(self) -> bool:
@@ -815,6 +856,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 string = "Unknown route type"
             return string
 
+        def format_custom_action_operation(op) -> str:
+            action = op.custom_action
+            op_details = action.get_operations_by_id().get(op.operation_id)
+            return f"{action.name}: {op_details}"
+
         return Version(
             instance=self,
             fields=[
@@ -827,7 +873,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 ),
                 # Language Model
                 VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_model", raw_value=self.llm),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
                 VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
                 # Safety
@@ -845,11 +891,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     group_name="Safety",
                     name="input_formatter",
                     raw_value=self.input_formatter,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="max_token_limit",
-                    raw_value=self.max_token_limit,
                 ),
                 # Consent
                 VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
@@ -894,6 +935,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     name="tools",
                     raw_value=set(self.tools),
                     to_display=format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="custom_actions",
+                    queryset=self.get_custom_action_operations(),
+                    to_display=format_custom_action_operation,
                 ),
                 VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),

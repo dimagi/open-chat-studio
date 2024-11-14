@@ -1,15 +1,20 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, Union
 
 from django.db import transaction
+from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent import schemas
+from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
 from apps.utils.time import pretty_date
+
+if TYPE_CHECKING:
+    from apps.assistants.models import OpenAiAssistant
 
 
 class CustomBaseTool(BaseTool):
@@ -229,10 +234,13 @@ TOOL_CLASS_MAP = {
 
 def get_tools(experiment_session, experiment) -> list[BaseTool]:
     tools = []
-    tool_names = experiment.assistant.tools if experiment.assistant else experiment.tools
-    for tool_name in tool_names:
+    tool_holder = experiment.assistant if experiment.assistant else experiment
+    for tool_name in tool_holder.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=experiment_session))
+
+    tools.extend(get_custom_action_tools(tool_holder))
+
     return tools
 
 
@@ -241,4 +249,25 @@ def get_assistant_tools(assistant) -> list[BaseTool]:
     for tool_name in assistant.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         tools.append(tool_cls(experiment_session=None))
+
+    tools.extend(get_custom_action_tools(assistant))
+
     return tools
+
+
+def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
+    operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
+    return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
+
+
+def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
+    custom_action = custom_action_operation.custom_action
+    spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
+    if not spec.paths:
+        return
+
+    auth_service = custom_action.get_auth_service()
+    path = list(spec.paths)[0]
+    method = spec.get_methods_for_path(path)[0]
+    function_def = openapi_spec_op_to_function_def(spec, path, method)
+    return function_def.build_tool(auth_service)

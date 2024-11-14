@@ -2,6 +2,7 @@ EXPERIMENT_FIELDS = [
     "owner",
     "name",
     "llm_provider",
+    "llm_provider_model",
     "llm",
     "temperature",
     "prompt_text",

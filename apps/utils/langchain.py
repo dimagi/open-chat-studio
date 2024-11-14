@@ -169,7 +169,7 @@ def mock_experiment_llm(experiment, responses: list[Any], token_counts: list[int
         patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
         patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
     ):
-        yield
+        yield service
 
 
 def build_fake_llm_service(responses, token_counts, fake_llm=None):

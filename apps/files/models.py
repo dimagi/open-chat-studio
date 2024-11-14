@@ -48,8 +48,9 @@ class File(BaseTeamModel):
             schema=self.schema,
             team=self.team,
         )
-        new_file_file = ContentFile(self.file.read())
-        new_file_file.name = self.file.name
-        new_file.file = new_file_file
+        if self.file:
+            new_file_file = ContentFile(self.file.read())
+            new_file_file.name = self.file.name
+            new_file.file = new_file_file
         new_file.save()
         return new_file

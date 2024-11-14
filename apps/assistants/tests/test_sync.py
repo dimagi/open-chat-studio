@@ -8,6 +8,7 @@ from openai.pagination import SyncCursorPage
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
     delete_openai_assistant,
+    get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
     sync_from_openai,
@@ -153,7 +154,7 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
     local_assistant.refresh_from_db()
     assert local_assistant.name == remote_assistant.name
     assert local_assistant.instructions == remote_assistant.instructions
-    assert local_assistant.llm_model == remote_assistant.model
+    assert local_assistant.llm_provider_model.name == remote_assistant.model
     assert local_assistant.temperature == remote_assistant.temperature
     assert local_assistant.top_p == remote_assistant.top_p
     assert local_assistant.builtin_tools == ["code_interpreter", "file_search"]
@@ -198,7 +199,7 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     assert imported_assistant.assistant_id == remote_assistant.id
     assert imported_assistant.name == remote_assistant.name
     assert imported_assistant.instructions == remote_assistant.instructions
-    assert imported_assistant.llm_model == remote_assistant.model
+    assert imported_assistant.llm_provider_model.name == remote_assistant.model
     assert imported_assistant.temperature == remote_assistant.temperature
     assert imported_assistant.top_p == remote_assistant.top_p
     assert imported_assistant.builtin_tools == ["code_interpreter", "file_search"]
@@ -237,3 +238,67 @@ def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, moc
     mock_delete.assert_called_with(local_assistant.assistant_id)
     assert mock_file_delete.call_count == 3
     assert mock_vector_store_delete.call_count == 1
+
+
+@pytest.mark.django_db()
+@patch("openai.resources.beta.Assistants.retrieve")
+def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
+    tool_type = "code_interpreter"
+    openai_files = FileObjectFactory.create_batch(2)
+
+    remote_assistant = AssistantFactory()
+    remote_assistant.tool_resources.code_interpreter.file_ids = [file.id for file in openai_files]
+    del remote_assistant.tool_resources.file_search
+    mock_retrieve.return_value = remote_assistant
+
+    # setup local assistant
+    files = FileFactory.create_batch(2)
+    files[0].external_id = openai_files[0].id
+    files[1].external_id = openai_files[1].id
+    [file.save() for file in files]
+
+    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=[tool_type])
+    resource = ToolResources.objects.create(tool_type=tool_type, assistant=local_assistant)
+    resource.files.set([files[0]])
+
+    assert get_out_of_sync_files(local_assistant) == (
+        {"code_interpreter": [openai_files[1].id]},
+        {},
+    )
+
+    # Update local files to match remote files
+    resource.files.set(files)
+    assert get_out_of_sync_files(local_assistant) == ({}, {})
+
+
+@pytest.mark.django_db()
+@patch("openai.resources.beta.vector_stores.files.Files.list")
+@patch("openai.resources.beta.Assistants.retrieve")
+def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
+    tool_type = "file_search"
+    openai_files = FileObjectFactory.create_batch(2)
+    file_list.return_value = [FileObjectFactory(id=file.id) for file in openai_files]
+
+    remote_assistant = AssistantFactory()
+    vector_store_id = "vs_123"
+    remote_assistant.tool_resources.file_search.vector_store_ids = [vector_store_id]
+    del remote_assistant.tool_resources.code_interpreter
+    mock_retrieve.return_value = remote_assistant
+
+    # setup local assistant
+    files = FileFactory.create_batch(2)
+    files[0].external_id = openai_files[0].id
+    files[1].external_id = openai_files[1].id
+    [file.save() for file in files]
+
+    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=[tool_type])
+    resource = ToolResources.objects.create(
+        tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": vector_store_id}
+    )
+    # Test out of sync
+    resource.files.set([files[0]])
+    assert get_out_of_sync_files(local_assistant) == ({"file_search": [openai_files[1].id]}, {})
+
+    # Test in sync
+    resource.files.set(files)
+    assert get_out_of_sync_files(local_assistant) == ({}, {})

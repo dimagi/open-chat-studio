@@ -3,7 +3,7 @@ import inspect
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -18,7 +18,7 @@ from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -66,13 +66,14 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "llm_models").all()
+        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
+        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "input_types": _pipeline_node_input_types(),
-            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers),
-            "default_values": _pipeline_node_default_values(llm_providers),
+            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
         }
 
 
@@ -86,33 +87,34 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
-def _pipeline_node_parameter_values(team, llm_providers):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
 
     return {
-        "LlmProviderId": [{"id": provider["id"], "name": provider["name"]} for provider in llm_providers],
-        "LlmModel": {provider["id"]: provider["llm_models"] for provider in llm_providers},
+        "LlmProviderId": [
+            {"id": provider["id"], "name": provider["name"], "type": provider["type"]} for provider in llm_providers
+        ],
+        "LlmProviderModelId": [
+            {"id": provider.id, "type": provider.type, "name": str(provider)} for provider in llm_provider_models
+        ],
         "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
     }
 
 
-def _pipeline_node_default_values(llm_providers):
+def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
     """Returns the default values for each input type"""
-    try:
-        provider_id = llm_providers[0]["id"]
-    except (IndexError, KeyError):
-        provider_id = None
+    llm_provider_model_id = None
+    provider_id = None
+    if len(llm_providers) > 0:
+        provider = llm_providers[0]
+        provider_id = provider["id"]
+        llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
 
-    try:
-        llm_model = llm_providers[0]["llm_models"][0]
-    except (IndexError, KeyError):
-        llm_model = None
     return {
         "LlmProviderId": provider_id,
-        "LlmModel": llm_model,
+        "LlmProviderModelId": llm_provider_model_id.id,
         "LlmTemperature": 0.7,
-        "MaxTokenLimit": 8192,
     }
 
 
@@ -144,7 +146,8 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.data = data.data.model_dump()
         pipeline.save()
         pipeline.set_nodes(data.data.nodes)
-        return JsonResponse({"data": {"message": "Pipeline saved"}})
+        pipeline.refresh_from_db(fields=["node_set"])
+        return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:
         pipeline = Pipeline.objects.get(pk=pk)
@@ -152,7 +155,16 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline = Pipeline.objects.create(
             id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
         )
-    return JsonResponse({"pipeline": {"id": pipeline.id, "name": pipeline.name, "data": pipeline.flow_data}})
+    return JsonResponse(
+        {
+            "pipeline": {
+                "id": pipeline.id,
+                "name": pipeline.name,
+                "data": pipeline.flow_data,
+                "errors": pipeline.validate(),
+            }
+        }
+    )
 
 
 @login_and_team_required

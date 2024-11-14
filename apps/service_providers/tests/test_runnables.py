@@ -8,6 +8,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.custom_actions.models import CustomAction, CustomActionOperation
 from apps.experiments.models import AgentTools, SourceMaterial
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
@@ -113,6 +114,57 @@ def test_runnable_with_source_material_missing(runnable, session, fake_llm_servi
 
 
 @pytest.mark.django_db()
+def test_runnable_with_custom_actions(session, fake_llm_service):
+    action = CustomAction.objects.create(
+        team=session.team,
+        name="Custom Action",
+        description="Custom action description",
+        prompt="Custom action prompt",
+        api_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Weather API", "version": "1.0.0"},
+            "servers": [{"url": "https://api.weather.com"}],
+            "paths": {
+                "/weather": {
+                    "get": {
+                        "summary": "Get weather",
+                    },
+                    "post": {
+                        "summary": "Update weather",
+                    },
+                },
+                "/pollen": {
+                    "get": {
+                        "summary": "Get pollen count",
+                    }
+                },
+            },
+        },
+        allowed_operations=["weather_get"],
+    )
+    CustomActionOperation.objects.create(
+        custom_action=action, experiment=session.experiment, operation_id="weather_get"
+    )
+    CustomActionOperation.objects.create(custom_action=action, experiment=session.experiment, operation_id="pollen_get")
+    session.experiment.tools = []
+    state = ChatExperimentState(session.experiment, session)
+    chain = AgentExperimentRunnable(state=state)
+    result = chain.invoke("hi")
+    assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
+    messages = fake_llm_service.llm.get_calls()[0].args[0]
+    assert len(messages) == 2
+    assert messages == [
+        SystemMessage(content="You are a helpful assistant"),
+        HumanMessage(content="hi"),
+    ]
+
+    tools_ = fake_llm_service.llm.get_calls()[0].kwargs["tools"]
+    # we only expect one because the other one is not present in the action's allowed_operations
+    assert len(tools_) == 1, tools_
+    assert sorted([tool["function"]["name"] for tool in tools_]) == ["weather_get"]
+
+
+@pytest.mark.django_db()
 def test_runnable_runnable_format_input(runnable, session, fake_llm_service):
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))
     session.experiment.input_formatter = "foo {input} bar"
@@ -155,7 +207,7 @@ def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm
 @pytest.mark.django_db()
 def test_runnable_with_history(runnable, session, chat, fake_llm_service):
     experiment = session.experiment
-    experiment.max_token_limit = 0  # disable compression
+    experiment.llm_provider_model.max_token_limit = 0  # disable compression
     session.chat = chat
     assert chat.messages.count() == 1
     chain = runnable.build(state=ChatExperimentState(session.experiment, session))

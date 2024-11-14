@@ -4,29 +4,26 @@ import httpx
 import pydantic
 import tenacity
 
-from apps.service_providers.auth_service.schemes import CommCareAuth
+from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
 
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self) -> httpx.Client:
-        return httpx.Client(**self._get_http_client_kwargs())
+        kwargs = {
+            **self._get_http_client_kwargs(),
+            "timeout": 10,
+            "limits": httpx.Limits(max_keepalive_connections=5, max_connections=10),
+        }
+        return httpx.Client(**kwargs)
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {}
 
     def call_with_retries(self, func, *args, **kwargs) -> Any:
         controller = self.get_retry_controller()
         if controller:
             func = controller.wraps(func)
         return func(*args, **kwargs)
-
-    def get_retry_controller(self) -> tenacity.Retrying | None:
-        return None
-
-    def _get_http_client_kwargs(self) -> dict:
-        return {}
-
-
-class CommCareAuthService(AuthService):
-    username: str
-    api_key: str
 
     def get_retry_controller(self):
         return tenacity.Retrying(
@@ -36,15 +33,43 @@ class CommCareAuthService(AuthService):
             retry=tenacity.retry_if_exception(self._is_http_429),
         )
 
-    def _get_http_client_kwargs(self) -> dict:
-        return {"auth": CommCareAuth(self.username, self.api_key)}
-
     @staticmethod
     def _is_http_429(exc: BaseException) -> bool:
         return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
 
     def _default_retry_wait(self):
         return tenacity.wait.wait_exponential_jitter()
+
+
+class BasicAuthService(AuthService):
+    username: str
+    password: pydantic.SecretStr
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {"auth": httpx.BasicAuth(self.username, self.password.get_secret_value())}
+
+
+class ApiKeyAuthService(AuthService):
+    key: str
+    value: pydantic.SecretStr
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {"auth": HeaderAuth(self.key, self.value.get_secret_value())}
+
+
+class BearerTokenAuthService(AuthService):
+    token: pydantic.SecretStr
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {"auth": HeaderAuth("Authorization", f"Bearer {self.token.get_secret_value()}")}
+
+
+class CommCareAuthService(AuthService):
+    username: str
+    api_key: pydantic.SecretStr
+
+    def _get_http_client_kwargs(self) -> dict:
+        return {"auth": CommCareAuth(self.username, self.api_key.get_secret_value())}
 
 
 class wait_or(tenacity.wait.wait_base):

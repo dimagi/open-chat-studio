@@ -3,6 +3,7 @@ from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
+from apps.service_providers.models import LlmProviderModel
 
 
 class ProviderTypeConfigForm(forms.Form):
@@ -189,6 +190,26 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     api_key = forms.CharField(label=_("API Key"))
 
 
+class BasicAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["password"]
+
+    username = forms.CharField(label=_("Username"))
+    password = forms.CharField(label=_("Password"))
+
+
+class ApiKeyAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["value"]
+
+    key = forms.CharField(label=_("Header Name"))
+    value = forms.CharField(label=_("API Key"))
+
+
+class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["token"]
+
+    token = forms.CharField(label=_("Bearer Token"))
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 
@@ -216,3 +237,30 @@ class LangsmithTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     api_key = forms.CharField(label=_("API Key"))
     api_url = forms.URLField(label=_("API URL"), initial="https://api.smith.langchain.com")
     project = forms.CharField(label=_("Project Name"))
+
+
+class LlmProviderModelForm(forms.ModelForm):
+    class Meta:
+        model = LlmProviderModel
+        fields = ("type", "name", "max_token_limit")
+        widgets = {
+            "type": forms.HiddenInput(),
+        }
+
+    def __init__(self, team, *args, **kwargs):
+        self.team = team
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        name = cleaned_data.get("name")
+        max_token_limit = cleaned_data.get("max_token_limit")
+
+        if (
+            LlmProviderModel.objects.filter(team=self.team, name=name, max_token_limit=max_token_limit)
+            .exclude(pk=self.instance.pk if self.instance else None)
+            .exists()
+        ):
+            raise forms.ValidationError(_("A model with this name and max token limit already exists for your team"))
+
+        return cleaned_data

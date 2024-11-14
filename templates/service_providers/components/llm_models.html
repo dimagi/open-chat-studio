@@ -1,0 +1,34 @@
+{% define 2 as num_cols %}
+{% for type_, models in models_by_type.items %}
+  <div id="models_{{ type_ }}" x-show="type === '{{ type_ }}'" class="mt-2"
+       {% if not for_type or type_ != for_type %}style="display:none"{% endif %}
+  >
+    <div class="grid grid-cols-{{ num_cols }} gap-x-5">
+      {% for i in num_cols|times %}
+        <div class="grid grid-cols-3 font-semibold">
+          <div>Model Name</div>
+          <div class="place-self-center">Token Limit</div>
+          {% if show_delete %}
+            <div class="place-self-start">Delete</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% for model in models %}
+        <div class="grid grid-cols-3" id="model_{{ model.id }}">
+          <div>{{ model.name }}</div>
+          <div class="place-self-center">{{ model.max_token_limit }}</div>
+          {% if show_delete %}
+            <div class="place-self-start">
+              <button class="btn btn-xs btn-ghost"
+                      hx-delete="{% url "service_providers:llm_provider_model_delete" request.team.slug model.id%}"
+                      hx-target="#model_{{ model.id }}"
+                      hx-swap="outerHTML">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}

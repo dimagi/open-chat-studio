@@ -14,7 +14,7 @@ from apps.utils.factories.experiment import (
     SourceMaterialFactory,
 )
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import (
     FakeLlmSimpleTokenCount,
     build_fake_llm_echo_service,
@@ -26,6 +26,11 @@ from apps.utils.pytest import django_db_with_data
 @pytest.fixture()
 def provider():
     return LlmProviderFactory()
+
+
+@pytest.fixture()
+def provider_model():
+    return LlmProviderModelFactory()
 
 
 @pytest.fixture()
@@ -47,7 +52,7 @@ def experiment_session():
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
+def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, pipeline):
     service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'], token_counts=[0])
     get_llm_service.return_value = service
 
@@ -76,7 +81,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, pipeline):
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": provider_model.id,
                         "prompt": """Make a summary of the following text: {input}.
                                 Output it as JSON with a single key called 'summary' with the summary.""",
                     },
@@ -159,7 +164,7 @@ def test_send_email(pipeline):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_llm_response(get_llm_service, provider, pipeline):
+def test_llm_response(get_llm_service, provider, provider_model, pipeline):
     service = build_fake_llm_service(responses=["123"], token_counts=[0])
     get_llm_service.return_value = service
     data = {
@@ -172,7 +177,7 @@ def test_llm_response(get_llm_service, provider, pipeline):
                     "type": "LLMResponse",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": provider_model.id,
                     },
                 },
                 "id": "llm-GUk0C",
@@ -188,7 +193,9 @@ def test_llm_response(get_llm_service, provider, pipeline):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_material, experiment_session):
+def test_llm_with_prompt_response(
+    get_llm_service, provider, provider_model, pipeline, source_material, experiment_session
+):
     service = build_fake_llm_echo_service()
     get_llm_service.return_value = service
 
@@ -217,7 +224,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": provider_model.id,
                         "source_material_id": source_material.id,
                         "prompt": ("Node 1: Use this {source_material} to answer questions about {participant_data}."),
                     },
@@ -231,7 +238,7 @@ def test_llm_with_prompt_response(get_llm_service, provider, pipeline, source_ma
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": provider_model.id,
                         "source_material_id": source_material.id,
                         "prompt": "Node 2:",
                     },
@@ -485,7 +492,7 @@ def test_conditional_node(pipeline, experiment_session):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_router_node(get_llm_service, provider, pipeline, experiment_session):
+def test_router_node(get_llm_service, provider, provider_model, pipeline, experiment_session):
     service = build_fake_llm_echo_service(include_system_message=False)
     get_llm_service.return_value = service
 
@@ -558,9 +565,9 @@ def test_router_node(get_llm_service, provider, pipeline, experiment_session):
                     "params": {
                         "prompt": "You are a router",
                         "keywords": ["A", "b", "c", "d"],
-                        "llm_model": "claude-3-5-sonnet-20240620",
                         "num_outputs": "4",
                         "llm_provider_id": provider.id,
+                        "llm_provider_model_id": provider_model.id,
                     },
                 },
                 "type": "pipelineNode",
@@ -636,7 +643,7 @@ def test_router_node(get_llm_service, provider, pipeline, experiment_session):
 
 
 @contextmanager
-def extract_structured_data_pipeline(provider, pipeline, llm=None):
+def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=None):
     service = build_fake_llm_service(responses=[{"name": "John"}], token_counts=[0], fake_llm=llm)
 
     with (
@@ -655,7 +662,7 @@ def extract_structured_data_pipeline(provider, pipeline, llm=None):
                         "type": "ExtractStructuredData",
                         "params": {
                             "llm_provider_id": provider.id,
-                            "llm_model": "fake-model",
+                            "llm_provider_model_id": provider_model.id,
                             "data_schema": '{"name": "the name of the user"}',
                         },
                     },
@@ -671,10 +678,10 @@ def extract_structured_data_pipeline(provider, pipeline, llm=None):
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_structured_data_no_chunking(provider, pipeline):
+def test_extract_structured_data_no_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
 
-    with extract_structured_data_pipeline(provider, pipeline) as graph:
+    with extract_structured_data_pipeline(provider, provider_model, pipeline) as graph:
         state = PipelineState(
             messages=["ai: hi user\nhuman: hi there I am John"],
             experiment_session=session,
@@ -684,7 +691,7 @@ def test_extract_structured_data_no_chunking(provider, pipeline):
 
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_extract_structured_data_with_chunking(provider, pipeline):
+def test_extract_structured_data_with_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
     ParticipantData.objects.create(
         team=session.team,
@@ -701,7 +708,7 @@ def test_extract_structured_data_with_chunking(provider, pipeline):
     )
 
     with (
-        extract_structured_data_pipeline(provider, pipeline, llm) as graph,
+        extract_structured_data_pipeline(provider, provider_model, pipeline, llm) as graph,
         mock.patch(
             "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
             return_value=["I am bond", "james bond", "007"],
@@ -819,7 +826,7 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
                         "type": "ExtractParticipantData",
                         "params": {
                             "llm_provider_id": provider.id,
-                            "llm_model": "fake-model",
+                            "llm_provider_model_id": session.experiment.llm_provider_model.id,
                             "data_schema": '{"name": "the name of the user"}',
                             "key_name": key_name,
                         },

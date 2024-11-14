@@ -36,7 +36,7 @@ from apps.utils.factories.experiment import (
     ParticipantFactory,
     SourceMaterialFactory,
 )
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 
 
@@ -61,7 +61,7 @@ def test_create_experiment_success(client, team_with_users):
         "consent_form": consent_form.id,
         "temperature": 0.7,
         "llm_provider": LlmProviderFactory(team=team_with_users).id,
-        "llm": "gpt-3.5",
+        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
         "tools": [AgentTools.ONE_OFF_REMINDER],
@@ -74,6 +74,34 @@ def test_create_experiment_success(client, team_with_users):
     experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
+@pytest.mark.django_db()
+def test_create_experiment_creates_first_version(client, team_with_users):
+    user = team_with_users.members.first()
+    consent_form = ConsentFormFactory(team=team_with_users)
+    LlmProviderFactory(team=team_with_users)
+    client.force_login(user)
+
+    post_data = {
+        "name": "some name",
+        "type": "llm",
+        "prompt_text": "You are a helpful assistant.",
+        "consent_form": consent_form.id,
+        "temperature": 0.7,
+        "llm_provider": LlmProviderFactory(team=team_with_users).id,
+        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
+        "max_token_limit": 100,
+        "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
+    }
+    client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
+    experiments = Experiment.objects.filter(owner=user).all()
+    assert len(experiments) == 2
+    working_verison = experiments.filter(working_version=None).first()
+    versioned_exp = experiments.filter(version_number=1).first()
+    assert working_verison is not None
+    assert versioned_exp is not None
+    assert versioned_exp.is_default_version
+
+
 @override_flag("assistants", active=True)
 @pytest.mark.parametrize(
     ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
@@ -82,7 +110,7 @@ def test_create_experiment_success(client, team_with_users):
         (False, True, True, True, {}),
         (False, False, True, True, {"prompt_text"}),
         (False, True, False, True, {"llm_provider"}),
-        (False, True, True, False, {"llm"}),
+        (False, True, True, False, {"llm_provider_model"}),
     ],
 )
 def test_experiment_form_with_assistants(
@@ -92,6 +120,7 @@ def test_experiment_form_with_assistants(
     request = mock.Mock()
     request.team = team_with_users
     llm_provider = LlmProviderFactory(team=team_with_users)
+    llm_provider_model = LlmProviderModelFactory(team=team_with_users, type=llm_provider.type)
     form = ExperimentForm(
         request,
         data={
@@ -100,7 +129,7 @@ def test_experiment_form_with_assistants(
             "assistant": assistant.id if with_assistant else None,
             "prompt_text": "text" if with_prompt else None,
             "llm_provider": llm_provider.id if with_llm_provider else None,
-            "llm": "gpt4" if with_llm_model else None,
+            "llm_provider_model": llm_provider_model.id if with_llm_model else None,
             "temperature": 0.7,
             "max_token_limit": 10,
             "consent_form": ConsentFormFactory(team=team_with_users).id,
@@ -146,8 +175,9 @@ def test_prompt_variable_validation(tools, source_material, prompt_str, expectat
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team")
-def test_form_fields(_get_for_team_mock):
+@mock.patch("apps.experiments.views.experiment.initialize_form_for_custom_actions", mock.Mock())
+@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team", mock.Mock())
+def test_form_fields():
     path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
     form_html = path.read_text()
     request = mock.Mock()

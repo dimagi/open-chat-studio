@@ -59,7 +59,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "node",
                         "prompt": "Node 1:",
                     },
@@ -73,7 +73,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "prompt": "Node 2:",
                         # No history_type
                     },
@@ -160,7 +160,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "node",
                         "prompt": "Node 1:",
                     },
@@ -174,7 +174,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "prompt": "Node 2:",
                         "history_type": "node",
                     },
@@ -268,7 +268,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "global",
                         "prompt": "Node 1:",
                     },
@@ -282,7 +282,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "prompt": "Node 2:",
                         "history_type": "node",
                     },
@@ -389,7 +389,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "named",
                         "history_name": "history1",
                         "prompt": "Node 1:",
@@ -404,7 +404,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "prompt": "Node 2:",
                         "history_type": "named",
                         "history_name": "history1",
@@ -419,7 +419,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "prompt": "Node 3:",
                     },
                 },
@@ -497,7 +497,7 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
                     "type": "LLMResponseWithPrompt",
                     "params": {
                         "llm_provider_id": provider.id,
-                        "llm_model": "fake-model",
+                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
                         "history_type": "none",
                         "prompt": "Node 1:",
                     },

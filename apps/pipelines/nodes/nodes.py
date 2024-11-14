@@ -2,6 +2,8 @@ import json
 from typing import Literal
 
 import tiktoken
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
@@ -9,7 +11,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic_core import PydanticCustomError
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
@@ -22,22 +25,24 @@ from apps.pipelines.nodes.types import (
     HistoryName,
     HistoryType,
     Keywords,
-    LlmModel,
     LlmProviderId,
+    LlmProviderModelId,
     LlmTemperature,
-    MaxTokenLimit,
     NumOutputs,
     SourceMaterialId,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.time import pretty_date
 
 
 class RenderTemplate(PipelineNode):
     __human_name__ = "Render a template"
     __node_description__ = "Renders a template"
-    template_string: ExpandableText
+    template_string: ExpandableText = Field(
+        description="Use {your_variable_name} to refer to designate input",
+    )
 
     def _process(self, input, **kwargs) -> str:
         def all_variables(in_):
@@ -63,8 +68,8 @@ class RenderTemplate(PipelineNode):
 
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId
-    llm_model: LlmModel
-    llm_temperature: LlmTemperature = 1.0
+    llm_provider_model_id: LlmProviderModelId
+    llm_temperature: LlmTemperature = Field(default=1.0, gt=0.0, le=2.0)
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -77,14 +82,19 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    def get_llm_provider_model(self):
+        try:
+            return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
+        except LlmProviderModel.DoesNotExist:
+            raise PipelineNodeBuildError(f"LLM provider model with id {self.llm_provider_model_id} does not exist")
+
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self.llm_model, self.llm_temperature)
+        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
 
 
 class HistoryMixin(LLMResponseMixin):
     history_type: HistoryType = PipelineChatHistoryTypes.NONE
     history_name: HistoryName | None = None
-    max_token_limit: MaxTokenLimit = 8192
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -99,7 +109,7 @@ class HistoryMixin(LLMResponseMixin):
             return compress_chat_history(
                 chat=session.chat,
                 llm=self.get_chat_model(),
-                max_token_limit=self.max_token_limit,
+                max_token_limit=self.get_llm_provider_model().max_token_limit,
                 input_messages=input_messages,
             )
 
@@ -111,7 +121,7 @@ class HistoryMixin(LLMResponseMixin):
             return []
         return compress_pipeline_chat_history(
             pipeline_chat_history=history,
-            max_token_limit=self.max_token_limit,
+            max_token_limit=self.get_llm_provider_model().max_token_limit,
             llm=self.get_chat_model(),
             input_messages=input_messages,
         )
@@ -146,7 +156,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
     __node_description__ = "Calls an LLM with a prompt"
 
     source_material_id: SourceMaterialId | None = None
-    prompt: ExpandableText = "You are a helpful assistant. Answer the user's query as best you can: {input}"
+    prompt: ExpandableText = Field(
+        default="You are a helpful assistant. Answer the user's query as best you can",
+    )
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
@@ -196,8 +208,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 class SendEmail(PipelineNode):
     __human_name__ = "Send an email"
     __node_description__ = ""
-    recipient_list: str
+    recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
+
+    @field_validator("recipient_list", mode="before")
+    def recipient_list_has_valid_emails(cls, value):
+        value = value or ""
+        for email in [email.strip() for email in value.split(",")]:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
+        return value
 
     def _process(self, input, **kwargs) -> str:
         send_email_from_pipeline.delay(
@@ -232,7 +254,9 @@ class BooleanNode(Passthrough):
 class RouterNode(Passthrough, HistoryMixin):
     __human_name__ = "Router"
     __node_description__ = "Routes the input to one of the linked nodes"
-    prompt: ExpandableText = "You are an extremely helpful router {input}"
+    prompt: ExpandableText = Field(
+        default="You are an extremely helpful router",
+    )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
 
@@ -336,14 +360,15 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        model_token_limit = 8192  # Get this from model metadata
+        llm_provider_model = self.get_llm_provider_model()
+        model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
         overlap_tokens = int(chunk_size_tokens * overlap_percentage)
         self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
         try:
-            encoding = tiktoken.encoding_for_model(self.llm_model)
+            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
             encoding_name = encoding.name
         except KeyError:
             # The same encoder we use for llm.get_num_tokens_from_messages
@@ -388,16 +413,36 @@ class ExtractStructuredDataNodeMixin:
         return schema
 
 
-class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse):
+class StructuredDataSchemaValidatorMixin:
+    @field_validator("data_schema")
+    def validate_data_schema(cls, value):
+        try:
+            parsed_value = json.loads(value)
+        except json.JSONDecodeError:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
+            raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        return value
+
+
+class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Structured Data"
     __node_description__ = "Extract structured data from the input"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+        description="A JSON object structure where the key is the name of the field and the value the description",
+    )
 
 
-class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse):
+class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
     __human_name__ = "Extract Participant Data"
     __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: ExpandableText
+    data_schema: ExpandableText = Field(
+        default='{"name": "the name of the user"}',
+        description="A JSON object structure where the key is the name of the field and the value the description",
+    )
     key_name: str | None = None
 
     def get_reference_data(self, state) -> dict:

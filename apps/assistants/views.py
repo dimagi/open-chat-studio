@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
@@ -16,13 +16,16 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
+from ..teams.decorators import login_and_team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
     delete_openai_assistant,
+    get_out_of_sync_files,
     import_openai_assistant,
+    is_synced_with_openai,
     push_assistant_to_openai,
     sync_from_openai,
 )
@@ -63,7 +66,9 @@ class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "assistants.view_openaiassistant"
 
     def get_queryset(self):
-        return OpenAiAssistant.objects.filter(team=self.request.team).order_by("name")
+        return OpenAiAssistant.objects.filter(
+            team=self.request.team, is_archived=False, working_version_id=None
+        ).order_by("name")
 
 
 class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -140,12 +145,50 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         return response
 
 
+@login_and_team_required
+def check_sync_status(request, team_slug, pk):
+    assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+    if not assistant.assistant_id:
+        return render(request, "assistants/sync_status.html", {"not_pushed": True})
+
+    error = None
+    try:
+        diffs = is_synced_with_openai(assistant)
+    except OpenAiSyncError as e:
+        error = str(e)
+        diffs = []
+    files_missing_local, files_missing_remote = get_out_of_sync_files(assistant)
+    context = {
+        "diffs": diffs,
+        "object": assistant,
+        "files_missing_local": files_missing_local,
+        "files_missing_remote": files_missing_remote,
+        "errors": error,
+    }
+    return render(request, "assistants/sync_status.html", context)
+
+
+class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
+    permission_required = "assistants.change_openaiassistant"
+
+    def post(self, request, team_slug: str, pk: int):
+        assistant = get_object_or_404(OpenAiAssistant, team__slug=team_slug, pk=pk)
+        try:
+            sync_from_openai(assistant)
+        except OpenAiSyncError as e:
+            messages.error(request, f"Error syncing assistant: {e}")
+        return HttpResponse(headers={"HX-Refresh": "true"})
+
+
 class DeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "assistants.delete_openaiassistant"
 
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
+        if assistant.working_version_id is None and not assistant.is_archived:
+            messages.warning(request, "Cannot delete an versioned assistant without first archiving.")
+            return HttpResponse(status=400)
         try:
             delete_openai_assistant(assistant)
         except OpenAiSyncError as e:
@@ -162,8 +205,8 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.delete()
-        messages.success(request, "Assistant Deleted")
+        assistant.archive()
+        messages.success(request, "Assistant Archived")
         return HttpResponse()
 
 

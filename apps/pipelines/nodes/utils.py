@@ -8,6 +8,7 @@ def get_input_types_for_node(node_class):
         name: str
         type: str
         default: Any = None
+        help_text: str | None = None
 
     class NodeInputType(pydantic.BaseModel):
         name: str
@@ -21,7 +22,7 @@ def get_input_types_for_node(node_class):
             type_ = info.annotation.__args__[0]
         else:
             type_ = info.annotation
-        new_input = InputParam(name=field_name, type=str(type_), default=info.default)
+        new_input = InputParam(name=field_name, type=str(type_), default=info.default, help_text=info.description)
         inputs.append(new_input)
 
     return NodeInputType(

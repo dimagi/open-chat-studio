@@ -51,6 +51,7 @@ CONTENT_TYPES = {
     "assistants": ["openaiassistant", "toolresources"],
     "channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
+    "custom_actions": ["customaction", "customactionoperation"],
     "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
     "experiments": [
         "consentform",
@@ -67,7 +68,14 @@ CONTENT_TYPES = {
     ],
     "files": ["file"],
     "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "pipelinerun", "node"],
-    "service_providers": ["authprovider", "llmprovider", "voiceprovider", "messagingprovider", "traceprovider"],
+    "service_providers": [
+        "authprovider",
+        "llmprovider",
+        "llmprovidermodel",
+        "voiceprovider",
+        "messagingprovider",
+        "traceprovider",
+    ],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
@@ -144,6 +152,7 @@ GROUPS = [
         TEAM_ADMIN_GROUP,
         [
             AppPermSetDef("teams", ALL),
+            AppPermSetDef("custom_actions", ALL),
             AppPermSetDef("service_providers", ALL),
         ],
     ),

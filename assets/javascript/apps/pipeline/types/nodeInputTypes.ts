@@ -3,6 +3,7 @@ export type InputParam = {
   human_name?: string;
   type: string;
   default?: unknown;
+  help_text: string;
 };
 
 export type NodeInputTypes = {

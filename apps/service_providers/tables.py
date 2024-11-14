@@ -3,9 +3,10 @@ from django.urls import reverse
 from django_tables2 import tables
 
 from apps.generics import actions
+from apps.service_providers.models import LlmProviderModel
 
 
-def make_table(provider_type, model, fields=("type", "name")):
+def make_table(provider_type: str, label: str, model, fields=("type", "name")):
     meta_attrs = {
         "model": model,
         "fields": fields,
@@ -22,7 +23,7 @@ def make_table(provider_type, model, fields=("type", "name")):
                 actions.delete_action(
                     url_name="service_providers:delete",
                     url_factory=_make_url_factory(provider_type),
-                    confirm_message="Continuing with this action will remove this tag from any tagged entity",
+                    confirm_message=f"This will remove the {label} from any places it is being used",
                 ),
             ]
         ),
@@ -36,3 +37,22 @@ def _make_url_factory(provider_type):
         return reverse(url_name, args=[request.team.slug, provider_type, record.pk])
 
     return url_factory
+
+
+class LlmProviderModelTable(tables.Table):
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="service_providers:llm_provider_model_edit"),
+            actions.delete_action(
+                url_name="service_providers:llm_provider_model_delete",
+                confirm_message="Are you sure you want to delete this custom LLM Provider Model?",
+                display_condition=lambda request, record: not record.has_related_objects(),
+            ),
+        ]
+    )
+
+    class Meta:
+        model = LlmProviderModel
+        fields = ("name", "type", "max_token_limit")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        empty_text = "No custom llm provider models found."
