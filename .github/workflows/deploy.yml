@@ -112,7 +112,7 @@ jobs:
         tags: |
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
-        file: Dockerfile.web
+        file: Dockerfile
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
