@@ -31,8 +31,8 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.state import (
-    AssistantExperimentState,
     ChatExperimentState,
+    ExperimentAssistantState,
 )
 
 if TYPE_CHECKING:
@@ -56,7 +56,7 @@ def create_experiment_runnable(
     """Create an experiment runnable based on the experiment configuration."""
     state_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
     if assistant := experiment.assistant:
-        state = AssistantExperimentState(**state_kwargs)
+        state = ExperimentAssistantState(**state_kwargs)
         if assistant.tools_enabled and not disable_tools:
             return AssistantAgentRunnable(state=state)
         return AssistantRunnable(state=state)
@@ -256,7 +256,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
 
 
 class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantExperimentState
+    state: ExperimentAssistantState
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
