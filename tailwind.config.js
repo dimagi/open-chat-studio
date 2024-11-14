@@ -1,5 +1,5 @@
 module.exports = {
-  // keep in sync with Dockerfile.web
+  // keep in sync with Dockerfile
   content: [
     './apps/**/*.html',
     './assets/**/*.js',
