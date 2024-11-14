@@ -123,7 +123,7 @@ def _update_llm_provider_models(LlmProviderModel):
         for obj in related_objects:
             custom_model = _get_or_create_custom_model(obj, key, provider_model, existing_custom_by_team)
             field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
-            setattr(obj, field.name, custom_model)
+            setattr(obj, field.attname, custom_model.id)
             obj.save(update_fields=[field.name])
 
         related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
