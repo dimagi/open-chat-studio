@@ -93,7 +93,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
-        config = {**self.additional_config, **config, "_type": self.slug}
+        config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
                 case LlmProviderTypes.openai:
