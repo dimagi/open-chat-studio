@@ -24,30 +24,26 @@ FROM python:3.11-slim-bullseye
 ENV PYTHONUNBUFFERED=1
 ENV DEBUG=0
 
-RUN <<EOT
-apt-get update -qy
-apt-get install -qyy \
-    -o APT::Install-Recommends=false \
-    -o APT::Install-Suggests=false \
-    # Azure cognitive audio dependencies
-    build-essential libssl-dev ca-certificates libasound2 wget \
-    # psycopg2 dependencies
-    libpq-dev \
-    # Translations dependencies
-    gettext \
-    # audio/video dependencies
-    ffmpeg \
-    # curl for heroku log shipping
-    curl \
-    # mimetype detection (creates /etc/mime.types)
-    mailcap \
-    # mimetype detection from content
-    libmagic1 \
-    # psql client for dbshell
-    postgresql-client
-apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
-rm -rf /var/lib/apt/lists/*
-EOT
+RUN apt-get update && apt-get install -y \
+  # psycopg2 dependencies
+  libpq-dev \
+  # Translations dependencies
+  gettext \
+  # audio/video dependencies
+  ffmpeg \
+  # Azure cognitive audio dependencies
+  build-essential libssl-dev ca-certificates libasound2 wget \
+  # curl for heroku log shipping
+  curl \
+  # mimetype detection (creates /etc/mime.types)
+  mailcap \
+  # mimetype detection from content
+  libmagic1 \
+  # psql client for dbshell
+  postgresql-client \
+  # cleaning up unused files
+  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system django \
     && adduser --system --ingroup django django
