@@ -11,8 +11,9 @@ from apps.utils.factories.service_provider_factories import LlmProviderModelFact
 @pytest.mark.django_db()
 def test_updates_existing_models():
     candidate = DEFAULT_LLM_PROVIDER_MODELS["openai"][0]
-    model = LlmProviderModel.objects.get(team=None, type="openai", name=candidate.name)
-    model.max_token_limit = 100
+    model, _ = LlmProviderModel.objects.update_or_create(
+        team=None, type="openai", name=candidate.name, defaults={"max_token_limit": 50}
+    )
     model.save()
 
     update_llm_provider_models()
@@ -24,8 +25,11 @@ def test_updates_existing_models():
 @pytest.mark.django_db()
 def test_creates_new_models():
     candidate = DEFAULT_LLM_PROVIDER_MODELS["openai"][0]
-    model = LlmProviderModel.objects.get(team=None, type="openai", name=candidate.name)
-    model.delete()
+    try:
+        model = LlmProviderModel.objects.get(team=None, type="openai", name=candidate.name)
+        model.delete()
+    except LlmProviderModel.DoesNotExist:
+        pass
 
     update_llm_provider_models()
 
