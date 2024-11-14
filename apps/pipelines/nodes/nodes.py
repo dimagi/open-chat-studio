@@ -14,6 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic_core import PydanticCustomError
 
+from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
@@ -33,6 +34,8 @@ from apps.pipelines.nodes.types import (
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.runnables import AssistantAgentRunnable, AssistantRunnable, ChainOutput
+from apps.service_providers.llm_service.state import PipelineAssistantState
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.time import pretty_date
 
@@ -488,3 +491,39 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
                 team=session.team,
                 data=output,
             )
+
+
+class AssistantNode(Passthrough):
+    __human_name__ = "OpenAI Assistant"
+    __node_description__ = "Calls an OpenAI assistant"
+    assistant_id: int
+    citations_enabled: bool = Field(default=True, description="Whether to include citations in the response")
+    input_formatter: str | None = None
+
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+        assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
+        state = PipelineAssistantState(
+            assistant=assistant,
+            session=state["experiment_session"],
+            trace_service=None,
+            input_formatter=self.input_formatter,
+            citations_enabled=self.citations_enabled,
+        )
+        if assistant.tools_enabled:
+            chain = AssistantAgentRunnable(state)
+        else:
+            chain = AssistantRunnable(state=state)
+
+        chain_output: ChainOutput = chain.invoke(input, config={}, attachments=[])
+        output = chain_output.output
+
+        return output
+        # TODO
+        # return PipelineState(
+        #     messages=[output],
+        #     outputs={node_id: output},
+        #     chat_message_metadata= {
+        #         "human": state.get_message_metadata(ChatMessageType.HUMAN),
+        #         "ai": state.get_message_metadata(ChatMessageType.AI)
+        #     }
+        # )
