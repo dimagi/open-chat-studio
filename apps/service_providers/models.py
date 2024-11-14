@@ -49,17 +49,18 @@ class ProviderMixin:
 class LlmProviderType:
     slug: str
     label: str
-    supports_transcription: bool = False
-    supports_assistants: bool = False
+    additional_config: dict = dataclasses.field(default_factory=dict)
 
     def __str__(self):
         return self.slug
 
 
 class LlmProviderTypes(LlmProviderType, Enum):
-    openai = "openai", _("OpenAI"), True, True
+    openai = "openai", _("OpenAI"), {"supports_transcription": True, "supports_assistants": True}
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
+    groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
+    perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
 
     def __str__(self):
         return str(self.value)
@@ -68,6 +69,14 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def choices(cls):
         empty = [(None, cls.__empty__)] if hasattr(cls, "__empty__") else []
         return empty + [(member.value.slug, member.label) for member in cls]
+
+    @property
+    def supports_transcription(self):
+        return self.additional_config.get("supports_transcription", False)
+
+    @property
+    def supports_assistants(self):
+        return self.additional_config.get("supports_assistants", False)
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -80,14 +89,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AzureOpenAIConfigForm
             case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+                return forms.OpenAIGenericConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
-        config = {
-            "supports_assistants": self.supports_assistants,
-            "supports_transcription": self.supports_transcription,
-            **config,
-        }
+        config = {**self.additional_config, **config, "_type": self.slug}
         try:
             match self:
                 case LlmProviderTypes.openai:
@@ -96,6 +103,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                     return llm_service.AzureLlmService(**config)
                 case LlmProviderTypes.anthropic:
                     return llm_service.AnthropicLlmService(**config)
+                case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+                    return llm_service.OpenAIGenericService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
         raise ServiceProviderConfigError(self.slug, "No chat model configured")
