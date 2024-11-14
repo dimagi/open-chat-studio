@@ -74,6 +74,34 @@ def test_create_experiment_success(client, team_with_users):
     experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
+@pytest.mark.django_db()
+def test_create_experiment_creates_first_version(client, team_with_users):
+    user = team_with_users.members.first()
+    consent_form = ConsentFormFactory(team=team_with_users)
+    LlmProviderFactory(team=team_with_users)
+    client.force_login(user)
+
+    post_data = {
+        "name": "some name",
+        "type": "llm",
+        "prompt_text": "You are a helpful assistant.",
+        "consent_form": consent_form.id,
+        "temperature": 0.7,
+        "llm_provider": LlmProviderFactory(team=team_with_users).id,
+        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
+        "max_token_limit": 100,
+        "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
+    }
+    client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
+    experiments = Experiment.objects.filter(owner=user).all()
+    assert len(experiments) == 2
+    working_verison = experiments.filter(working_version=None).first()
+    versioned_exp = experiments.filter(version_number=1).first()
+    assert working_verison is not None
+    assert versioned_exp is not None
+    assert versioned_exp.is_default_version
+
+
 @override_flag("assistants", active=True)
 @pytest.mark.parametrize(
     ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
