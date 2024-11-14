@@ -153,7 +153,7 @@ def create_llm_provider_model(request, team_slug: str):
         model.team = request.team
         model.save()
     else:
-        if len(form.errors) == 1:
+        if len(form.errors) == 1 and "__all__" in form.errors:
             return HttpResponseBadRequest(", ".join([str(v) for v in form.errors.values()]))
         return HttpResponseBadRequest(str(form.errors))
     return render(
