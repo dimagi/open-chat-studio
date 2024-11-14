@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("analysis", "0010_alter_analysis_llm_model"),
+        ("analysis", "0011_analysis_llm_provider_model"),
     ]
 
     operations = [
