@@ -1,7 +1,6 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.analysis.tests.factories import AnalysisFactory
 from apps.pipelines.flow import FlowNode
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -24,11 +23,6 @@ def llm_provider_model():
 @pytest.fixture()
 def assistant():
     return OpenAiAssistantFactory()
-
-
-@pytest.fixture()
-def analysis():
-    return AnalysisFactory()
 
 
 @pytest.fixture()
@@ -73,7 +67,7 @@ class TestServiceProviderModel:
         assert len(global_models) == len(team_models) - 1
         assert all(not m.is_custom() for m in global_models)
 
-    @pytest.mark.parametrize("fixture_name", ["experiment", "assistant", "analysis"])
+    @pytest.mark.parametrize("fixture_name", ["experiment", "assistant"])
     @django_db_with_data()
     def test_cannot_delete_provider_models_with_associated_models(self, request, fixture_name):
         associated_object = request.getfixturevalue(fixture_name)
