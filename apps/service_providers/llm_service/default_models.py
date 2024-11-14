@@ -128,14 +128,7 @@ def update_llm_provider_models():
         related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
         for node in related_pipeline_nodes.select_related("pipeline").all():
             custom_model = _get_or_create_custom_model(node.pipeline, key, provider_model, existing_custom_by_team)
-            node.params["llm_provider_model_id"] = custom_model.id
-            node.save()
-
-            data = node.pipeline.data
-            raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]
-            raw_node["data"]["params"]["llm_provider_model_id"] = custom_model.id
-            node.pipeline.data = data
-            node.pipeline.save()
+            _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", custom_model.id)
 
         provider_model.delete()
 
@@ -158,3 +151,16 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
         )
         existing_custom_by_team[id_key] = custom_model
     return custom_model
+
+
+def _update_pipeline_node_param(pipeline, node, param_name, param_value, commit=True):
+    node.params[param_name] = param_value
+    if commit:
+        node.save()
+
+    data = pipeline.data
+    raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]
+    raw_node["data"]["params"][param_name] = param_value
+    node.pipeline.data = data
+    if commit:
+        node.pipeline.save()
