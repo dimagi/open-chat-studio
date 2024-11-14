@@ -78,6 +78,12 @@ DEFAULT_LLM_PROVIDER_MODELS = {
 
 @transaction.atomic()
 def update_llm_provider_models():
+    from apps.service_providers.models import LlmProviderModel
+
+    _update_llm_provider_models(LlmProviderModel)
+
+
+def _update_llm_provider_models(LlmProviderModel):
     """
     This method updates the LlmProviderModel objects in the database to match the DEFAULT_LLM_PROVIDER_MODELS.
     If a model exists in the database that is not in DEFAULT_LLM_PROVIDER_MODELS, it is deleted.
@@ -86,9 +92,6 @@ def update_llm_provider_models():
     Any references to models that are going to be deleted are updated to reference a custom model (which is created
     if it does not already exist).
     """
-
-    from apps.service_providers.models import LlmProviderModel
-
     existing = {(m.type, m.name): m for m in LlmProviderModel.objects.filter(team=None)}
     existing_custom_by_team = {
         (m.team_id, m.type, m.name): m for m in LlmProviderModel.objects.filter(team__isnull=False)
