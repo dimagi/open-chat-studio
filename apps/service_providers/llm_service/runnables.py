@@ -59,7 +59,7 @@ def create_experiment_runnable(
         state = AssistantExperimentState(**state_kwargs)
         if assistant.tools_enabled and not disable_tools:
             return AssistantAgentRunnable(state=state)
-        return AssistantExperimentRunnable(state=state)
+        return AssistantRunnable(state=state)
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
@@ -255,7 +255,7 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return chain.invoke(self._get_input(input)).to_messages()
 
 
-class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
+class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
     state: AssistantExperimentState
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -543,7 +543,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         return {}
 
 
-class AssistantAgentRunnable(AssistantExperimentRunnable):
+class AssistantAgentRunnable(AssistantRunnable):
     def _extra_input_configs(self) -> dict:
         return {}
 

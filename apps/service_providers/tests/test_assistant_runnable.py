@@ -17,7 +17,7 @@ from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage
 from apps.service_providers.llm_service.runnables import (
-    AssistantExperimentRunnable,
+    AssistantRunnable,
     GenerationCancelled,
     GenerationError,
     create_experiment_runnable,
@@ -66,7 +66,7 @@ def db_session(request):
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -100,7 +100,7 @@ def test_assistant_conversation_new_chat(
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
@@ -134,7 +134,7 @@ def test_assistant_conversation_existing_chat(
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -169,7 +169,7 @@ def test_assistant_conversation_input_formatting(
     Mock(return_value=[]),
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_file_type_info")
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -276,7 +276,7 @@ def test_assistant_runnable_handles_cancellation_status(session):
 )
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.state.AssistantExperimentState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantExperimentRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
 def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
     save_response_annotations.return_value = ("normal response", {})
     thread_id = "thread_abc"
@@ -499,7 +499,7 @@ def test_assistant_response_with_image_file_content_block(
 def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
     state = Mock(spec=AssistantExperimentState)
     state.get_messages_to_sync_to_thread.return_value = messages
-    assistant_runnable = AssistantExperimentRunnable(state=state)
+    assistant_runnable = AssistantRunnable(state=state)
     assistant_runnable._sync_messages_to_thread(thread_id)
 
     assert state.get_messages_to_sync_to_thread.called
@@ -531,7 +531,7 @@ def test_get_messages_to_sync_to_thread():
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
     state = AssistantExperimentState(session.experiment, session)
-    assistant = AssistantExperimentRunnable(state=state)
+    assistant = AssistantRunnable(state=state)
     state.save_message_to_history = Mock()
     state.get_attachments = lambda _type: get_attachments_return_value or []
     return assistant
