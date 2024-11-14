@@ -28,10 +28,12 @@
     </form>
   </section>
   {% if not create %}
-    {% translate "Large Language Model services" as llm_subtitle %}
-    {% include 'service_providers/service_provider_home.html' with provider_type="llm" title="LLM Service Providers" subtitle=llm_subtitle perm="add_llmprovider" %}
-    {% translate "Custom Large Language Models" as llm_provider_model_subtitle %}
-    {% include 'service_providers/llm_provider_model_form.html' with provider_type="llm_provider_model" title="Custom LLM Models" subtitle=llm_provider_model_subtitle perm="add_llmprovidermodel" %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM Service Providers" subtitle="Large Language Model services"  %}
+      {% has_perm "service_providers" "add_llmprovider" as allow_new %}
+      {% url "service_providers:table" request.team.slug "llm" as table_url %}
+      {% url "service_providers:llm_new" request.team.slug as new_object_url %}
+      {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
+    {% endwith %}
     {% translate "Speech to text and visa versa" as speech_subtitle %}
     {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
     {% translate "WhatsApp, SMS etc" as messaging_subtitle %}

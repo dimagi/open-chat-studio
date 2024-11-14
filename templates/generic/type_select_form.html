@@ -2,12 +2,14 @@
 {% extends 'web/app/app_base.html' %}
 {% load form_tags %}
 {% block app %}
-  <div class="app-card max-w-5xl mx-auto">
+  <div class="app-card max-w-5xl mx-auto" x-data="{ type: '{{ secondary_key }}' }">
     <h1 class="pg-title">{{ title }}</h1>
     <div>
-      <form method="post" class="my-2" x-data="{ type: '{{ secondary_key }}' }" enctype="multipart/form-data">
+      <form method="post" class="my-2" enctype="multipart/form-data">
         {% csrf_token %}
         {% render_form_fields form.primary %}
+        {% block pre_secondary_form %}
+        {% endblock pre_secondary_form %}
         {% for key, form in form.secondary.items %}
           <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
             {% if form.custom_template %}
@@ -30,6 +32,8 @@
         {% endfor %}
         <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
       </form>
+      {% block post_form %}
+      {% endblock post_form %}
     </div>
   </div>
 {% endblock %}
