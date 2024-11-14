@@ -282,7 +282,6 @@ class BaseAssistantState(BaseRunnableState):
 
 
 class ExperimentAssistantState(ExperimentState, BaseAssistantState):
-    # TODO: rename save_message_to_history to _save_message_to_history
     def pre_run_hook(self, input, config, message_metadata):
         if config.get("configurable", {}).get("save_input_to_history", True):
             self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=message_metadata)
