@@ -506,10 +506,12 @@ class AssistantNode(Passthrough):
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
         assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
+        session = state["experiment_session"]
+
         state = PipelineAssistantState(
             assistant=assistant,
-            session=state["experiment_session"],
-            trace_service=None,
+            session=session,
+            trace_service=session.experiment.trace_service,
             input_formatter=self.input_formatter,
             citations_enabled=self.citations_enabled,
         )
