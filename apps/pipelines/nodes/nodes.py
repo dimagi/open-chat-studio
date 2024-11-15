@@ -16,6 +16,7 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.assistants.models import OpenAiAssistant
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
@@ -521,11 +522,22 @@ class AssistantNode(Passthrough):
             raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
-        from apps.channels.datamodels import Attachment
-
         assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        session = state["experiment_session"]
+        runnable = self._get_assistant_runnable(assistant, session=state["experiment_session"])
+        attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
+        chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
+        output = chain_output.output
 
+        return PipelineState(
+            messages=[output],
+            outputs={node_id: output},
+            message_metadata={
+                "input": runnable.state.get_message_metadata(ChatMessageType.HUMAN),
+                "output": runnable.state.get_message_metadata(ChatMessageType.AI),
+            },
+        )
+
+    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
         assistant_state = PipelineAssistantState(
             assistant=assistant,
             session=session,
@@ -533,19 +545,8 @@ class AssistantNode(Passthrough):
             input_formatter=self.input_formatter,
             citations_enabled=self.citations_enabled,
         )
-        if assistant.tools_enabled:
-            chain = AssistantAgentRunnable(state=assistant_state)
-        else:
-            chain = AssistantRunnable(state=assistant_state)
-        attachments = [Attachment.model_validate(params) for params in state["attachments"]]
-        chain_output: ChainOutput = chain.invoke(input, config={}, attachments=attachments)
-        output = chain_output.output
 
-        return PipelineState(
-            messages=[output],
-            outputs={node_id: output},
-            message_metadata={
-                "input": assistant_state.get_message_metadata(ChatMessageType.HUMAN),
-                "output": assistant_state.get_message_metadata(ChatMessageType.AI),
-            },
-        )
+        if assistant.tools_enabled:
+            return AssistantAgentRunnable(state=assistant_state)
+        else:
+            return AssistantRunnable(state=assistant_state)

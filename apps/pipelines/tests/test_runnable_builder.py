@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from unittest import mock
+from unittest.mock import Mock, patch
 
 import pytest
 from django.core import mail
@@ -9,6 +10,8 @@ from apps.experiments.models import ParticipantData
 from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
+from apps.service_providers.llm_service.runnables import ChainOutput
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     SourceMaterialFactory,
@@ -842,3 +845,48 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
         runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
         state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
         runnable.invoke(state)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("tools_enabled", [True, False])
+@patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
+def test_assistant_node(get_assistant_runnable, tools_enabled):
+    runnable_mock = Mock()
+    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
+        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    )
+    runnable_mock.state.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
+    get_assistant_runnable.return_value = runnable_mock
+
+    pipeline = PipelineFactory()
+    assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
+    data = {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {
+                    "id": "assistant-id",
+                    "label": "Assistant label",
+                    "type": "AssistantNode",
+                    "params": {
+                        "assistant_id": assistant.id,
+                        "citations_enabled": True,
+                        "input_formatter": "",
+                    },
+                },
+                "id": "assistant-id",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    state = PipelineState(
+        messages=["Hi there bot"],
+        experiment_session=ExperimentSessionFactory(),
+        attachments=[],
+    )
+    output_state = runnable.invoke(state)
+    assert output_state["message_metadata"]["input"] == {"test": "metadata"}
+    assert output_state["message_metadata"]["output"] == {"test": "metadata"}
+    assert output_state["messages"][-1] == "Hi there human"
