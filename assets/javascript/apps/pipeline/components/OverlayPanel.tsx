@@ -6,6 +6,7 @@ type OverlayPanelProps = {
   isOpen: boolean;
   classes?: string;
   onOpenChange?: (isOpen: boolean) => void;
+  onScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
 }
 
  export default function OverlayPanel(props: React.PropsWithChildren<OverlayPanelProps>) {
@@ -28,6 +29,7 @@ type OverlayPanelProps = {
          openClasses,
          props.classes,
        )}
+       onScroll={props.onScroll}
      >
        {props.children}
      </div>
