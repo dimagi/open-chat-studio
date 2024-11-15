@@ -8,6 +8,7 @@ from apps.service_providers.llm_service.state import (
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
 @pytest.fixture()
@@ -142,4 +143,51 @@ class TestAssistantStateSubclasses:
         assert state.chat == session.chat
 
 
-# TODO: Test subclass implementations of BaseRunnableState's abstract methods
+@pytest.mark.django_db()
+class TestBaseRunnableStateSubclasses:
+    def init_state(self, state_cls, **state_kwargs):
+        session = state_kwargs.get("session")
+        trace_service = state_kwargs.get("trace_service")
+        if state_cls == ChatExperimentState:
+            experiment = session.experiment
+            return ChatExperimentState(session=session, experiment=experiment, trace_service=trace_service)
+        elif state_cls == PipelineAssistantState:
+            return PipelineAssistantState(
+                session=session,
+                assistant=state_kwargs.get("assistant"),
+                trace_service=trace_service,
+                input_formatter=state_kwargs.get("input_formatter", ""),
+                citations_enabled=state_kwargs.get("citations_enabled", True),
+            )
+
+    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    def test_get_llm_service(self, state_cls):
+        llm_provider = LlmProviderFactory()
+        assistant = OpenAiAssistantFactory(llm_provider=llm_provider)
+        session = ExperimentSessionFactory(experiment__llm_provider=llm_provider)
+        state = self.init_state(state_cls=state_cls, session=session, assistant=assistant)
+
+        state.get_llm_service() == llm_provider
+
+    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    def test_callback_handler(self, state_cls):
+        llm_provider_model = LlmProviderModelFactory()
+        llm_provider = LlmProviderFactory()
+        assistant = OpenAiAssistantFactory(llm_provider=llm_provider, llm_provider_model=llm_provider_model)
+        session = ExperimentSessionFactory(
+            experiment__llm_provider=llm_provider, experiment__llm_provider_model=llm_provider_model
+        )
+        state = self.init_state(state_cls=state_cls, session=session, assistant=assistant)
+
+        state.callback_handler == llm_provider.get_llm_service().get_callback_handler(llm_provider_model.name)
+
+    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    def test_format_input(self, state_cls):
+        input_formatter = "message: {input}"
+        assistant = OpenAiAssistantFactory()
+        session = ExperimentSessionFactory(experiment__input_formatter=input_formatter)
+        state = self.init_state(
+            state_cls=state_cls, session=session, assistant=assistant, input_formatter=input_formatter
+        )
+
+        state.format_input("Hi there") == "message: Hi there"
