@@ -357,8 +357,7 @@ class PipelineAssistantState(BaseAssistantState):
         return input
 
     def get_tools(self):
-        # TODO: Hmm, might need to call get_tools
-        return get_assistant_tools(self.assistant)
+        return get_assistant_tools(self.assistant, experiment_session=self.session)
 
     def pre_run_hook(self, input, config, message_metadata):
         self.input_message_metadata = message_metadata

@@ -534,7 +534,6 @@ class AssistantNode(Passthrough):
             citations_enabled=self.citations_enabled,
         )
         if assistant.tools_enabled:
-            # TODO: Test this
             chain = AssistantAgentRunnable(state=assistant_state)
         else:
             chain = AssistantRunnable(state=assistant_state)
