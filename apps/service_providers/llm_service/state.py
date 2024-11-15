@@ -72,10 +72,6 @@ class BaseRunnableState(metaclass=ABCMeta):
     def format_input(self, input: str):
         pass
 
-    @abstractmethod
-    def get_prompt(self):
-        pass
-
     @property
     @abstractmethod
     def chat(self):
@@ -330,12 +326,10 @@ class PipelineAssistantState(BaseAssistantState):
     ):
         self._assistant = assistant
         self.session = session
-        # TODO: Pass in trace service
         self.trace_service = trace_service
 
         self.input_formatter = input_formatter
         self._citations_enabled = citations_enabled
-        # TODO: Extract this in the Node and add it to the pipeline state
         self.input_message_metadata = {}
         self.output_message_metadata = {}
 
@@ -366,7 +360,6 @@ class PipelineAssistantState(BaseAssistantState):
         # TODO: Hmm, might need to call get_tools
         return get_assistant_tools(self.assistant)
 
-    # ---------------------
     def pre_run_hook(self, input, config, message_metadata):
         self.input_message_metadata = message_metadata
 
@@ -381,5 +374,8 @@ class PipelineAssistantState(BaseAssistantState):
     def assistant(self):
         return self._assistant
 
-    def get_prompt(self):
-        pass
+    def get_message_metadata(self, message_type: ChatMessageType) -> dict:
+        """
+        Retrieve metadata for a given message type.
+        """
+        return self.input_message_metadata if message_type == ChatMessageType.HUMAN else self.output_message_metadata
