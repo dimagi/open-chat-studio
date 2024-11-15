@@ -28,6 +28,7 @@ IGNORE_APPS = {
     "allauth",
     "allauth_2fa",
     "api",
+    "analysis",  # TODO: delete once the app is completely removed
     "audit",
     "auth",
     "cache",  # heath_check.cache

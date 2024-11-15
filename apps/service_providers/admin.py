@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
-from apps.analysis.models import Analysis
 from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Node
@@ -29,7 +28,7 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
     list_display = ("name", "type", "max_token_limit", "team")
     list_filter = ("team", "type", "name")
     inlines = [ExperimentInline]
-    readonly_fields = ["related_experiments", "related_assistants", "related_analyses", "related_nodes"]
+    readonly_fields = ["related_experiments", "related_assistants", "related_nodes"]
 
     def related_experiments(self, obj):
         experiments = Experiment.objects.filter(llm_provider_model_id=str(obj.id))
@@ -50,16 +49,6 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
         return format_html("<br>".join(assistant_urls))
 
     related_assistants.short_description = "Assistant Usage"
-
-    def related_analyses(self, obj):
-        analyses = Analysis.objects.filter(llm_provider_model_id=str(obj.id))
-        analysis_urls = [
-            f"<a href={reverse('admin:analysis_analysis_change',args=[analysis.id])} >{str(analysis)}</a>"
-            for analysis in analyses
-        ]
-        return format_html("<br>".join(analysis_urls))
-
-    related_analyses.short_description = "Analysis Usage"
 
     def related_nodes(self, obj):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
