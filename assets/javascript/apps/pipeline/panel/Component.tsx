@@ -1,18 +1,14 @@
 import React, {DragEventHandler} from "react";
 
-export default function Component({
-                                    label,
-                                    onDragStart,
-                                    parentRef,
-                                    hasHelp,
-                                    toggleHelp,
-                                  }: {
+type ComponentProps = {
   label: string;
   onDragStart: DragEventHandler<HTMLDivElement>;
   parentRef: React.RefObject<HTMLDivElement>;
   hasHelp: boolean;
   toggleHelp: () => void;
-}) {
+}
+
+export default function Component({label, onDragStart, parentRef, hasHelp, toggleHelp}: ComponentProps) {
   return (
     <div
       draggable={true}
