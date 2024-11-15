@@ -783,7 +783,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
         raise Http404
 
     version_specific_vars = {
-        "assistant": experiment_version.assistant,
+        "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
         "experiment_version_number": version_number,
     }
@@ -832,7 +832,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
         attachments=attachments,
     )
     version_specific_vars = {
-        "assistant": experiment_version.assistant,
+        "assistant": experiment_version.get_assistant(),
         "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
