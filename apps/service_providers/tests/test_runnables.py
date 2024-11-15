@@ -1,6 +1,7 @@
 import dataclasses
 from collections.abc import Sequence
 from datetime import datetime
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
@@ -164,14 +165,24 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     assert sorted([tool["function"]["name"] for tool in tools_]) == ["weather_get"]
 
 
+@pytest.mark.parametrize(
+    ("extra_var", "extra_output"),
+    [
+        ("", ""),
+        (" {participant_data}", " {'name': 'Tester'}"),
+        (" {current_datetime}", " the current date and time"),
+    ],
+)
 @pytest.mark.django_db()
-def test_runnable_runnable_format_input(runnable, session, fake_llm_service):
-    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
-    session.experiment.input_formatter = "foo {input} bar"
+def test_runnable_runnable_format_input(runnable, session, fake_llm_service, extra_var, extra_output):
+    state = ChatExperimentState(session.experiment, session)
+    state.get_current_datetime = mock.Mock(return_value="the current date and time")
+    chain = runnable.build(state=state)
+    session.experiment.input_formatter = "foo {input} bar" + extra_var
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm_service.llm.get_calls()) == 1
-    assert _messages_to_dict(fake_llm_service.llm.get_call_messages()[0])[1] == {"human": "foo hi bar"}
+    assert _messages_to_dict(fake_llm_service.llm.get_call_messages()[0])[1] == {"human": "foo hi bar" + extra_output}
 
 
 @pytest.mark.django_db()
