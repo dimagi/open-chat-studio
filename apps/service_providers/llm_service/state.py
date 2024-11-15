@@ -5,16 +5,18 @@ from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
 
 from apps.annotations.models import Tag, TagCategories
+from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
 
-class RunnableState(metaclass=ABCMeta):
+class BaseRunnableState(metaclass=ABCMeta):
     ai_message: ChatMessage | None = None
 
     @abstractmethod
@@ -54,8 +56,13 @@ class RunnableState(metaclass=ABCMeta):
     def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
+    @property
+    @abstractmethod
+    def chat(self):
+        pass
 
-class ExperimentState(RunnableState):
+
+class ExperimentState(BaseRunnableState):
     def __init__(self, experiment: Experiment, session: ExperimentSession, trace_service=None):
         self.experiment = experiment
         self.session = session
@@ -126,28 +133,7 @@ class ExperimentState(RunnableState):
         self.chat.set_metadata(key, value)
 
 
-class ChatRunnableState(RunnableState):
-    @abstractmethod
-    def get_chat_history(self, input_messages: list):
-        pass
-
-    def get_source_material(self):
-        pass
-
-    @abstractmethod
-    def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
-        pass
-
-    @abstractmethod
-    def check_cancellation(self):
-        pass
-
-    @abstractmethod
-    def get_tools(self):
-        pass
-
-
-class ChatExperimentState(ExperimentState, ChatRunnableState):
+class ChatExperimentState(ExperimentState):
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
             self.chat,
@@ -186,36 +172,12 @@ class ChatExperimentState(ExperimentState, ChatRunnableState):
         return self.chat.metadata.get("cancelled", False)
 
 
-class AssistantState(RunnableState):
-    @abstractmethod
-    def get_assistant_instructions(self) -> str:
-        pass
-
-    @abstractmethod
-    def get_openai_assistant(self):
-        pass
-
-    @abstractmethod
-    def get_metadata(self, key: Chat.MetadataKeys):
-        pass
-
-    @abstractmethod
-    def save_message_to_history(
-        self, message: str, type_: ChatMessageType, resource_file_ids: dict | None = None
-    ) -> ChatMessage:
-        pass
-
-    @abstractmethod
-    def raw_client(self):
-        pass
-
-
-class AssistantExperimentState(ExperimentState, AssistantState):
+class BaseAssistantState(BaseRunnableState):
     def get_assistant_instructions(self):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
-        instructions = self.experiment.assistant.instructions
+        instructions = self.assistant.instructions
 
         instructions = instructions.format(
             participant_data=self.get_participant_data(),
@@ -223,7 +185,7 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         )
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
-        if self.experiment.assistant.include_file_info and code_interpreter_attachments:
+        if self.assistant.include_file_info and code_interpreter_attachments:
             file_type_info = self.get_file_type_info(code_interpreter_attachments)
             instructions += "\n\nFile type information:\n\n| File Path | Mime Type |\n"
             for file_info in file_type_info:
@@ -232,33 +194,109 @@ class AssistantExperimentState(ExperimentState, AssistantState):
 
         return instructions
 
-    def get_attachments(self, attachment_type: str):
-        return self.chat.attachments.filter(tool_type__in=attachment_type)
-
-    def get_file_type_info(self, attachments: list):
-        if not self.experiment.assistant.include_file_info:
+    def get_file_type_info(self, attachments: list) -> list:
+        if not self.assistant.include_file_info:
             return ""
         file_type_info = []
         for att in attachments:
             file_type_info.extend([{file.external_id: file.content_type} for file in att.files.all()])
         return file_type_info
 
-    def get_openai_assistant(self) -> OpenAIAssistantRunnable:
-        return self.experiment.assistant.get_assistant()
+    def get_attachments(self, attachment_type: str):
+        return self.chat.attachments.filter(tool_type__in=attachment_type)
 
     @cached_property
     def raw_client(self):
         return self.get_openai_assistant().client
 
+    def get_input_message_metadata(self, resource_file_mapping: dict[str, list[str]]):
+        metadata = {"openai_thread_checkpoint": True, **self.get_trace_metadata()}
+        file_ids = set([file_id for file_ids in resource_file_mapping.values() for file_id in file_ids])
+        metadata["openai_file_ids"] = list(file_ids)
+        return metadata
+
+    def get_output_message_metadata(self, annotation_file_ids: list):
+        metadata = {"openai_thread_checkpoint": True, **self.get_trace_metadata()}
+        metadata["openai_file_ids"] = annotation_file_ids
+        return metadata
+
+    def get_messages_to_sync_to_thread(self):
+        to_sync = []
+        for message in self.chat.message_iterator(with_summaries=False):
+            if message.get_metadata("openai_thread_checkpoint"):
+                break
+            to_sync.append(message)
+        return [
+            {
+                "content": message.content,
+                "role": message.role,
+            }
+            for message in reversed(to_sync)
+            if message.message_type != "system"
+        ]
+
     def get_metadata(self, key: Chat.MetadataKeys):
         """Chat metadata"""
         return self.chat.get_metadata(key)
+
+    def get_openai_assistant(self) -> OpenAIAssistantRunnable:
+        return self.assistant.get_assistant()
+
+    @property
+    def tools_enabled(self):
+        return self.assistant.tools_enabled
+
+    @property
+    def builtin_tools(self):
+        self.assistant.builtin_tools
+
+    @cached_property
+    def team(self) -> Team:
+        return self.assistant.team
+
+    @abstractmethod
+    def pre_run_hook(self, input, config, message_metadata):
+        pass
+
+    @abstractmethod
+    def post_run_hook(self, output, config, message_metadata):
+        pass
+
+    @abstractmethod
+    def citations_enabled(self) -> bool:
+        pass
+
+    @property
+    @abstractmethod
+    def assistant(self) -> OpenAiAssistant:
+        pass
+
+    @property
+    @abstractmethod
+    def chat(self):
+        pass
+
+    @abstractmethod
+    def get_trace_metadata(self) -> dict:
+        pass
+
+
+class ExperimentAssistantState(ExperimentState, BaseAssistantState):
+    def pre_run_hook(self, input, config, message_metadata):
+        if config.get("configurable", {}).get("save_input_to_history", True):
+            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=message_metadata)
+
+    def post_run_hook(self, output, config, message_metadata):
+        experiment_tag = config.get("configurable", {}).get("experiment_tag")
+        self.save_message_to_history(
+            output, type_=ChatMessageType.AI, message_metadata=message_metadata, experiment_tag=experiment_tag
+        )
 
     def save_message_to_history(
         self,
         message: str,
         type_: ChatMessageType,
-        annotation_file_ids: list | None = None,
+        message_metadata: dict | None = None,
         experiment_tag: str | None = None,
     ):
         """
@@ -266,15 +304,12 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         chat message metadata.
         Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
         """
-        metadata = {"openai_thread_checkpoint": True, **self.get_trace_metadata()}
-        if annotation_file_ids:
-            metadata["openai_file_ids"] = annotation_file_ids
-
+        message_metadata = message_metadata or {}
         chat_message = ChatMessage.objects.create(
             chat=self.chat,
             message_type=type_.value,
             content=message,
-            metadata=metadata,
+            metadata=message_metadata,
         )
 
         if experiment_tag:
@@ -296,20 +331,9 @@ class AssistantExperimentState(ExperimentState, AssistantState):
         return chat_message
 
     @property
-    def tools_enabled(self):
-        return self.experiment.assistant.tools_enabled
+    def citations_enabled(self):
+        return self.experiment.citations_enabled
 
-    def get_messages_to_sync_to_thread(self):
-        to_sync = []
-        for message in self.chat.message_iterator(with_summaries=False):
-            if message.get_metadata("openai_thread_checkpoint"):
-                break
-            to_sync.append(message)
-        return [
-            {
-                "content": message.content,
-                "role": message.role,
-            }
-            for message in reversed(to_sync)
-            if message.message_type != "system"
-        ]
+    @property
+    def assistant(self):
+        return self.experiment.assistant

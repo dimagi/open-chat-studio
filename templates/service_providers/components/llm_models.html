@@ -5,8 +5,8 @@
   >
     <div class="grid grid-cols-{{ num_cols }} gap-x-5">
       {% for i in num_cols|times %}
-        <div class="grid grid-cols-3 font-semibold">
-          <div>Model Name</div>
+        <div class="grid grid-cols-4 grid-flow-col-dense font-semibold">
+          <div class="col-span-2">Model Name</div>
           <div class="place-self-center">Token Limit</div>
           {% if show_delete %}
             <div class="place-self-start">Delete</div>
@@ -14,8 +14,8 @@
         </div>
       {% endfor %}
       {% for model in models %}
-        <div class="grid grid-cols-3" id="model_{{ model.id }}">
-          <div>{{ model.name }}</div>
+        <div class="grid grid-cols-4 grid-flow-col-dense" id="model_{{ model.id }}">
+          <div class="col-span-2">{{ model.name }}</div>
           <div class="place-self-center">{{ model.max_token_limit }}</div>
           {% if show_delete %}
             <div class="place-self-start">
