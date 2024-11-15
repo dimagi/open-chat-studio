@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [convert_to_openai_tool(tool, strict=True) for tool in internal_tools]
+        data["tools"] = [_convert_to_openai_tool(tool) for tool in internal_tools]
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -113,6 +113,32 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
         openai_assistant = client.beta.assistants.create(**data)
         assistant.assistant_id = openai_assistant.id
         assistant.save()
+
+
+def _convert_to_openai_tool(tool):
+    """Work around some limitiations of OpenAI function calling"""
+    function = convert_to_openai_tool(tool, strict=True)
+    try:
+        parameters = function["function"]["parameters"]
+    except KeyError:
+        return function
+
+    # OpenAI function schemas don't support 'format' or 'default' and must always specify a type
+    properties = parameters.get("properties", {})
+    for prop, schema in properties.items():
+        if schema.pop("format", False):
+            if "type" not in schema:
+                schema["type"] = "string"
+        schema.pop("default", False)
+
+        # Hack: OpenAI doesn't support 'AnyValue'
+        if "type" not in schema:
+            schema["type"] = "string"
+
+    # all fields must be required
+    parameters["required"] = list(properties)
+
+    return function
 
 
 @wrap_openai_errors
