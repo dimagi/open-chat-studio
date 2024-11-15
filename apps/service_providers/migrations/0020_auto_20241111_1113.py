@@ -181,11 +181,14 @@ def _create_custom_llm_provider_models(apps, schema_editor):
     LlmProvider = apps.get_model("service_providers", "LlmProvider")
     LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
     Experiment = apps.get_model("experiments", "Experiment")
-    Analysis = apps.get_model("analysis", "Analysis")
     Node = apps.get_model("pipelines", "Node")
 
-    for analysis in Analysis.objects.select_related("llm_provider").all():
-        _handle_analysis(LlmProviderModel, analysis)
+    try:
+        Analysis = apps.get_model("analysis", "Analysis")
+        for analysis in Analysis.objects.select_related("llm_provider").all():
+            _handle_analysis(LlmProviderModel, analysis)
+    except LookupError:
+        pass
 
     for node in Node.objects.filter(Q(type="LLMResponseWithPrompt") | Q(type="LLMResponse") | Q(type="RouterNode")).all():
         _handle_pipeline_node(LlmProvider, LlmProviderModel, node)
