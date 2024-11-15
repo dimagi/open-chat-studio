@@ -48,7 +48,7 @@ class File(BaseTeamModel):
             schema=self.schema,
             team=self.team,
         )
-        if self.file:
+        if self.file and self.file.storage.exists(self.file.name):
             new_file_file = ContentFile(self.file.read())
             new_file_file.name = self.file.name
             new_file.file = new_file_file
