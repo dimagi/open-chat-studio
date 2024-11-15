@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
-from django.db.models import Q
 from django.urls import reverse
 from django.utils.functional import classproperty
 from django.utils.translation import gettext
@@ -17,9 +16,9 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.pipelines.models import Node
 from apps.service_providers import auth_service, const, model_audit_fields, tracing
 from apps.teams.models import BaseTeamModel, Team
+from apps.utils.deletion import get_related_objects, has_related_objects
 
 from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
@@ -49,17 +48,18 @@ class ProviderMixin:
 class LlmProviderType:
     slug: str
     label: str
-    supports_transcription: bool = False
-    supports_assistants: bool = False
+    additional_config: dict = dataclasses.field(default_factory=dict)
 
     def __str__(self):
         return self.slug
 
 
 class LlmProviderTypes(LlmProviderType, Enum):
-    openai = "openai", _("OpenAI"), True, True
+    openai = "openai", _("OpenAI"), {"supports_transcription": True, "supports_assistants": True}
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
+    groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
+    perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
 
     def __str__(self):
         return str(self.value)
@@ -68,6 +68,14 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def choices(cls):
         empty = [(None, cls.__empty__)] if hasattr(cls, "__empty__") else []
         return empty + [(member.value.slug, member.label) for member in cls]
+
+    @property
+    def supports_transcription(self):
+        return self.additional_config.get("supports_transcription", False)
+
+    @property
+    def supports_assistants(self):
+        return self.additional_config.get("supports_assistants", False)
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -80,14 +88,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AzureOpenAIConfigForm
             case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+                return forms.OpenAIGenericConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict):
-        config = {
-            "supports_assistants": self.supports_assistants,
-            "supports_transcription": self.supports_transcription,
-            **config,
-        }
+        config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
                 case LlmProviderTypes.openai:
@@ -96,6 +102,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                     return llm_service.AzureLlmService(**config)
                 case LlmProviderTypes.anthropic:
                     return llm_service.AnthropicLlmService(**config)
+                case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+                    return llm_service.OpenAIGenericService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
         raise ServiceProviderConfigError(self.slug, "No chat model configured")
@@ -186,40 +194,15 @@ class LlmProviderModel(BaseTeamModel):
         return self.team is not None
 
     def has_related_objects(self):
-        for field in self._meta.get_fields():
-            if field.one_to_many and field.auto_created:
-                related_objects = getattr(self, field.get_accessor_name(), None)
-                if related_objects and related_objects.exists():
-                    return True
-        if Node.objects.filter(
-            Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
-        ).exists():
-            return True
-
-        return False
+        return has_related_objects(self, "llm_provider_model_id")
 
     def delete(self, *args, **kwargs):
-        related_object_strings = []
-        for field in self._meta.get_fields():
-            if field.one_to_many and field.auto_created:
-                related_objects = getattr(self, field.get_accessor_name(), None)
-                if related_objects and related_objects.exists():
-                    for obj in related_objects.all():
-                        related_model_name = obj._meta.verbose_name
-                        obj_name = obj.name
-                        related_object_strings.append(f"{related_model_name}: {obj_name}")
+        related_objects = get_related_objects(self, "llm_provider_model_id")
 
-        pipeline_nodes = (
-            Node.objects.filter(
-                Q(params__llm_provider_model_id=self.id) | Q(params__llm_provider_model_id=str(self.id))
-            )
-            .values_list("pipeline__name", flat=True)
-            .all()
-        )
-        for pipeline_node in pipeline_nodes:
-            related_object_strings.append(f"Pipeline: {pipeline_node}")
-
-        if related_object_strings:
+        if related_objects:
+            related_object_strings = [
+                f"{obj._meta.verbose_name}: {getattr(obj, 'name', obj)}" for obj in related_objects
+            ]
             raise DjangoValidationError(
                 f"Cannot delete LLM Provider Model {self.name} "
                 f"as it is in use by the following objects: {', '.join(related_object_strings)}"

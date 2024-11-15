@@ -80,6 +80,13 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["openai_api_key"]
+
+    # keep naming the same for the sake of simplicity with the client
+    openai_api_key = forms.CharField(label=_("API Key"))
+
+
 class OpenAIVoiceEngineFileFormset(BaseFileFormSet):
     accepted_file_types = ["mp4", "mp3"]
 

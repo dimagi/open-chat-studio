@@ -1,5 +1,4 @@
 from io import BytesIO
-from typing import ClassVar
 
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -81,7 +80,7 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
 
 
 class LlmService(pydantic.BaseModel):
-    _type: ClassVar[str]
+    _type: str
     supports_transcription: bool = False
     supports_assistants: bool = False
 
@@ -101,27 +100,12 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
 
-class OpenAILlmService(LlmService):
-    _type = "openai"
-
+class OpenAIGenericService(LlmService):
     openai_api_key: str
-    openai_api_base: str = None
-    openai_organization: str = None
-
-    def get_raw_client(self) -> OpenAI:
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
+    openai_api_base: str
 
     def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
-        model = ChatOpenAI(
-            model=llm_model,
-            temperature=temperature,
-            openai_api_key=self.openai_api_key,
-            openai_api_base=self.openai_api_base,
-            openai_organization=self.openai_organization,
-        )
+        model = ChatOpenAI(model=llm_model, temperature=temperature, **self._get_model_kwargs())
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -135,6 +119,32 @@ class OpenAILlmService(LlmService):
                     model.tiktoken_model_name = "gpt-4"
         return model
 
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+    def _get_model_kwargs(self):
+        return {
+            "openai_api_key": self.openai_api_key,
+            "openai_api_base": self.openai_api_base,
+        }
+
+
+class OpenAILlmService(OpenAIGenericService):
+    openai_api_base: str = None
+    openai_organization: str = None
+
+    def _get_model_kwargs(self):
+        return {
+            **super()._get_model_kwargs(),
+            "openai_organization": self.openai_organization,
+        }
+
+    def get_raw_client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
+
     def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self.get_raw_client().audio.transcriptions.create(
             model="whisper-1",
@@ -142,13 +152,8 @@ class OpenAILlmService(LlmService):
         )
         return transcript.text
 
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
-
 
 class AzureLlmService(LlmService):
-    _type = "openai"
-
     openai_api_key: str
     openai_api_base: str
     openai_api_version: str
@@ -167,8 +172,6 @@ class AzureLlmService(LlmService):
 
 
 class AnthropicLlmService(LlmService):
-    _type = "anthropic"
-
     anthropic_api_key: str
     anthropic_api_base: str
 
