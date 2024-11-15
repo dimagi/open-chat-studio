@@ -6,14 +6,12 @@ import {getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 
 type ComponentListParams = {
-  inputTypes: NodeInputTypes[];
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
 }
 
-export default function ComponentList({inputTypes, isOpen, setIsOpen}: ComponentListParams) {
-  const cachedData = getCachedData();
-  const defaultValues = cachedData.defaultValues;
+export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
+  const {inputTypes, defaultValues} = getCachedData();
 
   function getDefaultParamValues(inputType: NodeInputTypes): Record<string, any> {
     return inputType.input_params.reduce(
@@ -79,6 +77,7 @@ export default function ComponentList({inputTypes, isOpen, setIsOpen}: Component
           onDragStart(event, inputType)
         }
         parentRef={refMap[inputType.name]}
+        hasHelp={!!inputType.node_description}
         toggleHelp={() => toggleHelp(inputType)}
       />
     );
@@ -86,6 +85,9 @@ export default function ComponentList({inputTypes, isOpen, setIsOpen}: Component
 
   // Help bubbles need to be outside the overlay container to avoid clipping
   const helps = inputTypes.map((inputType) => {
+    if (!inputType.node_description) {
+      return null;
+    }
     return <ComponentHelp
       key={inputType.name}
       label={inputType.human_name}

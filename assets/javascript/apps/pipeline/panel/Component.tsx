@@ -4,11 +4,13 @@ export default function Component({
                                     label,
                                     onDragStart,
                                     parentRef,
+                                    hasHelp,
                                     toggleHelp,
                                   }: {
   label: string;
   onDragStart: DragEventHandler<HTMLDivElement>;
   parentRef: React.RefObject<HTMLDivElement>;
+  hasHelp: boolean;
   toggleHelp: () => void;
 }) {
   return (
@@ -19,24 +21,14 @@ export default function Component({
     >
       <div className="m-1 text-center">
         <span className="font-bold">{label}</span>
-        <div className="absolute top-0 right-0" ref={parentRef}>
-          <div className="dropdown" onClick={toggleHelp}>
-            <div tabIndex={0} role="button" className="btn btn-circle btn-ghost btn-xs text-info">
-              <svg
-                tabIndex={0}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                className="h-4 w-4 stroke-current">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-            </div>
+        {hasHelp &&
+          <div className="absolute top-0 right-0" ref={parentRef}>
+            <button tabIndex={0} role="button" className="btn btn-circle btn-ghost btn-xs text-info"
+                    onClick={toggleHelp}>
+              <i className={"fa-regular fa-circle-question"}></i>
+            </button>
           </div>
-        </div>
+        }
       </div>
     </div>
   );

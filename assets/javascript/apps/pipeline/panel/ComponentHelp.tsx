@@ -22,12 +22,23 @@ export default function ComponentHelp({label, parentRef, scrollPosition, showHel
     return null;
   }
   return (
-    <div className="card compact dropdown-content bg-base-100 rounded-box z-20 w-64 shadow"
-         style={{position: "fixed", top: top, left: left}}>
+    <HelpContent style={{position: "fixed", top: top, left: left}}>
+      <h2 className="font-semibold">{label}</h2>
+      {children}
+    </HelpContent>
+  );
+}
+
+export function HelpContent(props: {
+  children: React.ReactNode,
+  style?: any
+}) {
+  return (
+    <div className="card compact dropdown-content bg-base-100 rounded-box z-20 w-64 shadow border border-neutral-500"
+         style={props.style}>
       <div tabIndex={0} className="card-body">
-        <h2 className="font-semibold">{label}</h2>
-        {children}
+        {props.children}
       </div>
     </div>
-  );
+  )
 }
