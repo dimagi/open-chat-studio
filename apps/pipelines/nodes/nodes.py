@@ -34,6 +34,7 @@ from apps.pipelines.nodes.types import (
     LlmTemperature,
     NumOutputs,
     SourceMaterialId,
+    ToggleField,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -511,7 +512,7 @@ class AssistantNode(Passthrough):
     __human_name__ = "OpenAI Assistant"
     __node_description__ = "Calls an OpenAI assistant"
     assistant_id: AssistantId
-    citations_enabled: bool = Field(default=True, description="Whether to include citations in the response")
+    citations_enabled: ToggleField = Field(default=True, description="Whether to include cited sources in responses")
     input_formatter: str | None = Field(description="(Optional) Use {input} to designate the user input")
 
     @field_validator("input_formatter")

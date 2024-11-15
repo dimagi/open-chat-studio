@@ -150,6 +150,24 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
         </ExpandableTextWidget>
       );
     }
+    case "ToggleField": {
+      const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
+        event.target.value = event.target.checked ? "true" : "false";
+        updateParamValue(event);
+      };
+      const humanName = inputParam.name.replace(/_/g, " ");
+      return (
+        <InputField label={humanName} help_text={inputParam.help_text} inputError={inputError}>
+          <input
+            className="toggle"
+            name={inputParam.name}
+            onChange={onChangeCallback}
+            defaultChecked={paramValue === "true"}
+            type="checkbox"
+          ></input>
+        </InputField>
+      );
+    }
     default: {
       const humanName = inputParam.name.replace(/_/g, " ");
       return (
