@@ -41,7 +41,9 @@ class Command(BaseCommand):
                                 f"Failed to create version for experiment {experiment.name} ({experiment.id}): {e}"
                             )
                         else:
-                            raise CommandError(f"Failed to create version for experiment {experiment.name}: {e}")
+                            raise CommandError(
+                                f"Failed to create version for experiment {experiment.name} ({experiment.id}): {e}"
+                            )
 
         if not flag_is_active:
             flag.teams.add(team)

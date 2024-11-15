@@ -123,21 +123,16 @@ def _convert_to_openai_tool(tool):
     except KeyError:
         return function
 
-    # OpenAI function schemas don't support 'format' or 'default' and must always specify a type
+    # check if this function can use 'strict' mode
     properties = parameters.get("properties", {})
-    for prop, schema in properties.items():
-        if schema.pop("format", False):
-            if "type" not in schema:
-                schema["type"] = "string"
-        schema.pop("default", False)
+    # all fields are required
+    is_strict = set(parameters["required"]) == set(properties)
+    if is_strict:
+        for prop, schema in properties.items():
+            # format and default not supported + type must be present
+            is_strict &= "format" not in schema and "default" not in schema and "type" in schema
 
-        # Hack: OpenAI doesn't support 'AnyValue'
-        if "type" not in schema:
-            schema["type"] = "string"
-
-    # all fields must be required
-    parameters["required"] = list(properties)
-
+    function["function"]["strict"] = is_strict
     return function
 
 
