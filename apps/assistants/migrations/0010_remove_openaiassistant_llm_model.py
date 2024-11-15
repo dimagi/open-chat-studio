@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('assistants', '0008_openaiassistant_llm_provider_model'),
+        ('assistants', '0009_openaiassistant_is_archived_and_more'),
     ]
 
     operations = [
