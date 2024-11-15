@@ -514,10 +514,12 @@ class AssistantNode(Passthrough):
     input_formatter: str | None = None
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+        from apps.channels.datamodels import Attachment
+
         assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         session = state["experiment_session"]
 
-        state = PipelineAssistantState(
+        assistant_state = PipelineAssistantState(
             assistant=assistant,
             session=session,
             trace_service=session.experiment.trace_service,
@@ -525,18 +527,19 @@ class AssistantNode(Passthrough):
             citations_enabled=self.citations_enabled,
         )
         if assistant.tools_enabled:
-            chain = AssistantAgentRunnable(state)
+            # TODO: Test this
+            chain = AssistantAgentRunnable(state=assistant_state)
         else:
-            chain = AssistantRunnable(state=state)
-
-        chain_output: ChainOutput = chain.invoke(input, config={}, attachments=[])
+            chain = AssistantRunnable(state=assistant_state)
+        attachments = [Attachment.model_validate(params) for params in state["attachments"]]
+        chain_output: ChainOutput = chain.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
 
         return PipelineState(
             messages=[output],
             outputs={node_id: output},
             message_metadata={
-                "input": state.get_message_metadata(ChatMessageType.HUMAN),
-                "output": state.get_message_metadata(ChatMessageType.AI),
+                "input": assistant_state.get_message_metadata(ChatMessageType.HUMAN),
+                "output": assistant_state.get_message_metadata(ChatMessageType.AI),
             },
         )
