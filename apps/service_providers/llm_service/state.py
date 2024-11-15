@@ -91,19 +91,22 @@ class ExperimentState(BaseRunnableState):
             return input
 
         template = PromptTemplate.from_template(self.experiment.input_formatter)
-        context = {"input": input}
-        allowed = {
+        context = self.get_template_context(template.input_variables)
+        context["input"] = input
+        return template.format(**context)
+
+    def get_template_context(self, variables: list[str]):
+        factories = {
+            "source_material": self.get_source_material,
             "participant_data": self.get_participant_data,
             "current_datetime": self.get_current_datetime,
         }
-        for var in template.input_variables:
-            if var == "input":
-                continue
-            if var not in allowed:
-                raise ValueError(f"Invalid variable in input formatter: {var}")
-            context[var] = allowed[var]()
-
-        return template.format(**context)
+        context = {}
+        for key, factory in factories.items():
+            # allow partial matches to support format specifiers
+            if any(key in var for var in variables):
+                context[key] = factory()
+        return context
 
     @property
     def is_unauthorized_participant(self):
@@ -115,6 +118,9 @@ class ExperimentState(BaseRunnableState):
         - Always True, since the external channel handles authorization
         """
         return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
+
+    def get_source_material(self):
+        return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def get_participant_data(self):
         if self.is_unauthorized_participant:
@@ -156,9 +162,6 @@ class ChatExperimentState(ExperimentState):
             max_token_limit=self.experiment.max_token_limit,
             input_messages=input_messages,
         )
-
-    def get_source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         chat_message = ChatMessage.objects.create(

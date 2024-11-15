@@ -171,6 +171,7 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
         ("", ""),
         (" {participant_data}", " {'name': 'Tester'}"),
         (" {current_datetime}", " the current date and time"),
+        (" {participant_data[name]}", " Tester"),
     ],
 )
 @pytest.mark.django_db()
