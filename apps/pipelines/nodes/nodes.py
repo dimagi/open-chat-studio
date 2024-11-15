@@ -512,7 +512,12 @@ class AssistantNode(Passthrough):
     __node_description__ = "Calls an OpenAI assistant"
     assistant_id: AssistantId
     citations_enabled: bool = Field(default=True, description="Whether to include citations in the response")
-    input_formatter: str | None = None
+    input_formatter: str | None = Field(description="(Optional) Use {input} to designate the user input")
+
+    @field_validator("input_formatter")
+    def ensure_input_variable_exists(cls, value):
+        if value and "{input}" not in value:
+            raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
         from apps.channels.datamodels import Attachment
