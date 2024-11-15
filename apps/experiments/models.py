@@ -992,8 +992,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
             node_name = AssistantNode.model_json_schema()["title"]
             # TODO: What about multiple assistant nodes?
             assistant_node = Node.objects.filter(type=node_name, pipeline=self.pipeline).first()
-            if assistant_node and assistant_node.params["assistant_id"]:
-                return OpenAiAssistant.objects.get(id=assistant_node.params["assistant_id"])
+            if assistant_node:
+                assistant_id = assistant_node.params.get("assistant_id")
+                return OpenAiAssistant.objects.get(id=assistant_id)
         return self.assistant
 
 

@@ -52,7 +52,7 @@ class RenderTemplate(PipelineNode):
         description="Use {your_variable_name} to refer to designate input",
     )
 
-    def _process(self, input, node_id: str, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -154,7 +154,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
     __node_description__ = "Calls an LLM with the given input"
 
-    def _process(self, input, node_id: str, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return PipelineState(messages=[output.content], outputs={node_id: output.content})
@@ -230,7 +230,7 @@ class SendEmail(PipelineNode):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
-    def _process(self, input, node_id: str, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
@@ -518,8 +518,17 @@ class AssistantNode(Passthrough):
 
     @field_validator("input_formatter")
     def ensure_input_variable_exists(cls, value):
-        if value and "{input}" not in value:
-            raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
+        value = value or ""
+        acceptable_var = "input"
+        prompt_variables = set(PromptTemplate.from_template(value).input_variables)
+        if value:
+            if acceptable_var not in prompt_variables:
+                raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
+
+            acceptable_vars = set([acceptable_var])
+            extra_vars = prompt_variables - acceptable_vars
+            if extra_vars:
+                raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
         assistant = OpenAiAssistant.objects.get(id=self.assistant_id)

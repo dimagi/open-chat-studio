@@ -162,7 +162,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
             className="toggle"
             name={inputParam.name}
             onChange={onChangeCallback}
-            defaultChecked={paramValue === "true"}
+            checked={paramValue === "true"}
             type="checkbox"
           ></input>
         </InputField>
