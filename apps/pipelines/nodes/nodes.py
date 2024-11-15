@@ -24,6 +24,7 @@ from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
+    AssistantId,
     ExpandableText,
     HistoryName,
     HistoryType,
@@ -509,7 +510,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
 class AssistantNode(Passthrough):
     __human_name__ = "OpenAI Assistant"
     __node_description__ = "Calls an OpenAI assistant"
-    assistant_id: int
+    assistant_id: AssistantId
     citations_enabled: bool = Field(default=True, description="Whether to include citations in the response")
     input_formatter: str | None = None
 

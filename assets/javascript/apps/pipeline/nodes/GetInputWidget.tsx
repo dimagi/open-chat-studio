@@ -2,7 +2,7 @@ import {
   HistoryTypeWidget,
   SourceMaterialIdWidget,
   ExpandableTextWidget,
-  InputField, LlmWidget, KeywordsWidget,
+  InputField, LlmWidget, KeywordsWidget, AssistantIdWidget
 } from "../widgets";
 import React from "react";
 import {getCachedData, concatenate} from "../utils";
@@ -92,6 +92,17 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           />
         </InputField>
       );
+      case "AssistantId":
+        return (
+          <InputField label="Assistant" help_text={inputParam.help_text} inputError={inputError}>
+            <AssistantIdWidget
+              parameterValues={parameterValues}
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={paramValue}
+            />
+          </InputField>
+        );
       case "LlmProviderModelId":
           //   this is handled in the LlmModel widget
       return <></>;

@@ -281,6 +281,34 @@ export function SourceMaterialIdWidget({
   );
 }
 
+export function AssistantIdWidget({
+  parameterValues,
+  inputParam,
+  value,
+  onChange,
+}: {
+  parameterValues: NodeParameterValues;
+  inputParam: InputParam;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <select
+      className="select select-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+    >
+      <option value="">Select an assistant</option>
+      {parameterValues.AssistantId.map((assistant) => (
+        <option key={assistant["id"]} value={assistant["id"]}>
+          {assistant["name"]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function HistoryTypeWidget({
   inputParam,
   historyType,
