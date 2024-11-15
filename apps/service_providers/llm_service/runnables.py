@@ -31,9 +31,8 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.state import (
-    AssistantExperimentState,
     ChatExperimentState,
-    ChatRunnableState,
+    ExperimentAssistantState,
 )
 
 if TYPE_CHECKING:
@@ -57,10 +56,10 @@ def create_experiment_runnable(
     """Create an experiment runnable based on the experiment configuration."""
     state_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
     if assistant := experiment.assistant:
-        state = AssistantExperimentState(**state_kwargs)
+        state = ExperimentAssistantState(**state_kwargs)
         if assistant.tools_enabled and not disable_tools:
             return AssistantAgentRunnable(state=state)
-        return AssistantExperimentRunnable(state=state)
+        return AssistantRunnable(state=state)
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
@@ -97,7 +96,7 @@ class ChainOutput(Serializable):
 
 
 class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
-    state: ChatRunnableState
+    state: ChatExperimentState
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
@@ -256,8 +255,8 @@ class AgentExperimentRunnable(ExperimentRunnable):
         return chain.invoke(self._get_input(input)).to_messages()
 
 
-class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
-    state: AssistantExperimentState
+class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
+    state: ExperimentAssistantState
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -282,9 +281,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
 
         current_thread_id = self._sync_messages_to_thread(self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID))
 
-        if config.get("configurable", {}).get("save_input_to_history", True):
-            file_ids = set([file_id for file_ids in human_message_resource_file_ids.values() for file_id in file_ids])
-            self.state.save_message_to_history(input, ChatMessageType.HUMAN, annotation_file_ids=list(file_ids))
+        human_message_metadata = self.state.get_input_message_metadata(human_message_resource_file_ids)
+        self.state.pre_run_hook(input, config, human_message_metadata)
 
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
@@ -295,10 +293,8 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if not current_thread_id:
             self.state.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
-        experiment_tag = config.get("configurable", {}).get("experiment_tag")
-        self.state.save_message_to_history(
-            output, ChatMessageType.AI, annotation_file_ids=annotation_file_ids, experiment_tag=experiment_tag
-        )
+        ai_message_metadata = self.state.get_output_message_metadata(annotation_file_ids)
+        self.state.post_run_hook(output, config, ai_message_metadata)
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
@@ -341,8 +337,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         session_id = self.state.session.id
 
         team = self.state.session.team
-        experiment = self.state.experiment
-        assistant_file_ids = ToolResources.objects.filter(assistant=experiment.assistant).values_list("files")
+        assistant_file_ids = ToolResources.objects.filter(assistant=self.state.assistant).values_list("files")
         assistant_files_ids = File.objects.filter(
             team_id=team.id, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
@@ -358,7 +353,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                         image_file_attachments.append(created_file)
                         file_ids.add(created_file.external_id)
 
-                        team_slug = self.state.session.team.slug
+                        team_slug = team.slug
                         file_link = f"file:{team_slug}:{session_id}:{created_file.id}"
                         output_message += f"![{created_file.name}]({file_link})\n"
 
@@ -377,7 +372,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             )
 
                             # Original citation text example:【6:0†source】
-                            if experiment.citations_enabled:
+                            if self.state.citations_enabled:
                                 message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
                                 if file_link:
                                     message_content_value += f"\n[{idx}]: {file_link}"
@@ -392,7 +387,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
                             created_file = get_and_store_openai_file(
                                 client=client,
                                 file_id=file_id,
-                                team_id=self.state.experiment.team_id,
+                                team_id=team.id,
                             )
                             # Original citation text example: sandbox:/mnt/data/the_file.csv.
                             # This is the link part in what looks like
@@ -436,7 +431,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             return get_and_store_openai_file(
                 client=client,
                 file_id=file_id,
-                team_id=self.state.experiment.team_id,
+                team_id=self.state.team.id,
             )
         except Exception as ex:
             logger.exception(ex)
@@ -485,7 +480,7 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         if not attachments:
             return resource_file_ids
 
-        client = self.state.get_llm_service().get_raw_client()
+        client = self.state.raw_client
 
         for resource_name in ["file_search", "code_interpreter"]:
             file_ids = [att.file_id for att in attachments if att.type == resource_name]
@@ -533,10 +528,6 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
             if cancelling:
                 sleep(assistant_runnable.check_every_ms / 1000)
 
-    @property
-    def experiment(self) -> Experiment:
-        return self.state.experiment
-
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
         return response.thread_id, response.run_id
@@ -545,16 +536,14 @@ class AssistantExperimentRunnable(RunnableSerializable[dict, ChainOutput]):
         # Allow builtin tools but not custom tools when not running as an agent
         # This is to prevent using tools when using the assistant to generate responses
         # for automated messages e.g. reminders
-        custom_tools = self.state.experiment.assistant.tools_enabled
-        builtin_tools = self.state.experiment.assistant.builtin_tools
-        if custom_tools and builtin_tools:
-            return {"tools": [{"type": tool} for tool in builtin_tools]}
+        if self.state.tools_enabled and self.state.builtin_tools:
+            return {"tools": [{"type": tool} for tool in self.state.builtin_tools]}
 
         # prefer not to specify if we don't need to
         return {}
 
 
-class AssistantAgentRunnable(AssistantExperimentRunnable):
+class AssistantAgentRunnable(AssistantRunnable):
     def _extra_input_configs(self) -> dict:
         return {}
 
