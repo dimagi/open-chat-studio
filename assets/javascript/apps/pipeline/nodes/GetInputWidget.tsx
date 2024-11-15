@@ -110,7 +110,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
     case "NumOutputs":
       return <></>;
     case "Keywords": {
-      return <KeywordsWidget nodeId={id} params={params}/>
+      return <KeywordsWidget nodeId={id} params={params} inputError={inputError}/>
     }
     case "HistoryType": {
       return (

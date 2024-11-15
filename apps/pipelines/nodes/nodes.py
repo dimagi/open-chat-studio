@@ -13,6 +13,7 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic_core import PydanticCustomError
+from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform
@@ -265,6 +266,14 @@ class RouterNode(Passthrough, HistoryMixin):
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
+
+    @field_validator("keywords")
+    def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
+        num_outputs = info.data.get("num_outputs")
+        value = [entry for entry in value if entry]
+        if len(value) != num_outputs:
+            raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
+        return value
 
     def process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(
