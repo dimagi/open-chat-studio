@@ -8,7 +8,7 @@ setup:
     DJANGO_SETTINGS_MODULE: gpt_playground.settings_production
 build:
   docker:
-    django: Dockerfile.web
+    django: Dockerfile
 release:
   image: django
   command:

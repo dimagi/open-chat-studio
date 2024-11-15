@@ -299,6 +299,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
 
 class TimePeriod(models.TextChoices):
+    MINUTES = ("minutes", "Minutes")
     HOURS = ("hours", "Hours")
     DAYS = ("days", "Days")
     WEEKS = ("weeks", "Weeks")

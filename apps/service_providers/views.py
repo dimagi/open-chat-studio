@@ -1,23 +1,22 @@
+from collections import defaultdict
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, resolve_url
+from django.shortcuts import get_object_or_404, render, resolve_url
 from django.urls import reverse
-from django.views.decorators.http import require_http_methods
-from django.views.generic import TemplateView
-from django.views.generic.edit import ModelFormMixin, SingleObjectMixin
+from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.forms import LlmProviderModelForm
 from apps.service_providers.models import LlmProviderModel, MessagingProviderType, VoiceProviderType
-from apps.service_providers.tables import LlmProviderModelTable
 
 from ..generics.views import BaseTypeSelectFormView
+from ..teams.decorators import login_and_team_required
 from .utils import ServiceProvider, get_service_provider_config_form
 
 
@@ -117,71 +116,54 @@ class CreateServiceProvider(BaseTypeSelectFormView, ServiceProviderMixin):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
-class LlmProviderModelTableView(PermissionRequiredMixin, SingleTableView):
-    permission_required = "service_providers.view_llmprovidermodel"
-    paginate_by = 25
-    template_name = "table/single_table.html"
-    model = LlmProviderModel
-    table_class = LlmProviderModelTable
+class LlmProviderView(CreateServiceProvider):
+    template = "service_providers/llm_provider_form.html"
 
-    def get_queryset(self):
-        return LlmProviderModel.objects.filter(team=self.request.team)
-
-
-class LlmProviderModelView(PermissionRequiredMixin, ModelFormMixin, SingleObjectMixin, TemplateView):
-    permission_required = ("service_providers.add_llmprovidermodel", "service_providers.change_llmprovidermodel")
-    model = LlmProviderModel
-    form_class = LlmProviderModelForm
-    template_name = "generic/object_form.html"
-
-    def get_form_kwargs(self):
-        return {"team": self.request.team, **super().get_form_kwargs()}
+    @property
+    def provider_type(self) -> ServiceProvider:
+        return ServiceProvider.llm
 
     @property
     def extra_context(self):
+        default_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
+        custom_models_type_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
         return {
-            "title": self._get_title(),
-            "button_text": "Save",
+            "active_tab": "manage-team",
+            "title": self.provider_type.label,
+            "default_models_by_type": default_models_by_type,
+            "custom_models_by_type": custom_models_type_type,
+            "new_model_form": LlmProviderModelForm(self.request.team),
         }
 
-    def _get_title(self):
-        if self.object:
-            return "Edit Custom LLM Model"
-        return "Create Custom LLM Model"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(self.extra_context)
-        return context
+def _get_models_by_type(queryset):
+    models_by_type = defaultdict(list)
+    for model in queryset:
+        models_by_type[model.type].append(model)
+    return {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
 
-    def get(self, request, *args, **kwargs):
-        if "pk" in self.kwargs:
-            self.object = self.get_object()
-        else:
-            self.object = None
-        return self.render_to_response(self.get_context_data(form=self.get_form()))
 
-    def post(self, request, *args, **kwargs):
-        if "pk" in self.kwargs:
-            self.object = self.get_object()
-        else:
-            self.object = None
-        form = self.get_form()
-        if form.is_valid():
-            return self.form_valid(form)
-        else:
-            return self.form_invalid(form)
-
-    def get_success_url(self):
-        return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
-
-    def form_valid(self, form):
-        if not self.object:
-            form.instance.team = self.request.team
-        return super().form_valid(form)
-
-    def get_queryset(self):
-        return LlmProviderModel.objects.filter(team=self.request.team)
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.add_llmprovidermodel")
+def create_llm_provider_model(request, team_slug: str):
+    form = LlmProviderModelForm(request.team, request.POST)
+    if form.is_valid():
+        model = form.save(commit=False)
+        model.team = request.team
+        model.save()
+    else:
+        if len(form.errors) == 1 and "__all__" in form.errors:
+            return HttpResponseBadRequest(", ".join([str(v) for v in form.errors.values()]))
+        return HttpResponseBadRequest(str(form.errors))
+    return render(
+        request,
+        "service_providers/components/custom_llm_models.html",
+        {
+            "models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
+            "for_type": form.cleaned_data["type"],
+        },
+    )
 
 
 @require_http_methods(["DELETE"])

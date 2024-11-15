@@ -23,12 +23,13 @@ class BaseTypeSelectFormView(views.View):
     title = None
     extra_context = None
     model = None
+    template = "generic/type_select_form.html"
 
     _object = None
 
     def get(self, request, *args, **kwargs):
         form = self.get_form()
-        return render(request, "generic/type_select_form.html", self.get_context_data(form))
+        return render(request, self.template, self.get_context_data(form))
 
     def post(self, request, *args, **kwargs):
         form = self.get_form(request.POST)

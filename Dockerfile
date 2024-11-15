@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y \
   mailcap \
   # mimetype detection from content
   libmagic1 \
+  # psql client for dbshell
+  postgresql-client \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*

@@ -5,6 +5,7 @@ from typing import Any
 
 from django.contrib.admin.utils import NestedObjects
 from django.db import models, router, transaction
+from django.db.models import Q
 from django.db.models.deletion import get_candidate_relations_to_delete
 from field_audit.field_audit import get_audited_models
 
@@ -133,3 +134,40 @@ def _get_m2m_related_models(model):
             through_model = field.through if hasattr(field, "through") else field.remote_field.through
             m2m_models[through_model] = field.related_model
     return m2m_models
+
+
+def get_related_objects(instance, pipeline_param_key: str = None) -> list:
+    from apps.pipelines.models import Node
+
+    related_objects = []
+
+    for queryset in _get_related_objects_querysets(instance, pipeline_param_key):
+        if queryset.model == Node:
+            related_objects.extend([node.pipeline for node in queryset.only("pipeline").all()])
+        else:
+            related_objects.extend(queryset.all())
+
+    return related_objects
+
+
+def has_related_objects(instance, pipeline_param_key: str = None) -> bool:
+    return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
+
+
+def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> list:
+    for related in get_candidate_relations_to_delete(instance._meta):
+        related_objects = getattr(instance, related.get_accessor_name(), None)
+        if related_objects is not None:
+            yield related_objects
+
+    if pipeline_param_key:
+        yield get_related_pipelines_queryset(instance, pipeline_param_key)
+
+
+def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
+    from apps.pipelines.models import Node
+
+    pipelines = Node.objects.filter(
+        Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
+    )
+    return pipelines
