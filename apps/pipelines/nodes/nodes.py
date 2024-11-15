@@ -17,6 +17,7 @@ from pydantic_core import PydanticCustomError
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
@@ -47,7 +48,7 @@ class RenderTemplate(PipelineNode):
         description="Use {your_variable_name} to refer to designate input",
     )
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> str:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -66,7 +67,8 @@ class RenderTemplate(PipelineNode):
             # As a last resort, just set the all the variables in the template to the input
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
-        return template.render(content)
+        output = template.render(content)
+        return PipelineState(messages=[output], outputs={node_id: output})
 
 
 class LLMResponseMixin(BaseModel):
@@ -148,10 +150,10 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
     __node_description__ = "Calls an LLM with the given input"
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> str:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return output.content
+        return PipelineState(messages=[output.content], outputs={node_id: output.content})
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -174,7 +176,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         self._save_history(state["experiment_session"], node_id, input, output.content)
-        return output.content
+        return PipelineState(messages=[output.content], outputs={node_id: output.content})
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
         session: ExperimentSession = state["experiment_session"]
@@ -224,10 +226,11 @@ class SendEmail(PipelineNode):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> str:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
+        return PipelineState(outputs={node_id: None})
 
 
 class Passthrough(PipelineNode):
@@ -236,7 +239,7 @@ class Passthrough(PipelineNode):
 
     def _process(self, input, state: PipelineState, node_id: str) -> str:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return input
+        return PipelineState(messages=[input], outputs={node_id: input})
 
 
 class BooleanNode(Passthrough):
@@ -316,7 +319,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, **kwargs) -> str:
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
@@ -334,7 +337,8 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        return json.dumps(new_reference_data)
+        output = json.dumps(new_reference_data)
+        return PipelineState(messages=[output], outputs={node_id: output})
 
     def post_extraction_hook(self, output, state):
         pass
@@ -517,13 +521,11 @@ class AssistantNode(Passthrough):
         chain_output: ChainOutput = chain.invoke(input, config={}, attachments=[])
         output = chain_output.output
 
-        return output
-        # TODO
-        # return PipelineState(
-        #     messages=[output],
-        #     outputs={node_id: output},
-        #     chat_message_metadata= {
-        #         "human": state.get_message_metadata(ChatMessageType.HUMAN),
-        #         "ai": state.get_message_metadata(ChatMessageType.AI)
-        #     }
-        # )
+        return PipelineState(
+            messages=[output],
+            outputs={node_id: output},
+            message_metadata={
+                "input": state.get_message_metadata(ChatMessageType.HUMAN),
+                "output": state.get_message_metadata(ChatMessageType.AI),
+            },
+        )
