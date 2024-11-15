@@ -1,8 +1,9 @@
-import React from "react";
+import React, {useEffect, useState} from "react";
 import Component from "./Component";
 import {NodeInputTypes} from "../types/nodeInputTypes";
 import OverlayPanel from "../components/OverlayPanel";
 import {getCachedData} from "../utils";
+import ComponentHelp from "./ComponentHelp";
 
 type ComponentListParams = {
   inputTypes: NodeInputTypes[];
@@ -10,7 +11,7 @@ type ComponentListParams = {
   setIsOpen: (isOpen: boolean) => void;
 }
 
-export default function ComponentList({ inputTypes, isOpen, setIsOpen }: ComponentListParams) {
+export default function ComponentList({inputTypes, isOpen, setIsOpen}: ComponentListParams) {
   const cachedData = getCachedData();
   const defaultValues = cachedData.defaultValues;
 
@@ -24,10 +25,38 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
     );
   }
 
+  //** Help bubble state
+  const [scrollPosition, setScrollPosition] = useState(0)
+
+  const refMap: Record<string, React.RefObject<HTMLDivElement>> = {};
+  inputTypes.forEach((inputType) => {
+    refMap[inputType.name] = React.createRef<HTMLDivElement>();
+  });
+
+  const [showHelp, setShowHelp] = useState({
+    show: new Map(inputTypes.map((inputType) => [inputType.name, false]))
+  })
+  const toggleHelp = (inputType: NodeInputTypes) => {
+    setShowHelp(({show}) => {
+      const newShow = new Map(inputTypes.map((type) => [type.name, false]));
+      newShow.set(inputType.name, !show.get(inputType.name));
+      return { show: newShow };
+    });
+  }
+  const hideHelp = () => {
+    setShowHelp(() => {
+      return {show: new Map(inputTypes.map((inputType) => [inputType.name, false]))};
+    });
+  };
+
+  useEffect(hideHelp, [scrollPosition, isOpen]);
+  //** end help bubble state
+
   function onDragStart(
     event: React.DragEvent<any>,
     inputType: NodeInputTypes
   ): void {
+    hideHelp();
     const nodeData = {
       label: inputType.human_name,
       inputParams: inputType.input_params,
@@ -46,13 +75,32 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
       <Component
         key={inputType.name}
         label={inputType.human_name}
-        nodeDescription={inputType.node_description}
         onDragStart={(event) =>
           onDragStart(event, inputType)
         }
+        parentRef={refMap[inputType.name]}
+        toggleHelp={() => toggleHelp(inputType)}
       />
     );
   });
+
+  // Help bubbles need to be outside the overlay container to avoid clipping
+  const helps = inputTypes.map((inputType) => {
+    return <ComponentHelp
+      key={inputType.name}
+      label={inputType.human_name}
+      parentRef={refMap[inputType.name]}
+      scrollPosition={scrollPosition}
+      showHelp={showHelp.show.get(inputType.name)}
+    >
+      <p>{inputType.node_description}</p>
+    </ComponentHelp>;
+  })
+
+
+  const onscroll = (event: React.UIEvent<HTMLElement>) => {
+    setScrollPosition(event.currentTarget.scrollTop)
+  }
 
   return (
     <div className="relative">
@@ -68,7 +116,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
         />
       </button>
 
-      <OverlayPanel classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen}>
+      <OverlayPanel classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen} onScroll={onscroll}>
         {isOpen && (
           <>
             <h2 className="text-xl text-center font-bold">Available Nodes</h2>
@@ -79,6 +127,7 @@ export default function ComponentList({ inputTypes, isOpen, setIsOpen }: Compone
           </>
         )}
       </OverlayPanel>
+      {helps}
     </div>
   );
 }
