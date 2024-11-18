@@ -489,7 +489,7 @@ class ChannelBase(ABC):
         )
 
     def _is_reset_conversation_request(self):
-        return self.user_query.lower() == ExperimentChannel.RESET_COMMAND
+        return self.user_query.lower().strip() == ExperimentChannel.RESET_COMMAND
 
     def is_message_type_supported(self) -> bool:
         return self.message.content_type is not None and self.message.content_type in self.supported_message_types
