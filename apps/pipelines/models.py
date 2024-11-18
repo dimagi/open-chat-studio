@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
+from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -181,12 +182,22 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType) -> ChatMessage:
-        return ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=session.chat,
             message_type=type_.value,
             content=message,
         )
-        # TODO: Add tags here?
+
+        if type_ == ChatMessageType.AI:
+            self.ai_message = chat_message
+            chat_message.add_system_tag(tag=f"v{self.version_number}", tag_category=TagCategories.EXPERIMENT_VERSION)
+            if self.is_working_version:
+                chat_message.add_system_tag(
+                    tag="unreleased",
+                    tag_category=TagCategories.VERSION_DEPLOYED_STATUS,
+                )
+
+        return chat_message
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
