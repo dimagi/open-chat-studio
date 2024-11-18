@@ -169,7 +169,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
     )
 
-    def _process(self, input, state: PipelineState, node_id: str) -> str:
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
@@ -241,7 +241,7 @@ class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
     __node_description__ = ""
 
-    def _process(self, input, state: PipelineState, node_id: str) -> str:
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return PipelineState(messages=[input], outputs={node_id: input})
 
