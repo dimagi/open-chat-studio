@@ -509,7 +509,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             )
 
 
-class AssistantNode(Passthrough):
+class AssistantNode(PipelineNode):
     __human_name__ = "OpenAI Assistant"
     __node_description__ = "Calls an OpenAI assistant"
     assistant_id: AssistantId
