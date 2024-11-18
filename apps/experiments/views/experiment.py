@@ -257,7 +257,7 @@ class ExperimentForm(forms.ModelForm):
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
         self.fields["assistant"].queryset = team.openaiassistant_set.exclude(is_version=True)
-        self.fields["pipeline"].queryset = team.pipeline_set
+        self.fields["pipeline"].queryset = team.pipeline_set.exclude(is_version=True)
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
