@@ -178,9 +178,13 @@ class ChatExperimentState(ExperimentState):
 
         if type_ == ChatMessageType.AI:
             self.ai_message = chat_message
-            if not self.experiment.is_working_version:
+            chat_message.add_system_tag(
+                tag=f"v{self.experiment.version_number}", tag_category=TagCategories.EXPERIMENT_VERSION
+            )
+            if self.experiment.is_working_version:
                 chat_message.add_system_tag(
-                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                    tag="unreleased",
+                    tag_category=TagCategories.VERSION_DEPLOYED_STATUS,
                 )
 
     def check_cancellation(self):
@@ -341,9 +345,13 @@ class ExperimentAssistantState(ExperimentState, BaseAssistantState):
 
         if type_ == ChatMessageType.AI:
             self.ai_message = chat_message
-            if not self.experiment.is_working_version:
+            chat_message.add_system_tag(
+                tag=f"v{self.experiment.version_number}", tag_category=TagCategories.EXPERIMENT_VERSION
+            )
+            if self.experiment.is_working_version:
                 chat_message.add_system_tag(
-                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
+                    tag="unreleased",
+                    tag_category=TagCategories.VERSION_DEPLOYED_STATUS,
                 )
 
         return chat_message
