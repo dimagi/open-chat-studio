@@ -516,6 +516,8 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 
 # TODO: complete form
 class ExperimentVersionForm(forms.ModelForm):
+    version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+
     class Meta:
         model = Experiment
         fields = ["version_description", "is_default_version"]
