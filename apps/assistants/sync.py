@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [convert_to_openai_tool(tool, strict=True) for tool in internal_tools]
+        data["tools"] = [_convert_to_openai_tool(tool) for tool in internal_tools]
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -113,6 +113,27 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
         openai_assistant = client.beta.assistants.create(**data)
         assistant.assistant_id = openai_assistant.id
         assistant.save()
+
+
+def _convert_to_openai_tool(tool):
+    """Work around some limitiations of OpenAI function calling"""
+    function = convert_to_openai_tool(tool, strict=True)
+    try:
+        parameters = function["function"]["parameters"]
+    except KeyError:
+        return function
+
+    # check if this function can use 'strict' mode
+    properties = parameters.get("properties", {})
+    # all fields are required
+    is_strict = set(parameters["required"]) == set(properties)
+    if is_strict:
+        for prop, schema in properties.items():
+            # format and default not supported + type must be present
+            is_strict &= "format" not in schema and "default" not in schema and "type" in schema
+
+    function["function"]["strict"] = is_strict
+    return function
 
 
 @wrap_openai_errors

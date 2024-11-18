@@ -3,6 +3,7 @@ from functools import cache, cached_property
 
 from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.prompts import PromptTemplate
 
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -102,9 +103,29 @@ class ExperimentState(BaseRunnableState):
         return self.get_llm_service().get_callback_handler(self.experiment.get_llm_provider_model_name())
 
     def format_input(self, input: str) -> str:
-        if self.experiment.input_formatter:
-            input = self.experiment.input_formatter.format(input=input)
-        return input
+        if not self.experiment.input_formatter:
+            return input
+
+        template = PromptTemplate.from_template(self.experiment.input_formatter)
+        context = self.get_template_context(template.input_variables)
+        context["input"] = input
+        return template.format(**context)
+
+    def get_template_context(self, variables: list[str]):
+        factories = {
+            "source_material": self.get_source_material,
+            "participant_data": self.get_participant_data,
+            "current_datetime": self.get_current_datetime,
+        }
+        context = {}
+        for key, factory in factories.items():
+            # allow partial matches to support format specifiers
+            if any(key in var for var in variables):
+                context[key] = factory()
+        return context
+
+    def get_source_material(self):
+        return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def get_prompt(self):
         return self.experiment.prompt_text
@@ -121,9 +142,6 @@ class ChatExperimentState(ExperimentState):
             max_token_limit=self.experiment.max_token_limit,
             input_messages=input_messages,
         )
-
-    def get_source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
 
     def save_message_to_history(self, message: str, type_: ChatMessageType, experiment_tag: str = None):
         chat_message = ChatMessage.objects.create(

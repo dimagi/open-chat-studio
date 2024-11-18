@@ -1,27 +1,30 @@
-import { Node, NodeProps, NodeToolbar, Position } from "reactflow";
-import React, { ChangeEvent } from "react";
-import { classNames } from "./utils";
+import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
+import React, {ChangeEvent} from "react";
+import {classNames, getCachedData} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
-import { NodeData } from "./types/nodeParams";
-import { getNodeInputWidget, showAdvancedButton } from "./nodes/GetInputWidget";
+import {NodeData} from "./types/nodeParams";
+import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
+import {HelpContent} from "./panel/ComponentHelp";
 
 export type PipelineNode = Node<NodeData>;
 
 export function PipelineNode(nodeProps: NodeProps<NodeData>) {
-  const { id, data, selected } = nodeProps;
+  const {id, data, selected} = nodeProps;
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  
+  const {inputTypes} = getCachedData();
+  const inputType = inputTypes.filter((inputType) => inputType.name === data.type)[0];
+
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
-    const { name, value } = event.target;
+    const {name, value} = event.target;
     setNode(id, (old) => ({
       ...old,
       data: {
@@ -60,13 +63,21 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           >
             <i className="fa fa-pencil"></i>
           </button>
+          {inputType.node_description && (
+            <div className="dropdown dropdown-top">
+              <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                <i className={"fa fa-circle-question"}></i>
+              </button>
+              <HelpContent><p>{inputType.node_description}</p></HelpContent>
+            </div>
+          )}
         </div>
       </NodeToolbar>
       <div
         className={nodeBorder}
       >
         <div className="m-1 text-lg font-bold text-center">{data.label}</div>
-        <NodeInput nodeId={id} />
+        <NodeInput nodeId={id}/>
         <div className="ml-2">
           <div>
             {data.inputParams.map((inputParam) => (
@@ -84,13 +95,13 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           {showAdvancedButton(data.type) && (
             <div className="mt-2">
               <button className="btn btn-sm btn-ghost w-full"
-                onClick={() => editNode()}>
+                      onClick={() => editNode()}>
                 Advanced
               </button>
             </div>
           )}
         </div>
-        <NodeOutputs nodeId={id} data={data} />
+        <NodeOutputs nodeId={id} data={data}/>
       </div>
     </>
   );
