@@ -60,10 +60,6 @@ class BaseRunnableState(metaclass=ABCMeta):
     def get_llm_service(self):
         pass
 
-    @abstractmethod
-    def get_chat_model(self):
-        pass
-
     @property
     @abstractmethod
     def callback_handler(self) -> BaseCallbackHandler:
@@ -361,9 +357,6 @@ class PipelineAssistantState(BaseAssistantState):
 
     def _get_provider_model_name(self) -> str:
         return self.assistant.llm_provider_model.name
-
-    def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self._get_provider_model_name(), self.assistant.temperature)
 
     @property
     def callback_handler(self):
