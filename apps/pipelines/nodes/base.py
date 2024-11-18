@@ -40,6 +40,13 @@ class PipelineState(dict):
             copy["experiment_session"] = copy["experiment_session"].id
         return copy
 
+    @classmethod
+    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineNode":
+        kwargs["outputs"] = {node_id: output}
+        if output is not None:
+            kwargs["messages"] = [output]
+        return PipelineState(**kwargs)
+
 
 class PipelineNode(BaseModel, ABC):
     """Pipeline node that implements the `_process` method and returns a new state. Define required parameters as

@@ -72,7 +72,7 @@ class RenderTemplate(PipelineNode):
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         output = template.render(content)
-        return PipelineState(messages=[output], outputs={node_id: output})
+        return PipelineState.from_node_output(node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -157,7 +157,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return PipelineState(messages=[output.content], outputs={node_id: output.content})
+        return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -180,7 +180,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         self._save_history(state["experiment_session"], node_id, input, output.content)
-        return PipelineState(messages=[output.content], outputs={node_id: output.content})
+        return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
         session: ExperimentSession = state["experiment_session"]
@@ -234,7 +234,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState(outputs={node_id: None})
+        return PipelineState.from_node_output(node_id=node_id, output=None)
 
 
 class Passthrough(PipelineNode):
@@ -243,7 +243,7 @@ class Passthrough(PipelineNode):
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return PipelineState(messages=[input], outputs={node_id: input})
+        return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
 class BooleanNode(Passthrough):
@@ -350,7 +350,7 @@ class ExtractStructuredDataNodeMixin:
 
         self.post_extraction_hook(new_reference_data, state)
         output = json.dumps(new_reference_data)
-        return PipelineState(messages=[output], outputs={node_id: output})
+        return PipelineState.from_node_output(node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -537,9 +537,9 @@ class AssistantNode(PipelineNode):
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
 
-        return PipelineState(
-            messages=[output],
-            outputs={node_id: output},
+        return PipelineState.from_node_output(
+            node_id=node_id,
+            output=output,
             message_metadata={
                 "input": runnable.state.get_message_metadata(ChatMessageType.HUMAN),
                 "output": runnable.state.get_message_metadata(ChatMessageType.AI),
