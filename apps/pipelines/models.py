@@ -238,6 +238,28 @@ class Node(BaseModel, VersionsMixin):
     def __str__(self):
         return self.flow_id
 
+    def create_new_version(self, save: bool = True):
+        """
+        Create a new version of the node and if the node is an assistant node, create a new version of the assistant
+        and update the `assistant_id` in the node params to the new assistant version id.
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        assistant_node_name = AssistantNode.model_json_schema()["title"]
+
+        new_version = super().create_new_version(save=False)
+
+        if self.type == assistant_node_name and new_version.params.get("assistant_id"):
+            assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
+            if not assistant.is_a_version:
+                assistant_version = assistant.create_new_version()
+                new_version.params["assistant_id"] = assistant_version.id
+
+        if save:
+            new_version.save()
+        return new_version
+
 
 class PipelineRunStatus(models.TextChoices):
     RUNNING = "running", "Running"
