@@ -1,5 +1,6 @@
 {# Generic template for rendering an object form (e.g. create / update) #}
 {% extends 'web/app/app_base.html' %}
+{% load waffle_tags %}
 {% load form_tags %}
 {% block app %}
   <div class="app-card max-w-5xl mx-auto">
@@ -23,6 +24,11 @@
         {% endblock form %}
         {% block form_actions %}
           <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
+          {% flag "experiment_versions" %}
+            {% if show_version_action_options %}
+              {% include 'experiments/experiment_version_edit_actions.html' %}
+            {% endif %}
+          {% endflag %}
         {% endblock %}
       </form>
       {% block post_form %}

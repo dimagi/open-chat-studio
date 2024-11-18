@@ -452,6 +452,11 @@ class EditExperiment(BaseExperimentView, UpdateView):
     button_title = "Update"
     permission_required = "experiments.change_experiment"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["show_version_action_options"] = True
+        return context
+
     def get_initial(self):
         initial = super().get_initial()
         initial["type"] = "assistant" if self.object.assistant_id else "llm"
