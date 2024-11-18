@@ -246,7 +246,7 @@ class Node(BaseModel, VersionsMixin):
         from apps.assistants.models import OpenAiAssistant
         from apps.pipelines.nodes.nodes import AssistantNode
 
-        assistant_node_name = AssistantNode.model_json_schema()["title"]
+        assistant_node_name = AssistantNode.__name__
 
         new_version = super().create_new_version(save=False)
 
