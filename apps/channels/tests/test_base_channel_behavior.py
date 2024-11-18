@@ -154,17 +154,16 @@ def test_different_participants_created_for_same_user_in_different_teams():
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("user_input", ["/reset", "/Reset", "/RESET"])
 @patch("apps.chat.channels.TelegramChannel.send_text_to_user")
-def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, telegram_channel):
+def test_reset_command_creates_new_experiment_session(_send_text_to_user_mock, user_input, telegram_channel):
     """The reset command should create a new session when the user conversed with the bot"""
     telegram_chat_id = 00000
     normal_message = telegram_messages.text_message(chat_id=telegram_chat_id)
 
     _send_user_message_on_channel(telegram_channel, normal_message)
 
-    reset_message = telegram_messages.text_message(
-        chat_id=telegram_chat_id, message_text=ExperimentChannel.RESET_COMMAND
-    )
+    reset_message = telegram_messages.text_message(chat_id=telegram_chat_id, message_text=user_input)
     telegram_channel.new_user_message(reset_message)
     sessions = ExperimentSession.objects.for_chat_id(telegram_chat_id).order_by("created_at").all()
     assert len(sessions) == 2
