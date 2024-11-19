@@ -8,7 +8,7 @@ from langchain_core.prompts import PromptTemplate
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform
-from apps.chat.agent.tools import get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
@@ -20,12 +20,44 @@ from apps.utils.time import pretty_date
 class BaseRunnableState(metaclass=ABCMeta):
     ai_message: ChatMessage | None = None
 
-    @abstractmethod
-    def get_llm_service(self):
-        pass
+    @property
+    def is_unauthorized_participant(self):
+        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
+        following conditions are met:
+        For web channels:
+        - They are a platform user
+        All other channels:
+        - Always True, since the external channel handles authorization
+        """
+        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
+
+    def get_participant_data(self):
+        if self.is_unauthorized_participant:
+            return ""
+        return self.session.get_participant_data(use_participant_tz=True) or ""
+
+    def get_participant_timezone(self):
+        return self.session.get_participant_timezone()
+
+    def get_current_datetime(self):
+        return pretty_date(timezone.now(), self.get_participant_timezone())
+
+    def get_trace_metadata(self) -> dict:
+        if self.trace_service:
+            trace_info = self.trace_service.get_current_trace_info()
+            if trace_info:
+                return {
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
+                }
+        return {}
+
+    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
+        if self.trace_service:
+            self.trace_service.update_trace({key: value})
+        self.chat.set_metadata(key, value)
 
     @abstractmethod
-    def get_chat_model(self):
+    def get_llm_service(self):
         pass
 
     @property
@@ -35,26 +67,6 @@ class BaseRunnableState(metaclass=ABCMeta):
 
     @abstractmethod
     def format_input(self, input: str):
-        pass
-
-    @abstractmethod
-    def get_participant_data(self):
-        pass
-
-    @abstractmethod
-    def get_participant_timezone(self):
-        pass
-
-    @abstractmethod
-    def get_current_datetime(self):
-        pass
-
-    @abstractmethod
-    def get_prompt(self):
-        pass
-
-    @abstractmethod
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
     @property
@@ -108,50 +120,14 @@ class ExperimentState(BaseRunnableState):
                 context[key] = factory()
         return context
 
-    @property
-    def is_unauthorized_participant(self):
-        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
-        following conditions are met:
-        For web channels:
-        - They are a platform user
-        All other channels:
-        - Always True, since the external channel handles authorization
-        """
-        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
-
     def get_source_material(self):
         return self.experiment.source_material.material if self.experiment.source_material else ""
-
-    def get_participant_data(self):
-        if self.is_unauthorized_participant:
-            return ""
-        return self.session.get_participant_data(use_participant_tz=True) or ""
-
-    def get_participant_timezone(self):
-        return self.session.get_participant_timezone()
-
-    def get_current_datetime(self):
-        return pretty_date(timezone.now(), self.get_participant_timezone())
 
     def get_prompt(self):
         return self.experiment.prompt_text
 
     def get_tools(self):
         return get_tools(self.session, self.experiment)
-
-    def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
-        return {}
-
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if self.trace_service:
-            self.trace_service.update_trace({key: value})
-        self.chat.set_metadata(key, value)
 
 
 class ChatExperimentState(ExperimentState):
@@ -294,10 +270,6 @@ class BaseAssistantState(BaseRunnableState):
     def chat(self):
         pass
 
-    @abstractmethod
-    def get_trace_metadata(self) -> dict:
-        pass
-
 
 class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     def pre_run_hook(self, input, config, message_metadata):
@@ -355,3 +327,65 @@ class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     @property
     def assistant(self):
         return self.experiment.assistant
+
+
+class PipelineAssistantState(BaseAssistantState):
+    def __init__(
+        self,
+        assistant: OpenAiAssistant,
+        session: ExperimentSession,
+        trace_service=None,
+        input_formatter: str | None = None,
+        citations_enabled: bool = False,
+    ):
+        self._assistant = assistant
+        self.session = session
+        self.trace_service = trace_service
+
+        self.input_formatter = input_formatter
+        self._citations_enabled = citations_enabled
+        self.input_message_metadata = {}
+        self.output_message_metadata = {}
+
+    @property
+    def chat(self):
+        return self.session.chat
+
+    @cache
+    def get_llm_service(self):
+        return self.assistant.llm_provider.get_llm_service()
+
+    def _get_provider_model_name(self) -> str:
+        return self.assistant.llm_provider_model.name
+
+    @property
+    def callback_handler(self):
+        return self.get_llm_service().get_callback_handler(self._get_provider_model_name())
+
+    def format_input(self, input: str) -> str:
+        if self.input_formatter:
+            input = self.input_formatter.format(input=input)
+        return input
+
+    def get_tools(self):
+        return get_assistant_tools(self.assistant, experiment_session=self.session)
+
+    def pre_run_hook(self, input, config, message_metadata):
+        self.input_message_metadata = message_metadata
+
+    def post_run_hook(self, output, config, message_metadata):
+        self.output_message_metadata = message_metadata
+
+    @property
+    def citations_enabled(self):
+        return self._citations_enabled
+
+    @property
+    def assistant(self):
+        return self._assistant
+
+    def get_message_metadata(self, message_type: ChatMessageType) -> dict:
+        """
+        Retrieve metadata for a given message type.
+        """
+        return self.input_message_metadata if message_type == ChatMessageType.HUMAN else self.output_message_metadata
