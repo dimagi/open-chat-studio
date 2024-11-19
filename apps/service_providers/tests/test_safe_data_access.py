@@ -7,7 +7,7 @@ from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
     ("prompt", "output"),
     [
         ("Hello, World!", "Hello, World!"),
-        ("{data.name}!", "John Doe!"),
+        ("{data.name} ({data.age})", "John Doe (19)"),
         ("{data.name[1]}", "o"),
         ("{data.name.1}", "o"),
         ("{data.name.name}", ""),
