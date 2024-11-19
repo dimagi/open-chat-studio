@@ -159,8 +159,8 @@ class ExperimentVersionsTable(tables.Table):
         {% endif %}""",
         verbose_name="Deployed",
     )
-    details = columns.TemplateColumn(
-        template_name="experiments/components/experiment_version_details_button.html",
+    actions = columns.TemplateColumn(
+        template_name="experiments/components/experiment_version_actions.html",
         verbose_name="",
         attrs={"td": {"class": "overflow-visible"}},
     )

@@ -34,7 +34,7 @@ from apps.utils.factories.experiment import (
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -696,6 +696,21 @@ class TestExperimentModel:
         ExperimentFactory(working_version=working_exp, team=team, version_number=2)
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory(working_version=working_exp, team=team, version_number=2)
+
+    def test_get_assistant_with_assistant_directly_linked(self):
+        assistant = OpenAiAssistantFactory()
+        experiment = ExperimentFactory(assistant=assistant)
+        assert experiment.get_assistant() == assistant
+
+    @pytest.mark.parametrize("assistant_id_populated", [True, False])
+    def test_get_assistant_from_pipeline(self, assistant_id_populated):
+        assistant = OpenAiAssistantFactory()
+        assistant_id = assistant.id if assistant_id_populated else None
+        pipeline = PipelineFactory()
+        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
+        experiment = ExperimentFactory(pipeline=pipeline)
+        expected_assistant_result = assistant if assistant_id_populated else None
+        assert experiment.get_assistant() == expected_assistant_result
 
     def _setup_original_experiment(self):
         experiment = ExperimentFactory()

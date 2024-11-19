@@ -4,7 +4,6 @@ from typing import Literal
 import tiktoken
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -13,14 +12,18 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic_core import PydanticCustomError
+from pydantic_core.core_schema import FieldValidationInfo
 
-from apps.channels.models import ChannelPlatform
+from apps.assistants.models import OpenAiAssistant
+from apps.channels.datamodels import Attachment
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
-from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
+from apps.chat.models import ChatMessageType
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.types import (
+    AssistantId,
     ExpandableText,
     HistoryName,
     HistoryType,
@@ -30,11 +33,14 @@ from apps.pipelines.nodes.types import (
     LlmTemperature,
     NumOutputs,
     SourceMaterialId,
+    ToggleField,
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.runnables import AssistantAgentRunnable, AssistantRunnable, ChainOutput
+from apps.service_providers.llm_service.state import PipelineAssistantState
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.time import pretty_date
 
 
 class RenderTemplate(PipelineNode):
@@ -44,7 +50,7 @@ class RenderTemplate(PipelineNode):
         description="Use {your_variable_name} to refer to designate input",
     )
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         def all_variables(in_):
             return {var: in_ for var in meta.find_undeclared_variables(env.parse(self.template_string))}
 
@@ -63,7 +69,8 @@ class RenderTemplate(PipelineNode):
             # As a last resort, just set the all the variables in the template to the input
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
-        return template.render(content)
+        output = template.render(content)
+        return PipelineState.from_node_output(node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -145,10 +152,10 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     __human_name__ = "LLM response"
     __node_description__ = "Calls an LLM with the given input"
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return output.content
+        return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -160,7 +167,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
     )
 
-    def _process(self, input, state: PipelineState, node_id: str) -> str:
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
@@ -171,38 +178,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
         self._save_history(state["experiment_session"], node_id, input, output.content)
-        return output.content
+        return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
         session: ExperimentSession = state["experiment_session"]
         context = {"input": input}
 
-        if "source_material" in prompt.input_variables and self.source_material_id is None:
-            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
-        if "source_material" in prompt.input_variables and self.source_material_id:
-            context["source_material"] = self._get_source_material().material
-
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self._get_participant_data(session)
-
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self._get_current_datetime(session)
-
+        template_context = PromptTemplateContext(session, self.source_material_id)
+        context.update(template_context.get_context(prompt.input_variables))
         return context
-
-    def _get_participant_data(self, session):
-        if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
-            return ""
-        return session.get_participant_data(use_participant_tz=True) or ""
-
-    def _get_source_material(self):
-        try:
-            return SourceMaterial.objects.get(id=self.source_material_id)
-        except SourceMaterial.DoesNotExist:
-            raise PipelineNodeBuildError(f"Source material with id {self.source_material_id} does not exist")
-
-    def _get_current_datetime(self, session):
-        return pretty_date(timezone.now(), session.get_participant_timezone())
 
 
 class SendEmail(PipelineNode):
@@ -221,19 +205,20 @@ class SendEmail(PipelineNode):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses")
         return value
 
-    def _process(self, input, **kwargs) -> str:
+    def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
+        return PipelineState.from_node_output(node_id=node_id, output=None)
 
 
 class Passthrough(PipelineNode):
     __human_name__ = "Do Nothing"
     __node_description__ = ""
 
-    def _process(self, input, state: PipelineState, node_id: str) -> str:
+    def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return input
+        return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
 class BooleanNode(Passthrough):
@@ -259,6 +244,14 @@ class RouterNode(Passthrough, HistoryMixin):
     )
     num_outputs: NumOutputs = 2
     keywords: Keywords = []
+
+    @field_validator("keywords")
+    def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
+        num_outputs = info.data.get("num_outputs")
+        value = [entry for entry in value if entry]
+        if len(value) != num_outputs:
+            raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
+        return value
 
     def process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(
@@ -313,7 +306,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, **kwargs) -> str:
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
@@ -331,7 +324,8 @@ class ExtractStructuredDataNodeMixin:
             new_reference_data = self.update_reference_data(output, reference_data)
 
         self.post_extraction_hook(new_reference_data, state)
-        return json.dumps(new_reference_data)
+        output = json.dumps(new_reference_data)
+        return PipelineState.from_node_output(node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -488,3 +482,59 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
                 team=session.team,
                 data=output,
             )
+
+
+class AssistantNode(PipelineNode):
+    __human_name__ = "OpenAI Assistant"
+    __node_description__ = "Calls an OpenAI assistant"
+    assistant_id: AssistantId
+    citations_enabled: ToggleField = Field(default=True, description="Whether to include cited sources in responses")
+    input_formatter: str | None = Field(description="(Optional) Use {input} to designate the user input")
+
+    @field_validator("input_formatter")
+    def ensure_input_variable_exists(cls, value):
+        value = value or ""
+        acceptable_var = "input"
+        if value:
+            prompt_variables = set(PromptTemplate.from_template(value).input_variables)
+            if acceptable_var not in prompt_variables:
+                raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
+
+            acceptable_vars = set([acceptable_var])
+            extra_vars = prompt_variables - acceptable_vars
+            if extra_vars:
+                raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
+
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+        try:
+            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
+        except OpenAiAssistant.DoesNotExist:
+            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
+
+        runnable = self._get_assistant_runnable(assistant, session=state["experiment_session"])
+        attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
+        chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
+        output = chain_output.output
+
+        return PipelineState.from_node_output(
+            node_id=node_id,
+            output=output,
+            message_metadata={
+                "input": runnable.state.get_message_metadata(ChatMessageType.HUMAN),
+                "output": runnable.state.get_message_metadata(ChatMessageType.AI),
+            },
+        )
+
+    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
+        assistant_state = PipelineAssistantState(
+            assistant=assistant,
+            session=session,
+            trace_service=session.experiment.trace_service,
+            input_formatter=self.input_formatter,
+            citations_enabled=self.citations_enabled,
+        )
+
+        if assistant.tools_enabled:
+            return AssistantAgentRunnable(state=assistant_state)
+        else:
+            return AssistantRunnable(state=assistant_state)

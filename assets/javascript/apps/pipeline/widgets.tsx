@@ -102,7 +102,7 @@ export function ExpandableTextWidget({
   );
 }
 
-export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodeParams}) {
+export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, params: NodeParams, inputError?: string | undefined}) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
@@ -156,6 +156,7 @@ export function KeywordsWidget({nodeId, params}: {nodeId: string, params: NodePa
             </button>
           </div>
         </label>
+        <small className="text-red-500">{inputError}</small>
       </div>
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
@@ -274,6 +275,34 @@ export function SourceMaterialIdWidget({
       {parameterValues.SourceMaterialId.map((material) => (
         <option key={material["id"]} value={material["id"]}>
           {material["topic"]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export function AssistantIdWidget({
+  parameterValues,
+  inputParam,
+  value,
+  onChange,
+}: {
+  parameterValues: NodeParameterValues;
+  inputParam: InputParam;
+  value: string | string[];
+  onChange: ChangeEventHandler;
+}) {
+  return (
+    <select
+      className="select select-bordered w-full"
+      name={inputParam.name}
+      onChange={onChange}
+      value={value}
+    >
+      <option value="">Select an assistant</option>
+      {parameterValues.AssistantId.map((assistant) => (
+        <option key={assistant["id"]} value={assistant["id"]}>
+          {assistant["name"]}
         </option>
       ))}
     </select>

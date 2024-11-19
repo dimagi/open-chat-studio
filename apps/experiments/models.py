@@ -975,6 +975,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
             ],
         )
 
+    def get_assistant(self):
+        """
+        Retrieves the assistant associated with the current instance.
+
+        This method attempts to find an assistant node within the pipeline associated with the current instance.
+        - If an assistant node is found, it retrieves the assistant ID from the node's parameters and returns the
+        corresponding OpenAiAssistant object.
+        - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
+        the instance.
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.pipelines.models import Node
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        if self.pipeline:
+            node_name = AssistantNode.model_json_schema()["title"]
+            # TODO: What about multiple assistant nodes?
+            assistant_id = (
+                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
+                .values_list("params__assistant_id", flat=True)
+                .first()
+            )
+            if assistant_id:
+                return OpenAiAssistant.objects.get(id=assistant_id)
+        return self.assistant
+
 
 class ExperimentRouteType(models.TextChoices):
     PROCESSOR = "processor"

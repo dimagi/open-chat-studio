@@ -1,0 +1,25 @@
+<div class="flex flex-row gap-1">
+  {% if record.working_version_id %}
+    <form method="post" action="{% url 'experiments:start_authed_web_session' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}" class="inline">
+      {% csrf_token %}
+      <div class="tooltip" data-tip="Start web chat with v{{ record.version_number }}">
+
+        <button type="submit" class="btn btn-sm btn-outline btn-primary">
+          <i class="fas fa-comment"></i>
+        </button>
+      </div>
+    </form>
+    <button class="btn btn-sm btn-outline btn-primary"
+            hx-get="{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
+            hx-target="#modal-content"
+            hx-trigger="click"
+            onclick="document.querySelector('#versionDetailsModal').showModal();">
+      View Details
+    </button>
+  {% else %}
+    <a class="btn btn-sm btn-primary mb-2"
+       href="{% url 'experiments:create_version' team.slug record.id %}">
+      Create Version
+    </a>
+  {% endif %}
+</div>

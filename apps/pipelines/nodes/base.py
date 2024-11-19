@@ -30,6 +30,8 @@ class PipelineState(dict):
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     ai_message_id: int | None = None
+    message_metadata: dict | None = None
+    attachments: list | None = None
 
     def json_safe(self):
         # We need to make a copy of `self` so as to not change the actual value of `experiment_session` forever
@@ -37,6 +39,13 @@ class PipelineState(dict):
         if "experiment_session" in copy:
             copy["experiment_session"] = copy["experiment_session"].id
         return copy
+
+    @classmethod
+    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineNode":
+        kwargs["outputs"] = {node_id: output}
+        if output is not None:
+            kwargs["messages"] = [output]
+        return PipelineState(**kwargs)
 
 
 class PipelineNode(BaseModel, ABC):
@@ -80,13 +89,7 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
-        output = self._process(input=input, state=state, node_id=node_id)
-        # Append the output to the state, otherwise do not change the state
-        return (
-            PipelineState(messages=[output], outputs={node_id: output})
-            if output
-            else PipelineState(outputs={node_id: output})
-        )
+        return self._process(input=input, state=state, node_id=node_id)
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> str:
         """The method that executes node specific functionality"""

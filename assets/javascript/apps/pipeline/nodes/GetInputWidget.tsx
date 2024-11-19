@@ -2,7 +2,7 @@ import {
   HistoryTypeWidget,
   SourceMaterialIdWidget,
   ExpandableTextWidget,
-  InputField, LlmWidget, KeywordsWidget,
+  InputField, LlmWidget, KeywordsWidget, AssistantIdWidget
 } from "../widgets";
 import React from "react";
 import {getCachedData, concatenate} from "../utils";
@@ -92,6 +92,17 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           />
         </InputField>
       );
+      case "AssistantId":
+        return (
+          <InputField label="Assistant" help_text={inputParam.help_text} inputError={inputError}>
+            <AssistantIdWidget
+              parameterValues={parameterValues}
+              onChange={updateParamValue}
+              inputParam={inputParam}
+              value={paramValue}
+            />
+          </InputField>
+        );
       case "LlmProviderModelId":
           //   this is handled in the LlmModel widget
       return <></>;
@@ -110,7 +121,7 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
     case "NumOutputs":
       return <></>;
     case "Keywords": {
-      return <KeywordsWidget nodeId={id} params={params}/>
+      return <KeywordsWidget nodeId={id} params={params} inputError={inputError}/>
     }
     case "HistoryType": {
       return (
@@ -137,6 +148,24 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
           help_text={inputParam.help_text}
           inputError={inputError}>
         </ExpandableTextWidget>
+      );
+    }
+    case "ToggleField": {
+      const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
+        event.target.value = event.target.checked ? "true" : "false";
+        updateParamValue(event);
+      };
+      const humanName = inputParam.name.replace(/_/g, " ");
+      return (
+        <InputField label={humanName} help_text={inputParam.help_text} inputError={inputError}>
+          <input
+            className="toggle"
+            name={inputParam.name}
+            onChange={onChangeCallback}
+            checked={paramValue === "true"}
+            type="checkbox"
+          ></input>
+        </InputField>
       );
     }
     default: {
