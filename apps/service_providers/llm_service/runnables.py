@@ -439,6 +439,9 @@ class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
             file = File.objects.get(external_id=file_id, team_id=team.id)
             file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
+        except File.MultipleObjectsReturned:
+            logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
+            file = File.objects.filter(external_id=file_id, team_id=team.id).first()
         except File.DoesNotExist:
             client = self.state.raw_client
             try:
