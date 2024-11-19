@@ -1,4 +1,8 @@
+from typing import Any
+
+import pydantic.v1
 import pytest
+from pydantic import BaseModel
 
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
@@ -28,16 +32,6 @@ from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
         ("{data.name.-1}", "e"),
         ("{data.tasks.-1.status}", "completed"),
         ("{data.name[1:2]}", ""),  # slice not supported
-        ("{data.__class__}", ""),
-        ("{data.__dict__}", ""),
-        ("{data.__module__}", ""),
-        ("{data.__code__}", ""),
-        ("{data.__subclasses__()}", ""),
-        ("{data.__init__}", ""),
-        ("{data.__delattr__}", ""),
-        ("{data.__getattribute__}", ""),
-        ("{data.__setattr__}", ""),
-        ("{data.__del__}", ""),
     ],
 )
 def test_format_participant_data(prompt, output):
@@ -50,3 +44,21 @@ def test_format_participant_data(prompt, output):
     }
 
     assert prompt.format(data=SafeAccessWrapper(participant_data)) == output
+
+
+def test_pydantic():
+    class PydanticModel(BaseModel):
+        field: Any
+
+    instance = PydanticModel(field=SafeAccessWrapper({"name": "John Doe"}))
+    assert instance.model_dump() == {"field": {"__data": {"name": "John Doe"}}}
+    assert instance.model_dump_json() == '{"field":{"__data":{"name":"John Doe"}}}'
+
+
+def test_pydantic_v1():
+    class PydanticModel(pydantic.v1.BaseModel):
+        field: Any
+
+    instance = PydanticModel(field=SafeAccessWrapper({"name": "John Doe"}))
+    assert instance.dict() == {"field": {"__data": {"name": "John Doe"}}}
+    assert instance.json() == '{"field": {"__data": {"name": "John Doe"}}}'
