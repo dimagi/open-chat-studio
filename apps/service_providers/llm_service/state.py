@@ -1,20 +1,18 @@
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
-from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.channels.models import ChannelPlatform
 from apps.chat.agent.tools import get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.teams.models import Team
-from apps.utils.time import pretty_date
 
 
 class BaseRunnableState(metaclass=ABCMeta):
@@ -38,18 +36,6 @@ class BaseRunnableState(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_participant_data(self):
-        pass
-
-    @abstractmethod
-    def get_participant_timezone(self):
-        pass
-
-    @abstractmethod
-    def get_current_datetime(self):
-        pass
-
-    @abstractmethod
     def get_prompt(self):
         pass
 
@@ -68,6 +54,7 @@ class ExperimentState(BaseRunnableState):
         self.experiment = experiment
         self.session = session
         self.trace_service = trace_service or self.experiment.trace_service
+        self.template_context = PromptTemplateContext(session, experiment.source_material_id)
 
     @property
     def chat(self):
@@ -91,47 +78,9 @@ class ExperimentState(BaseRunnableState):
             return input
 
         template = PromptTemplate.from_template(self.experiment.input_formatter)
-        context = self.get_template_context(template.input_variables)
+        context = self.template_context.get_context(template.input_variables)
         context["input"] = input
         return template.format(**context)
-
-    def get_template_context(self, variables: list[str]):
-        factories = {
-            "source_material": self.get_source_material,
-            "participant_data": self.get_participant_data,
-            "current_datetime": self.get_current_datetime,
-        }
-        context = {}
-        for key, factory in factories.items():
-            # allow partial matches to support format specifiers
-            if any(key in var for var in variables):
-                context[key] = factory()
-        return context
-
-    @property
-    def is_unauthorized_participant(self):
-        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
-        following conditions are met:
-        For web channels:
-        - They are a platform user
-        All other channels:
-        - Always True, since the external channel handles authorization
-        """
-        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
-
-    def get_source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
-
-    def get_participant_data(self):
-        if self.is_unauthorized_participant:
-            return ""
-        return self.session.get_participant_data(use_participant_tz=True) or ""
-
-    def get_participant_timezone(self):
-        return self.session.get_participant_timezone()
-
-    def get_current_datetime(self):
-        return pretty_date(timezone.now(), self.get_participant_timezone())
 
     def get_prompt(self):
         return self.experiment.prompt_text
@@ -197,10 +146,10 @@ class BaseAssistantState(BaseRunnableState):
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
         instructions = self.assistant.instructions
 
-        instructions = instructions.format(
-            participant_data=self.get_participant_data(),
-            current_datetime=self.get_current_datetime(),
-        )
+        input_variables = get_template_variables(instructions, "f-string")
+        if input_variables:
+            context = PromptTemplateContext(self.session, None).get_context(input_variables)
+            instructions = instructions.format(**context)
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.assistant.include_file_info and code_interpreter_attachments:

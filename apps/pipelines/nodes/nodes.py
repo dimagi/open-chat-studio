@@ -4,7 +4,6 @@ from typing import Literal
 import tiktoken
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.utils import timezone
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
@@ -14,9 +13,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic_core import PydanticCustomError
 
-from apps.channels.models import ChannelPlatform
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
-from apps.experiments.models import ExperimentSession, ParticipantData, SourceMaterial
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -33,8 +31,8 @@ from apps.pipelines.nodes.types import (
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.prompt_context import ContextError, PromptTemplateContext
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.time import pretty_date
 
 
 class RenderTemplate(PipelineNode):
@@ -177,32 +175,13 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         session: ExperimentSession = state["experiment_session"]
         context = {"input": input}
 
-        if "source_material" in prompt.input_variables and self.source_material_id is None:
-            raise PipelineNodeBuildError("No source material set, but the prompt expects it")
-        if "source_material" in prompt.input_variables and self.source_material_id:
-            context["source_material"] = self._get_source_material().material
-
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self._get_participant_data(session)
-
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self._get_current_datetime(session)
+        template_context = PromptTemplateContext(session, self.source_material_id)
+        try:
+            template_context.get_context(prompt.input_variables)
+        except ContextError as e:
+            raise PipelineNodeBuildError(str(e)) from None
 
         return context
-
-    def _get_participant_data(self, session):
-        if session.experiment_channel.platform == ChannelPlatform.WEB and session.participant.user is None:
-            return ""
-        return session.get_participant_data(use_participant_tz=True) or ""
-
-    def _get_source_material(self):
-        try:
-            return SourceMaterial.objects.get(id=self.source_material_id)
-        except SourceMaterial.DoesNotExist:
-            raise PipelineNodeBuildError(f"Source material with id {self.source_material_id} does not exist")
-
-    def _get_current_datetime(self, session):
-        return pretty_date(timezone.now(), session.get_participant_timezone())
 
 
 class SendEmail(PipelineNode):

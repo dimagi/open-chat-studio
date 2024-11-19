@@ -177,7 +177,7 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
 @pytest.mark.django_db()
 def test_runnable_runnable_format_input(runnable, session, fake_llm_service, extra_var, extra_output):
     state = ChatExperimentState(session.experiment, session)
-    state.get_current_datetime = mock.Mock(return_value="the current date and time")
+    state.template_context.get_current_datetime = mock.Mock(return_value="the current date and time")
     chain = runnable.build(state=state)
     session.experiment.input_formatter = "foo {input} bar" + extra_var
     result = chain.invoke("hi")
