@@ -19,6 +19,11 @@ class File(BaseTeamModel):
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
+        if existing := File.objects.filter(
+            external_id=external_id, external_source=external_source, team_id=team_id
+        ).first():
+            return existing
+
         file_content_bytes = external_file.read() if external_file else None
 
         content_type = mimetypes.guess_type(filename)[0]
