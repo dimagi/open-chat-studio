@@ -189,7 +189,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
         if type_ == ChatMessageType.AI:
-            self.ai_message = chat_message
             chat_message.add_system_tag(tag=f"v{self.version_number}", tag_category=TagCategories.EXPERIMENT_VERSION)
             if self.is_working_version:
                 chat_message.add_system_tag(
