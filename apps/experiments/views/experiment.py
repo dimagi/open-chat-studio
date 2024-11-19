@@ -162,11 +162,11 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        return (
-            Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
-            .order_by("-version_number")
-            .all()
-        )
+        experiment_row = Experiment.objects.filter(id=self.kwargs["experiment_id"])
+        other_versions = Experiment.objects.filter(
+            working_version=self.kwargs["experiment_id"], is_archived=False
+        ).all()
+        return (experiment_row | other_versions).order_by("-version_number")
 
 
 class ExperimentForm(forms.ModelForm):
