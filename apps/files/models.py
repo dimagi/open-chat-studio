@@ -41,7 +41,7 @@ class File(BaseTeamModel):
     def duplicate(self, clear_external_id: bool = False):
         new_file = File(
             name=self.name,
-            external_source=self.external_source,
+            external_source="" if clear_external_id else self.external_source,
             external_id="" if clear_external_id else self.external_id,
             content_size=self.content_size,
             content_type=self.content_type,
