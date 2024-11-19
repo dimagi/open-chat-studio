@@ -19,7 +19,6 @@ class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
     SAFETY_LAYER_RESPONSE = "safety_layer_response", _("Safety Layer Response")
     EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
-    VERSION_DEPLOYED_STATUS = "version_deployed_status", _("Version Deployed Status")
 
 
 @audit_fields(

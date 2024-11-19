@@ -38,7 +38,7 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
         [SystemMessage(content="You are a helpful assistant"), HumanMessage(content="Hi")],
     ]
     message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
-    assert set(message.tags.values_list("name", flat=True)) == set([expected_tag, "unreleased", "v1"])
+    assert set(message.tags.values_list("name", flat=True)) == set([expected_tag, "v1-unreleased"])
 
 
 @pytest.mark.django_db()
@@ -94,7 +94,7 @@ def test_experiment_routing_with_assistant(
     assert bot.processor_experiment == ExperimentRoute.objects.get(parent=experiment, keyword=expected_tag).child
 
     message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
-    assert set(message.tags.values_list("name", flat=True)) == set([expected_tag, "unreleased", "v1"])
+    assert set(message.tags.values_list("name", flat=True)) == set([expected_tag, "v1-unreleased"])
 
 
 def _make_experiment_with_routing(with_default=True, assistant_children=False):

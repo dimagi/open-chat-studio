@@ -10,7 +10,6 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -189,13 +188,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
         if type_ == ChatMessageType.AI:
-            chat_message.add_system_tag(tag=f"v{self.version_number}", tag_category=TagCategories.EXPERIMENT_VERSION)
-            if self.is_working_version:
-                chat_message.add_system_tag(
-                    tag="unreleased",
-                    tag_category=TagCategories.VERSION_DEPLOYED_STATUS,
-                )
-
+            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
         return chat_message
 
     @transaction.atomic()
