@@ -122,5 +122,10 @@ class SafeAccessWrapper:
     def __str__(self):
         return str(self.data) if self.data is not None else ""
 
+    def __eq__(self, other):
+        if isinstance(other, SafeAccessWrapper):
+            return self.data == other.data
+        return self.data == other
+
 
 EMPTY = SafeAccessWrapper(None)
