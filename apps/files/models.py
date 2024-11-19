@@ -1,6 +1,9 @@
 import mimetypes
 import pathlib
+from tempfile import TemporaryFile
 
+import magic
+from django.core.files import File as DjangoFile
 from django.core.files.base import ContentFile
 from django.db import models
 
@@ -15,6 +18,31 @@ class File(BaseTeamModel):
     content_size = models.PositiveIntegerField(null=True, blank=True)
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
+
+    @classmethod
+    def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
+        file_content_bytes = external_file.read()
+
+        content_type = mimetypes.guess_type(filename)[0]
+        if not content_type:
+            # typically means the filename doesn't have an extension
+            content_type = magic.from_buffer(file_content_bytes, mime=True)
+            extension = mimetypes.guess_extension(content_type)
+            # leading '.' is included
+            filename = f"{filename}{extension}"
+
+        with TemporaryFile(mode="w+b") as file:
+            file.write(file_content_bytes)
+            django_file = DjangoFile(file, name=filename)
+            return File.objects.create(
+                name=filename,
+                file=django_file,
+                external_id=external_id,
+                external_source=external_source,
+                team_id=team_id,
+                content_type=content_type,
+                content_size=django_file.size,
+            )
 
     @staticmethod
     def get_content_type(file):
