@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from apps.annotations.models import TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.models import CustomAction, CustomActionOperation
-from apps.experiments.models import AgentTools, SourceMaterial
+from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.runnables import (
     AgentExperimentRunnable,
     ChainOutput,
@@ -95,9 +95,10 @@ def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_l
 
 @pytest.mark.django_db()
 def test_runnable_with_source_material(runnable, session, fake_llm_service):
-    session.experiment.source_material = SourceMaterial(material="this is the source material")
     session.experiment.prompt_text = "System prompt with {source_material}"
-    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
+    state = ChatExperimentState(session.experiment, session)
+    state.template_context.get_source_material = mock.Mock(return_value="this is the source material")
+    chain = runnable.build(state=state)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with this is the source material"
@@ -275,12 +276,13 @@ def test_runnable_with_participant_data(
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.state.ExperimentState.get_current_datetime")
-def test_runnable_with_current_datetime(get_current_datetime, runnable, session, fake_llm_service):
-    get_current_datetime.return_value = pretty_date(datetime.fromisoformat("2024-02-08 13:00:08.877096+00:00"))
-    session.experiment.source_material = SourceMaterial(material="this is the source material")
+def test_runnable_with_current_datetime(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with current datetime: {current_datetime}"
-    chain = runnable.build(state=ChatExperimentState(session.experiment, session))
+    state = ChatExperimentState(session.experiment, session)
+    state.template_context.get_current_datetime = mock.Mock(
+        return_value=pretty_date(datetime.fromisoformat("2024-02-08 13:00:08.877096+00:00"))
+    )
+    chain = runnable.build(state=state)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with current datetime: Thursday, 08 February 2024 13:00:08 UTC"

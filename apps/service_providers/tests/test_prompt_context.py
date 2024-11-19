@@ -4,7 +4,7 @@ import pytest
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SourceMaterial
-from apps.service_providers.llm_service.prompt_context import ContextError, PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
 
 @pytest.fixture()
@@ -25,7 +25,7 @@ def mock_authorized_session(mock_session):
 
 @patch("apps.experiments.models.SourceMaterial.objects.get")
 def test_builds_context_with_specified_variables(mock_get, mock_session):
-    mock_get.return_value = "source_material"
+    mock_get.return_value = Mock(material="source material")
     context = PromptTemplateContext(mock_session, 1)
     variables = ["source_material", "current_datetime"]
     result = context.get_context(variables)
@@ -64,17 +64,16 @@ def test_calls_with_different_vars_returns_correct_context(mock_session):
 
 @patch("apps.experiments.models.SourceMaterial.objects.get")
 def test_retrieves_source_material_successfully(mock_get, mock_session):
-    mock_get.return_value = "source_material"
+    mock_get.return_value = Mock(material="source material")
     context = PromptTemplateContext(mock_session, 1)
-    assert context.get_source_material() == "source_material"
+    assert context.get_source_material() == "source material"
 
 
 @patch("apps.experiments.models.SourceMaterial.objects.get")
-def test_raises_error_when_source_material_not_found(mock_get, mock_session):
+def test_returns_blank_source_material_not_found(mock_get, mock_session):
     mock_get.side_effect = SourceMaterial.DoesNotExist
     context = PromptTemplateContext(mock_session, 1)
-    with pytest.raises(ContextError):
-        context.get_source_material()
+    assert context.get_source_material() == ""
 
 
 def test_retrieves_participant_data_when_authorized(mock_authorized_session):

@@ -31,7 +31,7 @@ from apps.pipelines.nodes.types import (
 )
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.prompt_context import ContextError, PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.models import LlmProviderModel
 
 
@@ -176,11 +176,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         context = {"input": input}
 
         template_context = PromptTemplateContext(session, self.source_material_id)
-        try:
-            template_context.get_context(prompt.input_variables)
-        except ContextError as e:
-            raise PipelineNodeBuildError(str(e)) from None
-
+        context.update(template_context.get_context(prompt.input_variables))
         return context
 
 
