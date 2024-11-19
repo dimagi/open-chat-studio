@@ -12,6 +12,7 @@ class PromptTemplateContext:
     def __init__(self, session, source_material_id):
         self.session = session
         self.source_material_id = source_material_id
+        self.context = {}
 
     def get_context(self, variables: list[str]):
         factories = {
@@ -19,12 +20,14 @@ class PromptTemplateContext:
             "participant_data": self.get_participant_data,
             "current_datetime": self.get_current_datetime,
         }
-        context = {}
         for key, factory in factories.items():
+            if key in self.context:
+                continue
+
             # allow partial matches to support format specifiers
             if any(key in var for var in variables):
-                context[key] = factory()
-        return context
+                self.context[key] = factory()
+        return self.context
 
     def get_source_material(self):
         from apps.experiments.models import SourceMaterial
