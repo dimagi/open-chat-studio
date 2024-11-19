@@ -55,7 +55,6 @@ Once enabled on the assistant, the thread can add its own files to its vector st
 files, as well as those provided by the assistant.
 """
 
-import mimetypes
 import pathlib
 from functools import wraps
 from io import BytesIO
@@ -287,19 +286,9 @@ def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
     except Exception:
         pass
 
-    content_type = mimetypes.guess_type(filename)[0]
-    file = File(
-        team=assistant.team,
-        name=filename,
-        content_type=content_type,
-        external_id=openai_file.id,
-        external_source="openai",
-    )
     # Can't retrieve content from openai assistant files
     # content = client.files.retrieve_content(openai_file.id)
-    # file.file.save(filename, ContentFile(content.read()))
-    file.save()
-    return file
+    return File.from_external_source(filename, None, file_id, "openai", assistant.team_id)
 
 
 def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: OpenAiAssistant):
