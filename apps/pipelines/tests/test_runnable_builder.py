@@ -7,6 +7,7 @@ from django.core import mail
 from django.test import override_settings
 
 from apps.experiments.models import ParticipantData
+from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
@@ -860,24 +861,8 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
 
     pipeline = PipelineFactory()
     assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
-    data = {
-        "edges": [],
-        "nodes": [
-            {
-                "data": {
-                    "id": "assistant-id",
-                    "label": "Assistant label",
-                    "type": "AssistantNode",
-                    "params": {
-                        "assistant_id": assistant.id,
-                        "citations_enabled": True,
-                        "input_formatter": "",
-                    },
-                },
-                "id": "assistant-id",
-            },
-        ],
-    }
+    data = _get_assistant_node_data(assistant.id)
+
     pipeline.data = data
     pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
@@ -890,3 +875,48 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
     assert output_state["message_metadata"]["input"] == {"test": "metadata"}
     assert output_state["message_metadata"]["output"] == {"test": "metadata"}
     assert output_state["messages"][-1] == "Hi there human"
+
+
+@pytest.mark.django_db()
+@patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
+def test_assistant_node_raises(get_assistant_runnable):
+    runnable_mock = Mock()
+    runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
+        output="Hi there human", prompt_tokens=30, completion_tokens=20
+    )
+    runnable_mock.state.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
+    get_assistant_runnable.return_value = runnable_mock
+
+    pipeline = PipelineFactory()
+    data = _get_assistant_node_data(999)
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    state = PipelineState(
+        messages=["Hi there bot"],
+        experiment_session=ExperimentSessionFactory(),
+        attachments=[],
+    )
+    with pytest.raises(PipelineNodeBuildError):
+        runnable.invoke(state)
+
+
+def _get_assistant_node_data(assistant_id):
+    return {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {
+                    "id": "assistant-id",
+                    "label": "Assistant label",
+                    "type": "AssistantNode",
+                    "params": {
+                        "assistant_id": assistant_id,
+                        "citations_enabled": True,
+                        "input_formatter": "",
+                    },
+                },
+                "id": "assistant-id",
+            },
+        ],
+    }

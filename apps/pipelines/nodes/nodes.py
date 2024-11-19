@@ -520,8 +520,8 @@ class AssistantNode(PipelineNode):
     def ensure_input_variable_exists(cls, value):
         value = value or ""
         acceptable_var = "input"
-        prompt_variables = set(PromptTemplate.from_template(value).input_variables)
         if value:
+            prompt_variables = set(PromptTemplate.from_template(value).input_variables)
             if acceptable_var not in prompt_variables:
                 raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
 
@@ -531,7 +531,11 @@ class AssistantNode(PipelineNode):
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
-        assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
+        try:
+            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
+        except OpenAiAssistant.DoesNotExist:
+            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
+
         runnable = self._get_assistant_runnable(assistant, session=state["experiment_session"])
         attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
