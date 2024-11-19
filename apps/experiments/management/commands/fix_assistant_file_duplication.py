@@ -53,6 +53,7 @@ class Command(BaseCommand):
                             self.stdout.write("...clearing file external ids")
                             for file in tool_resource.files.all():
                                 file.external_id = ""
+                                file.external_source = ""
                                 file.save()
 
                                 self.stdout.write("...removing existing vector store id at OpenAI")
