@@ -6,7 +6,7 @@ from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
@@ -18,12 +18,22 @@ from apps.teams.models import Team
 class BaseRunnableState(metaclass=ABCMeta):
     ai_message: ChatMessage | None = None
 
-    @abstractmethod
-    def get_llm_service(self):
-        pass
+    def get_trace_metadata(self) -> dict:
+        if self.trace_service:
+            trace_info = self.trace_service.get_current_trace_info()
+            if trace_info:
+                return {
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
+                }
+        return {}
+
+    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
+        if self.trace_service:
+            self.trace_service.update_trace({key: value})
+        self.chat.set_metadata(key, value)
 
     @abstractmethod
-    def get_chat_model(self):
+    def get_llm_service(self):
         pass
 
     @property
@@ -33,14 +43,6 @@ class BaseRunnableState(metaclass=ABCMeta):
 
     @abstractmethod
     def format_input(self, input: str):
-        pass
-
-    @abstractmethod
-    def get_prompt(self):
-        pass
-
-    @abstractmethod
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
     @property
@@ -90,20 +92,6 @@ class ExperimentState(BaseRunnableState):
 
     def get_tools(self):
         return get_tools(self.session, self.experiment)
-
-    def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
-        return {}
-
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if self.trace_service:
-            self.trace_service.update_trace({key: value})
-        self.chat.set_metadata(key, value)
 
 
 class ChatExperimentState(ExperimentState):
@@ -246,10 +234,6 @@ class BaseAssistantState(BaseRunnableState):
     def chat(self):
         pass
 
-    @abstractmethod
-    def get_trace_metadata(self) -> dict:
-        pass
-
 
 class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     def pre_run_hook(self, input, config, message_metadata):
@@ -307,3 +291,65 @@ class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     @property
     def assistant(self):
         return self.experiment.assistant
+
+
+class PipelineAssistantState(BaseAssistantState):
+    def __init__(
+        self,
+        assistant: OpenAiAssistant,
+        session: ExperimentSession,
+        trace_service=None,
+        input_formatter: str | None = None,
+        citations_enabled: bool = False,
+    ):
+        self._assistant = assistant
+        self.session = session
+        self.trace_service = trace_service
+
+        self.input_formatter = input_formatter
+        self._citations_enabled = citations_enabled
+        self.input_message_metadata = {}
+        self.output_message_metadata = {}
+
+    @property
+    def chat(self):
+        return self.session.chat
+
+    @cache
+    def get_llm_service(self):
+        return self.assistant.llm_provider.get_llm_service()
+
+    def _get_provider_model_name(self) -> str:
+        return self.assistant.llm_provider_model.name
+
+    @property
+    def callback_handler(self):
+        return self.get_llm_service().get_callback_handler(self._get_provider_model_name())
+
+    def format_input(self, input: str) -> str:
+        if self.input_formatter:
+            input = self.input_formatter.format(input=input)
+        return input
+
+    def get_tools(self):
+        return get_assistant_tools(self.assistant, experiment_session=self.session)
+
+    def pre_run_hook(self, input, config, message_metadata):
+        self.input_message_metadata = message_metadata
+
+    def post_run_hook(self, output, config, message_metadata):
+        self.output_message_metadata = message_metadata
+
+    @property
+    def citations_enabled(self):
+        return self._citations_enabled
+
+    @property
+    def assistant(self):
+        return self._assistant
+
+    def get_message_metadata(self, message_type: ChatMessageType) -> dict:
+        """
+        Retrieve metadata for a given message type.
+        """
+        return self.input_message_metadata if message_type == ChatMessageType.HUMAN else self.output_message_metadata

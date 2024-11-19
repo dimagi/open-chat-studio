@@ -156,8 +156,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
-                self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-                ai_message = self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                metadata = output.get("message_metadata", {})
+                self._save_message_to_history(
+                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
+                )
+                ai_message = self._save_message_to_history(
+                    session, output["messages"][-1], ChatMessageType.AI, metadata=metadata.get("output", {})
+                )
                 output["ai_message_id"] = ai_message.id
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
@@ -180,11 +185,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             session=session,
         )
 
-    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType) -> ChatMessage:
+    def _save_message_to_history(
+        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
+    ) -> ChatMessage:
         return ChatMessage.objects.create(
-            chat=session.chat,
-            message_type=type_.value,
-            content=message,
+            chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
         # TODO: Add tags here?
 
