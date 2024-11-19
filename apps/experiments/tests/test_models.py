@@ -749,14 +749,18 @@ class TestExperimentModel:
         post_survey = SurveyFactory(team=team)
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
-        experiment.pipeline = PipelineFactory(team=experiment.team)
-        experiment.assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
-        files = FileFactory.create_batch(2)
-        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
-        code_resource.files.set(files[:1])
 
-        search_resource = ToolResources.objects.create(tool_type="file_search", assistant=experiment.assistant)
-        search_resource.files.set(files[1:])
+        experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.assistant = OpenAiAssistantFactory(
+            assistant_id="a-123", builtin_tools=["code_interpreter", "file_search"]
+        )
+        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
+        code_resource.files.set([FileFactory(external_id="ci-123")])
+
+        search_resource = ToolResources.objects.create(
+            tool_type="file_search", assistant=experiment.assistant, extra={"vector_store_id": "123"}
+        )
+        search_resource.files.set([FileFactory(external_id="fs-123")])
         experiment.save()
         return experiment
 
@@ -837,6 +841,16 @@ class TestExperimentModel:
         assert original_experiment.assistant.version_number == 2
         assert new_version.assistant.tool_resources.filter(tool_type="file_search").first().files.count() == 1
         assert new_version.assistant.tool_resources.filter(tool_type="code_interpreter").first().files.count() == 1
+
+        # Check that the assistant_id is cleared
+        assert original_experiment.assistant.assistant_id != new_version.assistant.assistant_id
+        assert new_version.assistant.assistant_id == ""
+
+        # Check that the vector_store_id is cleared
+        original_fs_resource = original_experiment.assistant.tool_resources.get(tool_type="file_search")
+        assert original_fs_resource.extra["vector_store_id"] is not None
+        new_fs_resource = new_version.assistant.tool_resources.get(tool_type="file_search")
+        assert new_fs_resource.extra["vector_store_id"] is None
 
     def test_copy_attr_to_new_version(self):
         """

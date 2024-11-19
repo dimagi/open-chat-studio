@@ -126,6 +126,9 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 )
                 new_tool_resource.files.set(tool_resource_files)
                 new_tool_resource.extra = tool_resource.extra
+                if tool_resource.tool_type == "file_search":
+                    # Clear the vector store ID so that a new one will be created
+                    new_tool_resource.extra["vector_store_id"] = None
                 new_tool_resource.save()
 
         self._copy_custom_action_operations_to_new_version(assistant_version)
