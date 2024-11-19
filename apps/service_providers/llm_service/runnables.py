@@ -436,7 +436,7 @@ class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
         team = self.state.session.team
         session_id = self.state.session.id
         try:
-            file = File.objects.get(external_id=file_id, team_id=team.id)
+            file = File.objects.get(external_id=file_id, team_id=team.id).first()
             file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
         except File.DoesNotExist:
