@@ -38,11 +38,11 @@ class File(BaseTeamModel):
                 self.content_type = File.get_content_type(self.file)
         super().save(*args, **kwargs)
 
-    def duplicate(self, clear_external_id: bool = False):
+    def duplicate(self):
         new_file = File(
             name=self.name,
-            external_source="" if clear_external_id else self.external_source,
-            external_id="" if clear_external_id else self.external_id,
+            external_source=self.external_source,
+            external_id=self.external_id,
             content_size=self.content_size,
             content_type=self.content_type,
             schema=self.schema,

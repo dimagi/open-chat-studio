@@ -1,5 +1,5 @@
 """
-This is a temporary test for the fix_assistant_file_duplication command. This test should be removed once the command
+This is a temporary test for the fix_vector_store_duplication command. This test should be removed once the command
 is not needed anymore.
 """
 
@@ -14,9 +14,9 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("args", [["--assistant", "a-123"], ["--team", "assistant-team"]])
-@patch("apps.experiments.management.commands.fix_assistant_file_duplication._clear_assistant_vector_store", Mock())
-@patch("apps.experiments.management.commands.fix_assistant_file_duplication.push_assistant_to_openai")
-def test_fix_assistant_file_duplication_command(push_assistant_to_openai, args):
+@patch("apps.experiments.management.commands.fix_vector_store_duplication._clear_assistant_vector_store", Mock())
+@patch("apps.experiments.management.commands.fix_vector_store_duplication.push_assistant_to_openai")
+def test_fix_vector_store_duplication_command(push_assistant_to_openai, args):
     assistant = OpenAiAssistantFactory(assistant_id="a-123", version_number=2, team__slug="assistant-team")
     original_tool_resource = assistant.tool_resources.create(
         tool_type="file_search", extra={"vector_store_id": "v-123"}
@@ -32,7 +32,7 @@ def test_fix_assistant_file_duplication_command(push_assistant_to_openai, args):
     version_file = FileFactory(external_id="f-123", external_source="openai")
     version_tool_resource.files.add(version_file)
 
-    call_command("fix_assistant_file_duplication", *args)
+    call_command("fix_vector_store_duplication", *args)
 
     # Ensure the original version is in tact
     original_tool_resource.refresh_from_db()
@@ -45,6 +45,3 @@ def test_fix_assistant_file_duplication_command(push_assistant_to_openai, args):
     assert assistant.is_a_version
     tool_resource = assistant.tool_resources.get(tool_type="file_search")
     tool_resource.extra["vector_store_id"] == ""
-    file = tool_resource.files.first()
-    assert file.external_id == ""
-    assert file.external_source == ""

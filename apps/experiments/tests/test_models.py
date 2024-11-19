@@ -831,12 +831,6 @@ class TestExperimentModel:
         new_fs_resource = new_version.assistant.tool_resources.get(tool_type="file_search")
         assert new_fs_resource.extra["vector_store_id"] is None
 
-        # Check that the duplicated files' external_ids is cleared
-        original_file = original_fs_resource.files.first()
-        copied_file = new_fs_resource.files.first()
-        assert original_file.external_id != copied_file.external_id
-        assert copied_file.external_id == ""
-
     def test_copy_attr_to_new_version(self):
         """
         Copying an attribute to the a version should only create a new version of the attribute (or related model) when

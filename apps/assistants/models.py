@@ -118,7 +118,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         assistant_version.files.set(files)
         assistant_version.tools = self.tools.copy()
         for tool_resource in self.tool_resources.all():
-            tool_resource_files = [file.duplicate(clear_external_id=True) for file in tool_resource.files.all()]
+            tool_resource_files = [file.duplicate() for file in tool_resource.files.all()]
             if tool_resource_files:
                 new_tool_resource = ToolResources.objects.create(
                     assistant=assistant_version,

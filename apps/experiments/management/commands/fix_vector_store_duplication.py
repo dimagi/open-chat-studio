@@ -50,13 +50,6 @@ class Command(BaseCommand):
                             self.stdout.write("...clearning vector_store_id")
                             tool_resource.extra["vector_store_id"] = None
                             tool_resource.save()
-                            self.stdout.write("...clearing file external ids")
-                            for file in tool_resource.files.all():
-                                file.external_id = ""
-                                file.external_source = ""
-                                file.save()
-
-                                self.stdout.write("...removing existing vector store id at OpenAI")
                             _clear_assistant_vector_store(version)
 
                             self.stdout.write("...syncing version with OpenAI")
