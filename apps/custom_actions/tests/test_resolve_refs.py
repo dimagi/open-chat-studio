@@ -94,3 +94,23 @@ def test_external_reference():
 
     with pytest.raises(ValueError, match="External references are not supported: http://example.com/definitions/Pet"):
         resolve_references(spec)
+
+
+def test_preserve_description():
+    spec = {
+        "definitions": {
+            "PetExample": {
+                "type": "object",
+                "properties": {
+                    "id": 1,
+                    "name": "Dog",
+                },
+            }
+        },
+        "examples": [
+            {"$ref": "#/definitions/PetExample", "description": "An example of a pet"},
+            {"id": 2, "name": "Cat"},
+        ],
+    }
+    resolved_spec = resolve_references(spec)
+    assert resolved_spec["examples"][0]["description"] == "An example of a pet"
