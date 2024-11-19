@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
@@ -58,7 +60,7 @@ class PromptTemplateContext:
         return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
 
 
-class SafeAccessWrapper:
+class SafeAccessWrapper(dict):
     """Allow access to nested data structures without raising exceptions.
 
     This class wraps around a data structure and allows access to its elements
@@ -80,52 +82,55 @@ class SafeAccessWrapper:
     >>> print("{data.address}".format(data=data))
     """
 
-    def __init__(self, data):
-        self.data = data
-
-    def __getattribute__(self, item):
-        if item and item.startswith("__"):
-            return EMPTY
-        return super().__getattribute__(item)
+    def __init__(self, data: Any):
+        super().__init__(self, __data=data)
+        self.__data = data
 
     def __getitem__(self, key):
-        if isinstance(self.data, list | str):
+        if isinstance(self.__data, list | str):
             try:
-                return SafeAccessWrapper(self.data[int(key)])
+                return SafeAccessWrapper(self.__data[int(key)])
             except (IndexError, ValueError):
                 return SafeAccessWrapper(None)
-        if isinstance(self.data, dict):
-            return SafeAccessWrapper(self.data.get(key, None))
+        if isinstance(self.__data, dict):
+            return SafeAccessWrapper(self.__data.get(key, None))
 
-        if isinstance(self.data, int):
+        if isinstance(self.__data, int):
             return EMPTY
 
         try:
-            return SafeAccessWrapper(self.data[key])
+            return SafeAccessWrapper(self.__data[key])
         except (IndexError, TypeError):
             return EMPTY
 
     def __getattr__(self, key):
-        if isinstance(self.data, dict):
-            return SafeAccessWrapper(self.data.get(key, ""))
-        elif isinstance(self.data, list | str):
+        if key.startswith("__"):
+            # don't try and wrap special methods
+            raise AttributeError(key)
+
+        if isinstance(self.__data, dict):
+            return SafeAccessWrapper(self.__data.get(key, ""))
+        elif isinstance(self.__data, list | str):
             try:
-                return SafeAccessWrapper(self.data[int(key)])
+                return SafeAccessWrapper(self.__data[int(key)])
             except (IndexError, ValueError):
                 return EMPTY
 
         try:
-            return SafeAccessWrapper(getattr(self.data, key))
+            return SafeAccessWrapper(getattr(self.__data, key))
         except AttributeError:
             return EMPTY
 
     def __str__(self):
-        return str(self.data) if self.data is not None else ""
+        return str(self.__data) if self.__data is not None else ""
+
+    def __repr__(self):
+        return f"SafeAccessWrapper({self.__data!r})"
 
     def __eq__(self, other):
         if isinstance(other, SafeAccessWrapper):
-            return self.data == other.data
-        return self.data == other
+            return self.__data == other.data
+        return self.__data == other
 
 
 EMPTY = SafeAccessWrapper(None)
