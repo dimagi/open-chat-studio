@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0020_auto_20241111_1113'),
+        ('service_providers', '0022_alter_llmprovider_type_alter_llmprovidermodel_type'),
     ]
 
     operations = [
