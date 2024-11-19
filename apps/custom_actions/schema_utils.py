@@ -68,7 +68,8 @@ def resolve_references(openapi_spec: dict) -> dict:
             current = openapi_spec
             for p in ref_path:
                 current = current[p]
-            return deepcopy(current)
+            # preserve description and summary
+            return {**deepcopy(current), **{k: v for k, v in data.items() if k in ("description", "summary")}}
         elif isinstance(data, dict):
             for k, v in data.items():
                 if isinstance(v, dict | list):
