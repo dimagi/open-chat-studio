@@ -82,6 +82,9 @@ class ExperimentState(BaseRunnableState):
         context["input"] = input
         return template.format(**context)
 
+    def get_template_context(self, variables: list[str]):
+        return self.template_context.get_context(variables)
+
     def get_prompt(self):
         return self.experiment.prompt_text
 
