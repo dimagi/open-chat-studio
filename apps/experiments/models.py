@@ -990,7 +990,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         from apps.pipelines.nodes.nodes import AssistantNode
 
         if self.pipeline:
-            node_name = AssistantNode.model_json_schema()["title"]
+            node_name = AssistantNode.__name__
             # TODO: What about multiple assistant nodes?
             assistant_id = (
                 Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
