@@ -203,6 +203,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         )
         self.add_tag(tag, team=self.chat.team, added_by=None)
 
+    def add_version_tag(self, version_number: int, is_a_version: bool):
+        tag = f"v{version_number}"
+        if not is_a_version:
+            tag = f"{tag}-unreleased"
+        self.add_system_tag(tag=tag, tag_category=TagCategories.EXPERIMENT_VERSION)
+
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
         if self.message_type != ChatMessageType.AI:

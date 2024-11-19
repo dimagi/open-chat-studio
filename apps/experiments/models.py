@@ -21,6 +21,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import Version, VersionField, differs
@@ -1537,8 +1538,16 @@ class ExperimentSession(BaseTeamModel):
 
     @property
     def experiment_version_for_display(self):
-        version_number = self.get_experiment_version_number()
-        return "Default version" if version_number == Experiment.DEFAULT_VERSION_NUMBER else f"v{version_number}"
+        version_tags = list(
+            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+            .order_by("name")
+            .values_list("name", flat=True)
+            .distinct()
+        )
+        if not version_tags:
+            return ""
+
+        return ", ".join(version_tags)
 
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment

@@ -188,10 +188,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def _save_message_to_history(
         self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
     ) -> ChatMessage:
-        return ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
-        # TODO: Add tags here?
+
+        if type_ == ChatMessageType.AI:
+            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
+        return chat_message
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):

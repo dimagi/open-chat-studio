@@ -6,8 +6,9 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.annotations.models import TagCategories
 from apps.assistants.models import ToolResources
-from apps.chat.models import Chat
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import (
@@ -432,14 +433,19 @@ class TestExperimentSession:
             _test()
 
     @pytest.mark.parametrize(
-        ("chat_metadata_version", "expected_display_val"),
+        ("versions_chatted_to", "expected_display_val"),
         [
-            (Experiment.DEFAULT_VERSION_NUMBER, "Default version"),
-            ("1", "v1"),
+            ([1, 2], "v1, v2"),
+            ([1], "v1"),
         ],
     )
-    def test_experiment_version_for_display(self, chat_metadata_version, expected_display_val, experiment_session):
-        experiment_session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, chat_metadata_version)
+    def test_experiment_version_for_display(self, versions_chatted_to, expected_display_val, experiment_session):
+        for version in versions_chatted_to:
+            message = ChatMessage.objects.create(
+                message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
+            )
+            message.add_system_tag(tag=f"v{version}", tag_category=TagCategories.EXPERIMENT_VERSION)
+
         assert experiment_session.experiment_version_for_display == expected_display_val
 
 

@@ -134,7 +134,7 @@ class ExperimentSessionsTable(tables.Table):
         verbose_name="Tags",
         template_name="annotations/tag_ui.html",
     )
-    version = columns.Column(verbose_name="Version", accessor="experiment_version_for_display")
+    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display")
     actions = actions.chip_column(label="Session Details", align="center", verbose_name="")
 
     def render_tags(self, record, bound_column):
