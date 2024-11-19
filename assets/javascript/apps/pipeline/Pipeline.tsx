@@ -13,7 +13,6 @@ import ReactFlow, {
 
 import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
-import {NodeInputTypes} from "./types/nodeInputTypes";
 import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
@@ -30,7 +29,7 @@ const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
 };
 
-export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
+export default function Pipeline() {
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
@@ -167,7 +166,6 @@ export default function Pipeline(props: { inputTypes: NodeInputTypes[] }) {
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
         <ComponentList
-          inputTypes={props.inputTypes}
           isOpen={isOpen}
           setIsOpen={setIsOpen}
         />

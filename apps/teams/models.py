@@ -173,10 +173,19 @@ class Flag(AbstractUserFlag):
             # flag not created
             return False
 
-        team = getattr(request, "team")
-        if team:
-            team_ids = self._get_team_ids()
-            return team.pk in team_ids
+        team = request and getattr(request, "team", None)
+        return self.is_active_for_team(team)
+
+    def is_active_for_team(self, team):
+        if not team:
+            return False
+
+        if not self.pk:
+            # flag not created
+            return False
+
+        team_ids = self._get_team_ids()
+        return team.pk in team_ids
 
     def _get_team_ids(self):
         cache = get_cache()

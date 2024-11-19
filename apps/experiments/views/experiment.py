@@ -162,11 +162,11 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        return (
-            Experiment.objects.filter(working_version=self.kwargs["experiment_id"], is_archived=False)
-            .order_by("-version_number")
-            .all()
-        )
+        experiment_row = Experiment.objects.filter(id=self.kwargs["experiment_id"])
+        other_versions = Experiment.objects.filter(
+            working_version=self.kwargs["experiment_id"], is_archived=False
+        ).all()
+        return (experiment_row | other_versions).order_by("-version_number")
 
 
 class ExperimentForm(forms.ModelForm):
@@ -516,6 +516,9 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 
 # TODO: complete form
 class ExperimentVersionForm(forms.ModelForm):
+    version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
+    is_default_version = forms.BooleanField(required=False, label="Set as Default Version")
+
     class Meta:
         model = Experiment
         fields = ["version_description", "is_default_version"]

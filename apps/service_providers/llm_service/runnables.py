@@ -169,18 +169,9 @@ class ExperimentRunnable(RunnableSerializable[str, ChainOutput]):
 
     def _get_input_chain_context(self, with_history=True):
         prompt = self.prompt
-        context = {}
+        context = self.state.get_template_context(prompt.input_variables)
         if with_history:
             context.update(self.memory.load_memory_variables({}))
-
-        if "source_material" in prompt.input_variables:
-            context["source_material"] = self.state.get_source_material()
-
-        if "participant_data" in prompt.input_variables:
-            context["participant_data"] = self.state.get_participant_data()
-
-        if "current_datetime" in prompt.input_variables:
-            context["current_datetime"] = self.state.get_current_datetime()
 
         return RunnableLambda(lambda inputs: context | inputs, name="add_prompt_context")
 
@@ -448,6 +439,9 @@ class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
             file = File.objects.get(external_id=file_id, team_id=team.id)
             file_link = f"file:{team.slug}:{session_id}:{file.id}"
             file_name = file.name
+        except File.MultipleObjectsReturned:
+            logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
+            file = File.objects.filter(external_id=file_id, team_id=team.id).first()
         except File.DoesNotExist:
             client = self.state.raw_client
             try:

@@ -1,10 +1,9 @@
 import React, {ChangeEvent, useState} from "react";
 import Pipeline from "./Pipeline";
-import {NodeInputTypes} from "./types/nodeInputTypes";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 
-export default function Page(props: { inputTypes: NodeInputTypes[] }) {
+export default function Page() {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
@@ -66,7 +65,7 @@ export default function Page(props: { inputTypes: NodeInputTypes[] }) {
             </div>
           </div>
           <div id="react-flow-id" className="relative h-full w-full">
-            <Pipeline inputTypes={props.inputTypes}/>
+            <Pipeline />
           </div>
         </div>
       </div>
