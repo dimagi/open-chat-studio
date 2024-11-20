@@ -17,6 +17,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
+from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
@@ -92,17 +93,20 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
 
+    def _option(value, label, type_=None):
+        return {"value": value, "label": label} | ({"type": type_} if type_ else {})
+
     return {
-        "LlmProviderId": [
-            {"value": provider["id"], "label": provider["name"], "type": provider["type"]} for provider in llm_providers
-        ],
-        "LlmProviderModelId": [
-            {"value": provider.id, "type": provider.type, "label": str(provider)} for provider in llm_provider_models
-        ],
-        "source_material": [{"value": "", "label": "Select a topic"}]
-        + [{"value": material["id"], "label": material["topic"]} for material in source_materials],
-        "assistant": [{"value": "", "label": "Select an Assistant"}]
-        + [{"value": assistant["id"], "label": assistant["name"]} for assistant in assistants],
+        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
+        "LlmProviderModelId": [_option(provider.id, provider.name, str(provider)) for provider in llm_provider_models],
+        OptionsSource.source_material: (
+            [_option("", "Select a topic")]
+            + [_option(material["id"], material["topic"]) for material in source_materials]
+        ),
+        OptionsSource.assistant: (
+            [_option("", "Select an Assistant")]
+            + [_option(assistant["id"], assistant["name"]) for assistant in assistants]
+        ),
     }
 
 
