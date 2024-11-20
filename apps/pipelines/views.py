@@ -17,7 +17,6 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
-from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
@@ -72,7 +71,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         return {
             **data,
             "pipeline_id": kwargs["pk"],
-            "input_types": _pipeline_node_input_types(),
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
@@ -118,9 +116,7 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
         llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
 
     return {
-        "LlmProviderId": provider_id,
-        "LlmProviderModelId": llm_provider_model_id.id,
-        "LlmTemperature": 0.7,
+        # these keys must match field names on the node schemas
         "llm_provider_id": provider_id,
         "llm_provider_model_id": llm_provider_model_id.id,
     }
@@ -148,24 +144,6 @@ def _get_node_schema(node_class):
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
     return schema
-
-
-def _pipeline_node_input_types():
-    """Returns all the input types for the various nodes"""
-
-    from apps.pipelines.nodes import nodes
-
-    fields = []
-
-    node_classes = [
-        cls
-        for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
-    ]
-    for node_class in node_classes:
-        fields.append(get_input_types_for_node(node_class))
-
-    return fields
 
 
 @login_and_team_required

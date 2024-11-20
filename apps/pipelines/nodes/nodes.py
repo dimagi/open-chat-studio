@@ -23,17 +23,6 @@ from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
-from apps.pipelines.nodes.types import (
-    AssistantId,
-    ExpandableText,
-    Keywords,
-    LlmProviderId,
-    LlmProviderModelId,
-    LlmTemperature,
-    NumOutputs,
-    SourceMaterialId,
-    ToggleField,
-)
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -47,9 +36,7 @@ class RenderTemplate(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Render a template"))
 
-    __human_name__ = "Render a template"
-    __node_description__ = "Renders a template"
-    template_string: ExpandableText = Field(
+    template_string: str = Field(
         description="Use {your_variable_name} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
@@ -78,11 +65,9 @@ class RenderTemplate(PipelineNode):
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: LlmProviderId = Field(..., json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
-    llm_provider_model_id: LlmProviderModelId = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_temperature: LlmTemperature = Field(
-        default=0.7, gt=0.0, le=2.0, json_schema_extra=UiSchema(widget=Widgets.float)
-    )
+    llm_provider_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
+    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
+    llm_temperature: float = Field(default=0.7, gt=0.0, le=2.0, json_schema_extra=UiSchema(widget=Widgets.float))
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -167,9 +152,6 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    __human_name__ = "LLM response"
-    __node_description__ = "Calls an LLM with the given input"
-
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
@@ -181,13 +163,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
 
-    __human_name__ = "LLM response with prompt"
-    __node_description__ = "Calls an LLM with a prompt"
-
-    source_material_id: SourceMaterialId = Field(
+    source_material_id: int = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
     )
-    prompt: ExpandableText = Field(
+    prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
@@ -219,8 +198,6 @@ class SendEmail(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Send an email"))
 
-    __human_name__ = "Send an email"
-    __node_description__ = ""
     recipient_list: str = Field(
         description="A comma-separated list of email addresses", json_schema_extra=UiSchema(widget=Widgets.email_list)
     )
@@ -248,9 +225,6 @@ class Passthrough(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
 
-    __human_name__ = "Do Nothing"
-    __node_description__ = ""
-
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return PipelineState.from_node_output(node_id=node_id, output=input)
@@ -261,8 +235,6 @@ class BooleanNode(Passthrough):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
 
-    __human_name__ = "Conditional Node"
-    __node_description__ = "Branches based whether the input matches a certain value"
     input_equals: str
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
@@ -280,13 +252,11 @@ class RouterNode(Passthrough, HistoryMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
 
-    __human_name__ = "Router"
-    __node_description__ = "Routes the input to one of the linked nodes"
-    prompt: ExpandableText = Field(
+    prompt: str = Field(
         default="You are an extremely helpful router", json_schema_extra=UiSchema(widget=Widgets.expandable_text)
     )
-    num_outputs: NumOutputs = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
-    keywords: Keywords = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
+    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
@@ -469,9 +439,7 @@ class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, Structu
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Extract Structured Data"))
 
-    __human_name__ = "Extract Structured Data"
-    __node_description__ = "Extract structured data from the input"
-    data_schema: ExpandableText = Field(
+    data_schema: str = Field(
         default='{"name": "the name of the user"}',
         description="A JSON object structure where the key is the name of the field and the value the description",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
@@ -483,9 +451,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Update Participant Data"))
 
-    __human_name__ = "Extract Participant Data"
-    __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: ExpandableText = Field(
+    data_schema: str = Field(
         default='{"name": "the name of the user"}',
         description="A JSON object structure where the key is the name of the field and the value the description",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
@@ -542,12 +508,10 @@ class AssistantNode(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="OpenAI Assistant"))
 
-    __human_name__ = "OpenAI Assistant"
-    __node_description__ = "Calls an OpenAI assistant"
-    assistant_id: AssistantId = Field(
+    assistant_id: int = Field(
         ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
     )
-    citations_enabled: ToggleField = Field(
+    citations_enabled: bool = Field(
         default=True,
         description="Whether to include cited sources in responses",
         json_schema_extra=UiSchema(widget=Widgets.toggle),

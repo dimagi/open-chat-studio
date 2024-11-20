@@ -29,7 +29,6 @@
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
-  {{ input_types|json_script:"node-input-types" }}
   {{ node_schemas|json_script:"node-schemas" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
