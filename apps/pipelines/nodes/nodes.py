@@ -552,7 +552,7 @@ class AssistantNode(PipelineNode):
         description="Whether to include cited sources in responses",
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
-    input_formatter: str = Field(None, description="(Optional) Use {input} to designate the user input")
+    input_formatter: str = Field("", description="(Optional) Use {input} to designate the user input")
 
     @field_validator("input_formatter")
     def ensure_input_variable_exists(cls, value):

@@ -59,11 +59,8 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   ): void {
     hideHelp();
     const nodeData: NodeData = {
-      label: schema["ui:label"],
-      value: 1,
-      paramNames: Object.getOwnPropertyNames(nodeSchemas.get("LLMResponseWithPrompt").properties),
-      inputParams: schema.properties,
       type: schema.title,
+      label: schema["ui:label"],
       params: getDefaultParamValues(schema),
     }
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));

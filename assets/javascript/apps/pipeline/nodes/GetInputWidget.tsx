@@ -16,6 +16,7 @@ type InputWidgetParams = {
   params: NodeParams;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   nodeType: string;
+  required: boolean;
 }
 
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
@@ -51,8 +52,8 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
  * @param updateParamValue - The function to update the value of the input parameter.
  * @returns The input widget for the specified parameter type.
  */
-export const getInputWidget = ({id, name, inputParam, params, updateParamValue}: InputWidgetParams) => {
-  if (name == "llm_model" || name == "max_token_limit") {
+export const getInputWidget = (params: InputWidgetParams) => {
+  if (params.name == "llm_model" || params.name == "max_token_limit") {
     /*
        This is here as we migrated llm_model to llm_provider_model_id, in October 2024.
        During the migration, we kept the data in llm_model as a safeguard. This check can safely be deleted once a second migration to delete all instances of llm_model has been run.
@@ -62,7 +63,7 @@ export const getInputWidget = ({id, name, inputParam, params, updateParamValue}:
   }
 
   const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
-  const widgetOrType = inputParam["ui:widget"] || inputParam.type;
+  const widgetOrType = params.inputParam["ui:widget"] || params.inputParam.type;
   if (widgetOrType == 'none') {
     return <></>;
   }
@@ -70,15 +71,16 @@ export const getInputWidget = ({id, name, inputParam, params, updateParamValue}:
   const Widget = getWidget(widgetOrType)
   return (
     <Widget
-      nodeId={id}
-      name={name}
-      label={inputParam.title || name.replace(/_/g, " ")}
-      helpText={inputParam.description || ""}
-      paramValue={params[name] || ""}
-      inputError={getFieldError(id, name)}
-      updateParamValue={updateParamValue}
-      inputSchema={inputParam}
-      nodeParams={params}
+      nodeId={params.id}
+      name={params.name}
+      label={params.inputParam.title || params.name.replace(/_/g, " ")}
+      helpText={params.inputParam.description || ""}
+      paramValue={params.params[params.name] || ""}
+      inputError={getFieldError(params.id, params.name)}
+      updateParamValue={params.updateParamValue}
+      inputSchema={params.inputParam}
+      nodeParams={params.params}
+      required={params.required}
     />
   )
 };
@@ -115,6 +117,7 @@ interface WidgetFactoryParams {
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   inputSchema: InputSchema
   nodeParams: NodeParams
+  required: boolean
 }
 
 function DefaultFactory(props: WidgetFactoryParams) {
@@ -126,6 +129,7 @@ function DefaultFactory(props: WidgetFactoryParams) {
         onChange={props.updateParamValue}
         value={props.paramValue}
         type="text"
+        required={props.required}
       ></input>
     </InputField>
   );
@@ -140,6 +144,7 @@ function FloatFactory(props: WidgetFactoryParams) {
       value={props.paramValue}
       type="number"
       step=".1"
+      required={props.required}
     ></input>
   </InputField>
 }
@@ -169,12 +174,12 @@ function SelectWidget(props: WidgetFactoryParams) {
     options = parameterValues[props.inputSchema["ui:optionsSource"]];
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-
     <select
       className="select select-bordered w-full"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
+      required={props.required}
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>

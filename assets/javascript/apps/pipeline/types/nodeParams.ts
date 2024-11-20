@@ -11,10 +11,7 @@ export type InputSchema = {
 }
 
 export type NodeData = {
-  label: string;
-  value: number;
   type: string;
-  paramNames: string[];
-  inputParams: Record<string, InputSchema>;
+  label: string;
   params: NodeParams;
 };

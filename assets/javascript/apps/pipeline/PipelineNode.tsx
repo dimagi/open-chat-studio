@@ -21,6 +21,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const {nodeSchemas} = getCachedData();
   const nodeSchema = nodeSchemas.get(data.type);
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
+  const requiredProperties = nodeSchema.required || [];
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -90,6 +91,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                   params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type,
+                  required: requiredProperties.includes(name),
                 })}
               </React.Fragment>
             ))}
