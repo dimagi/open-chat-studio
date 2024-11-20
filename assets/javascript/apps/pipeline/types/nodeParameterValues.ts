@@ -27,4 +27,5 @@ export type NodeParameterValues = {
   LlmModel: LlmModel;
   SourceMaterialId: SourceMaterial[];
   AssistantId: Assistant[];
+  InternalToolsField: string[][];
 };

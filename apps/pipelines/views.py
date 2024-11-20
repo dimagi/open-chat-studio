@@ -14,7 +14,7 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.utils import get_input_types_for_node
@@ -102,6 +102,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ],
         "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
         "AssistantId": [{"id": assistant["id"], "name": assistant["name"]} for assistant in assistants],
+        "InternalToolsField": AgentTools.choices,
     }
 
 

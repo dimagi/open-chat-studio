@@ -168,6 +168,35 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
         </InputField>
       );
     }
+    case "InternalToolsField": {
+      let selectedTools = paramValue ? paramValue.split(",") : [];
+      const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.checked) {
+          selectedTools.push(event.target.id);
+        } else {
+          selectedTools = selectedTools.filter((item) => item !== event.target.id);
+        }
+        event.target.value = selectedTools;
+        updateParamValue(event);
+      };
+
+      return (<InputField label="Tools" help_text={inputParam.help_text} inputError={inputError}>
+        {parameterValues.InternalToolsField.map(([id, humanName]) => (
+          <div className="flex items-center mb-1" key={id}>
+            <input
+              className="checkbox"
+              name={inputParam.name}
+              onChange={onChangeCallback}
+              checked={selectedTools.includes(id)}
+              id={id}
+              type="checkbox"
+            ></input>
+            <span className="ml-2">{humanName}</span>
+          </div>
+        ))}
+      </InputField>
+      );
+    }
     default: {
       const humanName = inputParam.name.replace(/_/g, " ");
       return (
