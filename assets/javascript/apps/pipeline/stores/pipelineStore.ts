@@ -118,6 +118,30 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       )
     );
   },
+  clearEdgeLabels: () => {
+    // Not calling setEdges so we don't autoSave
+    set({
+      edges: get().edges.map(
+        (edge) => {
+          delete edge.label;
+          return edge;
+        }
+      )
+    });
+  },
+  setEdgeLabel: (sourceId, label) => {
+    // Not calling setEdges so we don't autoSave
+    set({
+      edges: get().edges.map(
+          (edge) => {
+            if (sourceId == edge.source) {
+              edge.label = label;
+            }
+            return edge;
+          }
+        )
+    });
+  },
   onConnect: (connection) => {
     let newEdges: Edge[] = [];
     get().setEdges((oldEdges) => {

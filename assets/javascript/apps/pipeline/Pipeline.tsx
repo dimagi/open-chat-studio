@@ -20,6 +20,7 @@ import {getNodeId} from "./utils";
 import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
+import TestMessageBox from "./panel/TestMessageBox";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -28,6 +29,7 @@ const fitViewOptions: FitViewOptions = {
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
 };
+
 
 export default function Pipeline() {
   const nodes = usePipelineStore((state) => state.nodes);
@@ -50,7 +52,8 @@ export default function Pipeline() {
   const editingNode = useEditorStore((state) => state.currentNode);
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [componentListIsOpen, setComponentListIsOpen] = useState(false);
+  const [testMessageBoxIsOpen, setTestMessageBoxIsOpen] = useState(false);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -92,7 +95,7 @@ export default function Pipeline() {
         addNode(newNode, {x: event.clientX, y: event.clientY});
 
         // Close the panel after adding the node
-        setIsOpen(false);
+        setComponentListIsOpen(false);
       }
     },
     [getNodeId, setNodes, addNode]
@@ -140,8 +143,8 @@ export default function Pipeline() {
   };
 
   const handlePaneClick = useCallback(() => {
-    setIsOpen(false);
-  }, [setIsOpen]);
+    setComponentListIsOpen(false);
+  }, [setComponentListIsOpen]);
 
   return (
     <div className="h-[80vh]">
@@ -166,8 +169,12 @@ export default function Pipeline() {
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
         <ComponentList
-          isOpen={isOpen}
-          setIsOpen={setIsOpen}
+          isOpen={componentListIsOpen}
+          setIsOpen={setComponentListIsOpen}
+        />
+        <TestMessageBox
+          isOpen={testMessageBoxIsOpen}
+          setIsOpen={setTestMessageBoxIsOpen}
         />
         {editingNode && <EditPanel nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>

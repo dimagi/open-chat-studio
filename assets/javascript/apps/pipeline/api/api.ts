@@ -46,6 +46,20 @@ class ApiClient {
     }
   }
 
+  public async sendTestMessage(pipelineId: number, message: string): Promise<string> {
+    const client = this.createClient();
+    try {
+      const response = await client.post(`/pipelines/${pipelineId}/message/`, {"message": message});
+      if (response.status !== 200) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }
+
   private createClient(): AxiosInstance {
     return axios.create({
       baseURL: `/a/${this.team}`,
