@@ -399,7 +399,12 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 request=self.request, message="A seed message is required when conversational consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
-        return super().form_valid(form)
+        response = super().form_valid(form)
+
+        if self.request.POST.get("action") == "save_and_version":
+            return redirect("experiments:create_version", self.request.team.slug, experiment.id)
+
+        return response
 
 
 class CreateExperiment(BaseExperimentView, CreateView):
