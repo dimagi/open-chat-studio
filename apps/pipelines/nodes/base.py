@@ -1,11 +1,13 @@
 import operator
 from abc import ABC
 from collections.abc import Sequence
+from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict
+from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -41,7 +43,7 @@ class PipelineState(dict):
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineNode":
+    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: output}
         if output is not None:
             kwargs["messages"] = [output]
@@ -100,3 +102,41 @@ class PipelineNode(BaseModel, ABC):
         for handler in self._config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
+
+
+class Widgets(StrEnum):
+    expandable_text = "expandable_text"
+    toggle = "toggle"
+    select = "select"
+    none = "none"
+
+    # sepcial widgets
+    llm_provider_model = "llm_provider_model"
+    history = "history"
+    keywords = "keywords"
+    email_list = "email_list"
+
+
+class OptionsSource(StrEnum):
+    source_material = "source_material"
+
+
+class UiSchema(BaseModel):
+    widget: Widgets = None
+    enum_labels: list[str] = None
+    options_source: str = None
+
+    def __call__(self, schema: JsonDict):
+        if self.widget:
+            schema["ui:widget"] = self.widget
+        if self.enum_labels:
+            schema["ui:enumLabels"] = self.enum_labels
+        if self.options_source:
+            schema["ui:optionsSource"] = self.options_source
+
+
+class NodeSchema(BaseModel):
+    label: str
+
+    def __call__(self, schema: JsonDict):
+        schema["ui:label"] = self.label

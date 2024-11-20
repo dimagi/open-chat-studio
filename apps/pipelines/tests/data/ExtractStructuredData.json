@@ -1,0 +1,32 @@
+{
+  "description": "Extract structured data from the input",
+  "properties": {
+    "llm_provider_id": {
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "type": "number",
+      "default": 1.0
+    },
+    "data_schema": {
+      "type": "string",
+      "default": "{\"name\": \"the name of the user\"}",
+      "description": "A JSON object structure where the key is the name of the field and the value the description",
+      "ui:widget": "expandable_text"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id"
+  ],
+  "title": "ExtractStructuredData",
+  "type": "object",
+  "ui:label": "Extract Structured Data"
+}

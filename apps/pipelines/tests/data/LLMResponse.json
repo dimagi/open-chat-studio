@@ -1,0 +1,26 @@
+{
+  "description": "Calls an LLM with the given input",
+  "properties": {
+    "llm_provider_id": {
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "type": "number",
+      "default": 1.0
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id"
+  ],
+  "title": "LLMResponse",
+  "type": "object",
+  "ui:label": "LLM response"
+}

@@ -15,6 +15,7 @@ export function classNames(...classes: Array<string | null | undefined>): string
 const localCache = {
   loaded: false,
   inputTypes: null as unknown as NodeInputTypes[],
+  nodeSchemas: null as unknown as Record<string, any>,
   parameterValues: null as unknown as NodeParameterValues,
   defaultValues: null as unknown as Record<string, any>,
 };

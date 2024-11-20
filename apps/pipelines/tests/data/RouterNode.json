@@ -1,0 +1,65 @@
+{
+  "description": "Routes the input to one of the linked nodes",
+  "properties": {
+    "llm_provider_id": {
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "type": "number",
+      "default": 1.0
+    },
+    "history_type": {
+      "enum": [
+        "node",
+        "named",
+        "global",
+        "none"
+      ],
+      "title": "PipelineChatHistoryTypes",
+      "type": "string",
+      "default": "none",
+      "ui:enumLabels": [
+        "Node History",
+        "Named History",
+        "Global History",
+        "No History"
+      ],
+      "ui:widget": "history"
+    },
+    "history_name": {
+      "default": null,
+      "title": "History Name",
+      "type": "string",
+      "ui:widget": "none"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "You are an extremely helpful router",
+      "ui:widget": "expandable_text"
+    },
+    "num_outputs": {
+      "type": "integer",
+      "default": 2,
+      "ui:widget": "none"
+    },
+    "keywords": {
+      "items": {},
+      "type": "array",
+      "ui:widget": "keywords"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id"
+  ],
+  "title": "RouterNode",
+  "type": "object",
+  "ui:label": "Router"
+}

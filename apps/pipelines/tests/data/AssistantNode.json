@@ -1,0 +1,26 @@
+{
+  "description": "Calls an OpenAI assistant",
+  "properties": {
+    "assistant_id": {
+      "type": "integer"
+    },
+    "citations_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to include cited sources in responses",
+      "ui:widget": "toggle"
+    },
+    "input_formatter": {
+      "default": null,
+      "description": "(Optional) Use {input} to designate the user input",
+      "title": "Input Formatter",
+      "type": "string"
+    }
+  },
+  "required": [
+    "assistant_id"
+  ],
+  "title": "AssistantNode",
+  "type": "object",
+  "ui:label": "OpenAI Assistant"
+}

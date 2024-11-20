@@ -73,6 +73,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             **data,
             "pipeline_id": kwargs["pk"],
             "input_types": _pipeline_node_input_types(),
+            "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
         }
@@ -119,6 +120,30 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
         "LlmProviderModelId": llm_provider_model_id.id,
         "LlmTemperature": 0.7,
     }
+
+
+def _pipeline_node_schemas():
+    from apps.pipelines.nodes import nodes
+
+    schemas = []
+
+    node_classes = [
+        cls
+        for _, cls in inspect.getmembers(nodes, inspect.isclass)
+        if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
+    ]
+    for node_class in node_classes:
+        schemas.append(_get_node_schema(node_class))
+
+    return schemas
+
+
+def _get_node_schema(node_class):
+    from apps.custom_actions.schema_utils import resolve_references
+
+    schema = resolve_references(node_class.model_json_schema())
+    schema.pop("$defs", None)
+    return schema
 
 
 def _pipeline_node_input_types():

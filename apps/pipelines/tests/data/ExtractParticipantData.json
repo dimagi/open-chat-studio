@@ -1,0 +1,37 @@
+{
+  "description": "Extract structured data and saves it as participant data",
+  "properties": {
+    "llm_provider_id": {
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "type": "number",
+      "default": 1.0
+    },
+    "data_schema": {
+      "type": "string",
+      "default": "{\"name\": \"the name of the user\"}",
+      "description": "A JSON object structure where the key is the name of the field and the value the description",
+      "ui:widget": "expandable_text"
+    },
+    "key_name": {
+      "default": null,
+      "title": "Key Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id"
+  ],
+  "title": "ExtractParticipantData",
+  "type": "object",
+  "ui:label": "Update Participant Data"
+}
