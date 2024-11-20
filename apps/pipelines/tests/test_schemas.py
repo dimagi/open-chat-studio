@@ -13,6 +13,7 @@ def test_schemas():
     for schema in schemas:
         title = schema["title"]
         assert schema["description"], title
+        assert schema["ui:label"], title
 
         path = BASE / f"{title}.json"
         assert schema == json.loads(path.read_text())

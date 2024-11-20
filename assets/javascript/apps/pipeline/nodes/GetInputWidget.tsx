@@ -4,10 +4,9 @@ import {
   InputField, LlmWidget, KeywordsWidget
 } from "../widgets";
 import React from "react";
-import {getCachedData, concatenate, getSelectOptions} from "../utils";
+import {concatenate, getSelectOptions} from "../utils";
 import {PropertySchema, NodeParams} from "../types/nodeParams";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
-import {Option} from "../types/nodeParameterValues";
 
 
 type InputWidgetParams = {
@@ -173,13 +172,7 @@ function ToggleWidget(props: WidgetFactoryParams) {
 }
 
 function SelectWidget(props: WidgetFactoryParams) {
-  const {parameterValues} = getCachedData();
-  let options: Option[] = [];
-  if (props.schema["ui:optionsSource"]) {
-    options = parameterValues[props.schema["ui:optionsSource"]];
-  } else {
-    options = getSelectOptions(props.schema);
-  }
+  const options = getSelectOptions(props.schema);
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <select
       className="select select-bordered w-full"

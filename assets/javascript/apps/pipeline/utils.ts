@@ -34,7 +34,20 @@ export function concatenate(value: string | string[] | null | undefined): string
   return Array.isArray(value) ? value.join("") : value;
 }
 
+/**
+ * Retrieves select options based on the provided schema.
+ * If the schema has a `ui:optionsSource`, it fetches the options from the cached parameter values.
+ * Otherwise, it constructs options from the schema's enum values and their labels.
+ *
+ * @param {PropertySchema} schema - The schema defining the options.
+ * @returns {Option[]} - An array of options for the select input.
+ */
 export function getSelectOptions(schema: PropertySchema): Option[] {
+  const {parameterValues} = getCachedData();
+  if (schema["ui:optionsSource"]) {
+    return parameterValues[schema["ui:optionsSource"]];
+  }
+
   const enums = schema.enum || [];
   const enumLabels = schema["ui:enumLabels"];
   return enums.map((value: string, index: number) => {
