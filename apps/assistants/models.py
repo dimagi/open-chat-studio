@@ -1,3 +1,5 @@
+from typing import Self
+
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
@@ -130,6 +132,15 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
         push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
         return assistant_version
+
+    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
+        exclude = exclude_fields.copy()
+        exclude.append("name")
+        changes = super().compare_with_model(new, exclude)
+        new_name = new.name.split(f" v{new.version_number}")[0]
+        if self.name != new_name:
+            changes.add("name")
+        return changes
 
     def _copy_custom_action_operations_to_new_version(self, new_version):
         for operation in self.get_custom_action_operations():
