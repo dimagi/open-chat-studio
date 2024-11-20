@@ -69,14 +69,19 @@ export const getInputWidget = (params: InputWidgetParams) => {
   }
 
   const Widget = getWidget(widgetOrType)
+  let fieldError = getFieldError(params.id, params.name);
+  const paramValue = params.params[params.name];
+  if (params.required && (paramValue === null || paramValue === undefined)) {
+    fieldError = "This field is required";
+  }
   return (
     <Widget
       nodeId={params.id}
       name={params.name}
       label={params.inputParam.title || params.name.replace(/_/g, " ")}
       helpText={params.inputParam.description || ""}
-      paramValue={params.params[params.name] || ""}
-      inputError={getFieldError(params.id, params.name)}
+      paramValue={paramValue || ""}
+      inputError={fieldError}
       updateParamValue={params.updateParamValue}
       inputSchema={params.inputParam}
       nodeParams={params.params}
