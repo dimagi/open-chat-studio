@@ -172,16 +172,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
         context = self._get_context(input, state, prompt, node_id)
-        if self.history_type != PipelineChatHistoryTypes.NONE:
+        session: ExperimentSession | None = state.get("experiment_session")
+        if self.history_type != PipelineChatHistoryTypes.NONE and session is not None:
             input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+            context["history"] = self._get_history(session, node_id, input_messages)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
-        self._save_history(state["experiment_session"], node_id, input, output.content)
+        if session is not None:
+            self._save_history(session, node_id, input, output.content)
         return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
-        session: ExperimentSession = state["experiment_session"]
+        session: ExperimentSession | None = state.get("experiment_session")
         context = {"input": input}
 
         template_context = PromptTemplateContext(session, self.source_material_id)
@@ -217,7 +219,8 @@ class Passthrough(PipelineNode):
     __node_description__ = ""
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
-        self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
+        if self.logger:
+            self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
