@@ -115,7 +115,6 @@ class Widgets(StrEnum):
     llm_provider_model = "llm_provider_model"
     history = "history"
     keywords = "keywords"
-    email_list = "email_list"
 
 
 class OptionsSource(StrEnum):

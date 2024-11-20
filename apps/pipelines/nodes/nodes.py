@@ -200,9 +200,7 @@ class SendEmail(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Send an email"))
 
-    recipient_list: str = Field(
-        description="A comma-separated list of email addresses", json_schema_extra=UiSchema(widget=Widgets.email_list)
-    )
+    recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
 
     @field_validator("recipient_list", mode="before")

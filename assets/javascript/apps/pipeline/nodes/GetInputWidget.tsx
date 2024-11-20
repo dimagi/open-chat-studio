@@ -107,7 +107,6 @@ function getWidget(name: string) {
       return HistoryTypeWidgetFactory
     case "keywords":
       return KeywordsWidgetFactory
-    case "email_list":
     default:
       return DefaultFactory
   }

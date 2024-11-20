@@ -4,8 +4,7 @@
     "recipient_list": {
       "description": "A comma-separated list of email addresses",
       "title": "Recipient List",
-      "type": "string",
-      "ui:widget": "email_list"
+      "type": "string"
     },
     "subject": {
       "title": "Subject",
