@@ -124,6 +124,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       edges: get().edges.map(
         (edge) => {
           delete edge.label;
+          delete edge.type;
           return edge;
         }
       )
@@ -136,6 +137,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
           (edge) => {
             if (sourceId == edge.source) {
               edge.label = label;
+              edge.type = 'annotatedEdge';
             }
             return edge;
           }

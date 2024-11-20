@@ -47,7 +47,7 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
       <button
         className="absolute top-16 left-4 z-10 text-4xl text-primary"
         onClick={togglePanel}
-        title="Chat"
+        title="Test Pipeline"
       >
         <i
           className={`fas ${

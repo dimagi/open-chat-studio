@@ -3,6 +3,7 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
+  EdgeTypes,
   FitViewOptions,
   MarkerType,
   NodeDragHandler,
@@ -21,6 +22,7 @@ import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
 import TestMessageBox from "./panel/TestMessageBox";
+import AnnotatedEdge from "./AnnotatedEdge";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -30,6 +32,9 @@ const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
 };
 
+const edgeTypes: EdgeTypes = {
+  annotatedEdge: AnnotatedEdge,
+};
 
 export default function Pipeline() {
   const nodes = usePipelineStore((state) => state.nodes);
@@ -156,6 +161,7 @@ export default function Pipeline() {
         onConnect={onConnect}
         fitViewOptions={fitViewOptions}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
