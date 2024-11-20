@@ -18,10 +18,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  const {inputTypes, nodeSchemas} = getCachedData();
+  const {nodeSchemas} = getCachedData();
   const nodeSchema = nodeSchemas.get(data.type);
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
-  const inputType = inputTypes.filter((inputType) => inputType.name === data.type)[0];
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -65,12 +64,12 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           >
             <i className="fa fa-pencil"></i>
           </button>
-          {inputType.node_description && (
+          {nodeSchema.description && (
             <div className="dropdown dropdown-top">
               <button tabIndex={0} role="button" className="btn btn-xs join-item">
                 <i className={"fa fa-circle-question"}></i>
               </button>
-              <HelpContent><p>{inputType.node_description}</p></HelpContent>
+              <HelpContent><p>{nodeSchema.description}</p></HelpContent>
             </div>
           )}
         </div>

@@ -1,11 +1,9 @@
 import React, {ChangeEvent, useState} from "react";
 import useEditorStore from "../stores/editorStore";
 import OverlayPanel from "../components/OverlayPanel";
-import {classNames} from "../utils";
+import {classNames, getCachedData} from "../utils";
 import usePipelineStore from "../stores/pipelineStore";
 import {getInputWidget} from "../nodes/GetInputWidget";
-import {InputParam} from "../types/nodeInputTypes";
-
 
 export default function EditPanel({nodeId}: { nodeId: string }) {
   const closeEditor = useEditorStore((state) => state.closeEditor);
@@ -16,12 +14,15 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   const {id, data} = getNode(nodeId)!;
 
+  const {nodeSchemas} = getCachedData();
+  const nodeSchema = nodeSchemas.get(data.type);
+  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
+
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
   ) => {
     const {name, value} = event.target;
-    const param = data.inputParams.find((p: InputParam) => p.name === name);
-    if (!param) {
+    if (!schemaProperties.includes(name)) {
       console.warn(`Unknown parameter: ${name}`);
       return;
     }
@@ -64,17 +65,18 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
           <h2 className="text-lg text-center font-bold">{data?.label ? `Editing ${data.label}` : 'Loading...'}</h2>
 
           <div className="ml-2">
-            {data.inputParams.length === 0 && (
+            {schemaProperties.length === 0 && (
               <p className="pg-text-muted">No parameters to edit</p>
             )}
-            {data.inputParams.map((inputParam: InputParam) => (
-              <React.Fragment key={inputParam.name}>
+            {schemaProperties.map((name) => (
+              <React.Fragment key={name}>
                 {getInputWidget({
-                  id: id!,
-                  inputParam: inputParam,
+                  id: id,
+                  name: name,
+                  inputParam: nodeSchema.properties[name],
                   params: data.params,
                   updateParamValue: updateParamValue,
-                  nodeType: data.type
+                  nodeType: data.type,
                 })}
               </React.Fragment>
             ))}
