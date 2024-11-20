@@ -1,4 +1,5 @@
 import inspect
+import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -10,6 +11,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
@@ -205,3 +207,15 @@ def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
         "pipelines/pipeline_run_details.html",
         {"pipeline_run": pipeline_run},
     )
+
+
+@login_and_team_required
+@require_POST
+@csrf_exempt
+@permission_required("pipelines.change_pipeline")
+def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
+    pipeline: Pipeline = get_object_or_404(Pipeline, team=request.team, pk=pipeline_pk)
+    message = json.loads(request.body).get("message")
+    # TODO: Call this in a task
+    output = pipeline.simple_invoke(message)
+    return JsonResponse(output)
