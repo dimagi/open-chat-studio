@@ -56,8 +56,8 @@ class PipelineNode(BaseModel, ABC):
 
     Example:
         class FunNode(PipelineNode):
-            required_parameter_1: CustomType
-            optional_parameter_1: Optional[CustomType] = None
+            required_parameter_1: str
+            optional_parameter_1: int | None = None
 
             def _process(self, state: PipelineState) -> PipelineState:
                 input = state["messages"][-1]
@@ -124,8 +124,13 @@ class OptionsSource(StrEnum):
 
 class UiSchema(BaseModel):
     widget: Widgets = None
+
+    # Use this with Enum fields to provide label text
     enum_labels: list[str] = None
-    options_source: str = None
+
+    # Use this with 'select' type fields to indicate where the options should come from
+    # See `apps.pipelines.views._pipeline_node_parameter_values`
+    options_source: OptionsSource = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
