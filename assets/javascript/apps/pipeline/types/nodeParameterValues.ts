@@ -16,9 +16,15 @@ type SourceMaterial = {
   topic: string;
 };
 
+type Assistant = {
+  id: string;
+  name: string;
+};
+
 export type NodeParameterValues = {
   LlmProviderId: LlmProvider[];
   LlmProviderModelId: LlmProviderModel[];
   LlmModel: LlmModel;
   SourceMaterialId: SourceMaterial[];
+  AssistantId: Assistant[];
 };

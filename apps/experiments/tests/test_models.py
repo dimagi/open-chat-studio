@@ -6,8 +6,9 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from freezegun import freeze_time
 
+from apps.annotations.models import TagCategories
 from apps.assistants.models import ToolResources
-from apps.chat.models import Chat
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import (
@@ -33,7 +34,7 @@ from apps.utils.factories.experiment import (
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -432,14 +433,19 @@ class TestExperimentSession:
             _test()
 
     @pytest.mark.parametrize(
-        ("chat_metadata_version", "expected_display_val"),
+        ("versions_chatted_to", "expected_display_val"),
         [
-            (Experiment.DEFAULT_VERSION_NUMBER, "Default version"),
-            ("1", "v1"),
+            ([1, 2], "v1, v2"),
+            ([1], "v1"),
         ],
     )
-    def test_experiment_version_for_display(self, chat_metadata_version, expected_display_val, experiment_session):
-        experiment_session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, chat_metadata_version)
+    def test_experiment_version_for_display(self, versions_chatted_to, expected_display_val, experiment_session):
+        for version in versions_chatted_to:
+            message = ChatMessage.objects.create(
+                message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
+            )
+            message.add_system_tag(tag=f"v{version}", tag_category=TagCategories.EXPERIMENT_VERSION)
+
         assert experiment_session.experiment_version_for_display == expected_display_val
 
 
@@ -691,6 +697,21 @@ class TestExperimentModel:
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory(working_version=working_exp, team=team, version_number=2)
 
+    def test_get_assistant_with_assistant_directly_linked(self):
+        assistant = OpenAiAssistantFactory()
+        experiment = ExperimentFactory(assistant=assistant)
+        assert experiment.get_assistant() == assistant
+
+    @pytest.mark.parametrize("assistant_id_populated", [True, False])
+    def test_get_assistant_from_pipeline(self, assistant_id_populated):
+        assistant = OpenAiAssistantFactory()
+        assistant_id = assistant.id if assistant_id_populated else None
+        pipeline = PipelineFactory()
+        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
+        experiment = ExperimentFactory(pipeline=pipeline)
+        expected_assistant_result = assistant if assistant_id_populated else None
+        assert experiment.get_assistant() == expected_assistant_result
+
     def _setup_original_experiment(self):
         experiment = ExperimentFactory()
         team = experiment.team
@@ -728,14 +749,18 @@ class TestExperimentModel:
         post_survey = SurveyFactory(team=team)
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
-        experiment.pipeline = PipelineFactory(team=experiment.team)
-        experiment.assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
-        files = FileFactory.create_batch(2)
-        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
-        code_resource.files.set(files[:1])
 
-        search_resource = ToolResources.objects.create(tool_type="file_search", assistant=experiment.assistant)
-        search_resource.files.set(files[1:])
+        experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.assistant = OpenAiAssistantFactory(
+            assistant_id="a-123", builtin_tools=["code_interpreter", "file_search"]
+        )
+        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
+        code_resource.files.set([FileFactory(external_id="ci-123")])
+
+        search_resource = ToolResources.objects.create(
+            tool_type="file_search", assistant=experiment.assistant, extra={"vector_store_id": "123"}
+        )
+        search_resource.files.set([FileFactory(external_id="fs-123")])
         experiment.save()
         return experiment
 
@@ -816,6 +841,16 @@ class TestExperimentModel:
         assert original_experiment.assistant.version_number == 2
         assert new_version.assistant.tool_resources.filter(tool_type="file_search").first().files.count() == 1
         assert new_version.assistant.tool_resources.filter(tool_type="code_interpreter").first().files.count() == 1
+
+        # Check that the assistant_id is cleared
+        assert original_experiment.assistant.assistant_id != new_version.assistant.assistant_id
+        assert new_version.assistant.assistant_id == ""
+
+        # Check that the vector_store_id is cleared
+        original_fs_resource = original_experiment.assistant.tool_resources.get(tool_type="file_search")
+        assert original_fs_resource.extra["vector_store_id"] is not None
+        new_fs_resource = new_version.assistant.tool_resources.get(tool_type="file_search")
+        assert new_fs_resource.extra["vector_store_id"] is None
 
     def test_copy_attr_to_new_version(self):
         """

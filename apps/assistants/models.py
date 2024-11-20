@@ -22,7 +22,7 @@ class OpenAiAssistantManager(VersionsObjectManagerMixin, AuditingManager):
     "instructions",
     "builtin_tools",
     "llm_provider",
-    "llm_model",
+    "llm_provider_model",
     "temperature",
     "top_p",
     audit_special_queryset_writes=True,
@@ -48,11 +48,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
         help_text="The LLM model to use",
-        verbose_name="LLM Model",
-    )
-    llm_model = models.CharField(
-        max_length=255,
-        help_text="The LLM model to use.",
         verbose_name="LLM Model",
     )
     working_version = models.ForeignKey(
@@ -126,6 +121,9 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 )
                 new_tool_resource.files.set(tool_resource_files)
                 new_tool_resource.extra = tool_resource.extra
+                if tool_resource.tool_type == "file_search":
+                    # Clear the vector store ID so that a new one will be created
+                    new_tool_resource.extra["vector_store_id"] = None
                 new_tool_resource.save()
 
         self._copy_custom_action_operations_to_new_version(assistant_version)

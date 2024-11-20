@@ -21,6 +21,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import Version, VersionField, differs
@@ -472,7 +473,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
-    llm = models.CharField(max_length=255, help_text="The LLM model to use.", verbose_name="LLM Model", blank=True)
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.SET_NULL,
@@ -549,11 +549,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         null=True,
         blank=True,
     )
-    max_token_limit_old = models.PositiveIntegerField(
-        default=8192,
-        help_text="When the message history for a session exceeds this limit (in tokens), it will be compressed. "
-        "If 0, compression will be disabled which may result in errors or high LLM costs.",
-    )  # TODO Remove this after migration to llm_provider_model is complete
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,
@@ -973,6 +968,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 ),
             ],
         )
+
+    def get_assistant(self):
+        """
+        Retrieves the assistant associated with the current instance.
+
+        This method attempts to find an assistant node within the pipeline associated with the current instance.
+        - If an assistant node is found, it retrieves the assistant ID from the node's parameters and returns the
+        corresponding OpenAiAssistant object.
+        - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
+        the instance.
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.pipelines.models import Node
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        if self.pipeline:
+            node_name = AssistantNode.__name__
+            # TODO: What about multiple assistant nodes?
+            assistant_id = (
+                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
+                .values_list("params__assistant_id", flat=True)
+                .first()
+            )
+            if assistant_id:
+                return OpenAiAssistant.objects.get(id=assistant_id)
+        return self.assistant
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -1511,8 +1532,16 @@ class ExperimentSession(BaseTeamModel):
 
     @property
     def experiment_version_for_display(self):
-        version_number = self.get_experiment_version_number()
-        return "Default version" if version_number == Experiment.DEFAULT_VERSION_NUMBER else f"v{version_number}"
+        version_tags = list(
+            Tag.objects.filter(chatmessage__chat=self.chat, category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+            .order_by("name")
+            .values_list("name", flat=True)
+            .distinct()
+        )
+        if not version_tags:
+            return ""
+
+        return ", ".join(version_tags)
 
     def get_participant_timezone(self):
         participant_data = self.participant_data_from_experiment

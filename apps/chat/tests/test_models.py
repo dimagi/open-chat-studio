@@ -49,3 +49,13 @@ class TestChatMessage:
         assert human_message.get_processor_bot_tag_name() is None
         assert ai_message_wo_tag.get_processor_bot_tag_name() is None
         assert ai_message_with_tag.get_processor_bot_tag_name() == "some-bot"
+
+    def test_add_version_tag(self):
+        session = ExperimentSessionFactory()
+        chat_message1 = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
+        chat_message2 = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
+        chat_message1.add_version_tag(version_number=1, is_a_version=True)
+        chat_message2.add_version_tag(version_number=1, is_a_version=False)
+
+        assert chat_message1.tags.first().name == "v1"
+        assert chat_message2.tags.first().name == "v1-unreleased"

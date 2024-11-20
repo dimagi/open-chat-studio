@@ -1,31 +1,39 @@
 from abc import ABCMeta, abstractmethod
 from functools import cache, cached_property
 
-from django.utils import timezone
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.channels.models import ChannelPlatform
-from apps.chat.agent.tools import get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.teams.models import Team
-from apps.utils.time import pretty_date
 
 
 class BaseRunnableState(metaclass=ABCMeta):
     ai_message: ChatMessage | None = None
 
-    @abstractmethod
-    def get_llm_service(self):
-        pass
+    def get_trace_metadata(self) -> dict:
+        if self.trace_service:
+            trace_info = self.trace_service.get_current_trace_info()
+            if trace_info:
+                return {
+                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
+                }
+        return {}
+
+    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
+        if self.trace_service:
+            self.trace_service.update_trace({key: value})
+        self.chat.set_metadata(key, value)
 
     @abstractmethod
-    def get_chat_model(self):
+    def get_llm_service(self):
         pass
 
     @property
@@ -35,26 +43,6 @@ class BaseRunnableState(metaclass=ABCMeta):
 
     @abstractmethod
     def format_input(self, input: str):
-        pass
-
-    @abstractmethod
-    def get_participant_data(self):
-        pass
-
-    @abstractmethod
-    def get_participant_timezone(self):
-        pass
-
-    @abstractmethod
-    def get_current_datetime(self):
-        pass
-
-    @abstractmethod
-    def get_prompt(self):
-        pass
-
-    @abstractmethod
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
         pass
 
     @property
@@ -68,6 +56,7 @@ class ExperimentState(BaseRunnableState):
         self.experiment = experiment
         self.session = session
         self.trace_service = trace_service or self.experiment.trace_service
+        self.template_context = PromptTemplateContext(session, experiment.source_material_id)
 
     @property
     def chat(self):
@@ -91,67 +80,18 @@ class ExperimentState(BaseRunnableState):
             return input
 
         template = PromptTemplate.from_template(self.experiment.input_formatter)
-        context = self.get_template_context(template.input_variables)
+        context = self.template_context.get_context(template.input_variables)
         context["input"] = input
         return template.format(**context)
 
     def get_template_context(self, variables: list[str]):
-        factories = {
-            "source_material": self.get_source_material,
-            "participant_data": self.get_participant_data,
-            "current_datetime": self.get_current_datetime,
-        }
-        context = {}
-        for key, factory in factories.items():
-            # allow partial matches to support format specifiers
-            if any(key in var for var in variables):
-                context[key] = factory()
-        return context
-
-    @property
-    def is_unauthorized_participant(self):
-        """Returns `true` if a participant is unauthorized. A participant is considered authorized when the
-        following conditions are met:
-        For web channels:
-        - They are a platform user
-        All other channels:
-        - Always True, since the external channel handles authorization
-        """
-        return self.session.experiment_channel.platform == ChannelPlatform.WEB and self.session.participant.user is None
-
-    def get_source_material(self):
-        return self.experiment.source_material.material if self.experiment.source_material else ""
-
-    def get_participant_data(self):
-        if self.is_unauthorized_participant:
-            return ""
-        return self.session.get_participant_data(use_participant_tz=True) or ""
-
-    def get_participant_timezone(self):
-        return self.session.get_participant_timezone()
-
-    def get_current_datetime(self):
-        return pretty_date(timezone.now(), self.get_participant_timezone())
+        return self.template_context.get_context(variables)
 
     def get_prompt(self):
         return self.experiment.prompt_text
 
     def get_tools(self):
         return get_tools(self.session, self.experiment)
-
-    def get_trace_metadata(self) -> dict:
-        if self.trace_service:
-            trace_info = self.trace_service.get_current_trace_info()
-            if trace_info:
-                return {
-                    "trace_info": {**trace_info.model_dump(), "trace_provider": self.trace_service.type},
-                }
-        return {}
-
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
-        if self.trace_service:
-            self.trace_service.update_trace({key: value})
-        self.chat.set_metadata(key, value)
 
 
 class ChatExperimentState(ExperimentState):
@@ -178,10 +118,9 @@ class ChatExperimentState(ExperimentState):
 
         if type_ == ChatMessageType.AI:
             self.ai_message = chat_message
-            if not self.experiment.is_working_version:
-                chat_message.add_system_tag(
-                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
-                )
+            chat_message.add_version_tag(
+                version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+            )
 
     def check_cancellation(self):
         self.chat.refresh_from_db(fields=["metadata"])
@@ -197,10 +136,10 @@ class BaseAssistantState(BaseRunnableState):
         # https://github.com/langchain-ai/langchain/blob/cccc8fbe2fe59bde0846875f67aa046aeb1105a3/libs/langchain/langchain/agents/openai_assistant/base.py#L491
         instructions = self.assistant.instructions
 
-        instructions = instructions.format(
-            participant_data=self.get_participant_data(),
-            current_datetime=self.get_current_datetime(),
-        )
+        input_variables = get_template_variables(instructions, "f-string")
+        if input_variables:
+            context = PromptTemplateContext(self.session, None).get_context(input_variables)
+            instructions = instructions.format(**context)
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.assistant.include_file_info and code_interpreter_attachments:
@@ -294,10 +233,6 @@ class BaseAssistantState(BaseRunnableState):
     def chat(self):
         pass
 
-    @abstractmethod
-    def get_trace_metadata(self) -> dict:
-        pass
-
 
 class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     def pre_run_hook(self, input, config, message_metadata):
@@ -341,10 +276,9 @@ class ExperimentAssistantState(ExperimentState, BaseAssistantState):
 
         if type_ == ChatMessageType.AI:
             self.ai_message = chat_message
-            if not self.experiment.is_working_version:
-                chat_message.add_system_tag(
-                    tag=self.experiment.version_display, tag_category=TagCategories.EXPERIMENT_VERSION
-                )
+            chat_message.add_version_tag(
+                version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+            )
 
         return chat_message
 
@@ -355,3 +289,65 @@ class ExperimentAssistantState(ExperimentState, BaseAssistantState):
     @property
     def assistant(self):
         return self.experiment.assistant
+
+
+class PipelineAssistantState(BaseAssistantState):
+    def __init__(
+        self,
+        assistant: OpenAiAssistant,
+        session: ExperimentSession,
+        trace_service=None,
+        input_formatter: str | None = None,
+        citations_enabled: bool = False,
+    ):
+        self._assistant = assistant
+        self.session = session
+        self.trace_service = trace_service
+
+        self.input_formatter = input_formatter
+        self._citations_enabled = citations_enabled
+        self.input_message_metadata = {}
+        self.output_message_metadata = {}
+
+    @property
+    def chat(self):
+        return self.session.chat
+
+    @cache
+    def get_llm_service(self):
+        return self.assistant.llm_provider.get_llm_service()
+
+    def _get_provider_model_name(self) -> str:
+        return self.assistant.llm_provider_model.name
+
+    @property
+    def callback_handler(self):
+        return self.get_llm_service().get_callback_handler(self._get_provider_model_name())
+
+    def format_input(self, input: str) -> str:
+        if self.input_formatter:
+            input = self.input_formatter.format(input=input)
+        return input
+
+    def get_tools(self):
+        return get_assistant_tools(self.assistant, experiment_session=self.session)
+
+    def pre_run_hook(self, input, config, message_metadata):
+        self.input_message_metadata = message_metadata
+
+    def post_run_hook(self, output, config, message_metadata):
+        self.output_message_metadata = message_metadata
+
+    @property
+    def citations_enabled(self):
+        return self._citations_enabled
+
+    @property
+    def assistant(self):
+        return self._assistant
+
+    def get_message_metadata(self, message_type: ChatMessageType) -> dict:
+        """
+        Retrieve metadata for a given message type.
+        """
+        return self.input_message_metadata if message_type == ChatMessageType.HUMAN else self.output_message_metadata

@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
+from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
@@ -90,6 +91,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
+    assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
 
     return {
         "LlmProviderId": [
@@ -99,6 +101,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             {"id": provider.id, "type": provider.type, "name": str(provider)} for provider in llm_provider_models
         ],
         "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
+        "AssistantId": [{"id": assistant["id"], "name": assistant["name"]} for assistant in assistants],
     }
 
 

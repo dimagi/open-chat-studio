@@ -156,8 +156,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
-                self._save_message_to_history(session, input["messages"][-1], ChatMessageType.HUMAN)
-                ai_message = self._save_message_to_history(session, output["messages"][-1], ChatMessageType.AI)
+                metadata = output.get("message_metadata", {})
+                self._save_message_to_history(
+                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=metadata.get("input", {})
+                )
+                ai_message = self._save_message_to_history(
+                    session, output["messages"][-1], ChatMessageType.AI, metadata=metadata.get("output", {})
+                )
                 output["ai_message_id"] = ai_message.id
         finally:
             if pipeline_run.status == PipelineRunStatus.ERROR:
@@ -180,13 +185,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             session=session,
         )
 
-    def _save_message_to_history(self, session: ExperimentSession, message: str, type_: ChatMessageType) -> ChatMessage:
-        return ChatMessage.objects.create(
-            chat=session.chat,
-            message_type=type_.value,
-            content=message,
+    def _save_message_to_history(
+        self, session: ExperimentSession, message: str, type_: ChatMessageType, metadata: dict
+    ) -> ChatMessage:
+        chat_message = ChatMessage.objects.create(
+            chat=session.chat, message_type=type_.value, content=message, metadata=metadata
         )
-        # TODO: Add tags here?
+
+        if type_ == ChatMessageType.AI:
+            chat_message.add_version_tag(version_number=self.version_number, is_a_version=self.is_a_version)
+        return chat_message
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
@@ -232,6 +240,28 @@ class Node(BaseModel, VersionsMixin):
 
     def __str__(self):
         return self.flow_id
+
+    def create_new_version(self, save: bool = True):
+        """
+        Create a new version of the node and if the node is an assistant node, create a new version of the assistant
+        and update the `assistant_id` in the node params to the new assistant version id.
+        """
+        from apps.assistants.models import OpenAiAssistant
+        from apps.pipelines.nodes.nodes import AssistantNode
+
+        assistant_node_name = AssistantNode.__name__
+
+        new_version = super().create_new_version(save=False)
+
+        if self.type == assistant_node_name and new_version.params.get("assistant_id"):
+            assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
+            if not assistant.is_a_version:
+                assistant_version = assistant.create_new_version()
+                new_version.params["assistant_id"] = assistant_version.id
+
+        if save:
+            new_version.save()
+        return new_version
 
 
 class PipelineRunStatus(models.TextChoices):

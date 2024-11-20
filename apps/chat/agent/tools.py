@@ -244,11 +244,11 @@ def get_tools(experiment_session, experiment) -> list[BaseTool]:
     return tools
 
 
-def get_assistant_tools(assistant) -> list[BaseTool]:
+def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
     tools = []
     for tool_name in assistant.tools:
         tool_cls = TOOL_CLASS_MAP[tool_name]
-        tools.append(tool_cls(experiment_session=None))
+        tools.append(tool_cls(experiment_session=experiment_session))
 
     tools.extend(get_custom_action_tools(assistant))
 
