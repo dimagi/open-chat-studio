@@ -4,21 +4,21 @@ import React, {
   ReactNode,
   useId,
 } from "react";
-import { InputParam } from "./types/nodeInputTypes";
-import { NodeParameterValues, LlmProviderModel } from "./types/nodeParameterValues";
+import {InputParam} from "./types/nodeInputTypes";
+import {NodeParameterValues, LlmProviderModel} from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
-import { NodeProps } from "reactflow";
-import {concatenate} from "./utils";
+import {NodeProps} from "reactflow";
+import {concatenate, getCachedData} from "./utils";
 import {NodeParams} from "./types/nodeParams";
 import {Node} from "reactflow";
 
 export function TextModal({
-  modalId,
-  humanName,
-  name,
-  value,
-  onChange,
-}: {
+                            modalId,
+                            humanName,
+                            name,
+                            value,
+                            onChange,
+                          }: {
   modalId: string;
   humanName: string;
   name: string;
@@ -57,13 +57,13 @@ export function TextModal({
 }
 
 export function ExpandableTextWidget({
-  humanName,
-  name,
-  onChange,
-  value,
-  help_text,
-  inputError
-}: {
+                                       humanName,
+                                       name,
+                                       onChange,
+                                       value,
+                                       help_text,
+                                       inputError
+                                     }: {
   humanName: string;
   name: string;
   value: string | string[];
@@ -102,7 +102,11 @@ export function ExpandableTextWidget({
   );
 }
 
-export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, params: NodeParams, inputError?: string | undefined}) {
+export function KeywordsWidget({nodeId, params, inputError}: {
+  nodeId: string,
+  params: NodeParams,
+  inputError?: string | undefined
+}) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
@@ -128,9 +132,9 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
 
   const updateKeyword = (index: number, value: string) => {
     setNode(nodeId, (old) => {
-      const updatedList = [...(old.data.params["keywords"] || [])];
-      updatedList[index] = value;
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs);
+        const updatedList = [...(old.data.params["keywords"] || [])];
+        updatedList[index] = value;
+        return getNewNodeData(old, updatedList, old.data.params.num_outputs);
       }
     );
   };
@@ -143,7 +147,7 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
     });
   }
 
-  const length =parseInt(concatenate(params.num_outputs)) || 1;
+  const length = parseInt(concatenate(params.num_outputs)) || 1;
   const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
   return (
     <>
@@ -188,23 +192,22 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
 }
 
 export function LlmWidget({
-                            id,
-                            parameterValues,
-                            inputParam,
+                            name,
+                            nodeId,
                             providerId,
                             providerModelId,
                           }: {
-  id: NodeProps["id"];
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
+  name: string;
+  nodeId: NodeProps["id"];
   providerId: string;
   providerModelId: string;
 }) {
+  const {parameterValues} = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
-    const { value } = event.target;
+    const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
-    setNode(id, (old) => ({
+    setNode(nodeId, (old) => ({
       ...old,
       data: {
         ...old.data,
@@ -218,22 +221,22 @@ export function LlmWidget({
   };
 
   const makeValue = (providerId: string, providerModelId: string) => {
-      return providerId + '|:|' + providerModelId;
+    return providerId + '|:|' + providerModelId;
   };
 
   type ProviderModelsByType = { [type: string]: LlmProviderModel[] };
   const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
-          acc[provModel.type] = [];
-      }
-      acc[provModel.type].push(provModel);
-      return acc;
+      acc[provModel.type] = [];
+    }
+    acc[provModel.type].push(provModel);
+    return acc;
   }, {} as ProviderModelsByType);
 
   return (
     <select
       className="select select-bordered w-full"
-      name={inputParam.name}
+      name={name}
       onChange={updateParamValue}
       value={makeValue(providerId, providerModelId)}
     >
@@ -253,40 +256,12 @@ export function LlmWidget({
 }
 
 
-export function SourceMaterialIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-}: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="">Select a topic</option>
-      {parameterValues.SourceMaterialId.map((material) => (
-        <option key={material["id"]} value={material["id"]}>
-          {material["topic"]}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 export function AssistantIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-}: {
+                                    parameterValues,
+                                    inputParam,
+                                    value,
+                                    onChange,
+                                  }: {
   parameterValues: NodeParameterValues;
   inputParam: InputParam;
   value: string | string[];
@@ -310,13 +285,13 @@ export function AssistantIdWidget({
 }
 
 export function HistoryTypeWidget({
-  inputParam,
-  historyType,
-  historyName,
-  help_text,
-  onChange,
-}: {
-  inputParam: InputParam;
+                                    name,
+                                    historyType,
+                                    historyName,
+                                    help_text,
+                                    onChange,
+                                  }: {
+  name: string;
   historyType: string;
   historyName: string;
   help_text: string;
@@ -327,7 +302,7 @@ export function HistoryTypeWidget({
       <InputField label="History" help_text={help_text}>
         <select
           className="select select-bordered join-item"
-          name={inputParam.name}
+          name={name}
           onChange={onChange}
           value={historyType}
         >
@@ -348,11 +323,15 @@ export function HistoryTypeWidget({
         </InputField>
       )}
     </div>
-)
-  ;
+  )
+    ;
 }
 
-export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{ label: string | ReactNode, help_text: string, inputError?: string | undefined }>) {
+export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
+  label: string | ReactNode,
+  help_text: string,
+  inputError?: string | undefined
+}>) {
   return (
     <>
       <div className="form-control w-full capitalize">

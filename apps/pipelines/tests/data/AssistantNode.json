@@ -2,7 +2,9 @@
   "description": "Calls an OpenAI assistant",
   "properties": {
     "assistant_id": {
-      "type": "integer"
+      "type": "integer",
+      "ui:optionsSource": "assistant",
+      "ui:widget": "select"
     },
     "citations_enabled": {
       "type": "boolean",

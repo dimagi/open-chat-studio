@@ -103,6 +103,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ],
         "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
         "AssistantId": [{"id": assistant["id"], "name": assistant["name"]} for assistant in assistants],
+        "source_material": [{"value": "", "label": "Select a topic"}]
+        + [{"value": material["id"], "label": material["topic"]} for material in source_materials],
+        "assistant": [{"value": assistant["id"], "label": assistant["name"]} for assistant in assistants],
     }
 
 
@@ -119,6 +122,8 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
         "LlmProviderId": provider_id,
         "LlmProviderModelId": llm_provider_model_id.id,
         "LlmTemperature": 0.7,
+        "llm_provider_id": provider_id,
+        "llm_provider_model_id": llm_provider_model_id.id,
     }
 
 

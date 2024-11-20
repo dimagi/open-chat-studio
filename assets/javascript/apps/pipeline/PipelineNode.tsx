@@ -18,7 +18,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  const {inputTypes} = getCachedData();
+  const {inputTypes, nodeSchemas} = getCachedData();
+  const nodeSchema = nodeSchemas.get(data.type);
+  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
   const inputType = inputTypes.filter((inputType) => inputType.name === data.type)[0];
 
   const updateParamValue = (
@@ -76,15 +78,16 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       <div
         className={nodeBorder}
       >
-        <div className="m-1 text-lg font-bold text-center">{data.label}</div>
+        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
         <NodeInput nodeId={id}/>
         <div className="ml-2">
           <div>
-            {data.inputParams.map((inputParam) => (
-              <React.Fragment key={inputParam.name}>
+            {schemaProperties.map((name) => (
+              <React.Fragment key={name}>
                 {getNodeInputWidget({
                   id: id,
-                  inputParam: inputParam,
+                  name: name,
+                  inputParam: nodeSchema.properties[name],
                   params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type,
