@@ -169,14 +169,14 @@ export const getInputWidget = ({id, inputParam, params, updateParamValue}: Input
       );
     }
     case "InternalToolsField": {
-      let selectedTools = paramValue ? paramValue.split(",") : [];
+      let selectedTools = paramValue && typeof paramValue === "string" ? paramValue.split(",") : [];
       const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.checked) {
           selectedTools.push(event.target.id);
         } else {
           selectedTools = selectedTools.filter((item) => item !== event.target.id);
         }
-        event.target.value = selectedTools;
+        event.target.value = selectedTools.join(",");
         updateParamValue(event);
       };
 
