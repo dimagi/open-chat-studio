@@ -454,7 +454,6 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["show_version_action_options"] = True
         return context
 
     def get_initial(self):
