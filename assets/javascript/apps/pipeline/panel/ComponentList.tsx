@@ -18,7 +18,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     const defaults: Record<string, any> = {};
     for (const name in schema.properties) {
       const property = schema.properties[name];
-      defaults[name] = property.default || defaultValues[name] || null;
+      defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
     }
     return defaults;
   }
@@ -26,7 +26,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   //** Help bubble state
   const [scrollPosition, setScrollPosition] = useState(0)
 
-  const refMap  = schemaList.reduce((acc, schema) => {
+  const refMap = schemaList.reduce((acc, schema) => {
     acc[schema.title] = React.createRef();
     return acc;
   }, {} as Record<string, React.RefObject<HTMLDivElement>>);
