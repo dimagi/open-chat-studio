@@ -7,6 +7,7 @@ import React from "react";
 import {getCachedData, concatenate} from "../utils";
 import {InputSchema, NodeParams} from "../types/nodeParams";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
+import {Option} from "../types/nodeParameterValues";
 
 
 type InputWidgetParams = {
@@ -174,7 +175,7 @@ function ToggleWidget(props: WidgetFactoryParams) {
 
 function SelectWidget(props: WidgetFactoryParams) {
   const {parameterValues} = getCachedData();
-  let options = [];
+  let options: Option[] = [];
   if (props.inputSchema["ui:optionsSource"]) {
     options = parameterValues[props.inputSchema["ui:optionsSource"]];
   }

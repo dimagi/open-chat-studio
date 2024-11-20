@@ -4,8 +4,7 @@ import React, {
   ReactNode,
   useId,
 } from "react";
-import {InputParam} from "./types/nodeInputTypes";
-import {NodeParameterValues, LlmProviderModel} from "./types/nodeParameterValues";
+import {TypedOption} from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import {NodeProps} from "reactflow";
 import {concatenate, getCachedData} from "./utils";
@@ -224,7 +223,7 @@ export function LlmWidget({
     return providerId + '|:|' + providerModelId;
   };
 
-  type ProviderModelsByType = { [type: string]: LlmProviderModel[] };
+  type ProviderModelsByType = { [type: string]: TypedOption[] };
   const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
@@ -246,8 +245,8 @@ export function LlmWidget({
       {parameterValues.LlmProviderId.map((provider) => (
         providerModelsByType[provider.type] &&
         providerModelsByType[provider.type].map((providerModel) => (
-          <option key={provider.id + providerModel.id} value={makeValue(provider.id, providerModel.id)}>
-            {providerModel.name}
+          <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+            {providerModel.label}
           </option>
         ))
       ))}
@@ -255,34 +254,6 @@ export function LlmWidget({
   );
 }
 
-
-export function AssistantIdWidget({
-                                    parameterValues,
-                                    inputParam,
-                                    value,
-                                    onChange,
-                                  }: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="">Select an assistant</option>
-      {parameterValues.AssistantId.map((assistant) => (
-        <option key={assistant["id"]} value={assistant["id"]}>
-          {assistant["name"]}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export function HistoryTypeWidget({
                                     name,

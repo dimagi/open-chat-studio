@@ -96,13 +96,11 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
     return {
         "LlmProviderId": [
-            {"id": provider["id"], "name": provider["name"], "type": provider["type"]} for provider in llm_providers
+            {"value": provider["id"], "label": provider["name"], "type": provider["type"]} for provider in llm_providers
         ],
         "LlmProviderModelId": [
-            {"id": provider.id, "type": provider.type, "name": str(provider)} for provider in llm_provider_models
+            {"value": provider.id, "type": provider.type, "label": str(provider)} for provider in llm_provider_models
         ],
-        "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
-        "AssistantId": [{"id": assistant["id"], "name": assistant["name"]} for assistant in assistants],
         "source_material": [{"value": "", "label": "Select a topic"}]
         + [{"value": material["id"], "label": material["topic"]} for material in source_materials],
         "assistant": [{"value": "", "label": "Select an Assistant"}]
