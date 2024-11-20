@@ -802,7 +802,7 @@ def test_extract_participant_data(provider, pipeline):
         provider=provider,
         pipeline=pipeline,
         extracted_data={"has_pets": False},
-        key_name=None,
+        key_name="",
     )
     participant_data.refresh_from_db()
     assert participant_data.data == {
