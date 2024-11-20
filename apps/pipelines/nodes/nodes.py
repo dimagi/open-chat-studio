@@ -65,9 +65,11 @@ class RenderTemplate(PipelineNode):
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
+    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_temperature: float = Field(default=0.7, gt=0.0, le=2.0, json_schema_extra=UiSchema(widget=Widgets.float))
+    llm_temperature: float = Field(
+        default=0.7, gt=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.float)
+    )
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -96,7 +98,7 @@ class HistoryMixin(LLMResponseMixin):
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
     history_name: str = Field(
-        None,
+        "",
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
@@ -163,7 +165,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
 
-    source_material_id: int = Field(
+    source_material_id: int | None = Field(
         None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
     )
     prompt: str = Field(
@@ -456,7 +458,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         description="A JSON object structure where the key is the name of the field and the value the description",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    key_name: str = None
+    key_name: str = ""
 
     def get_reference_data(self, state) -> dict:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
@@ -467,7 +469,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
         )
         if not participant_data:
-            return ""
+            return {}
 
         data = participant_data.data
         if self.key_name:

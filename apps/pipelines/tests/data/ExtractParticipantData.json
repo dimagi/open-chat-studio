@@ -2,28 +2,32 @@
   "description": "Extract structured data and saves it as participant data",
   "properties": {
     "llm_provider_id": {
+      "title": "LLM Model",
       "type": "integer",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
     },
     "llm_temperature": {
+      "default": 0.7,
       "exclusiveMinimum": 0.0,
       "maximum": 2.0,
+      "title": "Temperature",
       "type": "number",
-      "default": 0.7,
       "ui:widget": "float"
     },
     "data_schema": {
-      "type": "string",
       "default": "{\"name\": \"the name of the user\"}",
       "description": "A JSON object structure where the key is the name of the field and the value the description",
+      "title": "Data Schema",
+      "type": "string",
       "ui:widget": "expandable_text"
     },
     "key_name": {
-      "default": null,
+      "default": "",
       "title": "Key Name",
       "type": "string"
     }

@@ -2,18 +2,21 @@
   "description": "Routes the input to one of the linked nodes",
   "properties": {
     "llm_provider_id": {
+      "title": "LLM Model",
       "type": "integer",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
     },
     "llm_temperature": {
+      "default": 0.7,
       "exclusiveMinimum": 0.0,
       "maximum": 2.0,
+      "title": "Temperature",
       "type": "number",
-      "default": 0.7,
       "ui:widget": "float"
     },
     "history_type": {
@@ -35,23 +38,28 @@
       "ui:widget": "history"
     },
     "history_name": {
-      "default": null,
+      "default": "",
       "title": "History Name",
       "type": "string",
       "ui:widget": "none"
     },
     "prompt": {
-      "type": "string",
       "default": "You are an extremely helpful router",
+      "title": "Prompt",
+      "type": "string",
       "ui:widget": "expandable_text"
     },
     "num_outputs": {
-      "type": "integer",
       "default": 2,
+      "title": "Num Outputs",
+      "type": "integer",
       "ui:widget": "none"
     },
     "keywords": {
-      "items": {},
+      "items": {
+        "type": "string"
+      },
+      "title": "Keywords",
       "type": "array",
       "ui:widget": "keywords"
     }

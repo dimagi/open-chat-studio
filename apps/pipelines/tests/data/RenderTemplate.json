@@ -2,8 +2,9 @@
   "description": "Renders a Jinja template",
   "properties": {
     "template_string": {
-      "type": "string",
       "description": "Use {your_variable_name} to refer to designate input",
+      "title": "Template String",
+      "type": "string",
       "ui:widget": "expandable_text"
     }
   },

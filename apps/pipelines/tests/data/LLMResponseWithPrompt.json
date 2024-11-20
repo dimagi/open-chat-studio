@@ -2,18 +2,21 @@
   "description": "Calls an LLM with a prompt",
   "properties": {
     "llm_provider_id": {
+      "title": "LLM Model",
       "type": "integer",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
     },
     "llm_temperature": {
+      "default": 0.7,
       "exclusiveMinimum": 0.0,
       "maximum": 2.0,
+      "title": "Temperature",
       "type": "number",
-      "default": 0.7,
       "ui:widget": "float"
     },
     "history_type": {
@@ -35,20 +38,29 @@
       "ui:widget": "history"
     },
     "history_name": {
-      "default": null,
+      "default": "",
       "title": "History Name",
       "type": "string",
       "ui:widget": "none"
     },
     "source_material_id": {
-      "type": "integer",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": null,
+      "title": "Source Material Id",
       "ui:optionsSource": "source_material",
       "ui:widget": "select"
     },
     "prompt": {
-      "type": "string",
       "default": "You are a helpful assistant. Answer the user's query as best you can",
+      "title": "Prompt",
+      "type": "string",
       "ui:widget": "expandable_text"
     }
   },
