@@ -443,6 +443,7 @@ class AssistantRunnable(RunnableSerializable[dict, ChainOutput]):
         except File.MultipleObjectsReturned:
             logger.error("Multiple files with the same external ID", extra={"file_id": file_id, "team": team.slug})
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
+            file_name = file.name
         except File.DoesNotExist:
             client = self.state.raw_client
             try:
