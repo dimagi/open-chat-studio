@@ -74,7 +74,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
                 {getInputWidget({
                   id: id,
                   name: name,
-                  inputParam: nodeSchema.properties[name],
+                  schema: nodeSchema.properties[name],
                   params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type,

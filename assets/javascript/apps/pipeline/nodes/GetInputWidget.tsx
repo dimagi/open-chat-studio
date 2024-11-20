@@ -5,7 +5,7 @@ import {
 } from "../widgets";
 import React from "react";
 import {getCachedData, concatenate} from "../utils";
-import {InputSchema, NodeParams} from "../types/nodeParams";
+import {PropertySchema, NodeParams} from "../types/nodeParams";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import {Option} from "../types/nodeParameterValues";
 
@@ -13,7 +13,7 @@ import {Option} from "../types/nodeParameterValues";
 type InputWidgetParams = {
   id: string;
   name: string;
-  inputParam: InputSchema;
+  schema: PropertySchema;
   params: NodeParams;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   nodeType: string;
@@ -64,7 +64,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
   }
 
   const getFieldError = usePipelineManagerStore((state) => state.getFieldError);
-  const widgetOrType = params.inputParam["ui:widget"] || params.inputParam.type;
+  const widgetOrType = params.schema["ui:widget"] || params.schema.type;
   if (widgetOrType == 'none') {
     return <></>;
   }
@@ -79,12 +79,12 @@ export const getInputWidget = (params: InputWidgetParams) => {
     <Widget
       nodeId={params.id}
       name={params.name}
-      label={params.inputParam.title || params.name.replace(/_/g, " ")}
-      helpText={params.inputParam.description || ""}
+      label={params.schema.title || params.name.replace(/_/g, " ")}
+      helpText={params.schema.description || ""}
       paramValue={paramValue || ""}
       inputError={fieldError}
       updateParamValue={params.updateParamValue}
-      inputSchema={params.inputParam}
+      schema={params.schema}
       nodeParams={params.params}
       required={params.required}
     />
@@ -120,7 +120,7 @@ interface WidgetFactoryParams {
   paramValue: string | string[];
   inputError: string | undefined;
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
-  inputSchema: InputSchema
+  schema: PropertySchema
   nodeParams: NodeParams
   required: boolean
 }
@@ -175,8 +175,13 @@ function ToggleWidget(props: WidgetFactoryParams) {
 function SelectWidget(props: WidgetFactoryParams) {
   const {parameterValues} = getCachedData();
   let options: Option[] = [];
-  if (props.inputSchema["ui:optionsSource"]) {
-    options = parameterValues[props.inputSchema["ui:optionsSource"]];
+  if (props.schema["ui:optionsSource"]) {
+    options = parameterValues[props.schema["ui:optionsSource"]];
+  } else if (props.schema.enum) {
+    options = props.schema.enum.map((value: string, index: number) => {
+      const label = props.schema["ui:enumLabels"] ? props.schema["ui:enumLabels"][index] : value;
+      return {value: value, label: label};
+    });
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <select

@@ -1,5 +1,6 @@
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues} from "./types/nodeParameterValues";
+import {JsonSchema} from "./types/nodeParams";
 
 const uid = new ShortUniqueId({ length: 5 });
 
@@ -13,7 +14,7 @@ export function classNames(...classes: Array<string | null | undefined>): string
 
 const localCache = {
   loaded: false,
-  nodeSchemas: null as unknown as Map<string, any>,
+  nodeSchemas: null as unknown as Map<string, JsonSchema>,
   parameterValues: null as unknown as NodeParameterValues,
   defaultValues: null as unknown as Record<string, any>,
 };

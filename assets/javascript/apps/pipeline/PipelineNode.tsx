@@ -19,7 +19,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
   const {nodeSchemas} = getCachedData();
-  const nodeSchema = nodeSchemas.get(data.type);
+  const nodeSchema = nodeSchemas.get(data.type)!;
   const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
   const requiredProperties = nodeSchema.required || [];
 
@@ -87,7 +87,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                 {getNodeInputWidget({
                   id: id,
                   name: name,
-                  inputParam: nodeSchema.properties[name],
+                  schema: nodeSchema.properties[name],
                   params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type,
