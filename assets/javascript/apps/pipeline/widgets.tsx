@@ -11,19 +11,14 @@ import {concatenate, getCachedData, getSelectOptions} from "./utils";
 import {NodeParams, PropertySchema} from "./types/nodeParams";
 import {Node} from "reactflow";
 
-export function TextModal({
-                            modalId,
-                            humanName,
-                            name,
-                            value,
-                            onChange,
-                          }: {
-  modalId: string;
-  humanName: string;
-  name: string;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
+export function TextModal(
+  {modalId, humanName, name, value, onChange}: {
+    modalId: string;
+    humanName: string;
+    name: string;
+    value: string | string[];
+    onChange: ChangeEventHandler;
+  }) {
   return (
     <dialog
       id={modalId}
@@ -55,21 +50,15 @@ export function TextModal({
   );
 }
 
-export function ExpandableTextWidget({
-                                       humanName,
-                                       name,
-                                       onChange,
-                                       value,
-                                       help_text,
-                                       inputError
-                                     }: {
-  humanName: string;
-  name: string;
-  value: string | string[];
-  help_text: string;
-  inputError: string | undefined
-  onChange: ChangeEventHandler;
-}) {
+export function ExpandableTextWidget(
+  {humanName, name, onChange, value, help_text, inputError}: {
+    humanName: string;
+    name: string;
+    value: string | string[];
+    help_text: string;
+    inputError: string | undefined
+    onChange: ChangeEventHandler;
+  }) {
   const modalId = useId();
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
   const label = (
@@ -190,17 +179,13 @@ export function KeywordsWidget({nodeId, params, inputError}: {
   );
 }
 
-export function LlmWidget({
-                            name,
-                            nodeId,
-                            providerId,
-                            providerModelId,
-                          }: {
-  name: string;
-  nodeId: NodeProps["id"];
-  providerId: string;
-  providerModelId: string;
-}) {
+export function LlmWidget(
+  {name, nodeId, providerId, providerModelId}: {
+    name: string;
+    nodeId: NodeProps["id"];
+    providerId: string;
+    providerModelId: string;
+  }) {
   const {parameterValues} = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -255,21 +240,15 @@ export function LlmWidget({
 }
 
 
-export function HistoryTypeWidget({
-                                    name,
-                                    historyType,
-                                    historyName,
-                                    help_text,
-                                    onChange,
-                                    schema,
-                                  }: {
-  name: string;
-  historyType: string;
-  historyName: string;
-  help_text: string;
-  onChange: ChangeEventHandler;
-  schema: PropertySchema
-}) {
+export function HistoryTypeWidget(
+  {name, historyType, historyName, help_text, onChange, schema}: {
+    name: string;
+    historyType: string;
+    historyName: string;
+    help_text: string;
+    onChange: ChangeEventHandler;
+    schema: PropertySchema
+  }) {
   const options = getSelectOptions(schema);
   return (
     <div className="flex join">
