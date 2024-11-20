@@ -3,7 +3,6 @@ EXPERIMENT_FIELDS = [
     "name",
     "llm_provider",
     "llm_provider_model",
-    "llm",
     "temperature",
     "prompt_text",
     "input_formatter",
