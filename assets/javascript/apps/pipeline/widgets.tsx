@@ -7,8 +7,8 @@ import React, {
 import {TypedOption} from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
 import {NodeProps} from "reactflow";
-import {concatenate, getCachedData} from "./utils";
-import {NodeParams} from "./types/nodeParams";
+import {concatenate, getCachedData, getSelectOptions} from "./utils";
+import {NodeParams, PropertySchema} from "./types/nodeParams";
 import {Node} from "reactflow";
 
 export function TextModal({
@@ -261,13 +261,16 @@ export function HistoryTypeWidget({
                                     historyName,
                                     help_text,
                                     onChange,
+                                    schema,
                                   }: {
   name: string;
   historyType: string;
   historyName: string;
   help_text: string;
   onChange: ChangeEventHandler;
+  schema: PropertySchema
 }) {
+  const options = getSelectOptions(schema);
   return (
     <div className="flex join">
       <InputField label="History" help_text={help_text}>
@@ -277,10 +280,11 @@ export function HistoryTypeWidget({
           onChange={onChange}
           value={historyType}
         >
-          <option value="none">No History</option>
-          <option value="node">Node</option>
-          <option value="global">Global</option>
-          <option value="named">Named</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </InputField>
       {historyType == "named" && (

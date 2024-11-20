@@ -291,9 +291,9 @@ class PipelineEventInputs(models.TextChoices):
 
 
 class PipelineChatHistoryTypes(models.TextChoices):
-    NODE = "node", "Node History"
-    NAMED = "named", "Named History"
-    GLOBAL = "global", "Global History"
+    NODE = "node", "Node"
+    NAMED = "named", "Named"
+    GLOBAL = "global", "Global"
     NONE = "none", "No History"
 
 

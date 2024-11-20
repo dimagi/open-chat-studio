@@ -1,6 +1,6 @@
 import ShortUniqueId from "short-unique-id";
-import {NodeParameterValues} from "./types/nodeParameterValues";
-import {JsonSchema} from "./types/nodeParams";
+import {NodeParameterValues, Option} from "./types/nodeParameterValues";
+import {JsonSchema, PropertySchema} from "./types/nodeParams";
 
 const uid = new ShortUniqueId({ length: 5 });
 
@@ -32,4 +32,13 @@ export const getCachedData: () => typeof localCache = () => {
 export function concatenate(value: string | string[] | null | undefined): string {
   if (!value) return "";
   return Array.isArray(value) ? value.join("") : value;
+}
+
+export function getSelectOptions(schema: PropertySchema): Option[] {
+  const enums = schema.enum || [];
+  const enumLabels = schema["ui:enumLabels"];
+  return enums.map((value: string, index: number) => {
+    const label = enumLabels ? enumLabels[index] : value;
+    return {value: value, label: label};
+  });
 }

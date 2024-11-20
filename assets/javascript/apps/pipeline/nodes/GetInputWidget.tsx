@@ -4,7 +4,7 @@ import {
   InputField, LlmWidget, KeywordsWidget
 } from "../widgets";
 import React from "react";
-import {getCachedData, concatenate} from "../utils";
+import {getCachedData, concatenate, getSelectOptions} from "../utils";
 import {PropertySchema, NodeParams} from "../types/nodeParams";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import {Option} from "../types/nodeParameterValues";
@@ -177,11 +177,8 @@ function SelectWidget(props: WidgetFactoryParams) {
   let options: Option[] = [];
   if (props.schema["ui:optionsSource"]) {
     options = parameterValues[props.schema["ui:optionsSource"]];
-  } else if (props.schema.enum) {
-    options = props.schema.enum.map((value: string, index: number) => {
-      const label = props.schema["ui:enumLabels"] ? props.schema["ui:enumLabels"][index] : value;
-      return {value: value, label: label};
-    });
+  } else {
+    options = getSelectOptions(props.schema);
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <select
@@ -236,6 +233,7 @@ function HistoryTypeWidgetFactory(props: WidgetFactoryParams) {
     <HistoryTypeWidget
       onChange={props.updateParamValue}
       name={props.name}
+      schema={props.schema}
       historyType={concatenate(props.paramValue)}
       historyName={concatenate(props.nodeParams["history_name"])}
       help_text={props.helpText}

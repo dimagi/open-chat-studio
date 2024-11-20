@@ -30,9 +30,9 @@
       "type": "string",
       "default": "none",
       "ui:enumLabels": [
-        "Node History",
-        "Named History",
-        "Global History",
+        "Node",
+        "Named",
+        "Global",
         "No History"
       ],
       "ui:widget": "history"
