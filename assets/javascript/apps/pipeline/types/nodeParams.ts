@@ -18,7 +18,7 @@ export type JsonSchema = {
   title: string;
   description?: string | undefined;
   required?: string[] | undefined;
-  "ui:label"?: string | undefined;
+  "ui:label": string;
   properties: Record<string, PropertySchema>;
   [k: string]: any;
 }
