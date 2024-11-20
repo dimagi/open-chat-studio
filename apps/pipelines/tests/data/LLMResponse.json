@@ -13,7 +13,8 @@
       "exclusiveMinimum": 0.0,
       "maximum": 2.0,
       "type": "number",
-      "default": 1.0
+      "default": 0.7,
+      "ui:widget": "float"
     }
   },
   "required": [

@@ -80,7 +80,9 @@ class RenderTemplate(PipelineNode):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: LlmProviderId = Field(..., json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: LlmProviderModelId = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_temperature: LlmTemperature = Field(default=1.0, gt=0.0, le=2.0)
+    llm_temperature: LlmTemperature = Field(
+        default=0.7, gt=0.0, le=2.0, json_schema_extra=UiSchema(widget=Widgets.float)
+    )
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -542,7 +544,9 @@ class AssistantNode(PipelineNode):
 
     __human_name__ = "OpenAI Assistant"
     __node_description__ = "Calls an OpenAI assistant"
-    assistant_id: AssistantId
+    assistant_id: AssistantId = Field(
+        ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
+    )
     citations_enabled: ToggleField = Field(
         default=True,
         description="Whether to include cited sources in responses",

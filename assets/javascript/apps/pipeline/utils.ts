@@ -15,7 +15,7 @@ export function classNames(...classes: Array<string | null | undefined>): string
 const localCache = {
   loaded: false,
   inputTypes: null as unknown as NodeInputTypes[],
-  nodeSchemas: null as unknown as Record<string, any>,
+  nodeSchemas: null as unknown as Map<string, any>,
   parameterValues: null as unknown as NodeParameterValues,
   defaultValues: null as unknown as Record<string, any>,
 };
@@ -25,6 +25,8 @@ export const getCachedData: () => typeof localCache = () => {
     localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
     localCache.inputTypes = JSON.parse(document.getElementById("node-input-types")?.textContent || "[]");
+    const schemas = JSON.parse(document.getElementById("node-schemas")?.textContent || "[]");
+    localCache.nodeSchemas = new Map(schemas.map((schema: any) => [schema.title, schema]));
   }
   return localCache;
 };

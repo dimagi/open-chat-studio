@@ -108,9 +108,10 @@ class Widgets(StrEnum):
     expandable_text = "expandable_text"
     toggle = "toggle"
     select = "select"
+    float = "float"
     none = "none"
 
-    # sepcial widgets
+    # special widgets
     llm_provider_model = "llm_provider_model"
     history = "history"
     keywords = "keywords"
@@ -119,6 +120,7 @@ class Widgets(StrEnum):
 
 class OptionsSource(StrEnum):
     source_material = "source_material"
+    assistant = "assistant"
 
 
 class UiSchema(BaseModel):
