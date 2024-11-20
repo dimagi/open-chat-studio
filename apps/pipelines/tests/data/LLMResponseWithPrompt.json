@@ -44,18 +44,11 @@
       "ui:widget": "none"
     },
     "source_material_id": {
-      "anyOf": [
-        {
-          "type": "integer"
-        },
-        {
-          "type": "null"
-        }
-      ],
       "default": null,
       "title": "Source Material Id",
       "ui:optionsSource": "source_material",
-      "ui:widget": "select"
+      "ui:widget": "select",
+      "type": "integer"
     },
     "prompt": {
       "default": "You are a helpful assistant. Answer the user's query as best you can",

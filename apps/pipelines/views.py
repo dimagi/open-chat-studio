@@ -143,6 +143,12 @@ def _get_node_schema(node_class):
 
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
+
+    # Remove type ambiguity for optional fields
+    for key, value in schema["properties"].items():
+        if "anyOf" in value:
+            any_of = value.pop("anyOf")
+            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
     return schema
 
 
