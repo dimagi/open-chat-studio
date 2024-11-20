@@ -122,6 +122,14 @@
       </div>
     </div>
 {% endblock form %}
+{% block form_actions %}
+  <input type="submit" class="pg-button-primary mt-2" value="{{ button_text }}">
+  {% flag "experiment_versions" %}
+    {% if show_version_action_options %}
+      {% include 'experiments/experiment_version_edit_actions.html' %}
+    {% endif %}
+  {% endflag %}
+{% endblock %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
