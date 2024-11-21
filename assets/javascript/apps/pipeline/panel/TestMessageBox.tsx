@@ -13,6 +13,7 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
   const [newMessage, setNewMessage] = useState("");
   const [userMessage, setUserMessage] = useState("");
   const [responseMessage, setResponseMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   function sendMessage() {
@@ -21,23 +22,61 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
     }
     setUserMessage(newMessage);
     setNewMessage("");
+    setErrorMessage("");
     clearEdgeLabels();
     setLoading(true);
 
     apiClient.sendTestMessage(currentPipelineId, newMessage).then((res) => {
-      setResponseMessage(res.data.messages[res.data.messages.length - 1]);
-      for (const [nodeId, message] of Object.entries(res.data.outputs)) {
-        setEdgeLabel(nodeId, message);
-      }
-      setLoading(false);
+      getMessageResponseUntilSuccess(currentPipelineId, res.task_id);
     });
+  }
+
+  async function getMessageResponseUntilSuccess(pipelineId, taskId) {
+    setLoading(true);
+    let polling = true;
+
+    while (polling) {
+      try {
+        const response = await apiClient.getTestMessageResponse(
+          pipelineId,
+          taskId,
+        );
+        if (response.complete && response.success) {
+          // The task finished succesfully and we receive the response
+          const result = response.result;
+          setResponseMessage(result.messages[result.messages.length - 1]);
+          for (const [nodeId, message] of Object.entries(result.outputs)) {
+            setEdgeLabel(nodeId, message);
+          }
+          setLoading(false);
+          polling = false;
+        } else if (response.complete && !response.success) {
+          // The task failed
+          setErrorMessage(response.result);
+          setLoading(false);
+          polling = false;
+        } else if (!response.complete) {
+          // The task has not finishe dyet, wait for 1 second before fetching the response again
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } else {
+          polling = false;
+        }
+      } catch (error) {
+        console.error("Error fetching message response:", error);
+        setErrorMessage(error.toString());
+        setLoading(false);
+        break;
+      }
+    }
   }
 
   function togglePanel() {
     if (isOpen) {
+      // When closing the panel, clear the chat box and the annotations
       clearEdgeLabels();
       setUserMessage("");
       setResponseMessage("");
+      setErrorMessage("");
     }
     setIsOpen(!isOpen);
   }
@@ -45,7 +84,7 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
   return (
     <div className="relative">
       <button
-        className="absolute top-16 left-4 z-10 text-4xl text-primary"
+        className="absolute top-4 left-16 z-10 text-4xl text-primary"
         onClick={togglePanel}
         title="Test Pipeline"
       >
@@ -57,25 +96,30 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
       </button>
 
       <OverlayPanel
-        classes="top-16 left-16 w-72 max-h-[70vh] overflow-y-auto"
+        classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto"
         isOpen={isOpen}
       >
         {isOpen && (
           <>
+            <h2 className="text-xl text-center font-bold">Send test message</h2>
             <div className="p-4">
               {userMessage && (
                 <div className="mb-4">
                   <div className="p-2 border rounded">
-                    <strong>You:</strong> {userMessage}
+                    <strong>Input:</strong> {userMessage}
                   </div>
                   {loading ? (
                     <div className="mt-2 p-2 border rounded">
                       <span className="loading loading-dots loading-sm"></span>
                     </div>
+                  ) : errorMessage ? (
+                    <div className="mt-2 p-2 border rounded text-red-500">
+                      <strong>Error:</strong> {errorMessage}
+                    </div>
                   ) : (
                     responseMessage && (
                       <div className="mt-2 p-2 border rounded">
-                        <strong>Response:</strong> {responseMessage}
+                        <strong>Output:</strong> {responseMessage}
                       </div>
                     )
                   )}
@@ -83,7 +127,7 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
               )}
               <form
                 onSubmit={(e) => {
-                  e.preventDefault(); // Prevent the form from refreshing the page
+                  e.preventDefault();
                   sendMessage();
                 }}
                 className="w-full"

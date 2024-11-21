@@ -1,6 +1,8 @@
 import inspect
 import json
 
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -21,6 +23,7 @@ from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
+from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -214,8 +217,14 @@ def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
 @csrf_exempt
 @permission_required("pipelines.change_pipeline")
 def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
-    pipeline: Pipeline = get_object_or_404(Pipeline, team=request.team, pk=pipeline_pk)
     message = json.loads(request.body).get("message")
-    # TODO: Call this in a task
-    output = pipeline.simple_invoke(message)
-    return JsonResponse(output)
+    result = get_response_for_pipeline_test_message.delay(pipeline_id=pipeline_pk, message_text=message)
+    return JsonResponse({"task_id": result.task_id})
+
+
+@login_and_team_required
+@csrf_exempt
+@permission_required("pipelines.change_pipeline")
+def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, task_id: str):
+    progress = Progress(AsyncResult(task_id)).get_info()
+    return JsonResponse(progress)
