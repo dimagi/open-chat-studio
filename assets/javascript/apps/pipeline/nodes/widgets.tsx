@@ -6,7 +6,6 @@ import React, {
 } from "react";
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {NodeProps} from "reactflow";
 import {concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node} from "reactflow";
@@ -23,7 +22,7 @@ export function getWidget(name: string) {
     case "select":
       return SelectWidget
     case "llm_provider_model":
-      return LlmProviderWidget
+      return LlmWidget
     case "history":
       return HistoryTypeWidget
     case "keywords":
@@ -110,19 +109,6 @@ function SelectWidget(props: WidgetParams) {
       ))}
     </select>
   </InputField>
-}
-
-function LlmProviderWidget(props: WidgetParams) {
-  return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-      <LlmWidget
-        name={props.name}
-        nodeId={props.nodeId}
-        providerId={concatenate(props.nodeParams.llm_provider_id)}
-        providerModelId={concatenate(props.nodeParams.llm_provider_model_id)}
-      ></LlmWidget>
-    </InputField>
-  );
 }
 
 function ExandableTextWidget(props: WidgetParams) {
@@ -325,19 +311,14 @@ export function KeywordsWidgetInner({nodeId, params, inputError}: {
   );
 }
 
-export function LlmWidget(
-  {name, nodeId, providerId, providerModelId}: {
-    name: string;
-    nodeId: NodeProps["id"];
-    providerId: string;
-    providerModelId: string;
-  }) {
+export function LlmWidget(props: WidgetParams) {
+
   const {parameterValues} = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
-    setNode(nodeId, (old) => ({
+    setNode(props.nodeId, (old) => ({
       ...old,
       data: {
         ...old.data,
@@ -363,12 +344,16 @@ export function LlmWidget(
     return acc;
   }, {} as ProviderModelsByType);
 
+  const providerId = concatenate(props.nodeParams.llm_provider_id);
+  const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
+  const value = makeValue(providerId, providerModelId)
   return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <select
       className="select select-bordered w-full"
-      name={name}
+      name={props.name}
       onChange={updateParamValue}
-      value={makeValue(providerId, providerModelId)}
+      value={value}
     >
       <option value="" disabled>
         Select a model
@@ -382,6 +367,7 @@ export function LlmWidget(
         ))
       ))}
     </select>
+      </InputField>
   );
 }
 
