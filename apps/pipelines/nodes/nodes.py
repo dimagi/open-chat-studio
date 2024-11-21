@@ -263,16 +263,18 @@ class RouterNode(Passthrough, HistoryMixin):
 
         node_input = state["messages"][-1]
         context = {"input": node_input}
+        session: ExperimentSession | None = state.get("experiment_session")
 
-        if self.history_type != PipelineChatHistoryTypes.NONE:
+        if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+            context["history"] = self._get_history(session, node_id, input_messages)
 
         chain = prompt | self.get_chat_model()
 
         result = chain.invoke(context, config=self._config)
         keyword = self._get_keyword(result)
-        self._save_history(state["experiment_session"], node_id, node_input, keyword)
+        if session:
+            self._save_history(session, node_id, node_input, keyword)
         return keyword
 
     def _get_keyword(self, result):
@@ -309,7 +311,11 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
+        if "experiment_session" not in state:
+            # If there is no session, treat this like a passthrough
+            return PipelineState.from_node_output(node_id=node_id, output=input)
+
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
