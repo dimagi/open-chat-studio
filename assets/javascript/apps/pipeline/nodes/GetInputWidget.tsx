@@ -111,7 +111,7 @@ function getWidget(name: string) {
   }
 }
 
-interface WidgetFactoryParams {
+interface WidgetParams {
   nodeId: string;
   name: string;
   label: string;
@@ -124,7 +124,7 @@ interface WidgetFactoryParams {
   required: boolean
 }
 
-function DefaultFactory(props: WidgetFactoryParams) {
+function DefaultFactory(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
@@ -139,7 +139,7 @@ function DefaultFactory(props: WidgetFactoryParams) {
   );
 }
 
-function FloatFactory(props: WidgetFactoryParams) {
+function FloatFactory(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
       className="input input-bordered w-full"
@@ -153,7 +153,7 @@ function FloatFactory(props: WidgetFactoryParams) {
   </InputField>
 }
 
-function ToggleWidget(props: WidgetFactoryParams) {
+function ToggleWidget(props: WidgetParams) {
   const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
     event.target.value = event.target.checked ? "true" : "false";
     props.updateParamValue(event);
@@ -171,7 +171,7 @@ function ToggleWidget(props: WidgetFactoryParams) {
   );
 }
 
-function SelectWidget(props: WidgetFactoryParams) {
+function SelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <select
@@ -190,7 +190,7 @@ function SelectWidget(props: WidgetFactoryParams) {
   </InputField>
 }
 
-function LlmProviderWidget(props: WidgetFactoryParams) {
+function LlmProviderWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <LlmWidget
@@ -203,7 +203,7 @@ function LlmProviderWidget(props: WidgetFactoryParams) {
   );
 }
 
-function ExandableTextWidget(props: WidgetFactoryParams) {
+function ExandableTextWidget(props: WidgetParams) {
   return (
     <ExpandableTextWidget
       humanName={props.label}
@@ -216,12 +216,12 @@ function ExandableTextWidget(props: WidgetFactoryParams) {
   );
 }
 
-function KeywordsWidgetFactory(props: WidgetFactoryParams) {
+function KeywordsWidgetFactory(props: WidgetParams) {
   return <KeywordsWidget nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
 }
 
 
-function HistoryTypeWidgetFactory(props: WidgetFactoryParams) {
+function HistoryTypeWidgetFactory(props: WidgetParams) {
   return (
     <HistoryTypeWidget
       onChange={props.updateParamValue}
