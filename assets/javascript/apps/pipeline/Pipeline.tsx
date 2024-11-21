@@ -1,3 +1,5 @@
+import "reactflow/dist/style.css";
+import "./styles.css"
 import React, {useCallback, useEffect, useState} from "react";
 import ReactFlow, {
   Background,
@@ -14,7 +16,6 @@ import ReactFlow, {
 
 import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
-import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 import {getNodeId} from "./utils";
