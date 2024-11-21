@@ -4,12 +4,158 @@ import React, {
   ReactNode,
   useId,
 } from "react";
-import {TypedOption} from "./types/nodeParameterValues";
-import usePipelineStore from "./stores/pipelineStore";
+import {TypedOption} from "../types/nodeParameterValues";
+import usePipelineStore from "../stores/pipelineStore";
 import {NodeProps} from "reactflow";
-import {concatenate, getCachedData, getSelectOptions} from "./utils";
-import {NodeParams, PropertySchema} from "./types/nodeParams";
+import {concatenate, getCachedData, getSelectOptions} from "../utils";
+import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node} from "reactflow";
+
+
+export function getWidget(name: string) {
+  switch (name) {
+    case "toggle":
+      return ToggleWidget
+    case "float":
+      return FloatWidget
+    case "expandable_text":
+      return ExandableTextWidget
+    case "select":
+      return SelectWidget
+    case "llm_provider_model":
+      return LlmProviderWidget
+    case "history":
+      return HistoryTypeWidget
+    case "keywords":
+      return KeywordsWidget
+    default:
+      return DefaultWidget
+  }
+}
+
+interface WidgetParams {
+  nodeId: string;
+  name: string;
+  label: string;
+  helpText: string;
+  paramValue: string | string[];
+  inputError: string | undefined;
+  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  schema: PropertySchema
+  nodeParams: NodeParams
+  required: boolean
+}
+
+function DefaultWidget(props: WidgetParams) {
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <input
+        className="input input-bordered w-full"
+        name={props.name}
+        onChange={props.updateParamValue}
+        value={props.paramValue}
+        type="text"
+        required={props.required}
+      ></input>
+    </InputField>
+  );
+}
+
+function FloatWidget(props: WidgetParams) {
+  return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+    <input
+      className="input input-bordered w-full"
+      name={props.name}
+      onChange={props.updateParamValue}
+      value={props.paramValue}
+      type="number"
+      step=".1"
+      required={props.required}
+    ></input>
+  </InputField>
+}
+
+function ToggleWidget(props: WidgetParams) {
+  const onChangeCallback = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.target.value = event.target.checked ? "true" : "false";
+    props.updateParamValue(event);
+  };
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <input
+        className="toggle"
+        name={props.name}
+        onChange={onChangeCallback}
+        checked={props.paramValue === "true"}
+        type="checkbox"
+      ></input>
+    </InputField>
+  );
+}
+
+function SelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+    <select
+      className="select select-bordered w-full"
+      name={props.name}
+      onChange={props.updateParamValue}
+      value={props.paramValue}
+      required={props.required}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </InputField>
+}
+
+function LlmProviderWidget(props: WidgetParams) {
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <LlmWidget
+        name={props.name}
+        nodeId={props.nodeId}
+        providerId={concatenate(props.nodeParams.llm_provider_id)}
+        providerModelId={concatenate(props.nodeParams.llm_provider_model_id)}
+      ></LlmWidget>
+    </InputField>
+  );
+}
+
+function ExandableTextWidget(props: WidgetParams) {
+  return (
+    <ExpandableTextWidget
+      humanName={props.label}
+      name={props.name}
+      onChange={props.updateParamValue}
+      value={props.paramValue}
+      help_text={props.helpText}
+      inputError={props.inputError}>
+    </ExpandableTextWidget>
+  );
+}
+
+function KeywordsWidget(props: WidgetParams) {
+  return <KeywordsWidgetInner nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
+}
+
+
+function HistoryTypeWidget(props: WidgetParams) {
+  return (
+    <HistoryTypeWidgetInner
+      onChange={props.updateParamValue}
+      name={props.name}
+      schema={props.schema}
+      historyType={concatenate(props.paramValue)}
+      historyName={concatenate(props.nodeParams["history_name"])}
+      help_text={props.helpText}
+    ></HistoryTypeWidgetInner>
+  );
+}
+
 
 export function TextModal(
   {modalId, humanName, name, value, onChange}: {
@@ -90,7 +236,7 @@ export function ExpandableTextWidget(
   );
 }
 
-export function KeywordsWidget({nodeId, params, inputError}: {
+export function KeywordsWidgetInner({nodeId, params, inputError}: {
   nodeId: string,
   params: NodeParams,
   inputError?: string | undefined
@@ -240,7 +386,7 @@ export function LlmWidget(
 }
 
 
-export function HistoryTypeWidget(
+export function HistoryTypeWidgetInner(
   {name, historyType, historyName, help_text, onChange, schema}: {
     name: string;
     historyType: string;
