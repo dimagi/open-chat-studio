@@ -11,7 +11,6 @@ class FlowNodeData(pydantic.BaseModel):
     type: str
     label: str = ""
     params: dict = {}  # Allowed in pydantic: https://docs.pydantic.dev/latest/concepts/models/#fields-with-non-hashable-default-values
-    inputParams: list[dict] = []
 
 
 class FlowNode(pydantic.BaseModel):
