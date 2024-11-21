@@ -25,16 +25,17 @@ export default function TestMessageBox({
   const [loading, setLoading] = useState(false);
 
   function sendMessage() {
-    if (!newMessage.trim()) {
+    const message = newMessage.trim() || userMessage.trim();
+    if (!message) {
       return;
     }
-    setUserMessage(newMessage);
+    setUserMessage(message);
     setNewMessage("");
     setErrorMessage("");
     clearEdgeLabels();
     setLoading(true);
     if (currentPipelineId) {
-      apiClient.sendTestMessage(currentPipelineId, newMessage).then((res) => {
+      apiClient.sendTestMessage(currentPipelineId, message).then((res) => {
         getMessageResponseUntilSuccess(currentPipelineId, res.task_id);
       });
     }
