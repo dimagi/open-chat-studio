@@ -115,21 +115,6 @@ function KeywordsWidget(props: WidgetParams) {
   return <KeywordsWidgetInner nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
 }
 
-
-function HistoryTypeWidget(props: WidgetParams) {
-  return (
-    <HistoryTypeWidgetInner
-      onChange={props.updateParamValue}
-      name={props.name}
-      schema={props.schema}
-      historyType={concatenate(props.paramValue)}
-      historyName={concatenate(props.nodeParams["history_name"])}
-      help_text={props.helpText}
-    ></HistoryTypeWidgetInner>
-  );
-}
-
-
 export function TextModal(
   {modalId, humanName, name, value, onChange}: {
     modalId: string;
@@ -350,24 +335,17 @@ export function LlmWidget(props: WidgetParams) {
   );
 }
 
-
-export function HistoryTypeWidgetInner(
-  {name, historyType, historyName, help_text, onChange, schema}: {
-    name: string;
-    historyType: string;
-    historyName: string;
-    help_text: string;
-    onChange: ChangeEventHandler;
-    schema: PropertySchema
-  }) {
-  const options = getSelectOptions(schema);
+export function HistoryTypeWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const historyType = concatenate(props.paramValue);
+  const historyName = concatenate(props.nodeParams["history_name"]);
   return (
     <div className="flex join">
-      <InputField label="History" help_text={help_text}>
+      <InputField label="History" help_text={props.helpText}>
         <select
           className="select select-bordered join-item"
-          name={name}
-          onChange={onChange}
+          name={props.name}
+          onChange={props.updateParamValue}
           value={historyType}
         >
           {options.map((option) => (
@@ -378,11 +356,11 @@ export function HistoryTypeWidgetInner(
         </select>
       </InputField>
       {historyType == "named" && (
-        <InputField label="History Name" help_text={help_text}>
+        <InputField label="History Name" help_text={props.helpText}>
           <input
             className="input input-bordered join-item"
             name="history_name"
-            onChange={onChange}
+            onChange={props.updateParamValue}
             value={historyName || ""}
           ></input>
         </InputField>
