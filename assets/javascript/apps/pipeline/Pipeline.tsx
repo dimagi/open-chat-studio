@@ -57,8 +57,7 @@ export default function Pipeline() {
   const editingNode = useEditorStore((state) => state.currentNode);
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
-  const [componentListIsOpen, setComponentListIsOpen] = useState(false);
-  const [testMessageBoxIsOpen, setTestMessageBoxIsOpen] = useState(false);
+  const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -100,7 +99,7 @@ export default function Pipeline() {
         addNode(newNode, {x: event.clientX, y: event.clientY});
 
         // Close the panel after adding the node
-        setComponentListIsOpen(false);
+        setSelectedOverlay(null);
       }
     },
     [getNodeId, setNodes, addNode]
@@ -148,8 +147,8 @@ export default function Pipeline() {
   };
 
   const handlePaneClick = useCallback(() => {
-    setComponentListIsOpen(false);
-  }, [setComponentListIsOpen]);
+    setSelectedOverlay(null);
+  }, [selectedOverlay]);
 
   return (
     <div className="h-[80vh]">
@@ -175,12 +174,12 @@ export default function Pipeline() {
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
         <ComponentList
-          isOpen={componentListIsOpen}
-          setIsOpen={setComponentListIsOpen}
+          isOpen={selectedOverlay == "componentList"}
+          setIsOpen={(open) => setSelectedOverlay(open ? "componentList" : null)}
         />
         <TestMessageBox
-          isOpen={testMessageBoxIsOpen}
-          setIsOpen={setTestMessageBoxIsOpen}
+           isOpen={selectedOverlay == "textBox"}
+          setIsOpen={(open) => setSelectedOverlay(open ? "textBox" : null)}
         />
         {editingNode && <EditPanel nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
