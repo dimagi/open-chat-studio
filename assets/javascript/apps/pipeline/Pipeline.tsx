@@ -172,7 +172,7 @@ export default function Pipeline() {
           isOpen={isOpen}
           setIsOpen={setIsOpen}
         />
-        {editingNode && <EditPanel nodeId={editingNode.id} />}
+        {editingNode && <EditPanel key={editingNode.id} nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         <Background
           variant={BackgroundVariant.Dots}
