@@ -45,6 +45,7 @@
     },
     "prompt": {
       "default": "You are an extremely helpful router",
+      "minLength": 1,
       "title": "Prompt",
       "type": "string",
       "ui:widget": "expandable_text"
