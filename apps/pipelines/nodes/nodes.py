@@ -325,10 +325,6 @@ class ExtractStructuredDataNodeMixin:
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
     def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
-        if "experiment_session" not in state:
-            # If there is no session, treat this like a passthrough
-            return PipelineState.from_node_output(node_id=node_id, output=input)
-
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
@@ -471,7 +467,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        session = state["experiment_session"]
+        session = state.get("experiment_session")
+        if not session:
+            return {}
+
         participant_data = (
             ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
         )
@@ -493,7 +492,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         return new_data
 
     def post_extraction_hook(self, output, state):
-        session = state["experiment_session"]
+        session = state.get("experiment_session")
+        if not session:
+            return
+
         if self.key_name:
             output = {self.key_name: output}
 
