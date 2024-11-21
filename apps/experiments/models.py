@@ -1566,3 +1566,6 @@ class ExperimentSession(BaseTeamModel):
         experiment's version number
         """
         return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, Experiment.DEFAULT_VERSION_NUMBER)
+
+    def requires_participant_data(self) -> bool:
+        return "{participant_data}" in self.experiment.prompt_text

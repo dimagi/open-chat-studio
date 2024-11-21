@@ -999,6 +999,9 @@ def _verify_user_or_start_session(identifier, request, session):
     if request.user.is_authenticated:
         return _record_consent_and_redirect(request, team_slug, session)
 
+    if not session.requires_participant_data():
+        return _record_consent_and_redirect(request, team_slug, session)
+
     if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
         if Participant.objects.filter(
             id=session_data["participant_id"], identifier=identifier, team_id=session.team_id

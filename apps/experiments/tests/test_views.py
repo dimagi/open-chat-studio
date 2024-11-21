@@ -483,11 +483,14 @@ class TestPublicSessions:
 
     @pytest.mark.parametrize(("capture_identifier", "expect_user_verified"), [(True, True), (False, False)])
     @mock.patch("apps.experiments.views.experiment._verify_user_or_start_session")
-    def test_user_is_verified_if_identifier_is_captured(
+    def test_user_is_verified_if_identifier_is_captured_and_participant_data_injected(
         self, verify_user, capture_identifier, expect_user_verified, client
     ):
         verify_user.return_value = HttpResponse()
-        experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=capture_identifier)
+        prompt = "This is data: {participant_data}"
+        experiment = ExperimentFactory(
+            team=TeamWithUsersFactory(), consent_form__capture_identifier=capture_identifier, prompt_text=prompt
+        )
         post_data = {
             "identifier": "someone@gmail.com",
             "consent_agreement": True,
@@ -514,6 +517,7 @@ class TestPublicSessions:
         record_consent_and_redirect_mock.assert_called()
 
     @pytest.mark.parametrize(("participant_match"), [True, False])
+    @mock.patch("apps.experiments.models.ExperimentSession.requires_participant_data")
     @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data")
@@ -522,16 +526,18 @@ class TestPublicSessions:
         get_chat_session_access_cookie_data,
         record_consent_and_redirect_mock,
         send_chat_link_email,
+        requires_participant_data,
         participant_match,
         request,
     ):
         """
         When a signed-out user wants to chat to a bot and has a session cookie from a prior chat, the following
         scenarios are expected:
-        - If the specified email matche that of the participant in the session, the user's email should not be verified
+        - If the specified email match that of the participant in the session, the user's email should not be verified
             again.
         - If the specified email do not match that of the participant in the session, it should be verified
         """
+        requires_participant_data.return_value = True
         request_user = mock.Mock()
         request_user.is_authenticated = False
         request.user = request_user
@@ -549,19 +555,35 @@ class TestPublicSessions:
             record_consent_and_redirect_mock.assert_not_called()
             send_chat_link_email.assert_called()
 
+    @pytest.mark.parametrize(("participant_data_injected"), [True, False])
+    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
-    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data", return_value=None)
-    def test_user_does_not_have_session_cookie(self, send_chat_link_email, request):
+    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data")
+    def test_user_does_not_have_session_cookie(
+        self,
+        get_chat_session_access_cookie_data,
+        send_chat_link_email,
+        _record_consent_and_redirect,
+        participant_data_injected,
+        request,
+    ):
         """
         When a signed-out user wants to chat to a bot and does not have a session cookie from a prior chat, we should
         verify the specified email first.
         """
+        get_chat_session_access_cookie_data.return_value = None
+        prompt = "Data: {participant_data}" if participant_data_injected else "Data"
         request_user = mock.Mock()
         request_user.is_authenticated = False
         request.user = request_user
-        experiment_session = ExperimentSessionFactory()
+        experiment_session = ExperimentSessionFactory(experiment__prompt_text=prompt)
         _verify_user_or_start_session(identifier="someone@gmail.com", request=request, session=experiment_session)
-        send_chat_link_email.assert_called()
+        if participant_data_injected:
+            _record_consent_and_redirect.assert_not_called()
+            send_chat_link_email.assert_called()
+        else:
+            send_chat_link_email.assert_not_called()
+            _record_consent_and_redirect.assert_called()
 
 
 @pytest.mark.django_db()
