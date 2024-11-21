@@ -130,14 +130,16 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       )
     });
   },
-  setEdgeLabel: (sourceId, label) => {
+  setEdgeLabel: (sourceId, outputHandle, label) => {
     // Not calling setEdges so we don't autoSave
     set({
       edges: get().edges.map(
           (edge) => {
             if (sourceId == edge.source) {
-              edge.label = label;
-              edge.type = 'annotatedEdge';
+              if (!outputHandle || edge.sourceHandle === outputHandle) {
+                edge.label = label;
+                edge.type = 'annotatedEdge';
+              }
             }
             return edge;
           }

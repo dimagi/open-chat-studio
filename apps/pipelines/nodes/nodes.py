@@ -229,7 +229,7 @@ class BooleanNode(Passthrough):
     __node_description__ = "Verifies whether the input is a certain value or not"
     input_equals: str
 
-    def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
+    def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
             return "true"
         return "false"
@@ -256,7 +256,7 @@ class RouterNode(Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
         return value
 
-    def process_conditional(self, state: PipelineState, node_id=None):
+    def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )

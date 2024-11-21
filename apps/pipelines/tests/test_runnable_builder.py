@@ -414,14 +414,14 @@ def test_conditional_node(pipeline, experiment_session):
                 "id": "Boolean -> True",
                 "source": "BooleanNode",
                 "target": "RenderTemplate-true",
-                "sourceHandle": "output_true",
+                "sourceHandle": "output_0",
                 "targetHandle": "input",
             },
             {
                 "id": "Boolean -> False",
                 "source": "BooleanNode",
                 "target": "RenderTemplate-false",
-                "sourceHandle": "output_false",
+                "sourceHandle": "output_1",
                 "targetHandle": "input",
             },
             {

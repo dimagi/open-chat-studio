@@ -42,7 +42,7 @@ class PipelineState(dict):
 
     @classmethod
     def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineState":
-        kwargs["outputs"] = {node_id: output}
+        kwargs["outputs"] = {node_id: {"message": output}}
         if output is not None:
             kwargs["messages"] = [output]
         return PipelineState(**kwargs)
@@ -85,14 +85,29 @@ class PipelineNode(BaseModel, ABC):
             # in a single node, we should give that node multiple inputs, and
             # read the input from that particular input
             if incoming_edge in state["outputs"]:
-                input = str(state["outputs"][incoming_edge])
+                input = str(state["outputs"][incoming_edge]["message"])
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
         return self._process(input=input, state=state, node_id=node_id)
 
+    def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
+        conditional_branch = self._process_conditional(state, node_id)
+        output_map = self.get_output_map()
+        output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
+        state["outputs"][node_id]["output_handle"] = output_handle
+        return conditional_branch
+
     def _process(self, input: str, state: PipelineState, node_id: str) -> str:
         """The method that executes node specific functionality"""
+        raise NotImplementedError
+
+    def _process_conditional(self, state: PipelineState, node_id: str | None = None):
+        """The method that selects which branch of a conditional node to go down."""
+        raise NotImplementedError
+
+    def get_output_map(self) -> dict:
+        """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         raise NotImplementedError
 
     @cached_property

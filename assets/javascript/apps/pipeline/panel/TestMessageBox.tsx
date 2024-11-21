@@ -45,8 +45,8 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
           // The task finished succesfully and we receive the response
           const result = response.result;
           setResponseMessage(result.messages[result.messages.length - 1]);
-          for (const [nodeId, message] of Object.entries(result.outputs)) {
-            setEdgeLabel(nodeId, message);
+          for (const [nodeId, nodeOutput] of Object.entries(result.outputs)) {
+            setEdgeLabel(nodeId, nodeOutput.output_handle, nodeOutput.message);
           }
           setLoading(false);
           polling = false;
