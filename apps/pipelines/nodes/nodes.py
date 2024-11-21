@@ -236,7 +236,7 @@ class BooleanNode(Passthrough):
 
     def get_output_map(self):
         """A mapping from the output handles on the frontend to the return values of process_conditional"""
-        return {"output_true": "true", "output_false": "false"}
+        return {"output_0": "true", "output_1": "false"}
 
 
 class RouterNode(Passthrough, HistoryMixin):

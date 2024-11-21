@@ -41,7 +41,7 @@ class PipelineState(dict):
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineNode":
+    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineState":
         kwargs["outputs"] = {node_id: output}
         if output is not None:
             kwargs["messages"] = [output]
