@@ -117,7 +117,7 @@ class PromptBuilderHistory(BaseTeamModel):
 
 
 class VersionsMixin:
-    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions"]
+    DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
     def create_new_version(self, save=True):
@@ -734,6 +734,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         new_version.files.set(self.files.all())
         return new_version
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
     def _copy_pipeline_to_new_version(self, new_version):
         if not self.pipeline:

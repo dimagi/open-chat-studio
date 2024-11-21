@@ -68,9 +68,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
-    def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["version_number"]
-
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 

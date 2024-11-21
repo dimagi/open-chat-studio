@@ -363,13 +363,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
 
-        excluded_fields = [
-            "version_number",
-            "is_default_version",
-            "public_id",
-            "version_description",
-        ] + self.object.get_fields_to_exclude()
-        fields_changed = self.object.latest_version.compare_with_model(self.object, excluded_fields)
+        fields_changed = self.object.latest_version.compare_with_model(self.object, self.object.get_fields_to_exclude())
         if "consent_form" in fields_changed:
             changed_fields = self.object.consent_form.compare_with_model(
                 self.object.latest_version.consent_form, self.object.consent_form.get_fields_to_exclude()
