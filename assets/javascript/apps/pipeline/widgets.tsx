@@ -4,27 +4,21 @@ import React, {
   ReactNode,
   useId,
 } from "react";
-import { InputParam } from "./types/nodeInputTypes";
-import { NodeParameterValues, LlmProviderModel } from "./types/nodeParameterValues";
+import {TypedOption} from "./types/nodeParameterValues";
 import usePipelineStore from "./stores/pipelineStore";
-import { NodeProps } from "reactflow";
-import {concatenate} from "./utils";
-import {NodeParams} from "./types/nodeParams";
+import {NodeProps} from "reactflow";
+import {concatenate, getCachedData, getSelectOptions} from "./utils";
+import {NodeParams, PropertySchema} from "./types/nodeParams";
 import {Node} from "reactflow";
 
-export function TextModal({
-  modalId,
-  humanName,
-  name,
-  value,
-  onChange,
-}: {
-  modalId: string;
-  humanName: string;
-  name: string;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
+export function TextModal(
+  {modalId, humanName, name, value, onChange}: {
+    modalId: string;
+    humanName: string;
+    name: string;
+    value: string | string[];
+    onChange: ChangeEventHandler;
+  }) {
   return (
     <dialog
       id={modalId}
@@ -56,21 +50,15 @@ export function TextModal({
   );
 }
 
-export function ExpandableTextWidget({
-  humanName,
-  name,
-  onChange,
-  value,
-  help_text,
-  inputError
-}: {
-  humanName: string;
-  name: string;
-  value: string | string[];
-  help_text: string;
-  inputError: string | undefined
-  onChange: ChangeEventHandler;
-}) {
+export function ExpandableTextWidget(
+  {humanName, name, onChange, value, help_text, inputError}: {
+    humanName: string;
+    name: string;
+    value: string | string[];
+    help_text: string;
+    inputError: string | undefined
+    onChange: ChangeEventHandler;
+  }) {
   const modalId = useId();
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
   const label = (
@@ -102,7 +90,11 @@ export function ExpandableTextWidget({
   );
 }
 
-export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, params: NodeParams, inputError?: string | undefined}) {
+export function KeywordsWidget({nodeId, params, inputError}: {
+  nodeId: string,
+  params: NodeParams,
+  inputError?: string | undefined
+}) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
@@ -128,9 +120,9 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
 
   const updateKeyword = (index: number, value: string) => {
     setNode(nodeId, (old) => {
-      const updatedList = [...(old.data.params["keywords"] || [])];
-      updatedList[index] = value;
-      return getNewNodeData(old, updatedList, old.data.params.num_outputs);
+        const updatedList = [...(old.data.params["keywords"] || [])];
+        updatedList[index] = value;
+        return getNewNodeData(old, updatedList, old.data.params.num_outputs);
       }
     );
   };
@@ -143,7 +135,7 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
     });
   }
 
-  const length =parseInt(concatenate(params.num_outputs)) || 1;
+  const length = parseInt(concatenate(params.num_outputs)) || 1;
   const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
   return (
     <>
@@ -187,24 +179,19 @@ export function KeywordsWidget({nodeId, params, inputError}: {nodeId: string, pa
   );
 }
 
-export function LlmWidget({
-                            id,
-                            parameterValues,
-                            inputParam,
-                            providerId,
-                            providerModelId,
-                          }: {
-  id: NodeProps["id"];
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  providerId: string;
-  providerModelId: string;
-}) {
+export function LlmWidget(
+  {name, nodeId, providerId, providerModelId}: {
+    name: string;
+    nodeId: NodeProps["id"];
+    providerId: string;
+    providerModelId: string;
+  }) {
+  const {parameterValues} = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
-    const { value } = event.target;
+    const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
-    setNode(id, (old) => ({
+    setNode(nodeId, (old) => ({
       ...old,
       data: {
         ...old.data,
@@ -218,22 +205,22 @@ export function LlmWidget({
   };
 
   const makeValue = (providerId: string, providerModelId: string) => {
-      return providerId + '|:|' + providerModelId;
+    return providerId + '|:|' + providerModelId;
   };
 
-  type ProviderModelsByType = { [type: string]: LlmProviderModel[] };
+  type ProviderModelsByType = { [type: string]: TypedOption[] };
   const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
-          acc[provModel.type] = [];
-      }
-      acc[provModel.type].push(provModel);
-      return acc;
+      acc[provModel.type] = [];
+    }
+    acc[provModel.type].push(provModel);
+    return acc;
   }, {} as ProviderModelsByType);
 
   return (
     <select
       className="select select-bordered w-full"
-      name={inputParam.name}
+      name={name}
       onChange={updateParamValue}
       value={makeValue(providerId, providerModelId)}
     >
@@ -243,8 +230,8 @@ export function LlmWidget({
       {parameterValues.LlmProviderId.map((provider) => (
         providerModelsByType[provider.type] &&
         providerModelsByType[provider.type].map((providerModel) => (
-          <option key={provider.id + providerModel.id} value={makeValue(provider.id, providerModel.id)}>
-            {providerModel.name}
+          <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+            {providerModel.label}
           </option>
         ))
       ))}
@@ -253,88 +240,30 @@ export function LlmWidget({
 }
 
 
-export function SourceMaterialIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-}: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="">Select a topic</option>
-      {parameterValues.SourceMaterialId.map((material) => (
-        <option key={material["id"]} value={material["id"]}>
-          {material["topic"]}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-export function AssistantIdWidget({
-  parameterValues,
-  inputParam,
-  value,
-  onChange,
-}: {
-  parameterValues: NodeParameterValues;
-  inputParam: InputParam;
-  value: string | string[];
-  onChange: ChangeEventHandler;
-}) {
-  return (
-    <select
-      className="select select-bordered w-full"
-      name={inputParam.name}
-      onChange={onChange}
-      value={value}
-    >
-      <option value="">Select an assistant</option>
-      {parameterValues.AssistantId.map((assistant) => (
-        <option key={assistant["id"]} value={assistant["id"]}>
-          {assistant["name"]}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-export function HistoryTypeWidget({
-  inputParam,
-  historyType,
-  historyName,
-  help_text,
-  onChange,
-}: {
-  inputParam: InputParam;
-  historyType: string;
-  historyName: string;
-  help_text: string;
-  onChange: ChangeEventHandler;
-}) {
+export function HistoryTypeWidget(
+  {name, historyType, historyName, help_text, onChange, schema}: {
+    name: string;
+    historyType: string;
+    historyName: string;
+    help_text: string;
+    onChange: ChangeEventHandler;
+    schema: PropertySchema
+  }) {
+  const options = getSelectOptions(schema);
   return (
     <div className="flex join">
       <InputField label="History" help_text={help_text}>
         <select
           className="select select-bordered join-item"
-          name={inputParam.name}
+          name={name}
           onChange={onChange}
           value={historyType}
         >
-          <option value="none">No History</option>
-          <option value="node">Node</option>
-          <option value="global">Global</option>
-          <option value="named">Named</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </InputField>
       {historyType == "named" && (
@@ -348,11 +277,15 @@ export function HistoryTypeWidget({
         </InputField>
       )}
     </div>
-)
-  ;
+  )
+    ;
 }
 
-export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{ label: string | ReactNode, help_text: string, inputError?: string | undefined }>) {
+export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
+  label: string | ReactNode,
+  help_text: string,
+  inputError?: string | undefined
+}>) {
   return (
     <>
       <div className="form-control w-full capitalize">

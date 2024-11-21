@@ -1,0 +1,15 @@
+{
+  "description": "Branches based whether the input matches a certain value",
+  "properties": {
+    "input_equals": {
+      "title": "Input Equals",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_equals"
+  ],
+  "title": "BooleanNode",
+  "type": "object",
+  "ui:label": "Conditional Node"
+}

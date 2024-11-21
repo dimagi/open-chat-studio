@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from "react";
 import Component from "./Component";
-import {NodeInputTypes} from "../types/nodeInputTypes";
 import OverlayPanel from "../components/OverlayPanel";
 import {getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
+import {NodeData} from "../types/nodeParams";
 
 type ComponentListParams = {
   isOpen: boolean;
@@ -11,55 +11,57 @@ type ComponentListParams = {
 }
 
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
-  const {inputTypes, defaultValues} = getCachedData();
+  const {defaultValues, nodeSchemas} = getCachedData();
+  const schemaList = Array.from(nodeSchemas.values())
 
-  function getDefaultParamValues(inputType: NodeInputTypes): Record<string, any> {
-    return inputType.input_params.reduce(
-      (acc, param) => {
-        acc[param.name] = param.default || defaultValues[param.type] || null;
-        return acc;
-      },
-      {} as Record<string, any>,
-    );
+  function getDefaultParamValues(schema: any): Record<string, any> {
+    const defaults: Record<string, any> = {};
+    for (const name in schema.properties) {
+      const property = schema.properties[name];
+      defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
+    }
+    return defaults;
   }
 
   //** Help bubble state
   const [scrollPosition, setScrollPosition] = useState(0)
 
-  const refMap: Record<string, React.RefObject<HTMLDivElement>> = {};
-  inputTypes.forEach((inputType) => {
-    refMap[inputType.name] = React.createRef<HTMLDivElement>();
-  });
+  const refMap = schemaList.reduce((acc, schema) => {
+    acc[schema.title] = React.createRef();
+    return acc;
+  }, {} as Record<string, React.RefObject<HTMLDivElement>>);
 
-  const [showHelp, setShowHelp] = useState({
-    show: new Map(inputTypes.map((inputType) => [inputType.name, false]))
-  })
-  const toggleHelp = (inputType: NodeInputTypes) => {
+  function getHelpOffState() {
+    return new Map(Array.from(nodeSchemas.keys()).map((key) => [key, false]));
+  }
+
+  const [showHelp, setShowHelp] = useState({show: getHelpOffState()})
+  const toggleHelp = (nodeType: string) => {
     setShowHelp(({show}) => {
-      const newShow = new Map(inputTypes.map((type) => [type.name, false]));
-      newShow.set(inputType.name, !show.get(inputType.name));
-      return { show: newShow };
+      const newShow = getHelpOffState();
+      newShow.set(nodeType, !show.get(nodeType));
+      return {show: newShow};
     });
   }
   const hideHelp = () => {
     setShowHelp(() => {
-      return {show: new Map(inputTypes.map((inputType) => [inputType.name, false]))};
+      return {show: getHelpOffState()};
     });
   };
 
   useEffect(hideHelp, [scrollPosition, isOpen]);
+
   //** end help bubble state
 
   function onDragStart(
     event: React.DragEvent<any>,
-    inputType: NodeInputTypes
+    schema: any
   ): void {
     hideHelp();
-    const nodeData = {
-      label: inputType.human_name,
-      inputParams: inputType.input_params,
-      type: inputType.name,
-      params: getDefaultParamValues(inputType),
+    const nodeData: NodeData = {
+      type: schema.title,
+      label: schema["ui:label"],
+      params: getDefaultParamValues(schema),
     }
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
   }
@@ -68,34 +70,34 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = inputTypes.map((inputType) => {
+  const components = schemaList.map((schema) => {
     return (
       <Component
-        key={inputType.name}
-        label={inputType.human_name}
+        key={schema.title}
+        label={schema["ui:label"]}
         onDragStart={(event) =>
-          onDragStart(event, inputType)
+          onDragStart(event, schema)
         }
-        parentRef={refMap[inputType.name]}
-        hasHelp={!!inputType.node_description}
-        toggleHelp={() => toggleHelp(inputType)}
+        parentRef={refMap[schema.title]}
+        hasHelp={!!schema.description}
+        toggleHelp={() => toggleHelp(schema.title)}
       />
     );
   });
 
   // Help bubbles need to be outside the overlay container to avoid clipping
-  const helps = inputTypes.map((inputType) => {
-    if (!inputType.node_description) {
+  const helps = schemaList.map((schema) => {
+    if (!schema.description) {
       return null;
     }
     return <ComponentHelp
-      key={inputType.name}
-      label={inputType.human_name}
-      parentRef={refMap[inputType.name]}
+      key={schema.title}
+      label={schema["ui:label"]}
+      parentRef={refMap[schema.title]}
       scrollPosition={scrollPosition}
-      showHelp={showHelp.show.get(inputType.name)}
+      showHelp={showHelp.show.get(schema.title)}
     >
-      <p>{inputType.node_description}</p>
+      <p>{schema.description}</p>
     </ComponentHelp>;
   })
 

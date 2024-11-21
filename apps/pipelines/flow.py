@@ -9,7 +9,7 @@ import pydantic
 class FlowNodeData(pydantic.BaseModel):
     id: str
     type: str
-    label: str
+    label: str = ""
     params: dict = {}  # Allowed in pydantic: https://docs.pydantic.dev/latest/concepts/models/#fields-with-non-hashable-default-values
     inputParams: list[dict] = []
 
