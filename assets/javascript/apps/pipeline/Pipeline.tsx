@@ -7,7 +7,6 @@ import ReactFlow, {
   MarkerType,
   NodeDragHandler,
   NodeTypes,
-  OnMove,
   OnSelectionChangeParams,
   PanOnScrollMode,
 } from "reactflow";
@@ -103,10 +102,6 @@ export default function Pipeline() {
     autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
   }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
 
-  const onMoveEnd: OnMove = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
-  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
-
   function handleDelete(e: KeyboardEvent) {
     if (lastSelection) {
       e.preventDefault();
@@ -118,8 +113,7 @@ export default function Pipeline() {
 
   function manualSaveCurrentPipeline() {
     if (currentPipeline) {
-      const viewport = reactFlowInstance?.getViewport()!;
-      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges}}
       savePipeline(updatedPipeline);
     }
   }
@@ -157,7 +151,6 @@ export default function Pipeline() {
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        onMoveEnd={onMoveEnd}
         onNodeDragStop={onNodeDragStop}
         minZoom={0.01}
         maxZoom={8}
@@ -167,6 +160,7 @@ export default function Pipeline() {
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
         panOnScroll={true}
         panOnScrollMode={PanOnScrollMode.Free}
+        fitView={true}
       >
         <ComponentList
           isOpen={isOpen}
