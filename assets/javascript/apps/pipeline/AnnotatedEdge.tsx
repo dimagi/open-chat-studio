@@ -35,7 +35,7 @@ const AnnotatedEdge: FC<EdgeProps<Edge<{ label: string }>>> = ({
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             pointerEvents: "all",
           }}
-          className="nodrag nopan nowheel border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100 max-w-xs border-dotted max-h-40 overflow-auto "
+          className="nodrag nopan nowheel px-4 py-2 shadow-md rounded-xl border-2 bg-base-100 max-w-xs border-dotted border-success max-h-40 overflow-auto z-20"
         >
           {label}
         </div>
