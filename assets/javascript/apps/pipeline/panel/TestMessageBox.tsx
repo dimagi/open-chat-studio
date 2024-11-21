@@ -4,7 +4,15 @@ import { apiClient } from "../api/api";
 import usePipelineManagerStore from "../stores/pipelineManagerStore";
 import usePipelineStore from "../stores/pipelineStore";
 
-export default function TestMessageBox({ isOpen, setIsOpen }) {
+type TestMessageBoxParams = {
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+};
+
+export default function TestMessageBox({
+  isOpen,
+  setIsOpen,
+}: TestMessageBoxParams) {
   const currentPipelineId = usePipelineManagerStore(
     (state) => state.currentPipelineId,
   );
@@ -25,13 +33,17 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
     setErrorMessage("");
     clearEdgeLabels();
     setLoading(true);
-
-    apiClient.sendTestMessage(currentPipelineId, newMessage).then((res) => {
-      getMessageResponseUntilSuccess(currentPipelineId, res.task_id);
-    });
+    if (currentPipelineId) {
+      apiClient.sendTestMessage(currentPipelineId, newMessage).then((res) => {
+        getMessageResponseUntilSuccess(currentPipelineId, res.task_id);
+      });
+    }
   }
 
-  async function getMessageResponseUntilSuccess(pipelineId, taskId) {
+  async function getMessageResponseUntilSuccess(
+    pipelineId: number,
+    taskId: string,
+  ) {
     setLoading(true);
     let polling = true;
 
@@ -41,7 +53,12 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
           pipelineId,
           taskId,
         );
-        if (response.complete && response.success) {
+        if (
+          response.complete &&
+          response.success &&
+          response.result &&
+          typeof response.result !== "string"
+        ) {
           // The task finished succesfully and we receive the response
           const result = response.result;
           setResponseMessage(result.messages[result.messages.length - 1]);
@@ -52,7 +69,14 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
           polling = false;
         } else if (response.complete && !response.success) {
           // The task failed
-          setErrorMessage(response.result);
+          if (response.result) {
+            const errorMessage =
+              typeof response.result === "string"
+                ? response.result
+                : response.result.messages[0];
+            setErrorMessage(errorMessage);
+          }
+
           setLoading(false);
           polling = false;
         } else if (!response.complete) {
@@ -61,9 +85,15 @@ export default function TestMessageBox({ isOpen, setIsOpen }) {
         } else {
           polling = false;
         }
-      } catch (error) {
-        console.error("Error fetching message response:", error);
-        setErrorMessage(error.toString());
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error(error.message);
+          setErrorMessage(error.message);
+          throw error;
+        } else {
+          console.error("Unexpected error", error);
+          throw new Error("Unexpected error occurred");
+        }
         setLoading(false);
         break;
       }

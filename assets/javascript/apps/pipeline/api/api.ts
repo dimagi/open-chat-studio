@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import { PipelineType } from "../types/pipeline";
+import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
 class ApiClient {
   private team: string | null;
@@ -42,8 +43,8 @@ class ApiClient {
   public async sendTestMessage(
     pipelineId: number,
     message: string,
-  ): Promise<string> {
-    return this.makeRequest<string>(
+  ): Promise<SimplePipelineMessageResponse> {
+    return this.makeRequest<SimplePipelineMessageResponse>(
       "post",
       `/pipelines/${pipelineId}/message/`,
       { message },
@@ -53,8 +54,8 @@ class ApiClient {
   public async getTestMessageResponse(
     pipelineId: number,
     taskId: string,
-  ): Promise<string> {
-    return this.makeRequest<string>(
+  ): Promise<TestMessageTaskResponse> {
+    return this.makeRequest<TestMessageTaskResponse>(
       "get",
       `/pipelines/${pipelineId}/message/get_response/${taskId}`,
     );
