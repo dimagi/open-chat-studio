@@ -9,6 +9,7 @@ import ReactFlow, {
   NodeTypes,
   OnMove,
   OnSelectionChangeParams,
+  PanOnScrollMode,
 } from "reactflow";
 
 import {PipelineNode} from "./PipelineNode";
@@ -164,6 +165,8 @@ export default function Pipeline() {
         defaultEdgeOptions={defaultEdgeOptions}
         onSelectionChange={onSelectionChange}
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
+        panOnScroll={true}
+        panOnScrollMode={PanOnScrollMode.Free}
       >
         <ComponentList
           isOpen={isOpen}
