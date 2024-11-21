@@ -165,7 +165,7 @@ export default function TestMessageBox({
               >
                 <input
                   type="text"
-                  className="w-full p-2 border rounded mb-2"
+                  className="input w-full p-2 border rounded mb-2"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
