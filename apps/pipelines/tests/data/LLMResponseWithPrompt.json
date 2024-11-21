@@ -1,0 +1,67 @@
+{
+  "description": "Calls an LLM with a prompt",
+  "properties": {
+    "llm_provider_id": {
+      "title": "LLM Model",
+      "type": "integer",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "title": "Llm Provider Model Id",
+      "type": "integer",
+      "ui:widget": "none"
+    },
+    "llm_temperature": {
+      "default": 0.7,
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "title": "Temperature",
+      "type": "number",
+      "ui:widget": "float"
+    },
+    "history_type": {
+      "enum": [
+        "node",
+        "named",
+        "global",
+        "none"
+      ],
+      "title": "PipelineChatHistoryTypes",
+      "type": "string",
+      "default": "none",
+      "ui:enumLabels": [
+        "Node",
+        "Named",
+        "Global",
+        "No History"
+      ],
+      "ui:widget": "history"
+    },
+    "history_name": {
+      "default": "",
+      "title": "History Name",
+      "type": "string",
+      "ui:widget": "none"
+    },
+    "source_material_id": {
+      "default": null,
+      "title": "Source Material Id",
+      "ui:optionsSource": "source_material",
+      "ui:widget": "select",
+      "type": "integer"
+    },
+    "prompt": {
+      "default": "You are a helpful assistant. Answer the user's query as best you can",
+      "title": "Prompt",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id"
+  ],
+  "title": "LLMResponseWithPrompt",
+  "type": "object",
+  "ui:label": "LLM response with prompt"
+}

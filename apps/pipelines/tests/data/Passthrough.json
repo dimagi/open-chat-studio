@@ -1,0 +1,7 @@
+{
+  "description": "Returns the input without modification",
+  "properties": {},
+  "title": "Passthrough",
+  "type": "object",
+  "ui:label": "Do Nothing"
+}

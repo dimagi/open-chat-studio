@@ -15,7 +15,6 @@ from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsOb
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.utils import get_input_types_for_node
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -111,16 +110,11 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @cached_property
     def flow_data(self) -> dict:
-        from apps.pipelines.nodes import nodes as pipeline_nodes
-
         flow = Flow(**self.data)
         flow_nodes_by_id = {node.id: node for node in flow.nodes}
         nodes = []
 
         for node in self.node_set.all():
-            node_class = getattr(pipeline_nodes, node.type)
-            input_types = get_input_types_for_node(node_class)
-
             nodes.append(
                 FlowNode(
                     id=node.flow_id,
@@ -128,9 +122,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     data=FlowNodeData(
                         id=node.flow_id,
                         type=node.type,
-                        label=node.label,
                         params=node.params,
-                        inputParams=input_types["input_params"],
                     ),
                 )
             )
@@ -308,9 +300,9 @@ class PipelineEventInputs(models.TextChoices):
 
 
 class PipelineChatHistoryTypes(models.TextChoices):
-    NODE = "node", "Node History"
-    NAMED = "named", "Named History"
-    GLOBAL = "global", "Global History"
+    NODE = "node", "Node"
+    NAMED = "named", "Named"
+    GLOBAL = "global", "Global"
     NONE = "none", "No History"
 
 

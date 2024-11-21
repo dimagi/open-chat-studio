@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, Prom
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
@@ -21,20 +22,7 @@ from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.types import (
-    AssistantId,
-    ExpandableText,
-    HistoryName,
-    HistoryType,
-    Keywords,
-    LlmProviderId,
-    LlmProviderModelId,
-    LlmTemperature,
-    NumOutputs,
-    SourceMaterialId,
-    ToggleField,
-)
+from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -44,10 +32,13 @@ from apps.service_providers.models import LlmProviderModel
 
 
 class RenderTemplate(PipelineNode):
-    __human_name__ = "Render a template"
-    __node_description__ = "Renders a template"
-    template_string: ExpandableText = Field(
+    """Renders a Jinja template"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Render a template"))
+
+    template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
@@ -74,9 +65,11 @@ class RenderTemplate(PipelineNode):
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: LlmProviderId
-    llm_provider_model_id: LlmProviderModelId
-    llm_temperature: LlmTemperature = Field(default=1.0, gt=0.0, le=2.0)
+    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
+    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
+    llm_temperature: float = Field(
+        default=0.7, gt=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.float)
+    )
 
     def get_llm_service(self):
         from apps.service_providers.models import LlmProvider
@@ -100,8 +93,16 @@ class LLMResponseMixin(BaseModel):
 
 
 class HistoryMixin(LLMResponseMixin):
-    history_type: HistoryType = PipelineChatHistoryTypes.NONE
-    history_name: HistoryName | None = None
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.NONE,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
+    )
+    history_name: str = Field(
+        "",
+        json_schema_extra=UiSchema(
+            widget=Widgets.none,
+        ),
+    )
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -149,8 +150,9 @@ class HistoryMixin(LLMResponseMixin):
 
 
 class LLMResponse(PipelineNode, LLMResponseMixin):
-    __human_name__ = "LLM response"
-    __node_description__ = "Calls an LLM with the given input"
+    """Calls an LLM with the given input"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
@@ -159,12 +161,16 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
-    __human_name__ = "LLM response with prompt"
-    __node_description__ = "Calls an LLM with a prompt"
+    """Calls an LLM with a prompt"""
 
-    source_material_id: SourceMaterialId | None = None
-    prompt: ExpandableText = Field(
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response with prompt"))
+
+    source_material_id: int | None = Field(
+        None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
+    )
+    prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
@@ -192,8 +198,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
 
 class SendEmail(PipelineNode):
-    __human_name__ = "Send an email"
-    __node_description__ = ""
+    """Send the input to the node to the list of addresses provided"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Send an email"))
+
     recipient_list: str = Field(description="A comma-separated list of email addresses")
     subject: str
 
@@ -215,8 +223,9 @@ class SendEmail(PipelineNode):
 
 
 class Passthrough(PipelineNode):
-    __human_name__ = "Do Nothing"
-    __node_description__ = ""
+    """Returns the input without modification"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
@@ -225,8 +234,10 @@ class Passthrough(PipelineNode):
 
 
 class BooleanNode(Passthrough):
-    __human_name__ = "Boolean Node"
-    __node_description__ = "Verifies whether the input is a certain value or not"
+    """Branches based whether the input matches a certain value"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
+
     input_equals: str
 
     def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
@@ -240,13 +251,15 @@ class BooleanNode(Passthrough):
 
 
 class RouterNode(Passthrough, HistoryMixin):
-    __human_name__ = "Router"
-    __node_description__ = "Routes the input to one of the linked nodes"
-    prompt: ExpandableText = Field(
-        default="You are an extremely helpful router",
+    """Routes the input to one of the linked nodes"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
+
+    prompt: str = Field(
+        default="You are an extremely helpful router", json_schema_extra=UiSchema(widget=Widgets.expandable_text)
     )
-    num_outputs: NumOutputs = 2
-    keywords: Keywords = []
+    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
+    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
 
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
@@ -431,22 +444,28 @@ class StructuredDataSchemaValidatorMixin:
 
 
 class ExtractStructuredData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
-    __human_name__ = "Extract Structured Data"
-    __node_description__ = "Extract structured data from the input"
-    data_schema: ExpandableText = Field(
+    """Extract structured data from the input"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Extract Structured Data"))
+
+    data_schema: str = Field(
         default='{"name": "the name of the user"}',
         description="A JSON object structure where the key is the name of the field and the value the description",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
 
 class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin):
-    __human_name__ = "Extract Participant Data"
-    __node_description__ = "Extract structured data and saves it as participant data"
-    data_schema: ExpandableText = Field(
+    """Extract structured data and saves it as participant data"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Update Participant Data"))
+
+    data_schema: str = Field(
         default='{"name": "the name of the user"}',
         description="A JSON object structure where the key is the name of the field and the value the description",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    key_name: str | None = None
+    key_name: str = ""
 
     def get_reference_data(self, state) -> dict:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
@@ -457,7 +476,7 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
             ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
         )
         if not participant_data:
-            return ""
+            return {}
 
         data = participant_data.data
         if self.key_name:
@@ -494,11 +513,19 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
 
 
 class AssistantNode(PipelineNode):
-    __human_name__ = "OpenAI Assistant"
-    __node_description__ = "Calls an OpenAI assistant"
-    assistant_id: AssistantId
-    citations_enabled: ToggleField = Field(default=True, description="Whether to include cited sources in responses")
-    input_formatter: str | None = Field(description="(Optional) Use {input} to designate the user input")
+    """Calls an OpenAI assistant"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="OpenAI Assistant"))
+
+    assistant_id: int = Field(
+        ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
+    )
+    citations_enabled: bool = Field(
+        default=True,
+        description="Whether to include cited sources in responses",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+    input_formatter: str = Field("", description="(Optional) Use {input} to designate the user input")
 
     @field_validator("input_formatter")
     def ensure_input_variable_exists(cls, value):
@@ -514,7 +541,7 @@ class AssistantNode(PipelineNode):
             if extra_vars:
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
-    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:

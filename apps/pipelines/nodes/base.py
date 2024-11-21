@@ -1,11 +1,13 @@
 import operator
 from abc import ABC
 from collections.abc import Sequence
+from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict
+from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -41,11 +43,11 @@ class PipelineState(dict):
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: any = None, **kwargs) -> "PipelineState":
+    def from_node_output(cls, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
         if output is not None:
             kwargs["messages"] = [output]
-        return PipelineState(**kwargs)
+        return cls(**kwargs)
 
 
 class PipelineNode(BaseModel, ABC):
@@ -54,8 +56,8 @@ class PipelineNode(BaseModel, ABC):
 
     Example:
         class FunNode(PipelineNode):
-            required_parameter_1: CustomType
-            optional_parameter_1: Optional[CustomType] = None
+            required_parameter_1: str
+            optional_parameter_1: int | None = None
 
             def _process(self, state: PipelineState) -> PipelineState:
                 input = state["messages"][-1]
@@ -115,3 +117,47 @@ class PipelineNode(BaseModel, ABC):
         for handler in self._config["callbacks"].handlers:
             if isinstance(handler, PipelineLoggingCallbackHandler):
                 return handler.logger
+
+
+class Widgets(StrEnum):
+    expandable_text = "expandable_text"
+    toggle = "toggle"
+    select = "select"
+    float = "float"
+    none = "none"
+
+    # special widgets
+    llm_provider_model = "llm_provider_model"
+    history = "history"
+    keywords = "keywords"
+
+
+class OptionsSource(StrEnum):
+    source_material = "source_material"
+    assistant = "assistant"
+
+
+class UiSchema(BaseModel):
+    widget: Widgets = None
+
+    # Use this with Enum fields to provide label text
+    enum_labels: list[str] = None
+
+    # Use this with 'select' type fields to indicate where the options should come from
+    # See `apps.pipelines.views._pipeline_node_parameter_values`
+    options_source: OptionsSource = None
+
+    def __call__(self, schema: JsonDict):
+        if self.widget:
+            schema["ui:widget"] = self.widget
+        if self.enum_labels:
+            schema["ui:enumLabels"] = self.enum_labels
+        if self.options_source:
+            schema["ui:optionsSource"] = self.options_source
+
+
+class NodeSchema(BaseModel):
+    label: str
+
+    def __call__(self, schema: JsonDict):
+        schema["ui:label"] = self.label

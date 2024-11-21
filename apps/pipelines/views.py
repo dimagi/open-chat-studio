@@ -21,7 +21,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
-from apps.pipelines.nodes.utils import get_input_types_for_node
+from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -77,7 +77,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         return {
             **data,
             "pipeline_id": kwargs["pk"],
-            "input_types": _pipeline_node_input_types(),
+            "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
         }
@@ -98,15 +98,20 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
 
+    def _option(value, label, type_=None):
+        return {"value": value, "label": label} | ({"type": type_} if type_ else {})
+
     return {
-        "LlmProviderId": [
-            {"id": provider["id"], "name": provider["name"], "type": provider["type"]} for provider in llm_providers
-        ],
-        "LlmProviderModelId": [
-            {"id": provider.id, "type": provider.type, "name": str(provider)} for provider in llm_provider_models
-        ],
-        "SourceMaterialId": [{"id": material["id"], "topic": material["topic"]} for material in source_materials],
-        "AssistantId": [{"id": assistant["id"], "name": assistant["name"]} for assistant in assistants],
+        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
+        "LlmProviderModelId": [_option(provider.id, provider.name, str(provider)) for provider in llm_provider_models],
+        OptionsSource.source_material: (
+            [_option("", "Select a topic")]
+            + [_option(material["id"], material["topic"]) for material in source_materials]
+        ),
+        OptionsSource.assistant: (
+            [_option("", "Select an Assistant")]
+            + [_option(assistant["id"], assistant["name"]) for assistant in assistants]
+        ),
     }
 
 
@@ -120,18 +125,16 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
         llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
 
     return {
-        "LlmProviderId": provider_id,
-        "LlmProviderModelId": llm_provider_model_id.id,
-        "LlmTemperature": 0.7,
+        # these keys must match field names on the node schemas
+        "llm_provider_id": provider_id,
+        "llm_provider_model_id": llm_provider_model_id.id,
     }
 
 
-def _pipeline_node_input_types():
-    """Returns all the input types for the various nodes"""
-
+def _pipeline_node_schemas():
     from apps.pipelines.nodes import nodes
 
-    fields = []
+    schemas = []
 
     node_classes = [
         cls
@@ -139,9 +142,23 @@ def _pipeline_node_input_types():
         if issubclass(cls, nodes.PipelineNode) and cls != nodes.PipelineNode
     ]
     for node_class in node_classes:
-        fields.append(get_input_types_for_node(node_class))
+        schemas.append(_get_node_schema(node_class))
 
-    return fields
+    return schemas
+
+
+def _get_node_schema(node_class):
+    from apps.custom_actions.schema_utils import resolve_references
+
+    schema = resolve_references(node_class.model_json_schema())
+    schema.pop("$defs", None)
+
+    # Remove type ambiguity for optional fields
+    for key, value in schema["properties"].items():
+        if "anyOf" in value:
+            any_of = value.pop("anyOf")
+            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
+    return schema
 
 
 @login_and_team_required

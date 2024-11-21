@@ -1,0 +1,21 @@
+{
+  "description": "Send the input to the node to the list of addresses provided",
+  "properties": {
+    "recipient_list": {
+      "description": "A comma-separated list of email addresses",
+      "title": "Recipient List",
+      "type": "string"
+    },
+    "subject": {
+      "title": "Subject",
+      "type": "string"
+    }
+  },
+  "required": [
+    "recipient_list",
+    "subject"
+  ],
+  "title": "SendEmail",
+  "type": "object",
+  "ui:label": "Send an email"
+}

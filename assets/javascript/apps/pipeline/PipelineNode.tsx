@@ -18,8 +18,10 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const nodeErrors = usePipelineManagerStore((state) => state.errors[id]);
-  const {inputTypes} = getCachedData();
-  const inputType = inputTypes.filter((inputType) => inputType.name === data.type)[0];
+  const {nodeSchemas} = getCachedData();
+  const nodeSchema = nodeSchemas.get(data.type)!;
+  const schemaProperties = Object.getOwnPropertyNames(nodeSchema.properties);
+  const requiredProperties = nodeSchema.required || [];
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -41,9 +43,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
-  const defaultBorder = nodeErrors ? "border-red-500 " : ""
+  const defaultBorder = nodeErrors ? "border-error " : ""
   const nodeBorder = classNames(
-    selected ? "border-primary" : defaultBorder,
+    selected ? "border-secondary" : defaultBorder,
     "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
   )
 
@@ -63,12 +65,12 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           >
             <i className="fa fa-pencil"></i>
           </button>
-          {inputType.node_description && (
+          {nodeSchema.description && (
             <div className="dropdown dropdown-top">
               <button tabIndex={0} role="button" className="btn btn-xs join-item">
                 <i className={"fa fa-circle-question"}></i>
               </button>
-              <HelpContent><p>{inputType.node_description}</p></HelpContent>
+              <HelpContent><p>{nodeSchema.description}</p></HelpContent>
             </div>
           )}
         </div>
@@ -76,18 +78,20 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       <div
         className={nodeBorder}
       >
-        <div className="m-1 text-lg font-bold text-center">{data.label}</div>
+        <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
         <NodeInput nodeId={id}/>
         <div className="ml-2">
           <div>
-            {data.inputParams.map((inputParam) => (
-              <React.Fragment key={inputParam.name}>
+            {schemaProperties.map((name) => (
+              <React.Fragment key={name}>
                 {getNodeInputWidget({
                   id: id,
-                  inputParam: inputParam,
+                  name: name,
+                  schema: nodeSchema.properties[name],
                   params: data.params,
                   updateParamValue: updateParamValue,
                   nodeType: data.type,
+                  required: requiredProperties.includes(name),
                 })}
               </React.Fragment>
             ))}

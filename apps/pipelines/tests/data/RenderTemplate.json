@@ -1,0 +1,17 @@
+{
+  "description": "Renders a Jinja template",
+  "properties": {
+    "template_string": {
+      "description": "Use {your_variable_name} to refer to designate input",
+      "title": "Template String",
+      "type": "string",
+      "ui:widget": "expandable_text"
+    }
+  },
+  "required": [
+    "template_string"
+  ],
+  "title": "RenderTemplate",
+  "type": "object",
+  "ui:label": "Render a template"
+}
