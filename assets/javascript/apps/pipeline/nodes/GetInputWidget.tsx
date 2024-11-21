@@ -81,6 +81,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
       schema={params.schema}
       nodeParams={params.params}
       required={params.required}
+      getFieldError={getFieldError}
     />
   )
 };

@@ -104,6 +104,12 @@ class HistoryMixin(LLMResponseMixin):
         ),
     )
 
+    @field_validator("history_name")
+    def validate_history_name(cls, value, info: FieldValidationInfo):
+        if info.data.get("history_type") == PipelineChatHistoryTypes.NAMED and not value:
+            raise PydanticCustomError("invalid_history_name", "A history name is required for named history")
+        return value
+
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             return self.history_name
@@ -253,7 +259,9 @@ class RouterNode(Passthrough, HistoryMixin):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
 
     prompt: str = Field(
-        default="You are an extremely helpful router", json_schema_extra=UiSchema(widget=Widgets.expandable_text)
+        default="You are an extremely helpful router",
+        min_length=1,
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))

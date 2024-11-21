@@ -42,7 +42,8 @@ interface WidgetParams {
   updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
   schema: PropertySchema
   nodeParams: NodeParams
-  required: boolean
+  required: boolean,
+  getFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
 
 function DefaultWidget(props: WidgetParams) {
@@ -305,25 +306,25 @@ export function LlmWidget(props: WidgetParams) {
   const value = makeValue(providerId, providerModelId)
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-    <select
-      className="select select-bordered w-full"
-      name={props.name}
-      onChange={updateParamValue}
-      value={value}
-    >
-      <option value="" disabled>
-        Select a model
-      </option>
-      {parameterValues.LlmProviderId.map((provider) => (
-        providerModelsByType[provider.type] &&
-        providerModelsByType[provider.type].map((providerModel) => (
-          <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-            {providerModel.label}
-          </option>
-        ))
-      ))}
-    </select>
-      </InputField>
+      <select
+        className="select select-bordered w-full"
+        name={props.name}
+        onChange={updateParamValue}
+        value={value}
+      >
+        <option value="" disabled>
+          Select a model
+        </option>
+        {parameterValues.LlmProviderId.map((provider) => (
+          providerModelsByType[provider.type] &&
+          providerModelsByType[provider.type].map((providerModel) => (
+            <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+              {providerModel.label}
+            </option>
+          ))
+        ))}
+      </select>
+    </InputField>
   );
 }
 
@@ -331,33 +332,39 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const historyType = concatenate(props.paramValue);
   const historyName = concatenate(props.nodeParams["history_name"]);
+  const historyNameError = props.getFieldError(props.nodeId, "history_name");
   return (
-    <div className="flex join">
-      <InputField label="History" help_text={props.helpText}>
-        <select
-          className="select select-bordered join-item"
-          name={props.name}
-          onChange={props.updateParamValue}
-          value={historyType}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </InputField>
-      {historyType == "named" && (
-        <InputField label="History Name" help_text={props.helpText}>
-          <input
-            className="input input-bordered join-item"
-            name="history_name"
+    <>
+      <div className="flex join">
+        <InputField label="History" help_text={props.helpText}>
+          <select
+            className="select select-bordered join-item"
+            name={props.name}
             onChange={props.updateParamValue}
-            value={historyName || ""}
-          ></input>
+            value={historyType}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </InputField>
-      )}
-    </div>
+        {historyType == "named" && (
+          <InputField label="History Name" help_text={props.helpText}>
+            <input
+              className="input input-bordered join-item"
+              name="history_name"
+              onChange={props.updateParamValue}
+              value={historyName || ""}
+            ></input>
+          </InputField>
+        )}
+      </div>
+      <div className="flex flex-col">
+        <small className="text-red-500">{historyNameError}</small>
+      </div>
+    </>
   )
     ;
 }
