@@ -396,11 +396,11 @@ def test_branching_pipeline(pipeline, experiment_session):
     runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
     output = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["outputs"]
     expected_output = {
-        "Passthrough-1": user_input,
-        "RenderTemplate-A": f"A ({user_input})",
-        "RenderTemplate-B": f"B ({user_input})",
-        "RenderTemplate-C": f"C (B ({user_input}))",
-        "Passthrough-2": [f"A ({user_input})", f"C (B ({user_input}))"],
+        "Passthrough-1": {"message": user_input},
+        "RenderTemplate-A": {"message": f"A ({user_input})"},
+        "RenderTemplate-B": {"message": f"B ({user_input})"},
+        "RenderTemplate-C": {"message": f"C (B ({user_input}))"},
+        "Passthrough-2": [{"message": f"A ({user_input})"}, {"message": f"C (B ({user_input}))"}],
     }
     assert output == expected_output
 
@@ -486,11 +486,19 @@ def test_conditional_node(pipeline, experiment_session):
 
     output = runnable.invoke(PipelineState(messages=["hello"], experiment_session=experiment_session))
     assert output["messages"][-1] == "said hello"
-    assert "RenderTemplate-false" not in output["outputs"]
+    assert output["outputs"] == {
+        "BooleanNode": {"message": "hello", "output_handle": "output_0"},
+        "RenderTemplate-true": {"message": "said hello"},
+        "End": {"message": "said hello"},
+    }
 
     output = runnable.invoke(PipelineState(messages=["bad"], experiment_session=experiment_session))
     assert output["messages"][-1] == "didn't say hello, said bad"
-    assert "RenderTemplate-true" not in output["outputs"]
+    assert output["outputs"] == {
+        "BooleanNode": {"message": "bad", "output_handle": "output_1"},
+        "RenderTemplate-false": {"message": "didn't say hello, said bad"},
+        "End": {"message": "didn't say hello, said bad"},
+    }
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))

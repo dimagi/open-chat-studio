@@ -61,8 +61,8 @@ def test_end_conversation_runs_pipeline(session, pipeline):
                 output_message,  # input to pipeline
             ],
             "outputs": {
-                "first": f"human: {input}",
-                "second": f"human: {input}",
+                "first": {"message": f"human: {input}"},
+                "second": {"message": f"human: {input}"},
             },
             "experiment_session": session.id,
         }
