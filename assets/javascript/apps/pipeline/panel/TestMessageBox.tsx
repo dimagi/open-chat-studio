@@ -102,13 +102,22 @@ export default function TestMessageBox({
 
   function togglePanel() {
     if (isOpen) {
-      // When closing the panel, clear the chat box and the annotations
-      clearEdgeLabels();
-      setUserMessage("");
-      setResponseMessage("");
-      setErrorMessage("");
+      clear();
     }
     setIsOpen(!isOpen);
+  }
+
+  function onClear(e: React.MouseEvent<HTMLElement>) {
+    e.preventDefault();
+    clear();
+  }
+
+  function clear() {
+    setNewMessage("");
+    setUserMessage("");
+    setResponseMessage("");
+    setErrorMessage("");
+    clearEdgeLabels();
   }
 
   return (
@@ -169,9 +178,12 @@ export default function TestMessageBox({
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
                 />
-                <button className="w-full btn btn-primary" type="submit">
-                  Send Message
-                </button>
+                <div className="grid grid-cols-2">
+                  <button className="btn btn-primary" type="submit">
+                    Send
+                  </button>
+                  <button className="btn" onClick={onClear}>Clear</button>
+                </div>
               </form>
             </div>
           </>
