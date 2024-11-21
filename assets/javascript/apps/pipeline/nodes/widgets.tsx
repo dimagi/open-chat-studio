@@ -18,7 +18,7 @@ export function getWidget(name: string) {
     case "float":
       return FloatWidget
     case "expandable_text":
-      return ExandableTextWidget
+      return ExpandableTextWidget
     case "select":
       return SelectWidget
     case "llm_provider_model":
@@ -111,19 +111,6 @@ function SelectWidget(props: WidgetParams) {
   </InputField>
 }
 
-function ExandableTextWidget(props: WidgetParams) {
-  return (
-    <ExpandableTextWidget
-      humanName={props.label}
-      name={props.name}
-      onChange={props.updateParamValue}
-      value={props.paramValue}
-      help_text={props.helpText}
-      inputError={props.inputError}>
-    </ExpandableTextWidget>
-  );
-}
-
 function KeywordsWidget(props: WidgetParams) {
   return <KeywordsWidgetInner nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
 }
@@ -182,20 +169,12 @@ export function TextModal(
   );
 }
 
-export function ExpandableTextWidget(
-  {humanName, name, onChange, value, help_text, inputError}: {
-    humanName: string;
-    name: string;
-    value: string | string[];
-    help_text: string;
-    inputError: string | undefined
-    onChange: ChangeEventHandler;
-  }) {
+export function ExpandableTextWidget(props: WidgetParams) {
   const modalId = useId();
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
   const label = (
-    <>{humanName}
-      <div className="tooltip tooltip-left" data-tip={`Expand ${humanName}`}>
+    <>{props.label}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
         <button className="btn btn-xs btn-ghost" onClick={openModal}>
           <i className="fa-solid fa-expand-alt"></i>
         </button>
@@ -203,20 +182,20 @@ export function ExpandableTextWidget(
     </>
   )
   return (
-    <InputField label={label} help_text={help_text} inputError={inputError}>
+    <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
       <textarea
         className="textarea textarea-bordered resize-none textarea-sm w-full"
         rows={3}
-        name={name}
-        onChange={onChange}
-        value={value}
+        name={props.name}
+        onChange={props.updateParamValue}
+        value={props.paramValue}
       ></textarea>
       <TextModal
         modalId={modalId}
-        humanName={humanName}
-        name={name}
-        value={value}
-        onChange={onChange}>
+        humanName={props.label}
+        name={props.name}
+        value={props.paramValue}
+        onChange={props.updateParamValue}>
       </TextModal>
     </InputField>
   );
