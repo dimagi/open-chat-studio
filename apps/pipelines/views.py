@@ -98,7 +98,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [_option(provider.id, provider.name, str(provider)) for provider in llm_provider_models],
+        "LlmProviderModelId": [_option(provider.id, str(provider), provider.type) for provider in llm_provider_models],
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
