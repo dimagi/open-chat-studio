@@ -87,6 +87,7 @@ export default function TestMessageBox({
           polling = false;
         }
       } catch (error: unknown) {
+        setLoading(false);
         if (error instanceof Error) {
           console.error(error.message);
           setErrorMessage(error.message);
@@ -95,8 +96,6 @@ export default function TestMessageBox({
           console.error("Unexpected error", error);
           throw new Error("Unexpected error occurred");
         }
-        setLoading(false);
-        break;
       }
     }
   }
