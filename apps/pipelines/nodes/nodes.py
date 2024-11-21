@@ -97,8 +97,8 @@ class HistoryMixin(LLMResponseMixin):
         PipelineChatHistoryTypes.NONE,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
-    history_name: str = Field(
-        "",
+    history_name: str | None = Field(
+        None,
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
