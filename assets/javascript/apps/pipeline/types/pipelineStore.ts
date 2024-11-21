@@ -9,6 +9,8 @@ export type PipelineStoreType = {
   onEdgesChange: OnEdgesChange;
   setNodes: (update: Node[] | ((oldState: Node[]) => Node[])) => void;
   setEdges: (update: Edge[] | ((oldState: Edge[]) => Edge[])) => void;
+  setEdgeLabel: (sourceId: string, outputHandle: string | null | undefined, label: string) => void;
+  clearEdgeLabels: () => void;
   setNode: (id: string, update: Node | ((oldState: Node) => Node)) => void;
   getNode: (id: string) => Node | undefined;
   deleteNode: (nodeId: string | Array<string>) => void;

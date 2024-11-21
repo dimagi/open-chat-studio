@@ -1,8 +1,11 @@
+import "reactflow/dist/style.css";
+import "./styles.css"
 import React, {useCallback, useEffect, useState} from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
+  EdgeTypes,
   FitViewOptions,
   MarkerType,
   NodeDragHandler,
@@ -13,13 +16,14 @@ import ReactFlow, {
 
 import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
-import "reactflow/dist/style.css";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
 import {getNodeId} from "./utils";
 import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
+import TestMessageBox from "./panel/TestMessageBox";
+import AnnotatedEdge from "./AnnotatedEdge";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -27,6 +31,10 @@ const fitViewOptions: FitViewOptions = {
 
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
+};
+
+const edgeTypes: EdgeTypes = {
+  annotatedEdge: AnnotatedEdge,
 };
 
 export default function Pipeline() {
@@ -50,7 +58,7 @@ export default function Pipeline() {
   const editingNode = useEditorStore((state) => state.currentNode);
 
   const [lastSelection, setLastSelection] = useState<OnSelectionChangeParams | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
 
   useEffect(() => {
     if (reactFlowInstance) {
@@ -92,7 +100,7 @@ export default function Pipeline() {
         addNode(newNode, {x: event.clientX, y: event.clientY});
 
         // Close the panel after adding the node
-        setIsOpen(false);
+        setSelectedOverlay(null);
       }
     },
     [getNodeId, setNodes, addNode]
@@ -140,8 +148,8 @@ export default function Pipeline() {
   };
 
   const handlePaneClick = useCallback(() => {
-    setIsOpen(false);
-  }, [setIsOpen]);
+    setSelectedOverlay(null);
+  }, [selectedOverlay]);
 
   return (
     <div className="h-[80vh]">
@@ -153,6 +161,7 @@ export default function Pipeline() {
         onConnect={onConnect}
         fitViewOptions={fitViewOptions}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -166,8 +175,12 @@ export default function Pipeline() {
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
       >
         <ComponentList
-          isOpen={isOpen}
-          setIsOpen={setIsOpen}
+          isOpen={selectedOverlay == "componentList"}
+          setIsOpen={(open) => setSelectedOverlay(open ? "componentList" : null)}
+        />
+        <TestMessageBox
+           isOpen={selectedOverlay == "textBox"}
+          setIsOpen={(open) => setSelectedOverlay(open ? "textBox" : null)}
         />
         {editingNode && <EditPanel nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
