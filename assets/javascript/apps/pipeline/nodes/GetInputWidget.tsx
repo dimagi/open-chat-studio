@@ -1,7 +1,7 @@
 import {
-  HistoryTypeWidget,
+  HistoryTypeWidget as HistoryTypeWidgetInner,
   ExpandableTextWidget,
-  InputField, LlmWidget, KeywordsWidget
+  InputField, LlmWidget, KeywordsWidget as KeywordsWidgetInner
 } from "../widgets";
 import React from "react";
 import {concatenate, getSelectOptions} from "../utils";
@@ -95,7 +95,7 @@ function getWidget(name: string) {
     case "toggle":
       return ToggleWidget
     case "float":
-      return FloatFactory
+      return FloatWidget
     case "expandable_text":
       return ExandableTextWidget
     case "select":
@@ -103,11 +103,11 @@ function getWidget(name: string) {
     case "llm_provider_model":
       return LlmProviderWidget
     case "history":
-      return HistoryTypeWidgetFactory
+      return HistoryTypeWidget
     case "keywords":
-      return KeywordsWidgetFactory
+      return KeywordsWidget
     default:
-      return DefaultFactory
+      return DefaultWidget
   }
 }
 
@@ -124,7 +124,7 @@ interface WidgetParams {
   required: boolean
 }
 
-function DefaultFactory(props: WidgetParams) {
+function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
@@ -139,7 +139,7 @@ function DefaultFactory(props: WidgetParams) {
   );
 }
 
-function FloatFactory(props: WidgetParams) {
+function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
       className="input input-bordered w-full"
@@ -216,20 +216,20 @@ function ExandableTextWidget(props: WidgetParams) {
   );
 }
 
-function KeywordsWidgetFactory(props: WidgetParams) {
-  return <KeywordsWidget nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
+function KeywordsWidget(props: WidgetParams) {
+  return <KeywordsWidgetInner nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
 }
 
 
-function HistoryTypeWidgetFactory(props: WidgetParams) {
+function HistoryTypeWidget(props: WidgetParams) {
   return (
-    <HistoryTypeWidget
+    <HistoryTypeWidgetInner
       onChange={props.updateParamValue}
       name={props.name}
       schema={props.schema}
       historyType={concatenate(props.paramValue)}
       historyName={concatenate(props.nodeParams["history_name"])}
       help_text={props.helpText}
-    ></HistoryTypeWidget>
+    ></HistoryTypeWidgetInner>
   );
 }
