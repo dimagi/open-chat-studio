@@ -44,10 +44,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   }
 
   const defaultBorder = nodeErrors ? "border-error " : ""
-  const nodeBorder = classNames(
-    selected ? "border-secondary" : defaultBorder,
-    "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
-  )
+  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
+  const border = selected ? selectedBorder : defaultBorder
+  const nodeBorder = classNames(border, "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100")
 
   return (
     <>
