@@ -111,10 +111,6 @@ function SelectWidget(props: WidgetParams) {
   </InputField>
 }
 
-function KeywordsWidget(props: WidgetParams) {
-  return <KeywordsWidgetInner nodeId={props.nodeId} params={props.nodeParams} inputError={props.inputError}/>
-}
-
 export function TextModal(
   {modalId, humanName, name, value, onChange}: {
     modalId: string;
@@ -186,11 +182,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   );
 }
 
-export function KeywordsWidgetInner({nodeId, params, inputError}: {
-  nodeId: string,
-  params: NodeParams,
-  inputError?: string | undefined
-}) {
+export function KeywordsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
@@ -208,14 +200,14 @@ export function KeywordsWidgetInner({nodeId, params, inputError}: {
   }
 
   const addKeyword = () => {
-    setNode(nodeId, (old) => {
+    setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
       return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
     });
   }
 
   const updateKeyword = (index: number, value: string) => {
-    setNode(nodeId, (old) => {
+    setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
         return getNewNodeData(old, updatedList, old.data.params.num_outputs);
@@ -224,15 +216,15 @@ export function KeywordsWidgetInner({nodeId, params, inputError}: {
   };
 
   const deleteKeyword = (index: number) => {
-    setNode(nodeId, (old) => {
+    setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || [])];
       updatedList.splice(index, 1);
       return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
     });
   }
 
-  const length = parseInt(concatenate(params.num_outputs)) || 1;
-  const keywords = Array.isArray(params.keywords) ? params["keywords"] : []
+  const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
+  const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -244,7 +236,7 @@ export function KeywordsWidgetInner({nodeId, params, inputError}: {
             </button>
           </div>
         </label>
-        <small className="text-red-500">{inputError}</small>
+        <small className="text-red-500">{props.inputError}</small>
       </div>
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
