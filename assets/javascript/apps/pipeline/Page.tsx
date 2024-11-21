@@ -7,7 +7,6 @@ export default function Page() {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const nodes = usePipelineStore((state) => state.nodes);
   const edges = usePipelineStore((state) => state.edges);
-  const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
 
   const updatePipelineName = usePipelineManagerStore((state) => state.updatePipelineName);
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
@@ -21,8 +20,7 @@ export default function Page() {
   };
   const onClickSave = () => {
     if (currentPipeline) {
-      const viewport = reactFlowInstance?.getViewport()!;
-      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges}}
       savePipeline(updatedPipeline).then(() => setEditingName(false));
     }
   };

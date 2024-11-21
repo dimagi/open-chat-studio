@@ -32,7 +32,6 @@ class FlowEdge(pydantic.BaseModel):
 class Flow(pydantic.BaseModel):
     nodes: list[FlowNode]
     edges: list[FlowEdge]
-    viewport: dict
     errors: dict[str, dict[str, str]] = {}
 
 

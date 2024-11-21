@@ -1,4 +1,4 @@
-import {Connection, Edge, Node, OnEdgesChange, OnNodesChange, ReactFlowInstance, Viewport,} from "reactflow";
+import {Connection, Edge, Node, OnEdgesChange, OnNodesChange, ReactFlowInstance} from "reactflow";
 
 export type PipelineStoreType = {
   reactFlowInstance: ReactFlowInstance | null;
@@ -21,6 +21,5 @@ export type PipelineStoreType = {
   resetFlow: (flow: {
     nodes: Node[];
     edges: Edge[];
-    viewport: Viewport;
   }) => void;
 };

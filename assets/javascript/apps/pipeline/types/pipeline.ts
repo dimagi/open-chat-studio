@@ -1,4 +1,9 @@
-import {ReactFlowJsonObject} from "reactflow";
+import {Edge, Node} from "@reactflow/core/dist/esm/types";
+
+export type ReactFlowJsonObject<NodeData = any, EdgeData = any> = {
+    nodes: Node<NodeData>[];
+    edges: Edge<EdgeData>[];
+};
 
 export type PipelineType = {
   id: bigint;

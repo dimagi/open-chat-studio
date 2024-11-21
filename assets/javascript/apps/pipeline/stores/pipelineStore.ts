@@ -46,7 +46,6 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     flowsManager.autoSaveCurrentPipline(
       newChange,
       newEdges,
-      get().reactFlowInstance?.getViewport() ?? {x: 0, y: 0, zoom: 1}
     );
   },
   setEdges: (change) => {
@@ -61,7 +60,6 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     flowsManager.autoSaveCurrentPipline(
       get().nodes,
       newChange,
-      get().reactFlowInstance?.getViewport() ?? {x: 0, y: 0, zoom: 1}
     );
   },
   setNode: (id: string, change: Node | ((oldState: Node) => Node)) => {
@@ -129,7 +127,6 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       .autoSaveCurrentPipline(
         get().nodes,
         newEdges,
-        get().reactFlowInstance?.getViewport() ?? {x: 0, y: 0, zoom: 1}
       );
   },
   addNode: (node, position) => {
@@ -173,12 +170,11 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
       .concat({...newNode, selected: false});
     get().setNodes(newNodes);
   },
-  resetFlow: ({ nodes, edges, viewport }) => {
+  resetFlow: ({ nodes, edges }) => {
     set({
       nodes,
       edges,
     });
-    get().reactFlowInstance!.setViewport(viewport);
   },
 }));
 

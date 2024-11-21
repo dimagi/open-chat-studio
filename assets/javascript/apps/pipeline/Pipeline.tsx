@@ -57,7 +57,6 @@ export default function Pipeline() {
       resetFlow({
         nodes: currentPipeline?.data?.nodes ?? [],
         edges: currentPipeline?.data?.edges ?? [],
-        viewport: currentPipeline?.data?.viewport ?? {zoom: 1, x: 0, y: 0},
       });
     }
   }, [currentPipelineId, reactFlowInstance]);
@@ -99,7 +98,7 @@ export default function Pipeline() {
   );
 
   const onNodeDragStop: NodeDragHandler = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
+    autoSaveCurrentPipline(nodes, edges);
   }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
 
   function handleDelete(e: KeyboardEvent) {
