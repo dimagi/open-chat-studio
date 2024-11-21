@@ -738,6 +738,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
+    def compare_with_latest(self):
+        """
+        Returns a boolean if the experiment differs from the lastest version
+        """
+        version = self.version
+        if prev_version := self.latest_version:
+            version.compare(prev_version.version)
+        return version.fields_changed
+
     def _copy_pipeline_to_new_version(self, new_version):
         if not self.pipeline:
             return
