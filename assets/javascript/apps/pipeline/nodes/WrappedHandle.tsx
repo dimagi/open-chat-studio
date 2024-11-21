@@ -1,20 +1,24 @@
 import {Handle, Position, useUpdateNodeInternals} from "reactflow";
 import React, {useEffect, useRef, useState} from "react";
 
-export default function WrappedHandle(props: {nodeId: string, label: string, classes: string, id: string, position: Position}) {
-  const ref = useRef<any>();
+export default function WrappedHandle(props: {
+  nodeId: string,
+  label: string,
+  classes: string,
+  id: string,
+  position: Position,
+  parentBounds?: DOMRect
+}) {
   const [position, setPosition] = useState(0);
+  const ref = useRef<any>();
   const updateNodeInternals = useUpdateNodeInternals()
+
   useEffect(() => {
     if (ref.current && ref.current.offsetTop && ref.current.clientHeight) {
       setPosition(ref.current.offsetTop + ref.current.clientHeight / 2)
       updateNodeInternals(props.nodeId)
     }
-  }, [props.nodeId, ref, updateNodeInternals])
-
-  useEffect(() => {
-    updateNodeInternals(props.nodeId)
-  }, [props.nodeId, position, updateNodeInternals])
+  }, [props.nodeId, props.parentBounds, updateNodeInternals])
 
   return (
     <div ref={ref} className={props.classes}>
