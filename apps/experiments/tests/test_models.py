@@ -448,6 +448,33 @@ class TestExperimentSession:
 
         assert experiment_session.experiment_version_for_display == expected_display_val
 
+    @pytest.mark.parametrize("participant_data_injected", [True, False])
+    def test_requires_participant_data(self, participant_data_injected):
+        prompt = "data: {participant_data}" if participant_data_injected else "data"
+        # Case 1 - Experiment only
+        session = ExperimentSessionFactory(experiment__prompt_text=prompt)
+        assert session.requires_participant_data() == participant_data_injected
+
+        # Case 2 - Assistant
+        session = ExperimentSessionFactory(experiment__assistant=OpenAiAssistantFactory(instructions=prompt))
+        assert session.requires_participant_data() == participant_data_injected
+
+        def _test_pipline(node_type, params):
+            pipeline = PipelineFactory()
+            NodeFactory(pipeline=pipeline, type=node_type, params=params)
+            session = ExperimentSessionFactory(experiment__pipeline=pipeline)
+            assert session.requires_participant_data() == participant_data_injected
+
+        # Case 3 - Pipeline Assistant Node
+        assistant = OpenAiAssistantFactory(instructions=prompt)
+        _test_pipline("AssistantNode", params={"assistant_id": assistant.id})
+
+        # Case 4 - Pipeline LLMResponseWithPrompt Node
+        _test_pipline("LLMResponseWithPrompt", params={"prompt": prompt})
+
+        # Case 5 - Pipeline Router Node
+        _test_pipline("RouterNode", params={"prompt": prompt})
+
 
 class TestParticipant:
     @pytest.mark.django_db()

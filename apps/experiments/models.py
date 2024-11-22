@@ -1578,3 +1578,24 @@ class ExperimentSession(BaseTeamModel):
         experiment's version number
         """
         return self.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION, Experiment.DEFAULT_VERSION_NUMBER)
+
+    def requires_participant_data(self) -> bool:
+        """Determines if participant data is required for this session"""
+        from apps.assistants.models import OpenAiAssistant
+        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
+
+        if self.experiment.assistant:
+            return "{participant_data}" in self.experiment.assistant.instructions
+        elif self.experiment.pipeline:
+            assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
+            results = OpenAiAssistant.objects.filter(
+                id__in=assistant_ids, instructions__contains="{participant_data}"
+            ).exists()
+            if results:
+                return True
+            llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
+            router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
+            prompts = llm_prompts + router_prompts
+            return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
+        else:
+            return "{participant_data}" in self.experiment.prompt_text

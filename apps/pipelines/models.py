@@ -219,6 +219,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         super().archive()
         self.node_set.update(is_archived=True)
 
+    def get_node_param_values(self, node_cls, param_name: str) -> list:
+        return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
+
 
 class Node(BaseModel, VersionsMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
