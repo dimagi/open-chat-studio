@@ -81,7 +81,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import async_export_chat, get_response_for_webchat_task
+from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -562,10 +562,11 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         return context
 
     def form_valid(self, form):
-        working_experiment = self.get_object()
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_experiment.create_new_version(version_description=description, make_default=is_default)
+        async_create_experiment_version.delay(
+            experiment_id=self.kwargs["experiment_id"], version_description=description, make_default=is_default
+        )
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):

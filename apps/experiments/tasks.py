@@ -35,6 +35,13 @@ def async_export_chat(self, experiment_id: int, tags: list[str] = None, particip
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
+def async_create_experiment_version(self, experiment_id: int, *arg, **kwargs) -> dict:
+    experiment = Experiment.objects.prefetch_related("assistant", "pipeline").get(id=experiment_id)
+    with current_team(experiment.team):
+        experiment.create_new_version(*arg, **kwargs)
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
     self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
 ) -> dict:
