@@ -26,8 +26,8 @@ from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, P
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.service_providers.llm_service.runnables import AssistantAgentRunnable, AssistantRunnable, ChainOutput
-from apps.service_providers.llm_service.state import PipelineAssistantState
+from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
+from apps.service_providers.llm_service.state import PipelineAdapter
 from apps.service_providers.models import LlmProviderModel
 
 
@@ -572,7 +572,7 @@ class AssistantNode(PipelineNode):
         )
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
-        assistant_state = PipelineAssistantState(
+        assistant_state = PipelineAdapter(
             assistant=assistant,
             session=session,
             trace_service=session.experiment.trace_service,
@@ -581,6 +581,6 @@ class AssistantNode(PipelineNode):
         )
 
         if assistant.tools_enabled:
-            return AssistantAgentRunnable(state=assistant_state)
+            return AgentAssistantChat(state=assistant_state)
         else:
-            return AssistantRunnable(state=assistant_state)
+            return AssistantChat(state=assistant_state)
