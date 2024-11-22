@@ -40,8 +40,8 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             input,  # the output of the last Passthrough
         ],
         outputs={
-            "first": "foo",
-            "second": "foo",
+            "first": {"message": "foo"},
+            "second": {"message": "foo"},
         },
     )
 

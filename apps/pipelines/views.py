@@ -1,5 +1,8 @@
 import inspect
+import json
 
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -10,6 +13,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
@@ -19,6 +23,7 @@ from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineRunTable, PipelineTable
+from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -98,7 +103,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [_option(provider.id, provider.name, str(provider)) for provider in llm_provider_models],
+        "LlmProviderModelId": [_option(provider.id, str(provider), provider.type) for provider in llm_provider_models],
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
@@ -222,3 +227,21 @@ def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
         "pipelines/pipeline_run_details.html",
         {"pipeline_run": pipeline_run},
     )
+
+
+@login_and_team_required
+@require_POST
+@csrf_exempt
+@permission_required("pipelines.change_pipeline")
+def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
+    message = json.loads(request.body).get("message")
+    result = get_response_for_pipeline_test_message.delay(pipeline_id=pipeline_pk, message_text=message)
+    return JsonResponse({"task_id": result.task_id})
+
+
+@login_and_team_required
+@csrf_exempt
+@permission_required("pipelines.change_pipeline")
+def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, task_id: str):
+    progress = Progress(AsyncResult(task_id)).get_info()
+    return JsonResponse(progress)

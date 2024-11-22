@@ -37,7 +37,7 @@ class RenderTemplate(PipelineNode):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Render a template"))
 
     template_string: str = Field(
-        description="Use {your_variable_name} to refer to designate input",
+        description="Use {{your_variable_name}} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
@@ -184,16 +184,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
         context = self._get_context(input, state, prompt, node_id)
-        if self.history_type != PipelineChatHistoryTypes.NONE:
+        session: ExperimentSession | None = state.get("experiment_session")
+        if self.history_type != PipelineChatHistoryTypes.NONE and session is not None:
             input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+            context["history"] = self._get_history(session, node_id, input_messages)
         chain = prompt | super().get_chat_model()
         output = chain.invoke(context, config=self._config)
-        self._save_history(state["experiment_session"], node_id, input, output.content)
+        if session is not None:
+            self._save_history(session, node_id, input, output.content)
         return PipelineState.from_node_output(node_id=node_id, output=output.content)
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
-        session: ExperimentSession = state["experiment_session"]
+        session: ExperimentSession | None = state.get("experiment_session")
         context = {"input": input}
 
         template_context = PromptTemplateContext(session, self.source_material_id)
@@ -232,7 +234,8 @@ class Passthrough(PipelineNode):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing"))
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
-        self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
+        if self.logger:
+            self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
@@ -243,14 +246,14 @@ class BooleanNode(Passthrough):
 
     input_equals: str
 
-    def process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
+    def _process_conditional(self, state: PipelineState, node_id: str | None = None) -> Literal["true", "false"]:
         if self.input_equals == state["messages"][-1]:
             return "true"
         return "false"
 
     def get_output_map(self):
         """A mapping from the output handles on the frontend to the return values of process_conditional"""
-        return {"output_true": "true", "output_false": "false"}
+        return {"output_0": "true", "output_1": "false"}
 
 
 class RouterNode(Passthrough, HistoryMixin):
@@ -274,23 +277,25 @@ class RouterNode(Passthrough, HistoryMixin):
             raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
         return value
 
-    def process_conditional(self, state: PipelineState, node_id=None):
+    def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
 
         node_input = state["messages"][-1]
         context = {"input": node_input}
+        session: ExperimentSession | None = state.get("experiment_session")
 
-        if self.history_type != PipelineChatHistoryTypes.NONE:
+        if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(state["experiment_session"], node_id, input_messages)
+            context["history"] = self._get_history(session, node_id, input_messages)
 
         chain = prompt | self.get_chat_model()
 
         result = chain.invoke(context, config=self._config)
         keyword = self._get_keyword(result)
-        self._save_history(state["experiment_session"], node_id, node_input, keyword)
+        if session:
+            self._save_history(session, node_id, node_input, keyword)
         return keyword
 
     def _get_keyword(self, result):
@@ -327,7 +332,7 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, json_schema, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(json_schema)
 
-    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> str:
+    def _process(self, input, state: PipelineState, node_id: str, **kwargs) -> PipelineState:
         json_schema = self.to_json_schema(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, json_schema)
@@ -470,7 +475,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        session = state["experiment_session"]
+        session = state.get("experiment_session")
+        if not session:
+            return {}
+
         participant_data = (
             ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
         )
@@ -492,7 +500,10 @@ class ExtractParticipantData(ExtractStructuredDataNodeMixin, LLMResponse, Struct
         return new_data
 
     def post_extraction_hook(self, output, state):
-        session = state["experiment_session"]
+        session = state.get("experiment_session")
+        if not session:
+            return
+
         if self.key_name:
             output = {self.key_name: output}
 

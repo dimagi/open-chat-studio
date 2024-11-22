@@ -67,9 +67,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
-    def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["version_number"]
-
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
@@ -132,6 +129,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @cached_property
     def node_ids(self):
         return self.node_set.values_list("flow_id", flat=True).all()
+
+    def simple_invoke(self, input: str) -> PipelineState:
+        """Invoke the pipeline without a session or the ability to save the run to history"""
+
+        from apps.pipelines.graph import PipelineGraph
+
+        runnable = PipelineGraph.build_runnable_from_pipeline(self)
+        output = runnable.invoke(PipelineState(messages=[input]))
+        return output
 
     def invoke(
         self, input: PipelineState, session: ExperimentSession, save_run_to_history: bool = True

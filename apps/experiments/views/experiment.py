@@ -363,6 +363,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
 
+        fields_changed = self.object.compare_with_latest()
         return {
             **{
                 "title": self.title,
@@ -371,6 +372,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
+                "disable_version_button": not bool(fields_changed),
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -399,7 +401,12 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 request=self.request, message="A seed message is required when conversational consent is enabled!"
             )
             return render(self.request, self.template_name, self.get_context_data())
-        return super().form_valid(form)
+        response = super().form_valid(form)
+
+        if self.request.POST.get("action") == "save_and_version":
+            return redirect("experiments:create_version", self.request.team.slug, experiment.id)
+
+        return response
 
 
 class CreateExperiment(BaseExperimentView, CreateView):

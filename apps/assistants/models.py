@@ -97,7 +97,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         return self.custom_action_operations.exists()
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["assistant_id", "version_number"]
+        return super().get_fields_to_exclude() + ["assistant_id"]
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
