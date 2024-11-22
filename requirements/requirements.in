@@ -21,6 +21,7 @@ django-redis
 django-storages[s3]
 django-tables2
 django-taggit
+django-template-partials
 django-tz-detect
 django-waffle
 django_celery_beat

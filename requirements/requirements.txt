@@ -114,6 +114,7 @@ django==5.1.2
     #   django-storages
     #   django-tables2
     #   django-taggit
+    #   django-template-partials
     #   django-timezone-field
     #   django-tz-detect
     #   django-waffle
@@ -152,6 +153,8 @@ django-storages[s3]==1.14.2
 django-tables2==2.6.0
     # via -r requirements.in
 django-taggit==5.0.1
+    # via -r requirements.in
+django-template-partials==24.4
     # via -r requirements.in
 django-timezone-field==7.0
     # via django-celery-beat
