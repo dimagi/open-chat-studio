@@ -362,8 +362,10 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
             team_participant_identifiers = set(team_participant_identifiers)
+            fields_changed = self.object.compare_with_latest()
+        else:
+            fields_changed = []
 
-        fields_changed = self.object.compare_with_latest()
         return {
             **{
                 "title": self.title,
