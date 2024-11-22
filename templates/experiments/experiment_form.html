@@ -129,12 +129,7 @@
       {% flag "experiment_versions" %}
         <button type="submit" class="pg-button-secondary" name="action" {% if disable_version_button %}disabled="True"{% endif %} value="save_and_version">Create Version</button>
       {% endflag %}
-      <form action="{% url 'experiments:archive' team_slug=team.slug pk=experiment.id %}" method="post" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
-        {% csrf_token %}
-        <button type="submit" class="pg-button-danger">
-          Archive
-        </button>
-      </form>
+      <button type="submit" class="pg-button-danger" name="action" value="save_and_archive" onclick="return confirm('Are you sure you want to archive this experiment?');">Archive</button>
     {% endif %}
   </div>
 {% endblock %}

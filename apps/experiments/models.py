@@ -747,6 +747,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
             version.compare(prev_version.version)
         return version.fields_changed
 
+    def archive_working_experiment(self):
+        if self.is_working_version:
+            if self.has_versions:
+                for version in self.versions.all():
+                    version.archive()
+            self.archive()
+
     def _copy_pipeline_to_new_version(self, new_version):
         if not self.pipeline:
             return

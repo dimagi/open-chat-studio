@@ -408,6 +408,10 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.request.POST.get("action") == "save_and_version":
             return redirect("experiments:create_version", self.request.team.slug, experiment.id)
 
+        if self.request.POST.get("action") == "save_and_archive":
+            experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
+            experiment.archive_working_experiment()
+            return redirect("experiments:experiments_home", self.request.team.slug)
         return response
 
 
@@ -1371,21 +1375,6 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         + "#versions"
     )
     return redirect(url)
-
-
-@require_POST
-@transaction.atomic
-@login_and_team_required
-def archive_working_experiment_and_all_versions(request, team_slug: str, pk: int):
-    """
-    Archives a working experiment along with all it's the versioned experiments
-    """
-    experiment = get_object_or_404(Experiment, id=pk, team=request.team)
-    if experiment.has_versions:
-        for version in experiment.versions.all():
-            version.archive()
-    experiment.archive()
-    return redirect("experiments:experiments_home", team_slug=team_slug)
 
 
 @require_POST
