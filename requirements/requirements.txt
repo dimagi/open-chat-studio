@@ -2,7 +2,7 @@
 #    inv requirements
 aiohappyeyeballs==2.3.5
     # via aiohttp
-aiohttp==3.10.2
+aiohttp==3.10.11
     # via
     #   aiohttp-retry
     #   langchain
@@ -316,6 +316,8 @@ phonenumberslite==8.13.47
     # via -r requirements.in
 prompt-toolkit==3.0.41
     # via click-repl
+propcache==0.2.0
+    # via yarl
 psycopg[binary]==3.2.1
     # via -r requirements.in
 psycopg-binary==3.2.1
@@ -513,5 +515,5 @@ whitenoise[brotli]==6.6.0
     # via -r requirements.in
 wrapt==1.16.0
     # via langfuse
-yarl==1.9.2
+yarl==1.18.0
     # via aiohttp
