@@ -62,6 +62,7 @@ IGNORE_APPS = {
     "socialaccount",
     "staticfiles",
     "taggit",
+    "template_partials",
     "tz_detect",
     "users",
     "waffle",
