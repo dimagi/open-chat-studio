@@ -1376,6 +1376,21 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
 @require_POST
 @transaction.atomic
 @login_and_team_required
+def archive_working_experiment_and_all_versions(request, team_slug: str, experiment_id: int):
+    """
+    Archives a working experiment along with all it's the versioned experiments
+    """
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    if experiment.has_versions():
+        for version in experiment.versions:
+            version.archive()
+    experiment.archive()
+    return redirect("experiments:experiments_home", team_slug=team_slug)
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
 def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
     """
     Archives a single realeased version of an experiment
