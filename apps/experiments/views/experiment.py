@@ -1393,7 +1393,7 @@ def archive_working_experiment_and_all_versions(request, team_slug: str, experim
 @login_and_team_required
 def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
     """
-    Archives a single realeased version of an experiment
+    Archives a single released version of an experiment, unless it's the default version
     """
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
@@ -1407,8 +1407,7 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
     )
     if experiment.is_default_version:
         return redirect(url)
-    experiment.is_archived = True
-    experiment.save()
+    experiment.archive()
     return redirect(url)
 
 
