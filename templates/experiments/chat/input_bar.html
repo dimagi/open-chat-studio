@@ -20,55 +20,59 @@
   <div class="flex flex-col" {% if assistant %}x-data="fileUploads"{% endif %}>
     <div class="flex items-center w-full">
       {% if assistant %}
-        <div class="flex flex-row gap-2">
-          <div class="dropdown dropdown-top">
-            <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
-            <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
-              <li>
-                <a
-                  class="btn btn-sm"
-                  {% if not assistant.supports_code_interpreter %}
-                    disabled
-                  {% else %}
-                    x-bind:disabled="disableCodeInterpreterUpload"
-                  {% endif %}
-                  @click="$refs.codeInterpreter.click()">
-                  Code Interpreter
-                </a>
-              </li>
-              <li>
-                <a
-                  class="btn btn-sm"
-                  {% if not assistant.supports_file_search %} disabled {% endif %}
-                  @click="$refs.fileSearch.click()">
-                  File Search
-                </a>
-              </li>
-            </ul>
-          </div>
+        {% if assistant.supports_code_interpreter and assistant.supports_file_search %}
+          <div class="flex flex-row gap-2">
+            <div class="dropdown dropdown-top">
+              <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
+              <ul tabindex="0"
+                  class="dropdown-content menu bg-base-100 rounded-box z-[1] w-40 p-2 shadow content-start">
+                <li>
+                  <a x-bind:disabled="disableCodeInterpreterUpload" @click="$refs.codeInterpreter.click()">Code
+                    Interpreter</a>
+                </li>
+                <li>
+                  <a @click="$refs.fileSearch.click()">File Search</a>
+                </li>
+              </ul>
+            </div>
+            {% partialdef code-interpreter-input inline=True %}
           <!-- Supported file types for code interpreter: https://platform.openai.com/docs/assistants/tools/code-interpreter/supported-files -->
-          <input
-            x-ref="codeInterpreter"
-            hidden
-            name="code_interpreter"
-            type="file"
-            @change="handleFileChange($event, 'code_interpreter_files')"
-            multiple
-            accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts,.csv,.jpeg,.jpg,.gif,.png,.tar,.xlsx,.xml,.zip"
-            class="file-input file-input-bordered file-input-sm w-full max-w-xs"
-          />
+              <input
+                x-ref="codeInterpreter"
+                hidden
+                name="code_interpreter"
+                type="file"
+                @change="handleFileChange($event, 'code_interpreter_files')"
+                multiple
+                accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts,.csv,.jpeg,.jpg,.gif,.png,.tar,.xlsx,.xml,.zip"
+                class="file-input file-input-bordered file-input-sm w-full max-w-xs"
+              />
+            {% endpartialdef %}
+            {% partialdef file-search-input inline=True %}
           <!-- Supported file types for file search: https://platform.openai.com/docs/assistants/tools/file-search/supported-files -->
-          <input
-            x-ref="fileSearch"
-            hidden
-            name="file_search"
-            type="file"
-            @change="handleFileChange($event, 'file_search_files')"
-            multiple
-            accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
-            class="file-input file-input-bordered file-input-sm w-full max-w-xs"
-          />
-        </div>
+              <input
+                x-ref="fileSearch"
+                hidden
+                name="file_search"
+                type="file"
+                @change="handleFileChange($event, 'file_search_files')"
+                multiple
+                accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
+                class="file-input file-input-bordered file-input-sm w-full max-w-xs"
+              />
+            {% endpartialdef %}
+          </div>
+        {% elif assistant.supports_code_interpreter %}
+          <div role="button" class="btn m-1" x-bind:disabled="disableCodeInterpreterUpload"
+               @click="$refs.codeInterpreter.click()">
+            <i class="fa-solid fa-paperclip"></i>
+          </div>
+          {% partial code-interpreter-input %}
+        {% elif assistant.supports_file_search %}
+          <div role="button" class="btn m-1" @click="$refs.fileSearch.click()"><i class="fa-solid fa-paperclip"></i>
+          </div>
+          {% partial file-search-input %}
+        {% endif %}
       {% endif %}
       <input name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full" oninput="checkInput()">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
@@ -105,7 +109,7 @@
     {% endif %}
   </div>
   <div class="w-full mt-2 text-center">
-    <label for="end-experiment-modal" class="btn btn-warning btn-xs" >End Experiment</label>
+    <label for="end-experiment-modal" class="btn btn-warning btn-xs">End Experiment</label>
   </div>
 </form>
 
@@ -113,7 +117,7 @@
   <script>
     document.addEventListener('alpine:init', () => {
       const megabyte_in_bytes = 1048576;
-      const byte_limit = megabyte_in_bytes*512;
+      const byte_limit = megabyte_in_bytes * 512;
       const code_interpreter_max_files = 20
       Alpine.data('fileUploads', () => ({
         code_interpreter_files: [],
@@ -124,12 +128,12 @@
           const files = Array.from(event.target.files);
 
           let new_upload_bytes = 0
-          for (let i = 0; i < files.length; i++){
+          for (let i = 0; i < files.length; i++) {
             new_upload_bytes = new_upload_bytes + files[i].size
           }
 
           if (this.total_upload_size_bytes + new_upload_bytes > byte_limit) {
-            let current_files_mb = this.total_upload_size_bytes/megabyte_in_bytes
+            let current_files_mb = this.total_upload_size_bytes / megabyte_in_bytes
             let message = "Unable to add new file(s). The maximum upload capacity is 512MB. Current size is " + current_files_mb + "MB";
             alert(message);
             return;
