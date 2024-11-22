@@ -76,6 +76,7 @@ THIRD_PARTY_APPS = [
     "health_check.cache",
     "health_check.contrib.celery",
     "health_check.contrib.redis",
+    "template_partials",
 ]
 
 PROJECT_APPS = [
@@ -161,6 +162,7 @@ TEMPLATES = [
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [
                 "apps.web.templatetags.default_tags",
+                "template_partials.templatetags.partials",
             ],
         },
     },
