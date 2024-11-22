@@ -1376,7 +1376,10 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def archive_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """
+    Archives a single realeased version of an experiment
+    """
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
