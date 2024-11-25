@@ -588,6 +588,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     debug_mode_enabled = models.BooleanField(default=False)
     citations_enabled = models.BooleanField(default=True)
+    create_version_task_id = models.CharField(max_length=128, blank=True)
     objects = ExperimentObjectManager()
 
     class Meta:

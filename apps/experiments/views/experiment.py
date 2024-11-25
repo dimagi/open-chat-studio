@@ -564,9 +564,17 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
     def form_valid(self, form):
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        async_create_experiment_version.delay(
-            experiment_id=self.kwargs["experiment_id"], version_description=description, make_default=is_default
-        )
+        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        if working_version.create_version_task_id:
+            messages.error(self.request, "Version creation is already in progress.")
+        else:
+            task_id = async_create_experiment_version.delay(
+                experiment_id=working_version.id, version_description=description, make_default=is_default
+            )
+            working_version.create_version_task_id = task_id
+            working_version.save(update_fields=["create_version_task_id"])
+            messages.success(self.request, "Creating new version. This might take a few minutes.")
+
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
