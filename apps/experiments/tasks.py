@@ -36,11 +36,13 @@ def async_export_chat(self, experiment_id: int, tags: list[str] = None, particip
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_create_experiment_version(self, experiment_id: int, *arg, **kwargs) -> dict:
+def async_create_experiment_version(
+    self, experiment_id: int, version_description: str | None = None, make_default: bool = False
+):
     try:
         experiment = Experiment.objects.prefetch_related("assistant", "pipeline").get(id=experiment_id)
         with current_team(experiment.team):
-            experiment.create_new_version(*arg, **kwargs)
+            experiment.create_new_version(version_description, make_default)
     finally:
         Experiment.objects.filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
