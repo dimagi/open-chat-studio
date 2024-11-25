@@ -1,4 +1,4 @@
-import {Edge, Node, Viewport} from "reactflow";
+import {Edge, Node} from "reactflow";
 import {PipelineType} from "./pipeline";
 
 export type PipelineManagerStoreType = {
@@ -14,7 +14,6 @@ export type PipelineManagerStoreType = {
   autoSaveCurrentPipline: (
     nodes: Node[],
     edges: Edge[],
-    viewport: Viewport
   ) => void;
   // Errors
   errors: {[nodeId: string]: {[name: string]: string}},

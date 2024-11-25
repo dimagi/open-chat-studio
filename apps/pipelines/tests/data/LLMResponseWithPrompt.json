@@ -38,10 +38,10 @@
       "ui:widget": "history"
     },
     "history_name": {
-      "default": "",
+      "default": null,
       "title": "History Name",
-      "type": "string",
-      "ui:widget": "none"
+      "ui:widget": "none",
+      "type": "string"
     },
     "source_material_id": {
       "default": null,

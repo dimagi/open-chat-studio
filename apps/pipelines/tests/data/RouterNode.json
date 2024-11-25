@@ -38,13 +38,14 @@
       "ui:widget": "history"
     },
     "history_name": {
-      "default": "",
+      "default": null,
       "title": "History Name",
-      "type": "string",
-      "ui:widget": "none"
+      "ui:widget": "none",
+      "type": "string"
     },
     "prompt": {
       "default": "You are an extremely helpful router",
+      "minLength": 1,
       "title": "Prompt",
       "type": "string",
       "ui:widget": "expandable_text"

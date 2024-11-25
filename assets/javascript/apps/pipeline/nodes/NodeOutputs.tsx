@@ -57,7 +57,7 @@ function getOutputNames(nodeType: string, params: NodeParams) {
     const numberOfOutputs = Math.max(1, parseInt(concatenate(params.num_outputs)) || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {
       if (params.keywords?.[i]) {
-        return `Keyword '${params.keywords[i]}'`
+        return params.keywords[i]
       }
       return `Output ${i + 1}`
     });
