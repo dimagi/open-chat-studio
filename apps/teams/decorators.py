@@ -4,6 +4,10 @@ from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 
 
+class TeamAccessDenied(Http404):
+    pass
+
+
 def login_and_team_required(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
@@ -20,6 +24,6 @@ def valid_auth_and_membership(request):
 
     if not request.team or not request.team_membership:
         # treat not having access to a team like a 404 to avoid accidentally leaking information
-        raise Http404
+        raise TeamAccessDenied
 
     return True
