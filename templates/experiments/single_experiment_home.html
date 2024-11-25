@@ -256,11 +256,9 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
-          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' team.slug experiment.id %}">
-            <i class="fa-regular fa-plus"></i> Create Version
-          </a>
+          {% include 'experiments/create_version_button.html' %}
           <div id="versions-table"
-               hx-trigger="load"
+               hx-trigger="load,refetch-versions"
                hx-target="this"
                hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
                hx-swap="innerHTML">

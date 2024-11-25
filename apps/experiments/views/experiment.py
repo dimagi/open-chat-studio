@@ -373,7 +373,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": not bool(fields_changed),
+                "disable_version_button": (not bool(fields_changed)) or self.object.create_version_task_id,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -586,6 +586,20 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             },
         )
         return f"{url}#versions"
+
+
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
+def version_create_status(request, team_slug: str, experiment_id: int):
+    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
+    return TemplateResponse(
+        request,
+        "experiments/create_version_button.html",
+        {
+            "active_tab": "experiments",
+            "experiment": experiment,
+        },
+    )
 
 
 @login_and_team_required

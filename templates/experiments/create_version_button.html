@@ -1,0 +1,15 @@
+{% if experiment.create_version_task_id %}
+  <div class="tooltip" data-tip="A new version is being created"
+       hx-get="{% url 'experiments:check_version_creation_status' experiment.team.slug experiment.id %}"
+       hx-trigger="every 2s"
+       hx-swap="outerHTML"
+  >
+    <button class="btn btn-sm btn-outline btn-primary mb-2 no-animation" disabled>
+      <i class="fa-regular fa-plus"></i> Create Version
+    </button>
+  </div>
+{% else %}
+  <a x-init='htmx.trigger("#versions-table", "refetch-versions")' class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}">
+    <i class="fa-regular fa-plus"></i> Create Version
+  </a>
+{% endif %}
