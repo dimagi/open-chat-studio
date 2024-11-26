@@ -447,7 +447,9 @@ class CreateExperiment(BaseExperimentView, CreateView):
         if file_formset:
             files = file_formset.save(self.request)
             self.object.files.set(files)
-        self.object.create_new_version()
+
+        if flag_is_active(self.request, "experiment_versions"):
+            self.object.create_new_version()
 
         return HttpResponseRedirect(self.get_success_url())
 
