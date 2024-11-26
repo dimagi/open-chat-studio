@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 
 from celery.app import shared_task
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.base import ContentFile
 from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
@@ -26,7 +26,7 @@ def async_export_chat(self, experiment_id: int, tags: list[str] = None, particip
     csv_in_memory = experiment_to_csv(experiment, tags, participant)
     bytes_buffer = io.BytesIO(csv_in_memory.getvalue().encode("utf-8"))
     bytes_buffer.seek(0)
-    uploaded_file = SimpleUploadedFile(name="chat_export.csv", content=bytes_buffer.read(), content_type="text/csv")
+    uploaded_file = ContentFile(name="chat_export.csv", content=bytes_buffer.read(), content_type="text/csv")
     file = File.objects.create(
         name=uploaded_file.name,
         file=uploaded_file,
@@ -121,7 +121,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
             "id": f"s{int(time.time() * 1000)}",
         }
     )
-    history_event |= {"preview": answer, "time": timedelta.now().time().strftime("%H:%M")}
+    history_event |= {"preview": answer, "time": timezone.now().time().strftime("%H:%M")}
     PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}
 

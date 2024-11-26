@@ -1103,6 +1103,8 @@ def get_export_download_link(request, team_slug: str, experiment_id: str, task_i
     return TemplateResponse(request, "experiments/components/exports.html", context)
 
 
+@login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
 def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
