@@ -1,8 +1,33 @@
 {% extends 'error_base.html' %}
 {% load i18n %}
+{% block top_nav %}{% endblock top_nav %}
+{% block notices %}{% endblock %}
 {% block error_details %}
   <h1 class="pg-title">{% translate "Shucks. We couldn't find that." %}</h1>
   <h2 class="pg-subtitle">
     {% translate "If you think this page should exist, double-check that you are signed in as the right person." %}
   </h2>
+  {% if request.user.is_superuser and exception == "TeamAccessDenied" and request.resolver_match.kwargs.team_slug %}
+    <div class="mt-4 alert">
+      <div class="prose">
+        <p>It looks like you're trying to access Team "{{ request.team.name }}" but you aren't a member.</p>
+        <p>
+          Do you want to use your superuser powers as <span class="font-bold text-lg">{{ request.user.email }}</span>
+          to gain temporary access?
+        </p>
+        <form class="mt-6 space-y-6" method="post" action="{% url "teams:sudo" request.resolver_match.kwargs.team_slug %}">
+          {% csrf_token %}
+          <div class="form-control w-full">
+            <label class="label font-bold" for="id_password">Password</label>
+            <input class="input input-bordered w-full " type="password" name="password" required="" id="id_password">
+            <small class="form-text text-muted"></small>
+          </div>
+          <input type="hidden" name="redirect" value="{{ request_path }}" id="id_redirect">
+          <div>
+            <button class="btn btn-warning" type="submit">Authenticate to continue</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
 {% endblock %}

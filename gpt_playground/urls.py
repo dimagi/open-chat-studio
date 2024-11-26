@@ -70,5 +70,3 @@ urlpatterns = [
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-handler404 = "apps.teams.views.handler404.page_not_found"

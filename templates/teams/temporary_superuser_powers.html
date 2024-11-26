@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% load i18n %}
+{% load form_tags %}
+{% load static %}
+{% block notices %}{% endblock notices %}
+{% block body %}
+  <div class="flex justify-center my-8">
+    <div class="w-96 px-4 py-4 bg-white rounded-lg shadow">
+      <div>
+        <h2 class="mt-6 text-center text-2xl font-bold text-gray-900">
+          Please confirm your identity as {{ request.user.email }}
+        </h2>
+        <form class="mt-6 space-y-6" method="post">
+          {% csrf_token %}
+          {{ form.non_field_errors }}
+          {% render_form_fields form %}
+          <div>
+            <input class="btn btn-primary btn-block" type="submit" value="{% translate "Continue" %}">
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock%}

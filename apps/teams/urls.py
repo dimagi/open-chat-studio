@@ -9,6 +9,7 @@ urlpatterns = [
     # invitation acceptance views
     path("invitation/<slug:invitation_id>/", views.accept_invitation, name="accept_invitation"),
     path("invitation/<slug:invitation_id>/signup/", views.SignupAfterInvite.as_view(), name="signup_after_invite"),
+    path("sudo/<slug:team_slug>/", views.acquire_superuser_powers, name="sudo"),
 ]
 
 team_urlpatterns = (
