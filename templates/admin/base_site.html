@@ -1,0 +1,34 @@
+{# override Django admin base site template #}
+{% extends "admin/base.html" %}
+{% load humanize %}
+
+{% block extrastyle %}
+  <style>
+    .releaselink {
+      display: block;
+      background: var(--delete-button-bg);
+      border-radius: 4px;
+      padding: 0.625rem 0.9375rem;
+      height: 0.9375rem;
+      line-height: 0.9375rem;
+      color: var(--button-fg);
+    }
+  </style>
+{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} |
+  {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+  <div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
+  {% if user.is_anonymous %}
+    {% include "admin/color_theme_toggle.html" %}
+  {% endif %}
+  {% if temporary_superuser_access and "admin_site" in temporary_superuser_access %}
+    <div>
+      <a href="{% url "web:release_sudo" "admin_site" %}" class="releaselink">Release Admin Access</a>
+      Expires in {{ temporary_superuser_access.admin_site|timeuntil }}
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

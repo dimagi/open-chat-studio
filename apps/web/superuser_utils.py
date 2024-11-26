@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.utils import timezone
 
@@ -43,4 +43,4 @@ def remove_expired_temporary_superuser_access(request):
 
 def get_temporary_superuser_access(request):
     remove_expired_temporary_superuser_access(request)
-    return [access[0] for access in request.session.get("elevated_privileges", [])]
+    return {access[0]: datetime.fromtimestamp(access[1]) for access in request.session.get("elevated_privileges", [])}

@@ -1,11 +1,14 @@
 {% if temporary_superuser_access %}
   <div class="alert bg-red-300 dark:bg-red-800 shadow-md !rounded-none text-warning-content">
     You are operating with escalated privileges. Release access:
-    {% for slug in temporary_superuser_access %}
-      <a href="{% url 'web:release_sudo' slug %}" class="btn btn-warning btn-xs">
-        {{ slug }}
-      </a>
-    {% endfor %}
+    <div>
+      {% for slug, expires in temporary_superuser_access.items %}
+        <a href="{% url 'web:release_sudo' slug %}" class="btn btn-warning btn-sm">
+          {{ slug }}
+          <span class="font-light">(expires in {{ expires|timeuntil }})</span>
+        </a>
+      {% endfor %}
+    </div>
   </div>
 {% endif %}
 {% if notices %}

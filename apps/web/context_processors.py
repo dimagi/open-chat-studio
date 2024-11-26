@@ -3,6 +3,7 @@ from copy import copy
 from django.conf import settings
 
 from .meta import absolute_url, get_server_root
+from .superuser_utils import get_temporary_superuser_access
 
 
 def project_meta(request):
@@ -23,6 +24,7 @@ def project_meta(request):
         },
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "signup_enabled": settings.SIGNUP_ENABLED,
+        "temporary_superuser_access": get_temporary_superuser_access(request),
     }
 
 

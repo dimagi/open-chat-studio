@@ -3,7 +3,7 @@ from functools import wraps
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 
-from apps.teams.superuser_utils import has_temporary_superuser_access
+from apps.web.superuser_utils import has_temporary_superuser_access
 
 
 class TeamAccessDenied(Http404):
