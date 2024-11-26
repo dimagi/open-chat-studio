@@ -83,6 +83,8 @@ def acquire_superuser_powers(request, slug):
         "web/temporary_superuser_powers.html",
         {
             "form": form,
+            "is_team_request": is_team_request,
+            "team_slug": slug,
         },
     )
 

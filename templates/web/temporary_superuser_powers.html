@@ -8,13 +8,16 @@
     <div class="w-96 px-4 py-4 bg-white rounded-lg shadow">
       <div>
         <h2 class="mt-6 text-center text-2xl font-bold text-gray-900">
-          Please confirm your identity as {{ request.user.email }}
+          You are requesting access to:<br/>
+          {% if is_team_request %}Team "{{ team_slug }}"{% else %}the Admin Site{% endif %}
         </h2>
-        <form class="mt-6 space-y-6" method="post">
+        <form class="mt-4" method="post">
+          <p class="text-center">Please confirm your identity:</p>
+          <p class="text-center font-bold">{{ request.user.email }}</p>
           {% csrf_token %}
           {{ form.non_field_errors }}
           {% render_form_fields form %}
-          <div>
+          <div class="mt-2">
             <input class="btn btn-primary btn-block" type="submit" value="{% translate "Continue" %}">
           </div>
         </form>
