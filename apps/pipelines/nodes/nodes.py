@@ -239,6 +239,10 @@ class Passthrough(PipelineNode):
         return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
+class StartNode(Passthrough):
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", show_input=False))
+
+
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 

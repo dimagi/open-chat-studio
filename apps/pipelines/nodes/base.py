@@ -159,6 +159,8 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
+    show_input: bool = True
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
+        schema["ui:show_input"] = self.show_input

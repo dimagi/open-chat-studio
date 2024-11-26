@@ -76,7 +76,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       </NodeToolbar>
       <div className={nodeBorder}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
-        <NodeInput />
+
+        {nodeSchema["ui:show_input"] && <NodeInput />}
         <div className="px-4">
           <div>
             {schemaProperties.map((name) => (

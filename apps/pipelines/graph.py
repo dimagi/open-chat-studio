@@ -9,6 +9,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.nodes import StartNode
 
 
 class Node(pydantic.BaseModel):
@@ -51,6 +52,15 @@ class PipelineGraph(pydantic.BaseModel):
         return [edge for edge in self.edges if edge.is_conditional()]
 
     @cached_property
+    def start_node(self) -> Node:
+        start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]
+        if len(start_nodes) != 1:
+            raise PipelineBuildError(
+                f"There should be exactly 1 {StartNode.model_config['json_schema_extra'].label} node"
+            )
+        return start_nodes[0]
+
+    @cached_property
     def conditional_edge_map(self) -> dict[str, dict[str, str]]:
         conditional_edge_map = defaultdict(dict)
         for edge in self.conditional_edges:
@@ -86,14 +96,10 @@ class PipelineGraph(pydantic.BaseModel):
 
         node_ids = {n.id for n in self.nodes}
         incoming = {e.source for e in self.edges}
-        outgoing = {e.target for e in self.edges}
-        start = list(node_ids - outgoing)
         end = list(node_ids - incoming)
-        if len(start) != 1:
-            raise PipelineBuildError(f"Expected 1 start node, got {len(start)}")
         if len(end) != 1:
             raise PipelineBuildError(f"Expected 1 end node, got {len(end)}")
-        state_graph.set_entry_point(start[0])
+        state_graph.set_entry_point(self.start_node.id)
         state_graph.set_finish_point(end[0])
 
         compiled_graph = state_graph.compile()

@@ -7,7 +7,7 @@ from django.core import mail
 from django.test import override_settings
 
 from apps.experiments.models import ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import PipelineState
@@ -928,3 +928,85 @@ def _get_assistant_node_data(assistant_id):
             },
         ],
     }
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_start_node_missing(pipeline):
+    data = {
+        "edges": [],
+        "nodes": [
+            {
+                "id": "Passthrough-1",
+                "data": {
+                    "id": "Passthrough-1",
+                    "type": "Passthrough",
+                    "label": "Do Nothing",
+                    "params": {},
+                    "inputParams": [],
+                },
+            }
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
+        PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_multiple_start_nodes(pipeline):
+    data = {
+        "edges": [
+            {
+                "id": "StartNode -> StartNode",
+                "source": "start-1",
+                "target": "start-2",
+                "sourceHandle": "output",
+                "targetHandle": "input",
+            },
+        ],
+        "nodes": [
+            {
+                "data": {
+                    "id": "start-1",
+                    "label": "Start",
+                    "type": "StartNode",
+                },
+                "id": "start-1",
+            },
+            {
+                "data": {
+                    "id": "start-2",
+                    "label": "Start",
+                    "type": "StartNode",
+                },
+                "id": "start-2",
+            },
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
+        PipelineGraph.build_runnable_from_pipeline(pipeline)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_end_node_missing(pipeline):
+    data = {
+        "edges": [],
+        "nodes": [
+            {
+                "data": {
+                    "id": "start-GUk0C",
+                    "label": "Start",
+                    "type": "StartNode",
+                },
+                "id": "start-GUk0C",
+            }
+        ],
+    }
+    pipeline.data = data
+    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
+        runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    assert runnable.invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1] == "Repeat exactly: 123"
