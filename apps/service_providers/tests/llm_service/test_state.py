@@ -25,7 +25,6 @@ class TestExperimentAdapter:
         assert state.ai_message == ChatMessage.objects.get(message_type=ChatMessageType.AI)
 
 
-# TODO: Reevaluate these tests
 @pytest.mark.django_db()
 class TestAssistantStateSubclasses:
     """
@@ -131,24 +130,6 @@ class TestAssistantStateSubclasses:
         state = self.init_state(state_cls=state_cls, session=session, assistant=assistant)
 
         assert state.chat == session.chat
-
-
-@pytest.mark.django_db()
-class TestBaseRunnableStateSubclasses:
-    def init_state(self, state_cls, **state_kwargs):
-        session = state_kwargs.get("session")
-        trace_service = state_kwargs.get("trace_service")
-        if state_cls == ExperimentAdapter:
-            experiment = session.experiment
-            return ExperimentAdapter(session=session, experiment=experiment, trace_service=trace_service)
-        elif state_cls == PipelineAdapter:
-            return PipelineAdapter(
-                session=session,
-                assistant=state_kwargs.get("assistant"),
-                trace_service=trace_service,
-                input_formatter=state_kwargs.get("input_formatter", ""),
-                citations_enabled=state_kwargs.get("citations_enabled", True),
-            )
 
     @pytest.mark.parametrize("state_cls", [PipelineAdapter, ExperimentAdapter])
     def test_get_llm_service(self, state_cls):
