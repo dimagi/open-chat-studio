@@ -1,18 +1,40 @@
+import io
 import time
-from datetime import datetime
+from datetime import timedelta
 
 from celery.app import shared_task
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
 from apps.chat.channels import WebChannel
+from apps.experiments.export import experiment_to_csv
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
+from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def async_export_chat(self, experiment_id: int, tags: list[str] = None, participant: str = None) -> dict:
+    experiment = Experiment.objects.get(id=experiment_id)
+    csv_in_memory = experiment_to_csv(experiment, tags, participant)
+    # TODO: Update experiment_to_csv to return BytesIO directly
+    bytes_buffer = io.BytesIO(csv_in_memory.getvalue().encode("utf-8"))
+    bytes_buffer.seek(0)
+    uploaded_file = SimpleUploadedFile(name="chat_export.csv", content=bytes_buffer.read(), content_type="text/csv")
+    file = File.objects.create(
+        name=uploaded_file.name,
+        file=uploaded_file,
+        team=experiment.team,
+        expiry_date=timezone.now() + timedelta(days=1),
+    )
+    return {"file_id": file.id}
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -100,7 +122,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
             "id": f"s{int(time.time() * 1000)}",
         }
     )
-    history_event |= {"preview": answer, "time": datetime.now().time().strftime("%H:%M")}
+    history_event |= {"preview": answer, "time": timedelta.now().time().strftime("%H:%M")}
     PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}
 

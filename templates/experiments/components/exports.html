@@ -1,0 +1,21 @@
+<div class="flex flex-row gap-1" id="chat-exports">
+    <button
+        class="btn btn-sm btn-outline btn-primary no-animation"
+        {% if task_id %}
+            disabled
+            hx-get="{% url 'experiments:get_export_download_link' team.slug experiment.id task_id %}"
+            hx-trigger="every 2s"
+        {% else %}
+            hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
+        {% endif %}
+        hx-swap="outerHTML"
+        hx-target="#chat-exports"
+    >
+        Generate Chat Export
+    </button>
+    {% if export_download_url %}
+        <a class="text-sm font-medium hover:link btn btn-sm btn-outline" href="{{ export_download_url }}">
+            Download export
+        </a>
+    {% endif %}
+</div>
