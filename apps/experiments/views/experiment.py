@@ -81,7 +81,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import async_export_chat, get_response_for_webchat_task
+from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -373,7 +373,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": not bool(fields_changed),
+                "disable_version_button": (not bool(fields_changed)) or self.object.create_version_task_id,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -564,10 +564,19 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         return context
 
     def form_valid(self, form):
-        working_experiment = self.get_object()
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_experiment.create_new_version(version_description=description, make_default=is_default)
+        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        if working_version.create_version_task_id:
+            messages.error(self.request, "Version creation is already in progress.")
+        else:
+            task_id = async_create_experiment_version.delay(
+                experiment_id=working_version.id, version_description=description, make_default=is_default
+            )
+            working_version.create_version_task_id = task_id
+            working_version.save(update_fields=["create_version_task_id"])
+            messages.success(self.request, "Creating new version. This might take a few minutes.")
+
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
@@ -579,6 +588,20 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             },
         )
         return f"{url}#versions"
+
+
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
+def version_create_status(request, team_slug: str, experiment_id: int):
+    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
+    return TemplateResponse(
+        request,
+        "experiments/create_version_button.html",
+        {
+            "active_tab": "experiments",
+            "experiment": experiment,
+        },
+    )
 
 
 @login_and_team_required

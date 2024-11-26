@@ -4,6 +4,7 @@ from datetime import timedelta
 from celery.app import shared_task
 from django.core.files.base import ContentFile
 from django.utils import timezone
+from field_audit.models import AuditAction
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
@@ -32,6 +33,18 @@ def async_export_chat(self, experiment_id: int, tags: list[str] = None, particip
         expiry_date=timezone.now() + timedelta(days=1),
     )
     return {"file_id": file.id}
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def async_create_experiment_version(
+    self, experiment_id: int, version_description: str | None = None, make_default: bool = False
+):
+    try:
+        experiment = Experiment.objects.prefetch_related("assistant", "pipeline").get(id=experiment_id)
+        with current_team(experiment.team):
+            experiment.create_new_version(version_description, make_default)
+    finally:
+        Experiment.objects.filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
