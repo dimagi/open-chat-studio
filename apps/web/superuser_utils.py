@@ -38,7 +38,7 @@ def has_temporary_superuser_access(request, slug):
 
 
 def remove_temporary_superuser_access(request, slug):
-    """This removes access to the specific team and also expired access."""
+    """Removes access to the specific team and retains other valid access."""
 
     elevated_privileges = request.session.get("elevated_privileges", [])
     now = int(timezone.now().timestamp())

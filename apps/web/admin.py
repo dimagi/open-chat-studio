@@ -3,6 +3,7 @@ from functools import update_wrapper
 from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
@@ -37,7 +38,10 @@ class OcsAdminSite(admin.AdminSite):
             # this is the custom functionality to check for temporary superuser access
             if request.user.is_superuser and not has_temporary_superuser_access(request, ADMIN_SLUG):
                 url = reverse("web:sudo", args=[ADMIN_SLUG])
-                return HttpResponseRedirect(f"{url}?next={request.get_full_path()}")
+                next_url = request.get_full_path()
+                if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+                    next_url = reverse("admin:index", current_app=self.name)
+                return HttpResponseRedirect(f"{url}?next={next_url}")
 
             return view(request, *args, **kwargs)
 

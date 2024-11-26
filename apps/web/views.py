@@ -3,10 +3,10 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.http import Http404, HttpResponseRedirect
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.urls import reverse
-from django.utils.translation import gettext_lazy as _
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
 
@@ -72,11 +72,13 @@ def acquire_superuser_powers(request, slug):
                 form.add_error("password", "Invalid password")
             else:
                 apply_temporary_superuser_access(request, slug)
-                redirect_to = form.cleaned_data["redirect"] or "/"
-                return HttpResponseRedirect(redirect_to or "/")
+                redirect_to = form.cleaned_data["redirect"]
+                if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
+                    redirect_to = "/"
+                return HttpResponseRedirect(redirect_to)
     else:
         redirect_to = request.GET.get("next", "")
-        if not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
+        if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
             redirect_to = "/"
         if is_team_request and Membership.objects.filter(team__slug=slug, user=request.user).exists():
             return HttpResponseRedirect(redirect_to)
