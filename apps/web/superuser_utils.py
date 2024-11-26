@@ -47,4 +47,4 @@ def remove_expired_temporary_superuser_access(request):
 
 def get_temporary_superuser_access(request):
     remove_expired_temporary_superuser_access(request)
-    return {access[0]: datetime.fromtimestamp(access[1]) for access in request.session.get("elevated_privileges", [])}
+    return {slug: datetime.fromtimestamp(expire) for slug, expire in request.session.get("elevated_privileges", [])}
