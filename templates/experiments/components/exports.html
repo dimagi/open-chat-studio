@@ -11,7 +11,11 @@
         hx-swap="outerHTML"
         hx-target="#chat-exports"
     >
+        {% if task_id %}
+        <span class="loading loading-bars loading-xs"></span> Generating
+        {% else %}
         Generate Chat Export
+        {% endif %}
     </button>
     {% if export_download_url %}
         <a class="text-sm font-medium hover:link btn btn-sm btn-outline" href="{{ export_download_url }}">
