@@ -1,12 +1,10 @@
-from datetime import timedelta
-
 from django import forms
 from django.contrib.auth.decorators import user_passes_test
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
-from django.utils import timezone
 
 from apps.teams.models import Membership
+from apps.teams.superuser_utils import apply_temporary_superuser_access
 
 
 class ConfirmIdentityForm(forms.Form):
@@ -25,11 +23,8 @@ def acquire_superuser_powers(request, team_slug):
             if not request.user.check_password(form.cleaned_data["password"]):
                 form.add_error("password", "Invalid password")
             else:
+                apply_temporary_superuser_access(request, team_slug)
                 redirect_to = form.cleaned_data["redirect"] or "/"
-                elevated_privileges = request.session.get("elevated_privileges", [])
-                expire = timezone.now() + timedelta(seconds=300)
-                elevated_privileges.append((team_slug, int(expire.timestamp())))
-                request.session["elevated_privileges"] = elevated_privileges
                 return HttpResponseRedirect(redirect_to or "/")
     else:
         redirect_to = request.GET.get("next", "")
