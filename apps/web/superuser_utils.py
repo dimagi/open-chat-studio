@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
-EXPIRY = 300
+EXPIRY = 60 * 30  # 30 minutes
 
 
 def apply_temporary_superuser_access(request, slug):
