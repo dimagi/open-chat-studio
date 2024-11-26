@@ -39,3 +39,8 @@ def remove_expired_temporary_superuser_access(request):
     elevated_privileges = request.session.get("elevated_privileges", [])
     now = int(timezone.now().timestamp())
     request.session["elevated_privileges"] = [(team, expire) for team, expire in elevated_privileges if expire > now]
+
+
+def get_temporary_superuser_access(request):
+    remove_expired_temporary_superuser_access(request)
+    return [access[0] for access in request.session.get("elevated_privileges", [])]

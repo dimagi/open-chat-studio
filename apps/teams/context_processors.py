@@ -1,10 +1,13 @@
 from django.urls import reverse
 
+from apps.teams.superuser_utils import get_temporary_superuser_access
+
 
 def team(request):
     return {
         "team": getattr(request, "team", None),
         "notices": get_team_notices(request),
+        "temporary_superuser_access": get_temporary_superuser_access(request),
     }
 
 

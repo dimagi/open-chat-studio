@@ -4,7 +4,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 
 from apps.teams.models import Membership
-from apps.teams.superuser_utils import apply_temporary_superuser_access
+from apps.teams.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
 
 
 class ConfirmIdentityForm(forms.Form):
@@ -44,10 +44,10 @@ def acquire_superuser_powers(request, team_slug):
 
 
 @user_passes_test(lambda u: u.is_superuser)
-def release_superuser_powers(request):
-    # team = get_object_or_404(Team, slug=team_slug)
-    return render(
-        request,
-        "teams/temporary_superuser_powers.html",
-        {},
-    )
+def release_superuser_powers(request, team_slug):
+    if not request.team:
+        raise Http404
+
+    remove_temporary_superuser_access(request, team_slug)
+
+    return HttpResponseRedirect("/")

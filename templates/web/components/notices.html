@@ -1,6 +1,16 @@
+{% if temporary_superuser_access %}
+  <div class="alert bg-red-300 dark:bg-red-800 shadow-md !rounded-none text-warning-content">
+    You are operating with escalated privileges. Release access:
+    {% for slug in temporary_superuser_access %}
+      <a href="{% url 'teams:release_sudo' slug %}" class="btn btn-warning btn-xs">
+        {{ slug }}
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
 {% if notices %}
   {% for notice in notices %}
-    <div class="notification flex w-full shadow-md !rounded-none alert m-1" >
+    <div class="notification flex w-full shadow-md !rounded-none alert m-1">
       <div class="prose !max-w-none">{{ notice|safe }}</div>
     </div>
   {% endfor %}
