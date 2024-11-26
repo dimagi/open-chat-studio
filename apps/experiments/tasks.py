@@ -24,7 +24,6 @@ from apps.utils.taskbadger import update_taskbadger_data
 def async_export_chat(self, experiment_id: int, tags: list[str] = None, participant: str = None) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
     csv_in_memory = experiment_to_csv(experiment, tags, participant)
-    # TODO: Update experiment_to_csv to return BytesIO directly
     bytes_buffer = io.BytesIO(csv_in_memory.getvalue().encode("utf-8"))
     bytes_buffer.seek(0)
     uploaded_file = SimpleUploadedFile(name="chat_export.csv", content=bytes_buffer.read(), content_type="text/csv")
