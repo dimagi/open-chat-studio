@@ -26,9 +26,10 @@ def async_export_chat(self, experiment_id: int, tags: list[str] = None, particip
     csv_in_memory = experiment_to_csv(experiment, tags, participant)
     bytes_buffer = io.BytesIO(csv_in_memory.getvalue().encode("utf-8"))
     bytes_buffer.seek(0)
-    uploaded_file = ContentFile(name="chat_export.csv", content=bytes_buffer.read(), content_type="text/csv")
+    uploaded_file = ContentFile(content=bytes_buffer.read(), name="chat_export.csv")
     file = File.objects.create(
         name=uploaded_file.name,
+        content_type="text/csv",
         file=uploaded_file,
         team=experiment.team,
         expiry_date=timezone.now() + timedelta(days=1),
