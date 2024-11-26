@@ -7,14 +7,22 @@ logger = logging.getLogger("superuser")
 
 EXPIRY = 60 * 30  # 30 minutes
 
+MAX_CONCURRENT_PRIVILEGES = 5
+
 
 def apply_temporary_superuser_access(request, slug):
+    if not isinstance(slug, str) or not slug.strip():
+        raise ValueError("Invalid slug")
+
     remove_expired_temporary_superuser_access(request)
     if has_temporary_superuser_access(request, slug):
         return
 
-    logger.info(f"Applying temporary superuser access for '{request.user.email}' to '{slug}'")
     elevated_privileges = request.session.get("elevated_privileges", [])
+    if len(elevated_privileges) >= MAX_CONCURRENT_PRIVILEGES:
+        raise ValueError("Maximum number of concurrent privileges exceeded")
+
+    logger.info(f"Applying temporary superuser access for '{request.user.email}' to '{slug}'")
     expire = timezone.now() + timedelta(seconds=EXPIRY)
     elevated_privileges.append((slug, int(expire.timestamp())))
     request.session["elevated_privileges"] = elevated_privileges

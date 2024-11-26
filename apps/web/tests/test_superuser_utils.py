@@ -68,3 +68,16 @@ def test_get_temporary_superuser_access_returns_correct_access(request_with_sess
     apply_temporary_superuser_access(request, slug)
     access = get_temporary_superuser_access(request)
     assert slug in access
+
+
+def test_max_number_of_concurrent_privileges(request_with_session):
+    request = request_with_session
+    for i in range(5):
+        apply_temporary_superuser_access(request, f"team{i}")
+    with pytest.raises(ValueError, match="Maximum number of concurrent privileges exceeded"):
+        apply_temporary_superuser_access(request, "team6")
+
+
+def test_invalid_slug(request_with_session):
+    with pytest.raises(ValueError, match="Invalid slug"):
+        apply_temporary_superuser_access(request_with_session, "  ")
