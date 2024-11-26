@@ -1,18 +1,19 @@
-import pytest
-
-from apps.experiments.tasks import async_export_chat
-from apps.files.models import File
-from apps.utils.factories.experiment import ExperimentSessionFactory
 from unittest.mock import patch
+
+import pytest
 from django.test import override_settings
-from apps.experiments.tasks import async_create_experiment_version
-from apps.utils.factories.experiment import ExperimentFactory
+
+from apps.experiments.tasks import async_create_experiment_version, async_export_chat
+from apps.files.models import File
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+
 
 @pytest.mark.django_db()
 def test_async_export_chat_returns_file_id():
     session = ExperimentSessionFactory()
     result = async_export_chat(session.experiment_id, tags=[], participant=None)
     assert result == {"file_id": File.objects.first().id}
+
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
