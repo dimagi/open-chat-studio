@@ -2,9 +2,8 @@ import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.service_providers.llm_service.state import (
-    ChatExperimentState,
-    ExperimentAssistantState,
-    PipelineAssistantState,
+    ExperimentAdapter,
+    PipelineAdapter,
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -17,25 +16,16 @@ def session():
 
 
 @pytest.mark.django_db()
-class TestChatExperimentState:
+class TestExperimentAdapter:
     def test_save_message_to_history_stores_ai_message_on_state(self, session):
-        state = ChatExperimentState(session=session, experiment=session.experiment)
+        state = ExperimentAdapter(session=session, experiment=session.experiment)
         state.save_message_to_history(message="hi", type_=ChatMessageType.HUMAN)
         assert state.ai_message is None
         state.save_message_to_history(message="hi human", type_=ChatMessageType.AI)
         assert state.ai_message == ChatMessage.objects.get(message_type=ChatMessageType.AI)
 
 
-@pytest.mark.django_db()
-class TestExperimentAssistantState:
-    def test_save_message_to_history_stores_ai_message_on_state(self, session):
-        state = ExperimentAssistantState(session=session, experiment=session.experiment)
-        state.save_message_to_history(message="hi", type_=ChatMessageType.HUMAN)
-        assert state.ai_message is None
-        state.save_message_to_history(message="hi human", type_=ChatMessageType.AI)
-        assert state.ai_message == ChatMessage.objects.get(message_type=ChatMessageType.AI)
-
-
+# TODO: Reevaluate these tests
 @pytest.mark.django_db()
 class TestAssistantStateSubclasses:
     """
@@ -47,11 +37,11 @@ class TestAssistantStateSubclasses:
     def init_state(self, state_cls, **state_kwargs):
         session = state_kwargs.get("session")
         trace_service = state_kwargs.get("trace_service")
-        if state_cls == ExperimentAssistantState:
+        if state_cls == ExperimentAdapter:
             experiment = session.experiment
-            return ExperimentAssistantState(session=session, experiment=experiment, trace_service=trace_service)
-        elif state_cls == PipelineAssistantState:
-            return PipelineAssistantState(
+            return ExperimentAdapter(session=session, experiment=experiment, trace_service=trace_service)
+        elif state_cls == PipelineAdapter:
+            return PipelineAdapter(
                 session=session,
                 assistant=state_kwargs.get("assistant"),
                 trace_service=trace_service,
@@ -59,11 +49,11 @@ class TestAssistantStateSubclasses:
                 citations_enabled=state_kwargs.get("citations_enabled", True),
             )
 
-    @pytest.mark.parametrize("state_cls", [ExperimentAssistantState, PipelineAssistantState])
+    @pytest.mark.parametrize("state_cls", [ExperimentAdapter, PipelineAdapter])
     def test_pre_run_hook(self, state_cls):
         """
-        This hook creates a message in the case of `ExperimentAssistantState`, but only saves the metadata on the
-        instance in the case of `PipelineAssistantState`.
+        This hook creates a message in the case of `ExperimentAdapter`, but only saves the metadata on the
+        instance in the case of `PipelineAdapter`.
         """
         session = ExperimentSessionFactory()
         assistant = OpenAiAssistantFactory()
@@ -76,19 +66,19 @@ class TestAssistantStateSubclasses:
         }
         state.pre_run_hook(**kwargs)
 
-        if state_cls == ExperimentAssistantState:
+        if state_cls == ExperimentAdapter:
             assert ChatMessage.objects.filter(
                 message_type=ChatMessageType.HUMAN, content="hi", metadata={"key1": 1}
             ).exists()
-        elif state_cls == PipelineAssistantState:
+        elif state_cls == PipelineAdapter:
             assert state.input_message_metadata == {"key1": 1}
             assert state.output_message_metadata == {}
 
-    @pytest.mark.parametrize("state_cls", [ExperimentAssistantState, PipelineAssistantState])
+    @pytest.mark.parametrize("state_cls", [ExperimentAdapter, PipelineAdapter])
     def test_post_run_hook(self, state_cls):
         """
-        This hook creates a message in the case of `ExperimentAssistantState`, but only saves the metadata on the
-        instance in the case of `PipelineAssistantState`.
+        This hook creates a message in the case of `ExperimentAdapter`, but only saves the metadata on the
+        instance in the case of `PipelineAdapter`.
         """
         session = ExperimentSessionFactory()
         assistant = OpenAiAssistantFactory()
@@ -101,20 +91,20 @@ class TestAssistantStateSubclasses:
         }
         state.post_run_hook(**kwargs)
 
-        if state_cls == ExperimentAssistantState:
+        if state_cls == ExperimentAdapter:
             message = ChatMessage.objects.get(message_type=ChatMessageType.AI, content="hi", metadata={"key1": 1})
             assert message.tags.first().name == "tester"
-        elif state_cls == PipelineAssistantState:
+        elif state_cls == PipelineAdapter:
             assert state.output_message_metadata == {"key1": 1}
             assert state.input_message_metadata == {}
 
     @pytest.mark.parametrize(
         ("state_cls", "citations_enabled"),
         [
-            (ExperimentAssistantState, True),
-            (ExperimentAssistantState, False),
-            (PipelineAssistantState, True),
-            (PipelineAssistantState, False),
+            (ExperimentAdapter, True),
+            (ExperimentAdapter, False),
+            (PipelineAdapter, True),
+            (PipelineAdapter, False),
         ],
     )
     def test_citations_enabled(self, state_cls, citations_enabled):
@@ -126,7 +116,7 @@ class TestAssistantStateSubclasses:
 
         assert state.citations_enabled == citations_enabled
 
-    @pytest.mark.parametrize("state_cls", [ExperimentAssistantState, PipelineAssistantState])
+    @pytest.mark.parametrize("state_cls", [ExperimentAdapter, PipelineAdapter])
     def test_assistant_property(self, state_cls):
         assistant = OpenAiAssistantFactory()
         session = ExperimentSessionFactory(experiment__assistant=assistant)
@@ -134,7 +124,7 @@ class TestAssistantStateSubclasses:
 
         assert state.assistant == assistant
 
-    @pytest.mark.parametrize("state_cls", [ExperimentAssistantState, PipelineAssistantState])
+    @pytest.mark.parametrize("state_cls", [ExperimentAdapter, PipelineAdapter])
     def test_chat_property(self, state_cls):
         assistant = OpenAiAssistantFactory()
         session = ExperimentSessionFactory()
@@ -148,11 +138,11 @@ class TestBaseRunnableStateSubclasses:
     def init_state(self, state_cls, **state_kwargs):
         session = state_kwargs.get("session")
         trace_service = state_kwargs.get("trace_service")
-        if state_cls == ChatExperimentState:
+        if state_cls == ExperimentAdapter:
             experiment = session.experiment
-            return ChatExperimentState(session=session, experiment=experiment, trace_service=trace_service)
-        elif state_cls == PipelineAssistantState:
-            return PipelineAssistantState(
+            return ExperimentAdapter(session=session, experiment=experiment, trace_service=trace_service)
+        elif state_cls == PipelineAdapter:
+            return PipelineAdapter(
                 session=session,
                 assistant=state_kwargs.get("assistant"),
                 trace_service=trace_service,
@@ -160,7 +150,7 @@ class TestBaseRunnableStateSubclasses:
                 citations_enabled=state_kwargs.get("citations_enabled", True),
             )
 
-    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    @pytest.mark.parametrize("state_cls", [PipelineAdapter, ExperimentAdapter])
     def test_get_llm_service(self, state_cls):
         llm_provider = LlmProviderFactory()
         assistant = OpenAiAssistantFactory(llm_provider=llm_provider)
@@ -169,7 +159,7 @@ class TestBaseRunnableStateSubclasses:
 
         state.get_llm_service() == llm_provider
 
-    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    @pytest.mark.parametrize("state_cls", [PipelineAdapter, ExperimentAdapter])
     def test_callback_handler(self, state_cls):
         llm_provider_model = LlmProviderModelFactory()
         llm_provider = LlmProviderFactory()
@@ -181,7 +171,7 @@ class TestBaseRunnableStateSubclasses:
 
         state.callback_handler == llm_provider.get_llm_service().get_callback_handler(llm_provider_model.name)
 
-    @pytest.mark.parametrize("state_cls", [PipelineAssistantState, ChatExperimentState])
+    @pytest.mark.parametrize("state_cls", [PipelineAdapter, ExperimentAdapter])
     def test_format_input(self, state_cls):
         input_formatter = "message: {input}"
         assistant = OpenAiAssistantFactory()

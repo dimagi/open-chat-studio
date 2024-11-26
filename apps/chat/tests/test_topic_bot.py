@@ -35,7 +35,7 @@ def test_safety_response(is_safe_mock):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.runnables.SimpleExperimentRunnable._get_output_check_cancellation")
+@patch("apps.service_providers.llm_service.runnables.SimpleLLMChat._get_output_check_cancellation")
 def test_bot_with_terminal_bot(get_output_check_cancellation):
     get_output_check_cancellation.side_effect = ["let's barbecue!", "kom ons braai!"]
     session = ExperimentSessionFactory()
