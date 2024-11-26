@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timedelta
 
 from django.utils import timezone
+
+logger = logging.getLogger("superuser")
 
 EXPIRY = 60 * 30  # 30 minutes
 
@@ -10,6 +13,7 @@ def apply_temporary_superuser_access(request, slug):
     if has_temporary_superuser_access(request, slug):
         return
 
+    logger.info(f"Applying temporary superuser access for '{request.user.email}' to '{slug}'")
     elevated_privileges = request.session.get("elevated_privileges", [])
     expire = timezone.now() + timedelta(seconds=EXPIRY)
     elevated_privileges.append((slug, int(expire.timestamp())))
