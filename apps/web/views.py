@@ -6,6 +6,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
 
 from apps.teams.decorators import login_and_team_required
@@ -57,6 +58,7 @@ class ConfirmIdentityForm(forms.Form):
 
 
 @user_passes_test(lambda u: u.is_superuser)
+@sensitive_post_parameters()
 def acquire_superuser_powers(request, slug):
     is_team_request = slug != ADMIN_SLUG
     if is_team_request and not Team.objects.filter(slug=slug).exists():
