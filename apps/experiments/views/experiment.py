@@ -57,7 +57,6 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentInvitationForm,
@@ -82,7 +81,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.tasks import async_export_chat, get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -1078,18 +1077,30 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 
 @require_POST
 @permission_required("experiments.download_chats", raise_exception=True)
-def download_experiment_chats(request, team_slug: str, experiment_id: str):
-    # todo: this could be made more efficient and should be async, but just shipping something for now
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    tags = request.POST["tags"]
+@login_and_team_required
+def generate_chat_export(request, team_slug: str, experiment_id: str):
+    experiment = get_object_or_404(Experiment, id=experiment_id)
+    tags = request.POST.get("tags", [])
     tags = tags.split(",") if tags else []
+    task_id = async_export_chat.delay(experiment_id, tags=tags, participant=request.POST.get("participant"))
+    return TemplateResponse(
+        request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
+    )
 
-    participant = request.POST.get("participant")
 
-    # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment, tags, participant).getvalue(), content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
-    return response
+@permission_required("experiments.download_chats", raise_exception=True)
+@login_and_team_required
+def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    info = Progress(AsyncResult(task_id)).get_info()
+    context = {"experiment": experiment}
+    if info["complete"] and info["success"]:
+        file_id = info["result"]["file_id"]
+        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id})
+        context["export_download_url"] = download_url
+    else:
+        context["task_id"] = task_id
+    return TemplateResponse(request, "experiments/components/exports.html", context)
 
 
 @login_and_team_required
