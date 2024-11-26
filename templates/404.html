@@ -15,7 +15,7 @@
           Do you want to use your superuser powers as <span class="font-bold text-lg">{{ request.user.email }}</span>
           to gain temporary access?
         </p>
-        <form class="mt-6 space-y-6" method="post" action="{% url "teams:sudo" request.resolver_match.kwargs.team_slug %}">
+        <form class="mt-6 space-y-6" method="post" action="{% url "web:sudo" request.resolver_match.kwargs.team_slug %}">
           {% csrf_token %}
           <div class="form-control w-full">
             <label class="label font-bold" for="id_password">Password</label>
