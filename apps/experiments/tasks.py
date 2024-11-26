@@ -1,4 +1,3 @@
-import io
 import time
 from datetime import timedelta
 
@@ -24,9 +23,7 @@ from apps.utils.taskbadger import update_taskbadger_data
 def async_export_chat(self, experiment_id: int, tags: list[str] = None, participant: str = None) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
     csv_in_memory = experiment_to_csv(experiment, tags, participant)
-    bytes_buffer = io.BytesIO(csv_in_memory.getvalue().encode("utf-8"))
-    bytes_buffer.seek(0)
-    uploaded_file = ContentFile(content=bytes_buffer.read(), name="chat_export.csv")
+    uploaded_file = ContentFile(content=csv_in_memory.read(), name="chat_export.csv")
     file = File.objects.create(
         name=uploaded_file.name,
         content_type="text/csv",
