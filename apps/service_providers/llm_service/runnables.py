@@ -53,9 +53,13 @@ def create_experiment_runnable(
     """Create an experiment runnable based on the experiment configuration."""
     if assistant := experiment.assistant:
         assistant_adapter = AssistantAdapter.from_experiment(experiment, session, trace_service)
+        runnable = None
         if assistant.tools_enabled and not disable_tools:
-            return AgentAssistantChat(adapter=assistant_adapter, experiment=experiment)
-        return AssistantChat(adapter=assistant_adapter, experiment=experiment)
+            runnable = AgentAssistantChat(adapter=assistant_adapter)
+        runnable = AssistantChat(adapter=assistant_adapter)
+        # This is a temporary hack until we return an object with metadata about the run
+        runnable.experiment = experiment
+        return runnable
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
@@ -63,11 +67,15 @@ def create_experiment_runnable(
         experiment.llm_provider.type == experiment.llm_provider_model.type
     ), "Experiment provider and provider model should be of the same type"
 
+    runnable = None
     chat_adapter = ChatAdapter.from_experiment(experiment, session, trace_service)
     if experiment.tools_enabled and not disable_tools:
-        return AgentLLMChat(adapter=chat_adapter, experiment=experiment)
+        runnable = AgentLLMChat(adapter=chat_adapter)
 
-    return SimpleLLMChat(adapter=chat_adapter, experiment=experiment)
+    runnable = SimpleLLMChat(adapter=chat_adapter)
+    # This is a temporary hack until we return an object with metadata about the run
+    runnable.experiment = experiment
+    return runnable
 
 
 class ChainOutput(Serializable):
@@ -93,7 +101,7 @@ class ChainOutput(Serializable):
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
     adapter: ChatAdapter
-    experiment: Experiment
+    experiment: Experiment | None = None
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
