@@ -482,7 +482,7 @@ LOGGING = {
         },
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "superuser": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
 

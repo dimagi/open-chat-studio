@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
-logger = logging.getLogger("superuser")
+logger = logging.getLogger("audit")
 
 EXPIRY = 60 * 30  # 30 minutes
 
@@ -40,6 +40,7 @@ def has_temporary_superuser_access(request, slug):
 def remove_temporary_superuser_access(request, slug):
     """Removes access to the specific team and retains other valid access."""
 
+    logger.info(f"Removing temporary superuser access for '{request.user.email}' to '{slug}'")
     elevated_privileges = request.session.get("elevated_privileges", [])
     now = int(timezone.now().timestamp())
     request.session["elevated_privileges"] = [
@@ -51,6 +52,12 @@ def remove_expired_temporary_superuser_access(request):
     elevated_privileges = request.session.get("elevated_privileges", [])
     now = int(timezone.now().timestamp())
     request.session["elevated_privileges"] = [(team, expire) for team, expire in elevated_privileges if expire > now]
+
+    valid = [(team, expire) for team, expire in elevated_privileges if expire > now]
+    invalid = [team for team, expire in elevated_privileges if expire <= now]
+    if invalid:
+        logger.info(f"Removed expired privileges for user {request.user.email}: {','.join(invalid)}")
+    request.session["elevated_privileges"] = valid
 
 
 def get_temporary_superuser_access(request):
