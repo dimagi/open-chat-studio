@@ -748,6 +748,16 @@ class Experiment(BaseTeamModel, VersionsMixin):
             version.compare(prev_version.version)
         return version.fields_changed
 
+    def archive(self):
+        super().archive()
+        self.delete_experiment_channels()
+
+    def delete_experiment_channels(self):
+        from apps.channels.models import ExperimentChannel
+
+        for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
+            channel.soft_delete()
+
     def archive_working_experiment(self):
         if self.is_working_version:
             if self.has_versions:
