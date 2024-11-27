@@ -9,5 +9,6 @@ export default function NodeInput({nodeId}: {nodeId: string}) {
     label="Input"
     position={Position.Left}
     classes="py-2 mb-2 border-b border-neutral"
+    isError={false}
     />
 }

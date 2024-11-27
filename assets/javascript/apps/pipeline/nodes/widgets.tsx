@@ -6,7 +6,7 @@ import React, {
 } from "react";
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {concatenate, getCachedData, getSelectOptions} from "../utils";
+import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node} from "reactflow";
 
@@ -17,6 +17,8 @@ export function getWidget(name: string) {
       return ToggleWidget
     case "float":
       return FloatWidget
+    case "range":
+      return RangeWidget
     case "expandable_text":
       return ExpandableTextWidget
     case "select":
@@ -69,6 +71,38 @@ function FloatWidget(props: WidgetParams) {
       onChange={props.updateParamValue}
       value={props.paramValue}
       type="number"
+      step=".1"
+      required={props.required}
+    ></input>
+  </InputField>
+}
+
+function RangeWidget(props: WidgetParams) {
+  const getPropOrOther = (prop: string, other: string) => {
+    const val = props.schema[prop];
+    if (val !== undefined) {
+      return val;
+    }
+    return props.schema[other];
+  }
+  return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+    <input
+      className="input input-bordered w-full input-sm"
+      name={props.name}
+      onChange={props.updateParamValue}
+      value={props.paramValue}
+      type="number"
+      step=".1"
+      required={props.required}
+    ></input>
+    <input
+      className="range range-xs"
+      name={props.name}
+      onChange={props.updateParamValue}
+      value={props.paramValue}
+      type="range"
+      min={getPropOrOther("minimum", "exclusiveMinimum")}
+      max={getPropOrOther("maximum", "exclusiveMaximum")}
       step=".1"
       required={props.required}
     ></input>
@@ -255,7 +289,7 @@ export function KeywordsWidget(props: WidgetParams) {
             <div className="form-control w-full capitalize" key={index}>
               <label className="label">{label}</label>
               <input
-                className="input input-bordered w-full"
+                className={classNames("input input-bordered w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}

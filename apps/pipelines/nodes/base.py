@@ -124,6 +124,7 @@ class Widgets(StrEnum):
     toggle = "toggle"
     select = "select"
     float = "float"
+    range = "range"
     none = "none"
 
     # special widgets
