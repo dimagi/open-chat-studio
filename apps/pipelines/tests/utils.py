@@ -54,13 +54,19 @@ def email_node():
 
 
 def llm_response_with_prompt_node(
-    provider_id: str, provider_model_id: str, source_material_id: str | None = None, prompt: str | None = None
+    provider_id: str,
+    provider_model_id: str,
+    source_material_id: str | None = None,
+    prompt: str | None = None,
+    history_type: str | None = None,
+    history_name: str | None = None,
 ):
     if prompt is None:
         prompt = (
             "Make a summary of the following text: {input}. "
             "Output it as JSON with a single key called 'summary' with the summary."
         )
+
     params = {
         "llm_provider_id": provider_id,
         "llm_provider_model_id": provider_model_id,
@@ -68,6 +74,13 @@ def llm_response_with_prompt_node(
     }
     if source_material_id is not None:
         params["source_material_id"] = source_material_id
+
+    if history_type is not None:
+        params["history_type"] = history_type
+
+    if history_name is not None:
+        params["history_name"] = history_name
+
     return {
         "id": str(uuid4()),
         "type": "LLMResponseWithPrompt",
