@@ -46,7 +46,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const defaultBorder = nodeErrors ? "border-error " : ""
   const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
   const border = selected ? selectedBorder : defaultBorder
-  const nodeBorder = classNames(border, "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100")
+  const nodeBorder = classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
 
   return (
     <>
@@ -77,7 +77,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       <div className={nodeBorder}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
         <NodeInput />
-        <div className="ml-2">
+        <div className="px-4">
           <div>
             {schemaProperties.map((name) => (
               <React.Fragment key={name}>
