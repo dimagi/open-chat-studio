@@ -9,7 +9,7 @@ export default function WrappedHandle(props: {
   position: Position,
   parentBounds?: DOMRect
 }) {
-  const [position, setPosition] = useState(0);
+  const [position, setPosition] = useState(null);
   const ref = useRef<any>();
   const updateNodeInternals = useUpdateNodeInternals()
 
@@ -18,15 +18,16 @@ export default function WrappedHandle(props: {
       setPosition(ref.current.offsetTop + ref.current.clientHeight / 2)
       updateNodeInternals(props.nodeId)
     }
-  }, [props.nodeId, props.parentBounds, updateNodeInternals])
+  }, [ref, props.parentBounds, updateNodeInternals])
 
+  const style = position != null ? {top: position} : {}
   return (
     <div ref={ref} className={props.classes}>
       <Handle
         type={props.position == Position.Left ? "target" : "source"}
         position={props.position}
         id={props.id}
-        style={{top: position}}
+        style={style}
       />
       <span className="font-semibold font-mono">{props.label}</span>
     </div>
