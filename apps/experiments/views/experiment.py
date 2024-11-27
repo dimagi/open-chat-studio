@@ -512,6 +512,13 @@ def delete_experiment(request, team_slug: str, pk: int):
     return redirect("experiments:experiments_home", team_slug=team_slug)
 
 
+@login_and_team_required
+def experiment_details(request, team_slug: str, pk: int):
+    experiment = Experiment.objects.get_all().filter(id=pk, team=request.team).first()
+    context = {"experiment": experiment}
+    return render(request, "experiments/components/archived_experiment_details.html", context)
+
+
 class AddFileToExperiment(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
