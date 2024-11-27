@@ -6,7 +6,7 @@ import React, {
 } from "react";
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {concatenate, getCachedData, getSelectOptions} from "../utils";
+import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node} from "reactflow";
 
@@ -255,7 +255,7 @@ export function KeywordsWidget(props: WidgetParams) {
             <div className="form-control w-full capitalize" key={index}>
               <label className="label">{label}</label>
               <input
-                className="input input-bordered w-full"
+                className={classNames("input input-bordered w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
