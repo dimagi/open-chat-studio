@@ -20,7 +20,7 @@
         <h1 class="pg-title">{{ experiment.name }}</h1>
         {% flag "experiment_versions" %}
           {% if deployed_version %}
-            <div class="tooltip" data-tip="Currently deployed version">
+            <div class="tooltip" data-tip="Current published version">
               <a class="badge badge-success badge-sm"
                  href="#versions">
                 v{{ deployed_version }}
