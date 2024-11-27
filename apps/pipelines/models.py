@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
+from uuid import uuid4
 
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
@@ -66,6 +67,37 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         if self.is_working_version:
             return ""
         return f"v{self.version_number}"
+
+    @classmethod
+    def create_default(cls, team):
+        from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+        default_name = "New Pipeline"
+        existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
+
+        start_node = {
+            "id": str(uuid4()),
+            "type": "pipelineNode",
+            "position": {
+                "x": -200,
+                "y": 200,
+            },
+            "data": {"id": str(uuid4()), "type": StartNode.__name__},
+        }
+        end_node = {
+            "id": str(uuid4()),
+            "type": "pipelineNode",
+            "position": {"x": 1000, "y": 200},
+            "data": {"id": str(uuid4()), "type": EndNode.__name__},
+        }
+        default_nodes = [start_node, end_node]
+        new_pipeline = cls.objects.create(
+            team=team,
+            data={"nodes": default_nodes, "edges": []},
+            name=f"New Pipeline {existing_pipeline_count + 1}",
+        )
+        new_pipeline.set_nodes([FlowNode(**default_node) for default_node in default_nodes])
+        return new_pipeline
 
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])

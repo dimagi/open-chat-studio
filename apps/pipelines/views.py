@@ -60,9 +60,7 @@ class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     template_name = "pipelines/pipeline_builder.html"
 
     def get(self, request, *args, **kwargs):
-        pipeline = Pipeline.objects.create(
-            team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
-        )
+        pipeline = Pipeline.create_default(request.team)
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
