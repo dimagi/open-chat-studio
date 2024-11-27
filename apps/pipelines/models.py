@@ -128,7 +128,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @property
     def node_ids(self):
-        return self.node_set.values_list("flow_id", flat=True).all()
+        return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
     def simple_invoke(self, input: str) -> PipelineState:
         """Invoke the pipeline without a session or the ability to save the run to history"""
