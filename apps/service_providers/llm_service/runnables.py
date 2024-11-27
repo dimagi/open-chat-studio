@@ -29,7 +29,7 @@ from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
-from apps.service_providers.llm_service.adapters import ExperimentAdapter, PipelineAdapter
+from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 
 if TYPE_CHECKING:
@@ -51,12 +51,11 @@ def create_experiment_runnable(
     experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
 ):
     """Create an experiment runnable based on the experiment configuration."""
-    adapter_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
-    adapter = ExperimentAdapter(**adapter_kwargs)
     if assistant := experiment.assistant:
+        assistant_adapter = AssistantAdapter.from_experiment(experiment, session, trace_service)
         if assistant.tools_enabled and not disable_tools:
-            return AgentAssistantChat(adapter=adapter)
-        return AssistantChat(adapter=adapter)
+            return AgentAssistantChat(adapter=assistant_adapter, experiment=experiment)
+        return AssistantChat(adapter=assistant_adapter, experiment=experiment)
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
@@ -64,10 +63,11 @@ def create_experiment_runnable(
         experiment.llm_provider.type == experiment.llm_provider_model.type
     ), "Experiment provider and provider model should be of the same type"
 
+    chat_adapter = ChatAdapter.from_experiment(experiment, session, trace_service)
     if experiment.tools_enabled and not disable_tools:
-        return AgentLLMChat(adapter=adapter)
+        return AgentLLMChat(adapter=chat_adapter, experiment=experiment)
 
-    return SimpleLLMChat(adapter=adapter)
+    return SimpleLLMChat(adapter=chat_adapter, experiment=experiment)
 
 
 class ChainOutput(Serializable):
@@ -92,7 +92,8 @@ class ChainOutput(Serializable):
 
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
-    adapter: ExperimentAdapter | PipelineAdapter
+    adapter: ChatAdapter
+    experiment: Experiment
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
@@ -239,7 +240,8 @@ class AgentLLMChat(LLMChat):
 
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
-    adapter: ExperimentAdapter | PipelineAdapter
+    adapter: AssistantAdapter
+    experiment: Experiment | None = None
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
