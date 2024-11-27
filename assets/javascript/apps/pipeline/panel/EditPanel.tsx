@@ -44,7 +44,6 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   }
 
   const width = expanded ? "w-full" : "w-2/5";
-
   return (
     <div className="relative">
       <OverlayPanel classes={classNames("top-0 right-0 h-[80vh] overflow-y-auto", width)} isOpen={true}
@@ -63,7 +62,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
               <i className="fa fa-times"></i>
             </button>
           </div>
-          <h2 className="text-lg text-center font-bold">{data?.label ? `Editing ${data.label}` : 'Loading...'}</h2>
+          <h2 className="text-lg text-center font-bold">{`Editing ${nodeSchema["ui:label"]}`}</h2>
 
           <div className="ml-2">
             {schemaProperties.length === 0 && (
