@@ -87,7 +87,7 @@ class PipelineNode(BaseModel, ABC):
             # in a single node, we should give that node multiple inputs, and
             # read the input from that particular input
             if incoming_edge in state["outputs"]:
-                input = str(state["outputs"][incoming_edge]["message"])
+                input = state["outputs"][incoming_edge]["message"]
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]

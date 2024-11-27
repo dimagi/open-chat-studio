@@ -33,7 +33,7 @@ class Edge(pydantic.BaseModel):
     id: str
     source: str
     target: str
-    sourceHandle: str | None = None
+    sourceHandle: str | None = STANDARD_OUTPUT_NAME
 
     def is_conditional(self):
         return self.sourceHandle != STANDARD_OUTPUT_NAME

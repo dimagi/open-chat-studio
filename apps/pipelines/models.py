@@ -126,7 +126,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         flow.nodes = nodes
         return flow.model_dump()
 
-    @cached_property
+    @property
     def node_ids(self):
         return self.node_set.values_list("flow_id", flat=True).all()
 
