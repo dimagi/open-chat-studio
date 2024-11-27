@@ -68,7 +68,7 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_temperature: float = Field(
-        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.float)
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
     def get_llm_service(self):
