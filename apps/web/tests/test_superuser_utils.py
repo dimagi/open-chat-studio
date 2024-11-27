@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest import mock
 
 import pytest
 from django.utils import timezone
@@ -16,7 +17,7 @@ from apps.web.superuser_utils import (
 def request_with_session(rf):
     request = rf.get("/")
     request.session = {}
-    request.user = type("User", (object,), {"email": "test@example.com"})()
+    request.user = mock.Mock(email="test@example.com")
     return request
 
 
