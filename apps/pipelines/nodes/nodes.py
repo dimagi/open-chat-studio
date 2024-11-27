@@ -272,7 +272,8 @@ class RouterNode(Passthrough, HistoryMixin):
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         num_outputs = info.data.get("num_outputs")
-        value = [entry for entry in value if entry]
+        if not all(entry for entry in value):
+            raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
         if len(value) != num_outputs:
             raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
         return value
