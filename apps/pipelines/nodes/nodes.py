@@ -25,9 +25,9 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.adapters import PipelineAdapter
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
-from apps.service_providers.llm_service.state import PipelineAdapter
 from apps.service_providers.models import LlmProviderModel
 
 
@@ -566,13 +566,13 @@ class AssistantNode(PipelineNode):
             node_id=node_id,
             output=output,
             message_metadata={
-                "input": runnable.state.get_message_metadata(ChatMessageType.HUMAN),
-                "output": runnable.state.get_message_metadata(ChatMessageType.AI),
+                "input": runnable.adapter.get_message_metadata(ChatMessageType.HUMAN),
+                "output": runnable.adapter.get_message_metadata(ChatMessageType.AI),
             },
         )
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
-        assistant_state = PipelineAdapter(
+        adapter = PipelineAdapter(
             assistant=assistant,
             session=session,
             trace_service=session.experiment.trace_service,
@@ -581,6 +581,6 @@ class AssistantNode(PipelineNode):
         )
 
         if assistant.tools_enabled:
-            return AgentAssistantChat(state=assistant_state)
+            return AgentAssistantChat(adapter=adapter)
         else:
-            return AssistantChat(state=assistant_state)
+            return AssistantChat(adapter=adapter)

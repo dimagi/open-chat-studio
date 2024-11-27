@@ -29,8 +29,8 @@ from apps.assistants.models import ToolResources
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.adapters import ExperimentAdapter, PipelineAdapter
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
-from apps.service_providers.llm_service.state import ExperimentAdapter, PipelineAdapter
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -52,11 +52,11 @@ def create_experiment_runnable(
 ):
     """Create an experiment runnable based on the experiment configuration."""
     adapter_kwargs = {"experiment": experiment, "session": session, "trace_service": trace_service}
-    state = ExperimentAdapter(**adapter_kwargs)
+    adapter = ExperimentAdapter(**adapter_kwargs)
     if assistant := experiment.assistant:
         if assistant.tools_enabled and not disable_tools:
-            return AgentAssistantChat(state=state)
-        return AssistantChat(state=state)
+            return AgentAssistantChat(adapter=adapter)
+        return AssistantChat(adapter=adapter)
 
     assert experiment.llm_provider, "Experiment must have an LLM provider"
     assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
@@ -65,9 +65,9 @@ def create_experiment_runnable(
     ), "Experiment provider and provider model should be of the same type"
 
     if experiment.tools_enabled and not disable_tools:
-        return AgentLLMChat(state=state)
+        return AgentLLMChat(adapter=adapter)
 
-    return SimpleLLMChat(state=state)
+    return SimpleLLMChat(adapter=adapter)
 
 
 class ChainOutput(Serializable):
@@ -92,7 +92,7 @@ class ChainOutput(Serializable):
 
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
-    state: ExperimentAdapter | PipelineAdapter
+    adapter: ExperimentAdapter | PipelineAdapter
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
     last_cancel_check: float | None = None
@@ -105,7 +105,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         return False
 
     def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
-        callback = self.state.callback_handler
+        callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
         configurable = config.get("configurable", {})
@@ -117,7 +117,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             self._populate_memory(input)
 
         if save_input_to_history:
-            self.state.save_message_to_history(input, ChatMessageType.HUMAN)
+            self.adapter.save_message_to_history(input, ChatMessageType.HUMAN)
 
         output = self._get_output_check_cancellation(input, merged_config)
         result = ChainOutput(
@@ -128,11 +128,11 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         if save_output_to_history:
             experiment_tag = configurable.get("experiment_tag")
-            self.state.save_message_to_history(output, ChatMessageType.AI, experiment_tag=experiment_tag)
+            self.adapter.save_message_to_history(output, ChatMessageType.AI, experiment_tag=experiment_tag)
         return result
 
     def _get_input(self, input: str):
-        return {self.input_key: self.state.format_input(input)}
+        return {self.input_key: self.adapter.format_input(input)}
 
     def _get_output_check_cancellation(self, input, config):
         chain = self._build_chain().with_config(run_name="get_llm_response")
@@ -157,7 +157,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
         self.last_cancel_check = time.time()
 
-        self.cancelled = self.state.check_cancellation()
+        self.cancelled = self.adapter.check_cancellation()
         return self.cancelled
 
     def _build_chain(self) -> Runnable[dict[str, Any], Any]:
@@ -165,7 +165,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def _get_input_chain_context(self, with_history=True):
         prompt = self.prompt
-        context = self.state.get_template_context(prompt.input_variables)
+        context = self.adapter.get_template_context(prompt.input_variables)
         if with_history:
             context.update(self.memory.load_memory_variables({}))
 
@@ -175,7 +175,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def prompt(self):
         return ChatPromptTemplate.from_messages(
             [
-                ("system", self.state.get_prompt()),
+                ("system", self.adapter.get_prompt()),
                 MessagesPlaceholder("history", optional=True),
                 ("human", "{input}"),
             ]
@@ -183,7 +183,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def _populate_memory(self, input: str):
         input_messages = self.get_input_messages(input)
-        self.memory.chat_memory.messages = self.state.get_chat_history(input_messages)
+        self.memory.chat_memory.messages = self.adapter.get_chat_history(input_messages)
 
     def get_input_messages(self, input: str) -> list[BaseMessage]:
         """Return a list of messages which represent the fully populated LLM input.
@@ -198,7 +198,7 @@ class SimpleLLMChat(LLMChat):
         return chain.invoke(self._get_input(input)).to_messages()
 
     def _build_chain(self):
-        return self._input_chain() | self.state.get_chat_model() | StrOutputParser()
+        return self._input_chain() | self.adapter.get_chat_model() | StrOutputParser()
 
     def _input_chain(self, with_history=True) -> Runnable[dict, PromptValue]:
         context = self._get_input_chain_context(with_history=with_history)
@@ -213,9 +213,9 @@ class AgentLLMChat(LLMChat):
         return self._get_input_chain_context(with_history=with_history)
 
     def _build_chain(self):
-        tools = self.state.get_tools()
+        tools = self.adapter.get_tools()
         agent = self._input_chain() | create_tool_calling_agent(
-            llm=self.state.get_chat_model(), tools=tools, prompt=self.prompt
+            llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt
         )
         executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
@@ -239,7 +239,7 @@ class AgentLLMChat(LLMChat):
 
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
-    state: ExperimentAdapter | PipelineAdapter
+    adapter: ExperimentAdapter | PipelineAdapter
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -253,31 +253,31 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
             )
 
-        callback = self.state.callback_handler
+        callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(config, {"callbacks": [callback]})
 
         input_dict = {
-            "content": self.state.format_input(input),
+            "content": self.adapter.format_input(input),
             "attachments": message_attachments,
         } | self._extra_input_configs()
 
-        current_thread_id = self._sync_messages_to_thread(self.state.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID))
+        current_thread_id = self._sync_messages_to_thread(self.adapter.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID))
 
-        human_message_metadata = self.state.get_input_message_metadata(human_message_resource_file_ids)
-        self.state.pre_run_hook(input, config, human_message_metadata)
+        human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
+        self.adapter.pre_run_hook(input, config, human_message_metadata)
 
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
-        input_dict["instructions"] = self.state.get_assistant_instructions()
+        input_dict["instructions"] = self.adapter.get_assistant_instructions()
         thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
         output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
 
         if not current_thread_id:
-            self.state.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
+            self.adapter.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
-        ai_message_metadata = self.state.get_output_message_metadata(annotation_file_ids)
-        self.state.post_run_hook(output, config, ai_message_metadata)
+        ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
+        self.adapter.post_run_hook(output, config, ai_message_metadata)
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
@@ -289,18 +289,18 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         def _sync_messages_to_existing_thread(thread_id, messages):
             for message in messages_to_sync:
-                self.state.assistant_client.beta.threads.messages.create(current_thread_id, **message)
+                self.adapter.assistant_client.beta.threads.messages.create(current_thread_id, **message)
 
-        if messages_to_sync := self.state.get_messages_to_sync_to_thread():
+        if messages_to_sync := self.adapter.get_messages_to_sync_to_thread():
             if current_thread_id:
                 _sync_messages_to_existing_thread(current_thread_id, messages_to_sync)
             else:
                 # There is a 32 message limit when creating a new thread
                 first, rest = messages_to_sync[:32], messages_to_sync[32:]
-                thread = self.state.assistant_client.beta.threads.create(messages=first)
+                thread = self.adapter.assistant_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
                 _sync_messages_to_existing_thread(current_thread_id, rest)
-                self.state.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
+                self.adapter.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
         return current_thread_id
 
     @transaction.atomic()
@@ -315,12 +315,12 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         """
         from apps.assistants.sync import get_and_store_openai_file
 
-        client = self.state.assistant_client
-        chat = self.state.session.chat
-        session_id = self.state.session.id
+        client = self.adapter.assistant_client
+        chat = self.adapter.session.chat
+        session_id = self.adapter.session.id
 
-        team = self.state.session.team
-        assistant_file_ids = ToolResources.objects.filter(assistant=self.state.assistant).values_list("files")
+        team = self.adapter.session.team
+        assistant_file_ids = ToolResources.objects.filter(assistant=self.adapter.assistant).values_list("files")
         assistant_files_ids = File.objects.filter(
             team_id=team.id, id__in=models.Subquery(assistant_file_ids)
         ).values_list("external_id", flat=True)
@@ -355,7 +355,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                             )
 
                             # Original citation text example:【6:0†source】
-                            if self.state.citations_enabled:
+                            if self.adapter.citations_enabled:
                                 message_content_value = message_content_value.replace(file_ref_text, f" [{idx}]")
                                 if file_link:
                                     message_content_value += f"\n[{idx}]: {file_link}"
@@ -414,7 +414,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             return get_and_store_openai_file(
                 client=client,
                 file_id=file_id,
-                team_id=self.state.team.id,
+                team_id=self.adapter.team.id,
             )
         except Exception as ex:
             logger.exception(ex)
@@ -425,8 +425,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         """
         file_link = ""
 
-        team = self.state.session.team
-        session_id = self.state.session.id
+        team = self.adapter.session.team
+        session_id = self.adapter.session.id
         try:
             file = File.objects.get(external_id=file_id, team_id=team.id)
             file_link = f"file:{team.slug}:{session_id}:{file.id}"
@@ -436,7 +436,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             file = File.objects.filter(external_id=file_id, team_id=team.id).first()
             file_name = file.name
         except File.DoesNotExist:
-            client = self.state.assistant_client
+            client = self.adapter.assistant_client
             try:
                 openai_file = client.files.retrieve(file_id=file_id)
                 file_name = openai_file.filename
@@ -467,7 +467,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         if not attachments:
             return resource_file_ids
 
-        client = self.state.assistant_client
+        client = self.adapter.assistant_client
 
         for resource_name in ["file_search", "code_interpreter"]:
             file_ids = [att.file_id for att in attachments if att.type == resource_name]
@@ -478,7 +478,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         return resource_file_ids
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
-        assistant_runnable = self.state.get_openai_assistant()
+        assistant_runnable = self.adapter.get_openai_assistant()
 
         for i in range(3):
             try:
@@ -523,8 +523,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         # Allow builtin tools but not custom tools when not running as an agent
         # This is to prevent using tools when using the assistant to generate responses
         # for automated messages e.g. reminders
-        if self.state.assistant_tools_enabled and self.state.assistant_builtin_tools:
-            return {"tools": [{"type": tool} for tool in self.state.assistant_builtin_tools]}
+        if self.adapter.assistant_tools_enabled and self.adapter.assistant_builtin_tools:
+            return {"tools": [{"type": tool} for tool in self.adapter.assistant_builtin_tools]}
 
         # prefer not to specify if we don't need to
         return {}
@@ -537,7 +537,7 @@ class AgentAssistantChat(AssistantChat):
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         agent = AgentExecutor.from_agent_and_tools(
             agent=assistant_runnable,
-            tools=self.state.get_tools(),
+            tools=self.adapter.get_tools(),
             max_execution_time=120,
         )
         response: dict = agent.invoke(input, config)

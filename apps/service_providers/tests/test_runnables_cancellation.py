@@ -42,7 +42,7 @@ def test_simple_runnable_cancellation(session, fake_llm_service):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.state.get_tools")
+@patch("apps.service_providers.llm_service.adapters.get_tools")
 def test_agent_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
     runnable = _get_assistant_mocked_history_recording(session, AgentLLMChat)
@@ -82,7 +82,7 @@ def _test_runnable(runnable, session, expected_output):
 
 
 def _get_assistant_mocked_history_recording(session, cls):
-    state = ExperimentAdapter(session.experiment, session)
-    assistant = cls(state=state, check_every_ms=0)
-    state.save_message_to_history = Mock()
+    adapter = ExperimentAdapter(session.experiment, session)
+    assistant = cls(adapter=adapter, check_every_ms=0)
+    adapter.save_message_to_history = Mock()
     return assistant

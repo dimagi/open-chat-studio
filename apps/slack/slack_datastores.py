@@ -200,12 +200,12 @@ class DjangoOAuthStateStore(OAuthStateStore):
         state: str = str(uuid4())
         expire_at = timezone.now() + timezone.timedelta(seconds=self.expiration_seconds)
         # save the team on the state so that we can look it up during the callback request
-        row = SlackOAuthState(team=team, state=state, expire_at=expire_at, config=config)
+        row = SlackOAuthState(team=team, adapter=state, expire_at=expire_at, config=config)
         row.save()
         return state
 
     def consume(self, state: str) -> bool:
-        rows = SlackOAuthState.objects.filter(state=state).filter(expire_at__gte=timezone.now())
+        rows = SlackOAuthState.objects.filter(adapter=state).filter(expire_at__gte=timezone.now())
         if len(rows) > 0:
             for row in rows:
                 row.delete()

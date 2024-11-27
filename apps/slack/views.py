@@ -29,7 +29,7 @@ def slack_oauth_redirect(request):
     bolt_request = to_bolt_request(request)
     state = request.GET["state"]
     if state:
-        state_obj = SlackOAuthState.objects.filter(state=state).first()
+        state_obj = SlackOAuthState.objects.filter(adapter=state).first()
         if state_obj:
             bolt_request.context.update(state_obj.get_request_context())
 

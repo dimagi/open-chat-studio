@@ -67,7 +67,7 @@ def runnable(request, session):
 
 @pytest.mark.django_db()
 def test_runnable(runnable, session, fake_llm_service):
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm_service.llm.get_calls()) == 1
@@ -85,7 +85,7 @@ def test_runnable(runnable, session, fake_llm_service):
 def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_llm_service):
     experiment_version = session.experiment.create_new_version()
     experiment_version.get_llm_service = lambda: fake_llm_service
-    chain = runnable.build(state=ExperimentAdapter(experiment_version, session))
+    chain = runnable.build(adapter=ExperimentAdapter(experiment_version, session))
     chain.invoke("hi")
     ai_message = session.chat.messages.get(message_type=ChatMessageType.AI)
     tag = ai_message.tags.first()
@@ -96,9 +96,9 @@ def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_l
 @pytest.mark.django_db()
 def test_runnable_with_source_material(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with {source_material}"
-    state = ExperimentAdapter(session.experiment, session)
-    state.template_context.get_source_material = mock.Mock(return_value="this is the source material")
-    chain = runnable.build(state=state)
+    adapter = ExperimentAdapter(session.experiment, session)
+    adapter.template_context.get_source_material = mock.Mock(return_value="this is the source material")
+    chain = runnable.build(adapter=adapter)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with this is the source material"
@@ -108,7 +108,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm_service):
 @pytest.mark.django_db()
 def test_runnable_with_source_material_missing(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with {source_material}"
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with "
@@ -149,8 +149,8 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     )
     CustomActionOperation.objects.create(custom_action=action, experiment=session.experiment, operation_id="pollen_get")
     session.experiment.tools = []
-    state = ExperimentAdapter(session.experiment, session)
-    chain = AgentLLMChat(state=state)
+    adapter = ExperimentAdapter(session.experiment, session)
+    chain = AgentLLMChat(adapter=adapter)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     messages = fake_llm_service.llm.get_calls()[0].args[0]
@@ -177,9 +177,9 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
 )
 @pytest.mark.django_db()
 def test_runnable_runnable_format_input(runnable, session, fake_llm_service, extra_var, extra_output):
-    state = ExperimentAdapter(session.experiment, session)
-    state.template_context.get_current_datetime = mock.Mock(return_value="the current date and time")
-    chain = runnable.build(state=state)
+    adapter = ExperimentAdapter(session.experiment, session)
+    adapter.template_context.get_current_datetime = mock.Mock(return_value="the current date and time")
+    chain = runnable.build(adapter=adapter)
     session.experiment.input_formatter = "foo {input} bar" + extra_var
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -189,7 +189,7 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm_service, ext
 
 @pytest.mark.django_db()
 def test_runnable_save_input_to_history(runnable, session, chat, fake_llm_service):
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     session.chat = chat
     assert chat.messages.count() == 1
 
@@ -202,7 +202,7 @@ def test_runnable_save_input_to_history(runnable, session, chat, fake_llm_servic
 
 @pytest.mark.django_db()
 def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm_service):
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     session.chat = chat
     assert chat.messages.count() == 1
     # The existing message should not be included in the LLM call, only the system message an human message
@@ -223,7 +223,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm_service):
     experiment.llm_provider_model.max_token_limit = 0  # disable compression
     session.chat = chat
     assert chat.messages.count() == 1
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     assert len(fake_llm_service.llm.get_calls()) == 1
@@ -265,7 +265,7 @@ def test_runnable_with_participant_data(
     participant.save()
 
     session.experiment.prompt_text = "System prompt. Participant data: {participant_data}"
-    chain = runnable.build(state=ExperimentAdapter(session.experiment, session))
+    chain = runnable.build(adapter=ExperimentAdapter(session.experiment, session))
     chain.invoke("hi")
 
     if considered_authorized:
@@ -278,11 +278,11 @@ def test_runnable_with_participant_data(
 @pytest.mark.django_db()
 def test_runnable_with_current_datetime(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with current datetime: {current_datetime}"
-    state = ExperimentAdapter(session.experiment, session)
-    state.template_context.get_current_datetime = mock.Mock(
+    adapter = ExperimentAdapter(session.experiment, session)
+    adapter.template_context.get_current_datetime = mock.Mock(
         return_value=pretty_date(datetime.fromisoformat("2024-02-08 13:00:08.877096+00:00"))
     )
-    chain = runnable.build(state=state)
+    chain = runnable.build(adapter=adapter)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
     expected_system__prompt = "System prompt with current datetime: Thursday, 08 February 2024 13:00:08 UTC"
