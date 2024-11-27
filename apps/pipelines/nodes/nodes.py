@@ -274,9 +274,11 @@ class RouterNode(Passthrough, HistoryMixin):
         num_outputs = info.data.get("num_outputs")
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
-        if len(value) != num_outputs:
-            raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
-        return value
+
+        if len(set(value)) != len(value):
+            raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
+
+        return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(
