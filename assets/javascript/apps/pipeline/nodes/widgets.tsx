@@ -242,18 +242,17 @@ export function KeywordsWidget(props: WidgetParams) {
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
-          const label = (
-            <>{`Output Keyword ${index + 1}`}
-              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
-                <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
-                  <i className="fa-solid fa-minus"></i>
-                </button>
-              </div>
-            </>
-          )
+          const label = `Output Keyword ${index + 1}`;
           return (
             <div className="form-control w-full capitalize" key={index}>
-              <label className="label">{label}</label>
+              <div className="flex justify-between items-center">
+                <label className="label">{label}</label>
+                <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                  <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
+                    <i className="fa-solid fa-minus"></i>
+                  </button>
+                </div>
+              </div>
               <input
                 className="input input-bordered w-full"
                 name="keywords"
