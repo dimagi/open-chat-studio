@@ -41,22 +41,20 @@ def remove_temporary_superuser_access(request, slug):
     """Removes access to the specific team and retains other valid access."""
 
     logger.info(f"Removing temporary superuser access for '{request.user.email}' to '{slug}'")
+    remove_expired_temporary_superuser_access(request, slug)
+
+
+def remove_expired_temporary_superuser_access(request, remove_slug=None):
     elevated_privileges = request.session.get("elevated_privileges", [])
     now = int(timezone.now().timestamp())
-    request.session["elevated_privileges"] = [
-        (team, expire) for team, expire in elevated_privileges if team != slug or expire <= now
+    valid = [
+        (team, expire)
+        for team, expire in elevated_privileges
+        if expire > now and (remove_slug is None or team != remove_slug)
     ]
-
-
-def remove_expired_temporary_superuser_access(request):
-    elevated_privileges = request.session.get("elevated_privileges", [])
-    now = int(timezone.now().timestamp())
-    request.session["elevated_privileges"] = [(team, expire) for team, expire in elevated_privileges if expire > now]
-
-    valid = [(team, expire) for team, expire in elevated_privileges if expire > now]
-    invalid = [team for team, expire in elevated_privileges if expire <= now]
-    if invalid:
-        logger.info(f"Removed expired privileges for user {request.user.email}: {','.join(invalid)}")
+    expired = [team for team, expire in elevated_privileges if expire <= now]
+    if expired:
+        logger.info(f"Removed expired privileges for user {request.user.email}: {','.join(expired)}")
     request.session["elevated_privileges"] = valid
 
 
