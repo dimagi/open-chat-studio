@@ -7,6 +7,11 @@ from apps.web.superuser_utils import has_temporary_superuser_access
 
 
 class TeamAccessDenied(Http404):
+    """'Tagged' 404 that allows us to detect this condition in error handling.
+
+    See 404.html.
+    """
+
     pass
 
 
