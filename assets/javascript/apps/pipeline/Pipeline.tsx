@@ -10,8 +10,8 @@ import ReactFlow, {
   MarkerType,
   NodeDragHandler,
   NodeTypes,
-  OnMove,
   OnSelectionChangeParams,
+  PanOnScrollMode,
 } from "reactflow";
 
 import {PipelineNode} from "./PipelineNode";
@@ -65,7 +65,6 @@ export default function Pipeline() {
       resetFlow({
         nodes: currentPipeline?.data?.nodes ?? [],
         edges: currentPipeline?.data?.edges ?? [],
-        viewport: currentPipeline?.data?.viewport ?? {zoom: 1, x: 0, y: 0},
       });
     }
   }, [currentPipelineId, reactFlowInstance]);
@@ -107,11 +106,7 @@ export default function Pipeline() {
   );
 
   const onNodeDragStop: NodeDragHandler = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
-  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
-
-  const onMoveEnd: OnMove = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges, reactFlowInstance?.getViewport()!);
+    autoSaveCurrentPipline(nodes, edges);
   }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
 
   function handleDelete(e: KeyboardEvent) {
@@ -125,8 +120,7 @@ export default function Pipeline() {
 
   function manualSaveCurrentPipeline() {
     if (currentPipeline) {
-      const viewport = reactFlowInstance?.getViewport()!;
-      const updatedPipeline = {...currentPipeline, data: {nodes, edges, viewport}}
+      const updatedPipeline = {...currentPipeline, data: {nodes, edges}}
       savePipeline(updatedPipeline);
     }
   }
@@ -165,7 +159,6 @@ export default function Pipeline() {
         onInit={setReactFlowInstance}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        onMoveEnd={onMoveEnd}
         onNodeDragStop={onNodeDragStop}
         minZoom={0.01}
         maxZoom={8}
@@ -173,6 +166,9 @@ export default function Pipeline() {
         defaultEdgeOptions={defaultEdgeOptions}
         onSelectionChange={onSelectionChange}
         onPaneClick={handlePaneClick} // Close panel when clicking on the canvas
+        panOnScroll={true}
+        panOnScrollMode={PanOnScrollMode.Free}
+        fitView={true}
       >
         <ComponentList
           isOpen={selectedOverlay == "componentList"}
@@ -182,7 +178,7 @@ export default function Pipeline() {
            isOpen={selectedOverlay == "textBox"}
           setIsOpen={(open) => setSelectedOverlay(open ? "textBox" : null)}
         />
-        {editingNode && <EditPanel nodeId={editingNode.id} />}
+        {editingNode && <EditPanel key={editingNode.id} nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left"/>
         <Background
           variant={BackgroundVariant.Dots}

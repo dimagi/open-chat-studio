@@ -18,11 +18,13 @@ export default function NodeOutputs({nodeId, data, parentBounds}: {
     <>
       {multipleOutputs && <div className="divider">Outputs</div>}
       <div className={multipleOutputs ? "" : "py-2 mt-2 border-t border-neutral"}>
-        {outputNames.map((outputName, index) => (
+        {outputNames.map((output, index) => (
           <NodeOutput
-            key={outputName}
+            key={output.label}
             handleKey={generateOutputHandle(index)}
-            nodeId={nodeId} label={outputName}
+            nodeId={nodeId}
+            label={output.label}
+            isError={output.isError}
             parentBounds={parentBounds}/>
         ))}
       </div>
@@ -34,10 +36,11 @@ interface NodeOutputProps {
   nodeId: string;
   handleKey: string;
   label: string;
+  isError: boolean;
   parentBounds?: DOMRect;
 }
 
-const NodeOutput = React.memo(function NodeOutput({nodeId, handleKey, label, parentBounds}: NodeOutputProps) {
+const NodeOutput = React.memo(function NodeOutput({nodeId, handleKey, label, parentBounds, isError}: NodeOutputProps) {
   return <WrappedHandle
     nodeId={nodeId}
     id={handleKey}
@@ -46,22 +49,27 @@ const NodeOutput = React.memo(function NodeOutput({nodeId, handleKey, label, par
     classes="py-2 text-right"
     key={handleKey}
     parentBounds={parentBounds}
+    isError={isError}
   />
 });
 
 
 function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
-    return ["Output True", "Output False"];
+    return [new Output("Output True"), new Output("Output False")];
   } else if (nodeType === "RouterNode") {
     const numberOfOutputs = Math.max(1, parseInt(concatenate(params.num_outputs)) || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {
       if (params.keywords?.[i]) {
-        return `Keyword '${params.keywords[i]}'`
+        return new Output(params.keywords[i])
       }
-      return `Output ${i + 1}`
+      return new Output(`Output ${i + 1}`, true)
     });
   } else {
-    return ["Output"]
+    return [new Output("Output")]
   }
+}
+
+class Output {
+  constructor(readonly label: string, readonly isError: boolean = false) {}
 }
