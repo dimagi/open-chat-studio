@@ -120,7 +120,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
         />
       </button>
 
-      <OverlayPanel classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen} onScroll={onscroll}>
+      <OverlayPanel classes="p-4 top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen} onScroll={onscroll}>
         {isOpen && (
           <>
             <h2 className="text-xl text-center font-bold">Available Nodes</h2>
