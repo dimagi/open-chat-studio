@@ -68,7 +68,7 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_temperature: float = Field(
-        default=0.7, gt=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.float)
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
     def get_llm_service(self):
@@ -272,10 +272,13 @@ class RouterNode(Passthrough, HistoryMixin):
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         num_outputs = info.data.get("num_outputs")
-        value = [entry for entry in value if entry]
-        if len(value) != num_outputs:
-            raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
-        return value
+        if not all(entry for entry in value):
+            raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
+
+        if len(set(value)) != len(value):
+            raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
+
+        return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(

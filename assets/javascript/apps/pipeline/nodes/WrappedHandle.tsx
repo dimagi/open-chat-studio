@@ -1,5 +1,6 @@
 import {Handle, Position, useUpdateNodeInternals} from "reactflow";
 import React, {useEffect, useRef, useState} from "react";
+import {classNames} from "../utils";
 
 export default function WrappedHandle(props: {
   nodeId: string,
@@ -8,6 +9,7 @@ export default function WrappedHandle(props: {
   id: string,
   position: Position,
   parentBounds?: DOMRect
+  isError: boolean
 }) {
   const [position, setPosition] = useState(null);
   const ref = useRef<any>();
@@ -29,7 +31,7 @@ export default function WrappedHandle(props: {
         id={props.id}
         style={style}
       />
-      <span className="font-semibold font-mono">{props.label}</span>
+      <span className={classNames("font-semibold font-mono", props.isError ? "text-error" : "")}>{props.label}</span>
     </div>
   )
 }
