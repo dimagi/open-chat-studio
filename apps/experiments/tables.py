@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.template.loader import get_template
 from django.urls import reverse
+from django.utils.html import format_html
 from django_tables2 import columns, tables
 
 from apps.experiments.models import (
@@ -17,10 +18,6 @@ from apps.generics import actions
 
 class ExperimentTable(tables.Table):
     name = columns.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
         orderable=True,
     )
     description = columns.Column(verbose_name="Description")
@@ -35,9 +32,20 @@ class ExperimentTable(tables.Table):
     class Meta:
         model = Experiment
         fields = ("name",)
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "data-redirect-url": lambda record: (
+                record.get_absolute_url() if hasattr(record, "get_absolute_url") and not record.is_archived else ""
+            ),
+        }
         orderable = False
         empty_text = "No experiments found."
+
+    def render_name(self, record):
+        """Conditionally linkify the name field based on is_archived."""
+        if not record.is_archived:
+            return format_html('<a href="{}" class="link">{}</a>', record.get_absolute_url(), record.name)
+        return record.name
 
 
 class SafetyLayerTable(tables.Table):
