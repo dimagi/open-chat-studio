@@ -11,5 +11,7 @@
   ],
   "title": "BooleanNode",
   "type": "object",
-  "ui:label": "Conditional Node"
+  "ui:label": "Conditional Node",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

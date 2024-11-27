@@ -1,0 +1,9 @@
+{
+  "description": "The end of the pipeline",
+  "properties": {},
+  "title": "EndNode",
+  "type": "object",
+  "ui:label": "End",
+  "ui:show_input": true,
+  "ui:show_output": false
+}

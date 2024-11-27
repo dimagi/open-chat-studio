@@ -33,5 +33,7 @@
   ],
   "title": "ExtractStructuredData",
   "type": "object",
-  "ui:label": "Extract Structured Data"
+  "ui:label": "Extract Structured Data",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

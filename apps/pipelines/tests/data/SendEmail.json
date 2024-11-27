@@ -17,5 +17,7 @@
   ],
   "title": "SendEmail",
   "type": "object",
-  "ui:label": "Send an email"
+  "ui:label": "Send an email",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

@@ -26,5 +26,7 @@
   ],
   "title": "AssistantNode",
   "type": "object",
-  "ui:label": "OpenAI Assistant"
+  "ui:label": "OpenAI Assistant",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

@@ -71,5 +71,7 @@
   ],
   "title": "RouterNode",
   "type": "object",
-  "ui:label": "Router"
+  "ui:label": "Router",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

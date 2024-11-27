@@ -3,5 +3,7 @@
   "properties": {},
   "title": "Passthrough",
   "type": "object",
-  "ui:label": "Do Nothing"
+  "ui:label": "Do Nothing",
+  "ui:show_input": true,
+  "ui:show_output": true
 }

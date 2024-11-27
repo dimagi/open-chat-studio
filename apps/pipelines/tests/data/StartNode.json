@@ -1,0 +1,9 @@
+{
+  "description": "The start of the pipeline",
+  "properties": {},
+  "title": "StartNode",
+  "type": "object",
+  "ui:label": "Start",
+  "ui:show_input": false,
+  "ui:show_output": true
+}

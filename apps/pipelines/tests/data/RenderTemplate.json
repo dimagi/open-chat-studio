@@ -13,5 +13,7 @@
   ],
   "title": "RenderTemplate",
   "type": "object",
-  "ui:label": "Render a template"
+  "ui:label": "Render a template",
+  "ui:show_input": true,
+  "ui:show_output": true
 }
