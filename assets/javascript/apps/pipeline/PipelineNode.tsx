@@ -103,7 +103,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             </div>
           )}
         </div>
-        <NodeOutputs data={data} />
+        {nodeSchema["ui:show_output"] && <NodeOutputs data={data} />}
       </div>
     </>
   );

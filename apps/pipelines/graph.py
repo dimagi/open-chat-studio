@@ -9,7 +9,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.nodes import StartNode
+from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 
 class Node(pydantic.BaseModel):
@@ -54,11 +54,12 @@ class PipelineGraph(pydantic.BaseModel):
     @cached_property
     def start_node(self) -> Node:
         start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]
-        if len(start_nodes) != 1:
-            raise PipelineBuildError(
-                f"There should be exactly 1 {StartNode.model_config['json_schema_extra'].label} node"
-            )
         return start_nodes[0]
+
+    @cached_property
+    def end_node(self) -> Node:
+        end_nodes = [node for node in self.nodes if node.type == EndNode.__name__]
+        return end_nodes[0]
 
     @cached_property
     def conditional_edge_map(self) -> dict[str, dict[str, str]]:
@@ -89,18 +90,16 @@ class PipelineGraph(pydantic.BaseModel):
 
         if not self.nodes:
             raise PipelineBuildError("There are no nodes in the graph")
+
+        self._validate_start_end_nodes()
+
         state_graph = StateGraph(PipelineState)
 
         self._add_nodes_to_graph(state_graph)
         self._add_edges_to_graph(state_graph)
 
-        node_ids = {n.id for n in self.nodes}
-        incoming = {e.source for e in self.edges}
-        end = list(node_ids - incoming)
-        if len(end) != 1:
-            raise PipelineBuildError(f"Expected 1 end node, got {len(end)}")
         state_graph.set_entry_point(self.start_node.id)
-        state_graph.set_finish_point(end[0])
+        state_graph.set_finish_point(self.end_node.id)
 
         compiled_graph = state_graph.compile()
         # compiled_graph.get_graph().print_ascii()
@@ -128,3 +127,15 @@ class PipelineGraph(pydantic.BaseModel):
 
         for edge in self.unconditional_edges:
             state_graph.add_edge(edge.source, edge.target)
+
+    def _validate_start_end_nodes(self):
+        start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]
+        if len(start_nodes) != 1:
+            raise PipelineBuildError(
+                f"There should be exactly 1 {StartNode.model_config['json_schema_extra'].label} node"
+            )
+        end_nodes = [node for node in self.nodes if node.type == EndNode.__name__]
+        if len(end_nodes) != 1:
+            raise PipelineBuildError(
+                f"There should be exactly 1 {EndNode.model_config['json_schema_extra'].label} node"
+            )

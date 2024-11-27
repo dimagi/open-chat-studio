@@ -82,7 +82,11 @@ def _create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | 
 
 
 def _create_start_node():
-    return {"id": str(uuid4()), "type": "StartNode"}
+    return {"id": str(uuid4()), "type": nodes.StartNode.__name__}
+
+
+def _create_end_node():
+    return {"id": str(uuid4()), "type": nodes.EndNode.__name__}
 
 
 def _create_email_node():
@@ -221,6 +225,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
         _create_render_template_node(),
         _create_llm_response_with_prompt_node(str(provider.id), str(provider_model.id)),
         _create_email_node(),
+        _create_end_node(),
     ]
 
     state = PipelineState(
@@ -237,7 +242,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_send_email(pipeline):
-    nodes = [_create_start_node(), _create_email_node()]
+    nodes = [_create_start_node(), _create_email_node(), _create_end_node()]
     _create_runnable(pipeline, nodes).invoke(PipelineState(messages=["A cool message"]))
     assert len(mail.outbox) == 1
     assert mail.outbox[0].body == "A cool message"
@@ -251,7 +256,11 @@ def test_send_email(pipeline):
 def test_llm_response(get_llm_service, provider, provider_model, pipeline):
     service = build_fake_llm_service(responses=["123"], token_counts=[0])
     get_llm_service.return_value = service
-    nodes = [_create_start_node(), _create_llm_response_node(str(provider.id), str(provider_model.id))]
+    nodes = [
+        _create_start_node(),
+        _create_llm_response_node(str(provider.id), str(provider_model.id)),
+        _create_end_node(),
+    ]
     assert (
         _create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1]
         == "123"
@@ -285,6 +294,7 @@ def test_llm_with_prompt_response(
         _create_llm_response_with_prompt_node(
             str(provider.id), str(provider_model.id), source_material_id=str(source_material.id), prompt="Node 2:"
         ),
+        _create_end_node(),
     ]
     output = _create_runnable(pipeline, nodes).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session)
@@ -299,7 +309,11 @@ def test_llm_with_prompt_response(
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
 def test_render_template(pipeline):
-    nodes = [_create_start_node(), _create_render_template_node("{{ thing }} is cool")]
+    nodes = [
+        _create_start_node(),
+        _create_render_template_node("{{ thing }} is cool"),
+        _create_end_node(),
+    ]
     assert (
         _create_runnable(pipeline, nodes).invoke(PipelineState(messages=[{"thing": "Cycling"}]))["messages"][-1]
         == "Cycling is cool"
@@ -313,7 +327,7 @@ def test_branching_pipeline(pipeline, experiment_session):
     A = _create_render_template_node("A ({{input }})")
     B = _create_render_template_node("B ({{ input}})")
     C = _create_render_template_node("C ({{input }})")
-    END = _create_passthrough_node()  # TODO: Convert to endnode
+    END = _create_end_node()
     nodes = [
         start,
         A,
@@ -369,7 +383,7 @@ def test_conditional_node(pipeline, experiment_session):
     boolean = _create_boolean_node()
     template_true = _create_render_template_node("said hello")
     template_false = _create_render_template_node("didn't say hello, said {{ input }}")
-    end = _create_passthrough_node()
+    end = _create_end_node()
     nodes = [
         start,
         boolean,
@@ -434,7 +448,7 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     template_b = _create_render_template_node("B {{ input }}")
     template_c = _create_render_template_node("C {{ input }}")
     template_d = _create_render_template_node("D {{ input }}")
-    end = _create_passthrough_node()
+    end = _create_end_node()
     nodes = [start, router, template_a, template_b, template_c, template_d, end]
     edges = [
         {"id": "start -> router", "source": start["id"], "target": router["id"]},
@@ -514,6 +528,7 @@ def extract_structured_data_pipeline(provider, provider_model, pipeline, llm=Non
             _create_extract_structured_data_node(
                 str(provider.id), str(provider_model.id), '{"name": "the name of the user"}'
             ),
+            _create_end_node(),
         ]
         runnable = _create_runnable(pipeline, nodes)
         yield runnable
@@ -667,6 +682,7 @@ def _run_data_extract_and_update_pipeline(session, provider, pipeline, extracted
                 '{"name": "the name of the user"}',
                 key_name,
             ),
+            _create_end_node(),
         ]
         runnable = _create_runnable(pipeline, nodes)
         state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
@@ -686,7 +702,7 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
 
     pipeline = PipelineFactory()
     assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
-    nodes = [_create_start_node(), _create_assistant_node(str(assistant.id))]
+    nodes = [_create_start_node(), _create_assistant_node(str(assistant.id)), _create_end_node()]
     runnable = _create_runnable(pipeline, nodes)
     state = PipelineState(
         messages=["Hi there bot"],
@@ -710,7 +726,7 @@ def test_assistant_node_raises(get_assistant_runnable):
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
-    nodes = [_create_start_node(), _create_assistant_node(str(999))]
+    nodes = [_create_start_node(), _create_assistant_node(str(999)), _create_end_node()]
     runnable = _create_runnable(pipeline, nodes)
     state = PipelineState(
         messages=["Hi there bot"],
@@ -723,36 +739,27 @@ def test_assistant_node_raises(get_assistant_runnable):
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_start_node_missing(pipeline):
-    nodes = [_create_passthrough_node()]
+    nodes = [_create_passthrough_node(), _create_end_node()]
     with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
+        _create_runnable(pipeline, nodes)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_end_node_missing(pipeline):
+    nodes = [_create_start_node()]
+    with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
         _create_runnable(pipeline, nodes)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_multiple_start_nodes(pipeline):
-    nodes = [_create_start_node(), _create_start_node()]
+    nodes = [_create_start_node(), _create_start_node(), _create_end_node()]
     with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
         _create_runnable(pipeline, nodes)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-@pytest.mark.skip()
-def test_end_node_missing(pipeline):
-    data = {
-        "edges": [],
-        "nodes": [
-            {
-                "data": {
-                    "id": "start-GUk0C",
-                    "label": "Start",
-                    "type": "StartNode",
-                },
-                "id": "start-GUk0C",
-            }
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+def test_multiple_end_nodes(pipeline):
+    nodes = [_create_start_node(), _create_end_node(), _create_end_node()]
     with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
-        runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
-    assert runnable.invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1] == "Repeat exactly: 123"
+        _create_runnable(pipeline, nodes)

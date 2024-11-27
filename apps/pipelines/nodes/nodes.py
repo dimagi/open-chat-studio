@@ -243,6 +243,10 @@ class StartNode(Passthrough):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", show_input=False))
 
 
+class EndNode(Passthrough):
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", show_output=False))
+
+
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 
