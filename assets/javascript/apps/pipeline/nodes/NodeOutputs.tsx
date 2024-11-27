@@ -2,13 +2,10 @@ import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
 import {concatenate} from "../utils";
-import WrappedHandle from "./WrappedHandle";
 import {LabeledHandle} from "./LabeledHandle";
 
-export default function NodeOutputs({nodeId, data, parentBounds}: {
-  nodeId: string,
+export default function NodeOutputs({data}: {
   data: NodeData,
-  parentBounds?: DOMRect
 }) {
   const outputNames = getOutputNames(data.type, data.params);
   const multipleOutputs = outputNames.length > 1;
@@ -33,27 +30,6 @@ export default function NodeOutputs({nodeId, data, parentBounds}: {
     </>
   )
 }
-
-interface NodeOutputProps {
-  nodeId: string;
-  handleKey: string;
-  label: string;
-  isError: boolean;
-  parentBounds?: DOMRect;
-}
-
-const NodeOutput = React.memo(function NodeOutput({nodeId, handleKey, label, parentBounds, isError}: NodeOutputProps) {
-  return <WrappedHandle
-    nodeId={nodeId}
-    id={handleKey}
-    label={label}
-    position={Position.Right}
-    classes="py-2 text-right"
-    key={handleKey}
-    parentBounds={parentBounds}
-    isError={isError}
-  />
-});
 
 
 function getOutputNames(nodeType: string, params: NodeParams) {
