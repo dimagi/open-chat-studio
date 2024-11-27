@@ -9,8 +9,8 @@ export default function NodeOutputs({nodeId, data, parentBounds}: {
   data: NodeData,
   parentBounds?: DOMRect
 }) {
+  const multipleOutputs = data.type === "RouterNode" || data.type === "BooleanNode";
   const outputNames = getOutputNames(data.type, data.params);
-  const multipleOutputs = outputNames.length > 1;
   const generateOutputHandle = (outputIndex: number) => {
     return multipleOutputs ? `output_${outputIndex}` : "output";
   };
@@ -20,7 +20,7 @@ export default function NodeOutputs({nodeId, data, parentBounds}: {
       <div className={multipleOutputs ? "" : "py-2 mt-2 border-t border-neutral"}>
         {outputNames.map((outputName, index) => (
           <NodeOutput
-            key={outputName}
+            key={index}
             handleKey={generateOutputHandle(index)}
             nodeId={nodeId} label={outputName}
             parentBounds={parentBounds}/>
