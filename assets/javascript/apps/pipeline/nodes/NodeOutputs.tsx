@@ -3,6 +3,7 @@ import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
 import {concatenate} from "../utils";
 import WrappedHandle from "./WrappedHandle";
+import {LabeledHandle} from "./LabeledHandle";
 
 export default function NodeOutputs({nodeId, data, parentBounds}: {
   nodeId: string,
@@ -19,13 +20,14 @@ export default function NodeOutputs({nodeId, data, parentBounds}: {
       {multipleOutputs && <div className="divider">Outputs</div>}
       <div className={multipleOutputs ? "" : "py-2 mt-2 border-t border-neutral"}>
         {outputNames.map((output, index) => (
-          <NodeOutput
-            key={output.label}
-            handleKey={generateOutputHandle(index)}
-            nodeId={nodeId}
-            label={output.label}
-            isError={output.isError}
-            parentBounds={parentBounds}/>
+          <LabeledHandle
+            id={generateOutputHandle(index)}
+            key={generateOutputHandle(index)}
+            title={output.label}
+            type="source"
+            position={Position.Right}
+            labelClassName={output.isError ? "text-error" : "text-foreground"}
+          />
         ))}
       </div>
     </>
@@ -71,5 +73,6 @@ function getOutputNames(nodeType: string, params: NodeParams) {
 }
 
 class Output {
-  constructor(readonly label: string, readonly isError: boolean = false) {}
+  constructor(readonly label: string, readonly isError: boolean = false) {
+  }
 }
