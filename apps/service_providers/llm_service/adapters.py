@@ -292,7 +292,7 @@ class AssistantAdapter(BaseAdapter):
             file_type_info.extend([{file.external_id: file.content_type} for file in att.files.all()])
         return file_type_info
 
-    def get_attachments(self, attachment_type: str):
+    def get_attachments(self, attachment_type: list[str]):
         return self.session.chat.attachments.filter(tool_type__in=attachment_type)
 
     def get_input_message_metadata(self, resource_file_mapping: dict[str, list[str]]):
