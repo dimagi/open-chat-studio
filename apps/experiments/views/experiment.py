@@ -821,7 +821,8 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
-        "experiment_version_number": version_number,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
