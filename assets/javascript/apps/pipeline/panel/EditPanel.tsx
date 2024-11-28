@@ -44,28 +44,28 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   }
 
   const width = expanded ? "w-full" : "w-2/5";
-
   return (
     <div className="relative">
       <OverlayPanel classes={classNames("top-0 right-0 h-[80vh] overflow-y-auto", width)} isOpen={true}
         onOpenChange={(value) => !value && closeEditor()}>
         <>
-          <div className="absolute top-0 left-0">
-            <button className="btn btn-xs btn-ghost" onClick={toggleExpand}
-              aria-label={expanded ? "Collapse panel" : "Expand panel"}
-            >
-              {expanded ? <i className="fa-solid fa-down-left-and-up-right-to-center"></i> :
-                <i className="fa-solid fa-up-right-and-down-left-from-center"></i>}
-            </button>
+          <div className="sticky top-0 z-10 p-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <div className="absolute top-0 left-0">
+              <button className="btn btn-xs btn-ghost" onClick={toggleExpand}
+                aria-label={expanded ? "Collapse panel" : "Expand panel"}
+              >
+                {expanded ? <i className="fa-solid fa-down-left-and-up-right-to-center"></i> :
+                  <i className="fa-solid fa-up-right-and-down-left-from-center"></i>}
+              </button>
+            </div>
+            <div className="absolute top-0 right-0">
+              <button className="btn btn-xs btn-ghost" onClick={closeEditor} aria-label="Close editor">
+                <i className="fa fa-times"></i>
+              </button>
+            </div>
+            <h2 className="text-lg text-center font-bold">{`Editing ${nodeSchema["ui:label"]}`}</h2>
           </div>
-          <div className="absolute top-0 right-0">
-            <button className="btn btn-xs btn-ghost" onClick={closeEditor} aria-label="Close editor">
-              <i className="fa fa-times"></i>
-            </button>
-          </div>
-          <h2 className="text-lg text-center font-bold">{data?.label ? `Editing ${data.label}` : 'Loading...'}</h2>
-
-          <div className="ml-2">
+          <div className="p-4 ml-2">
             {schemaProperties.length === 0 && (
               <p className="pg-text-muted">No parameters to edit</p>
             )}

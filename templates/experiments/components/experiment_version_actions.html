@@ -16,10 +16,5 @@
             onclick="document.querySelector('#versionDetailsModal').showModal();">
       View Details
     </button>
-  {% else %}
-    <a class="btn btn-sm btn-primary mb-2"
-       href="{% url 'experiments:create_version' team.slug record.id %}">
-      Create Version
-    </a>
   {% endif %}
 </div>

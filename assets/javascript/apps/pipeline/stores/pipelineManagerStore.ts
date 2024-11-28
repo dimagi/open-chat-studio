@@ -1,4 +1,4 @@
-import {Edge, Node, Viewport} from "reactflow";
+import {Edge, Node} from "reactflow";
 import {create} from "zustand";
 import {PipelineType} from "../types/pipeline";
 import {PipelineManagerStoreType} from "../types/pipelineManagerStore";
@@ -31,7 +31,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     }
   },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
-  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[], viewport: Viewport) => {
+  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
     set({dirty: true});
     // Clear the previous timeout if it exists.
     if (saveTimeoutId) {
@@ -42,7 +42,7 @@ const usePipelineManagerStore = create<PipelineManagerStoreType>((set, get) => (
     saveTimeoutId = setTimeout(() => {
       if (get().currentPipeline) {
         get().savePipeline(
-          {...get().currentPipeline!, data: {nodes, edges, viewport}},
+          {...get().currentPipeline!, data: {nodes, edges}},
           true,
         );
       }

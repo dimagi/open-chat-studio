@@ -59,7 +59,7 @@
         <form method="post" action="{{ update_default_url }}">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-primary" {% if experiment.is_default_version %}disabled{% endif %}>
-                Make default version
+                Set as Published version
             </button>
         </form>
     </div>

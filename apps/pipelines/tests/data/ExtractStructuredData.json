@@ -13,11 +13,11 @@
     },
     "llm_temperature": {
       "default": 0.7,
-      "exclusiveMinimum": 0.0,
       "maximum": 2.0,
+      "minimum": 0.0,
       "title": "Temperature",
       "type": "number",
-      "ui:widget": "float"
+      "ui:widget": "range"
     },
     "data_schema": {
       "default": "{\"name\": \"the name of the user\"}",

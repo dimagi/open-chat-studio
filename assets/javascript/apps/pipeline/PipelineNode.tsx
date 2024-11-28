@@ -1,5 +1,5 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
-import React, {ChangeEvent, useEffect, useRef, useState} from "react";
+import React, {ChangeEvent} from "react";
 import {classNames, getCachedData} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
@@ -44,23 +44,9 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   }
 
   const defaultBorder = nodeErrors ? "border-error " : ""
-  const nodeBorder = classNames(
-    selected ? "border-secondary" : defaultBorder,
-    "border px-4 py-2 shadow-md rounded-xl border-2 bg-base-100",
-  )
-
-  const nodeRef = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<DOMRect>();
-  useEffect(() => {
-    if (nodeRef && nodeRef.current) {
-      const resizeObserver = new ResizeObserver((entries) => {
-        if (entries[0].target === nodeRef.current) {
-          setRect(nodeRef.current.getBoundingClientRect());
-        }
-      });
-      resizeObserver.observe(nodeRef.current);
-    }
-  }, [nodeRef]);
+  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
+  const border = selected ? selectedBorder : defaultBorder
+  const nodeBorder = classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
 
   return (
     <>
@@ -88,13 +74,10 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
           )}
         </div>
       </NodeToolbar>
-      <div
-        ref={nodeRef}
-        className={nodeBorder}
-      >
+      <div className={nodeBorder}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
-        <NodeInput nodeId={id}/>
-        <div className="ml-2">
+        <NodeInput />
+        <div className="px-4">
           <div>
             {schemaProperties.map((name) => (
               <React.Fragment key={name}>
@@ -119,7 +102,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             </div>
           )}
         </div>
-        <NodeOutputs nodeId={id} data={data} parentBounds={rect}/>
+        <NodeOutputs data={data} />
       </div>
     </>
   );

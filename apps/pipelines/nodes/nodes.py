@@ -68,7 +68,7 @@ class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_temperature: float = Field(
-        default=0.7, gt=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.float)
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
     def get_llm_service(self):
@@ -97,12 +97,18 @@ class HistoryMixin(LLMResponseMixin):
         PipelineChatHistoryTypes.NONE,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
-    history_name: str = Field(
-        "",
+    history_name: str | None = Field(
+        None,
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
     )
+
+    @field_validator("history_name")
+    def validate_history_name(cls, value, info: FieldValidationInfo):
+        if info.data.get("history_type") == PipelineChatHistoryTypes.NAMED and not value:
+            raise PydanticCustomError("invalid_history_name", "A history name is required for named history")
+        return value
 
     def _get_history_name(self, node_id):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
@@ -256,7 +262,9 @@ class RouterNode(Passthrough, HistoryMixin):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
 
     prompt: str = Field(
-        default="You are an extremely helpful router", json_schema_extra=UiSchema(widget=Widgets.expandable_text)
+        default="You are an extremely helpful router",
+        min_length=1,
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
     num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
     keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
@@ -264,10 +272,13 @@ class RouterNode(Passthrough, HistoryMixin):
     @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         num_outputs = info.data.get("num_outputs")
-        value = [entry for entry in value if entry]
-        if len(value) != num_outputs:
-            raise PydanticCustomError("invalid_keywords", "Number of keywords should match the number of outputs")
-        return value
+        if not all(entry for entry in value):
+            raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
+
+        if len(set(value)) != len(value):
+            raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
+
+        return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
 
     def _process_conditional(self, state: PipelineState, node_id=None):
         prompt = ChatPromptTemplate.from_messages(

@@ -39,7 +39,9 @@
                         {% include "experiments/chat/components/user_icon.html" %}
                       {% endif %}
                       <div class="grow">
-                        {{ message.content|render_markdown }}
+                        <div class="message-contents">
+                          <p>{{ message.content|render_markdown }}</p>
+                        </div>
                         <div class="flex flex-col">
                           {% for file in message.get_attached_files %}
                             <div class="inline text-sm p-1">
