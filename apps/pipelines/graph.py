@@ -49,6 +49,13 @@ class PipelineGraph(pydantic.BaseModel):
         return {node.id: node for node in self.nodes}
 
     @cached_property
+    def edges_by_source(self) -> dict[str, list[Edge]]:
+        by_source = defaultdict(list)
+        for edge in self.edges:
+            by_source[edge.source].append(edge)
+        return by_source
+
+    @cached_property
     def conditional_edges(self) -> list[Edge]:
         return [edge for edge in self.edges if edge.is_conditional()]
 
@@ -100,38 +107,55 @@ class PipelineGraph(pydantic.BaseModel):
 
         state_graph = StateGraph(PipelineState)
 
-        self._add_nodes_to_graph(state_graph)
-        self._add_edges_to_graph(state_graph)
-
         state_graph.set_entry_point(self.start_node.id)
         state_graph.set_finish_point(self.end_node.id)
+
+        reachable_nodes = self._get_reachable_nodes(self.start_node)
+        self._add_nodes_to_graph(state_graph, reachable_nodes)
+        self._add_edges_to_graph(state_graph, reachable_nodes)
 
         compiled_graph = state_graph.compile()
         # compiled_graph.get_graph().print_ascii()
         return compiled_graph
 
-    def _add_nodes_to_graph(self, state_graph):
-        try:
-            for node in self.nodes:
+    def _get_reachable_nodes(self, start_node: Node) -> list[Node]:
+        visited = set()
+        stack = [start_node.id]
+        while stack:
+            node_id = stack.pop()
+            visited.add(node_id)
+            stack.extend([edge.target for edge in self.edges_by_source[node_id]])
+        return list(self.nodes_by_id[node_id] for node_id in visited)
+
+    def _add_nodes_to_graph(self, state_graph: StateGraph, nodes: list[Node]):
+        if self.end_node not in nodes:
+            raise PipelineBuildError(
+                f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
+                f"from {StartNode.model_config['json_schema_extra'].label} node"
+            )
+
+        for node in nodes:
+            try:
                 incoming_edges = [edge.source for edge in self.edges if edge.target == node.id]
                 state_graph.add_node(node.id, partial(node.pipeline_node_instance.process, node.id, incoming_edges))
-        except ValidationError as ex:
-            raise PipelineNodeBuildError(ex)
+            except ValidationError as ex:
+                raise PipelineNodeBuildError(ex)
 
-    def _add_edges_to_graph(self, state_graph):
+    def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         seen_sources = set()
-        for edge in self.conditional_edges:
-            if edge.source not in seen_sources:  # We only add edges from the same source once
-                node_instance = self.nodes_by_id[edge.source].pipeline_node_instance
-                state_graph.add_conditional_edges(
-                    edge.source,
-                    partial(node_instance.process_conditional, node_id=edge.source),
-                    self.conditional_edge_map[edge.source],
-                )
-            seen_sources.add(edge.source)
-
-        for edge in self.unconditional_edges:
-            state_graph.add_edge(edge.source, edge.target)
+        for node in reachable_nodes:
+            for edge in self.edges_by_source[node.id]:
+                if edge.is_conditional():
+                    if edge.source in seen_sources:
+                        continue
+                    state_graph.add_conditional_edges(
+                        edge.source,
+                        partial(node.pipeline_node_instance.process_conditional, node_id=edge.source),
+                        self.conditional_edge_map[edge.source],
+                    )
+                    seen_sources.add(edge.source)
+                else:
+                    state_graph.add_edge(edge.source, edge.target)
 
     def _validate_start_end_nodes(self):
         start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]

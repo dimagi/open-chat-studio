@@ -9,6 +9,7 @@ from django.test import override_settings
 from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -614,3 +615,85 @@ def test_multiple_end_nodes(pipeline):
     nodes = [start_node(), end_node(), end_node()]
     with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
         create_runnable(pipeline, nodes)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_single_node_unreachable(pipeline):
+    # The last passthrough node is not reachable, as it doesn't have any incoming or outgoing edges
+    nodes = [start_node(), passthrough_node(), end_node(), passthrough_node()]
+    edges = [
+        {
+            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "source": node["id"],
+            "target": nodes[i + 1]["id"],
+        }
+        for i, node in enumerate(nodes[:-2])
+    ]
+    # Should not raise a `ValueError`
+    create_runnable(pipeline, nodes, edges)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_subgraph_unreachable_should_build(pipeline):
+    # The last passthrough nodes are not reachable
+    start = start_node()
+    passthrough = passthrough_node()
+    end = end_node()
+    nodes = [start, passthrough, end, passthrough_node(), passthrough_node(), passthrough_node()]
+
+    # Start -> Passthrough -> End
+    reachable_edges = [
+        {
+            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "source": node["id"],
+            "target": nodes[i + 1]["id"],
+        }
+        for i, node in enumerate(nodes[:2])
+    ]
+    # Passthrough 2 -> Passthrough 3 -> Passthrough 4
+    unreachable_edges = [
+        {
+            "id": f"{node['id']}->{nodes[i+1]['id']}",
+            "source": node["id"],
+            "target": nodes[i + 1]["id"],
+        }
+        for i, node in enumerate(nodes[-3:-1])
+    ]
+    assert len(unreachable_edges) == 2
+
+    runnable = create_runnable(pipeline, nodes, [*reachable_edges, *unreachable_edges])
+    assert set(runnable.get_graph().nodes.keys()) == set(
+        ["__start__", start["id"], passthrough["id"], end["id"], "__end__"]
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_split_graphs_should_not_build(pipeline):
+    # The last passthrough nodes are not reachable
+    start = start_node()
+    passthrough_1 = passthrough_node()
+
+    passthrough_2 = passthrough_node()
+    end = end_node()
+    nodes = [start, passthrough_1, passthrough_2, end]
+    edges = [
+        {
+            "id": "start -> passthrough 1",
+            "source": start["id"],
+            "target": passthrough_1["id"],
+        },
+        {
+            "id": "passthrough 2 -> end",
+            "source": passthrough_2["id"],
+            "target": end["id"],
+        },
+    ]
+
+    with pytest.raises(
+        PipelineBuildError,
+        match=(
+            f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
+            f"from {StartNode.model_config['json_schema_extra'].label} node"
+        ),
+    ):
+        create_runnable(pipeline, nodes, edges)
