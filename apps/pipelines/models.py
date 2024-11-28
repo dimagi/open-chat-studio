@@ -96,15 +96,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             data={"nodes": default_nodes, "edges": []},
             name=f"New Pipeline {existing_pipeline_count + 1}",
         )
-        new_pipeline.set_nodes([FlowNode(**default_node) for default_node in default_nodes])
+        new_pipeline.set_nodes()
         return new_pipeline
 
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
-    def set_nodes(self, nodes: list[FlowNode]) -> None:
+    def set_nodes(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""
-
+        nodes = [FlowNode(**node) for node in self.data["nodes"]]
         # Delete old nodes
         current_ids = set(self.node_ids)
         new_ids = set(node.id for node in nodes)

@@ -1,6 +1,5 @@
 import pytest
 
-from apps.pipelines.flow import FlowNode
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS, update_llm_provider_models
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.experiment import ExperimentFactory
@@ -113,5 +112,5 @@ def get_pipeline(llm_provider_model):
             },
         },
     }
-    pipeline.set_nodes([FlowNode(**node) for node in pipeline.data["nodes"]])
+    pipeline.set_nodes()
     return pipeline

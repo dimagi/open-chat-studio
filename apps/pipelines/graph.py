@@ -1,5 +1,6 @@
 from collections import defaultdict
 from functools import cached_property, partial
+from typing import Self
 
 import pydantic
 from langgraph.graph import StateGraph
@@ -78,12 +79,16 @@ class PipelineGraph(pydantic.BaseModel):
 
     @classmethod
     def build_runnable_from_pipeline(cls, pipeline: Pipeline) -> CompiledStateGraph:
+        return cls.build_from_pipeline(pipeline).build_runnable()
+
+    @classmethod
+    def build_from_pipeline(cls, pipeline: Pipeline) -> Self:
         node_data = [
             Node(id=node.flow_id, label=node.label, type=node.type, params=node.params)
             for node in pipeline.node_set.all()
         ]
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
-        return cls(nodes=node_data, edges=edge_data).build_runnable()
+        return cls(nodes=node_data, edges=edge_data)
 
     def build_runnable(self) -> CompiledStateGraph:
         from apps.pipelines.nodes.base import PipelineState

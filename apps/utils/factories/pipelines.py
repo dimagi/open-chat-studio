@@ -1,6 +1,5 @@
 import factory
 
-from apps.pipelines.flow import FlowNode
 from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.utils.factories.team import TeamFactory
@@ -55,7 +54,7 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     def nodes(self, create, *args, **kwargs):
         if not create:
             return
-        self.set_nodes([FlowNode(**flow_node) for flow_node in self.data["nodes"]])
+        self.set_nodes()
 
 
 class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):

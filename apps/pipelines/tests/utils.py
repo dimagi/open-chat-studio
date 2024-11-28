@@ -2,7 +2,6 @@ from uuid import uuid4
 
 from langgraph.graph.state import CompiledStateGraph
 
-from apps.pipelines.flow import FlowNode
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
@@ -29,7 +28,7 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | N
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
     pipeline.data = {"edges": edges, "nodes": flow_nodes}
-    pipeline.set_nodes([FlowNode(**flow_node) for flow_node in flow_nodes])
+    pipeline.set_nodes()
     return PipelineGraph.build_runnable_from_pipeline(pipeline)
 
 

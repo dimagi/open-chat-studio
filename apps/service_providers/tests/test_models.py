@@ -1,7 +1,6 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.pipelines.flow import FlowNode
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -46,7 +45,7 @@ def pipeline(llm_provider, llm_provider_model):
             },
         },
     }
-    pipeline.set_nodes([FlowNode(**node) for node in pipeline.data["nodes"]])
+    pipeline.set_nodes()
     return pipeline
 
 

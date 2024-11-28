@@ -168,7 +168,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()
         pipeline.save()
-        pipeline.set_nodes(data.data.nodes)
+        pipeline.set_nodes()
         pipeline.refresh_from_db(fields=["node_set"])
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
