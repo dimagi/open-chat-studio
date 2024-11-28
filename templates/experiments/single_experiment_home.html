@@ -20,7 +20,7 @@
         <h1 class="pg-title">{{ experiment.name }}</h1>
         {% flag "experiment_versions" %}
           {% if deployed_version %}
-            <div class="tooltip" data-tip="Currently deployed version">
+            <div class="tooltip" data-tip="Current published version">
               <a class="badge badge-success badge-sm"
                  href="#versions">
                 v{{ deployed_version }}
@@ -173,13 +173,7 @@
           <div x-data="{tags: '', participant: null}">
             <div class="flex gap-x-2">
               {% if perms.experiments.download_chats %}
-                <form method="post" action="{% url 'experiments:download_experiment_chats' team.slug experiment.id %}"
-                      class="my-2">
-                  {% csrf_token %}
-                  <input name="participant" class="hidden" x-bind:value="participant"/>
-                  <input name="tags" class="hidden" x-bind:value="tags"/>
-                  <input class="btn btn-sm btn-outline btn-primary" type="submit" value="Download All"/>
-                </form>
+                {% include "experiments/components/exports.html" %}
               {% endif %}
               <form
                 hx-trigger="load, change"
@@ -262,11 +256,9 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
-          <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' team.slug experiment.id %}">
-            <i class="fa-regular fa-plus"></i> Create Version
-          </a>
+          {% include 'experiments/create_version_button.html' %}
           <div id="versions-table"
-               hx-trigger="load"
+               hx-trigger="load,refetch-versions"
                hx-target="this"
                hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
                hx-swap="innerHTML">

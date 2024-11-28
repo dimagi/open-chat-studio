@@ -135,7 +135,7 @@ export default function TestMessageBox({
       </button>
 
       <OverlayPanel
-        classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto"
+        classes="p-4 top-16 left-4 w-72 max-h-[70vh] overflow-y-auto"
         isOpen={isOpen}
       >
         {isOpen && (

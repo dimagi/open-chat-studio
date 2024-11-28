@@ -16,6 +16,7 @@ class File(BaseTeamModel):
     content_size = models.PositiveIntegerField(null=True, blank=True)
     content_type = models.CharField(blank=True)
     schema = models.JSONField(default=dict, blank=True)
+    expiry_date = models.DateTimeField(null=True)
 
     @classmethod
     def from_external_source(cls, filename, external_file, external_id, external_source, team_id):

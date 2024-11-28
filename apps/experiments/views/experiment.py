@@ -57,7 +57,6 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.export import experiment_to_csv
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentInvitationForm,
@@ -82,7 +81,7 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.tasks import get_response_for_webchat_task
+from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
@@ -374,7 +373,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 "experiment_type": experiment_type,
                 "available_tools": AgentTools.choices,
                 "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": not bool(fields_changed),
+                "disable_version_button": (not bool(fields_changed)) or self.object.create_version_task_id,
             },
             **_get_voice_provider_alpine_context(self.request),
         }
@@ -448,7 +447,9 @@ class CreateExperiment(BaseExperimentView, CreateView):
         if file_formset:
             files = file_formset.save(self.request)
             self.object.files.set(files)
-        self.object.create_new_version()
+
+        if flag_is_active(self.request, "experiment_versions"):
+            self.object.create_new_version()
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -526,7 +527,7 @@ class DeleteFileFromExperiment(BaseDeleteFileView):
 # TODO: complete form
 class ExperimentVersionForm(forms.ModelForm):
     version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
-    is_default_version = forms.BooleanField(required=False, label="Set as Default Version")
+    is_default_version = forms.BooleanField(required=False, label="Set as Published Version")
 
     class Meta:
         model = Experiment
@@ -563,10 +564,19 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         return context
 
     def form_valid(self, form):
-        working_experiment = self.get_object()
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
-        working_experiment.create_new_version(version_description=description, make_default=is_default)
+        working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+        if working_version.create_version_task_id:
+            messages.error(self.request, "Version creation is already in progress.")
+        else:
+            task_id = async_create_experiment_version.delay(
+                experiment_id=working_version.id, version_description=description, make_default=is_default
+            )
+            working_version.create_version_task_id = task_id
+            working_version.save(update_fields=["create_version_task_id"])
+            messages.success(self.request, "Creating new version. This might take a few minutes.")
+
         return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
@@ -578,6 +588,20 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
             },
         )
         return f"{url}#versions"
+
+
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
+def version_create_status(request, team_slug: str, experiment_id: int):
+    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
+    return TemplateResponse(
+        request,
+        "experiments/create_version_button.html",
+        {
+            "active_tab": "experiments",
+            "experiment": experiment,
+        },
+    )
 
 
 @login_and_team_required
@@ -1078,18 +1102,30 @@ def experiment_invitations(request, team_slug: str, experiment_id: str):
 
 @require_POST
 @permission_required("experiments.download_chats", raise_exception=True)
-def download_experiment_chats(request, team_slug: str, experiment_id: str):
-    # todo: this could be made more efficient and should be async, but just shipping something for now
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    tags = request.POST["tags"]
+@login_and_team_required
+def generate_chat_export(request, team_slug: str, experiment_id: str):
+    experiment = get_object_or_404(Experiment, id=experiment_id)
+    tags = request.POST.get("tags", [])
     tags = tags.split(",") if tags else []
+    task_id = async_export_chat.delay(experiment_id, tags=tags, participant=request.POST.get("participant"))
+    return TemplateResponse(
+        request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
+    )
 
-    participant = request.POST.get("participant")
 
-    # Create a HttpResponse with the CSV data and file attachment headers
-    response = HttpResponse(experiment_to_csv(experiment, tags, participant).getvalue(), content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="{experiment.name}-export.csv"'
-    return response
+@permission_required("experiments.download_chats", raise_exception=True)
+@login_and_team_required
+def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    info = Progress(AsyncResult(task_id)).get_info()
+    context = {"experiment": experiment}
+    if info["complete"] and info["success"]:
+        file_id = info["result"]["file_id"]
+        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id})
+        context["export_download_url"] = download_url
+    else:
+        context["task_id"] = task_id
+    return TemplateResponse(request, "experiments/components/exports.html", context)
 
 
 @login_and_team_required

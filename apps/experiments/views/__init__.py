@@ -19,7 +19,6 @@ from .experiment import (  # noqa: F401
     archive_experiment,
     create_channel,
     delete_experiment,
-    download_experiment_chats,
     download_file,
     end_experiment,
     experiment_chat,
@@ -33,6 +32,8 @@ from .experiment import (  # noqa: F401
     experiment_session_pagination_view,
     experiment_version_details,
     experiments_home,
+    generate_chat_export,
+    get_export_download_link,
     get_message_response,
     poll_messages,
     send_invitation,
@@ -44,6 +45,7 @@ from .experiment import (  # noqa: F401
     update_delete_channel,
     update_version_description,
     verify_public_chat_token,
+    version_create_status,
 )
 from .experiment_routes import (  # noqa: F401
     CreateExperimentRoute,

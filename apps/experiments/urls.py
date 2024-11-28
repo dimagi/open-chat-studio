@@ -65,6 +65,7 @@ urlpatterns = [
         name="update_version_description",
     ),
     path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
+    path("e/<int:experiment_id>/versions/status", views.version_create_status, name="check_version_creation_status"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
     path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
@@ -101,7 +102,12 @@ urlpatterns = [
     # superuser tools
     path("e/<slug:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
     path("e/<slug:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
-    path("e/<int:experiment_id>/download_chats/", views.download_experiment_chats, name="download_experiment_chats"),
+    path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
+    path(
+        "e/<int:experiment_id>/exports/result/<slug:task_id>",
+        views.get_export_download_link,
+        name="get_export_download_link",
+    ),
     # public links
     path(
         "e/<slug:experiment_id>/s/<str:session_id>/",
