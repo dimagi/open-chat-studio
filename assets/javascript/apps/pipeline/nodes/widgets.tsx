@@ -8,7 +8,7 @@ import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
-import {Node} from "reactflow";
+import {Node, useUpdateNodeInternals} from "reactflow";
 
 
 export function getWidget(name: string) {
@@ -219,6 +219,8 @@ export function ExpandableTextWidget(props: WidgetParams) {
 
 export function KeywordsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
+  const setEdges = usePipelineStore((state) => state.setEdges);
+  const updateNodeInternals = useUpdateNodeInternals()
 
   function getNewNodeData(old: Node, keywords: any[], numOutputs: number) {
     return {
@@ -239,6 +241,7 @@ export function KeywordsWidget(props: WidgetParams) {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
       return getNewNodeData(old, updatedList, old.data.params.num_outputs + 1);
     });
+    updateNodeInternals(props.nodeId);
   }
 
   const updateKeyword = (index: number, value: string) => {
@@ -256,10 +259,34 @@ export function KeywordsWidget(props: WidgetParams) {
       updatedList.splice(index, 1);
       return getNewNodeData(old, updatedList, old.data.params.num_outputs - 1);
     });
+    updateNodeInternals(props.nodeId);
+    const handleName = `output_${index}`;
+    setEdges((old) => {
+      const edges = old.filter((edge) => {
+        // remove edges that have this handle as source
+        if (edge.source != props.nodeId) {
+          return true;
+        }
+        return edge.sourceHandle != handleName;
+      }).map((edge) => {
+        // update sourceHandle of edges that have a sourceHandle greater than this index to preserve connections
+        if (edge.source != props.nodeId) {
+          return edge;
+        }
+        const sourceHandleIndex = edge.sourceHandle && +edge.sourceHandle.split("_")[1];
+        if (sourceHandleIndex && sourceHandleIndex > index) {
+          const newSourceHandle = `output_${sourceHandleIndex - 1}`;
+          return {...edge, sourceHandle: newSourceHandle}
+        }
+        return edge;
+      });
+      return edges;
+    });
   }
 
   const length = parseInt(concatenate(props.nodeParams.num_outputs)) || 1;
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : []
+  const canDelete = length > 1;
   return (
     <>
       <div className="form-control w-full capitalize">
@@ -276,18 +303,17 @@ export function KeywordsWidget(props: WidgetParams) {
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
-          const label = (
-            <>{`Output Keyword ${index + 1}`}
-              <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
-                <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)}>
-                  <i className="fa-solid fa-minus"></i>
-                </button>
-              </div>
-            </>
-          )
+          const label = `Output Keyword ${index + 1}`;
           return (
             <div className="form-control w-full capitalize" key={index}>
-              <label className="label">{label}</label>
+              <div className="flex justify-between items-center">
+                <label className="label">{label}</label>
+                <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                  <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
+                    <i className="fa-solid fa-minus"></i>
+                  </button>
+                </div>
+              </div>
               <input
                 className={classNames("input input-bordered w-full", value ? "" : "input-error")}
                 name="keywords"
