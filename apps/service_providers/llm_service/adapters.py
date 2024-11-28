@@ -1,3 +1,14 @@
+"""
+This module provides adapter classes to facilitate interaction with an LLM service or OpenAI Assistant within the
+context of an experiment or pipeline.
+
+Classes:
+    - ChatAdapter: An adapter for handling chat interactions using an LLM service.
+    - AssistantAdapter: An adapter for handling interactions with an OpenAI Assistant.
+
+Usage:
+    Use the `from_experiment` or `from_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
+"""
 from abc import ABCMeta
 from functools import cached_property
 from typing import TYPE_CHECKING, Self
