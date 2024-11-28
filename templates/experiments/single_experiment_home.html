@@ -31,13 +31,30 @@
       </div>
       <div class="justify-self-end">
         <div class="join">
-          <div class="tooltip" data-tip="Start Web Session Working Version">
-            <form method="post" action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}" class="inline">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-primary join-item btn-sm !rounded-l-full">
-                <i class="fas fa-comment"></i>
-              </button>
-            </form>
+          <div class="tooltip" data-tip="Chat to the bot">
+            <div class="dropdown dropdown-hover">
+              <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm !rounded-l-full">
+                <i class="fas fa-comment"></i><i class="fa-solid fa-caret-down fa-sm"></i>
+              </div>
+              <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
+                <li>
+                  <form method="post"
+                        action="{% url 'experiments:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                        class="inline">
+                    {% csrf_token %}
+                    <button type="submit">Unreleased version</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post"
+                        action="{% url 'experiments:start_authed_web_session' team.slug experiment.id 0 %}"
+                        class="inline">
+                    {% csrf_token %}
+                    <button type="submit">Published version</button>
+                  </form>
+                </li>
+              </ul>
+            </div>
           </div>
           <div class="tooltip" data-tip="Edit">
             <a class="btn btn-primary join-item btn-sm rounded-r-full"
