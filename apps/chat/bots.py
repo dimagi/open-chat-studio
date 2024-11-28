@@ -238,9 +238,10 @@ class TopicBot:
             self._save_message_to_history(bot_response, ChatMessageType.AI)
             self.generator_chain = self.chain
 
-        self.generator_chain.adapter.ai_message.add_system_tag(
-            safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
-        )
+        if self.generator_chain and self.generator_chain.adapter.ai_message:
+            self.generator_chain.adapter.ai_message.add_system_tag(
+                safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
+            )
         return bot_response
 
     def _save_message_to_history(self, message: str, message_type: ChatMessageType):

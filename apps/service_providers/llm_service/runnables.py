@@ -56,7 +56,8 @@ def create_experiment_runnable(
         runnable = None
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter)
-        runnable = AssistantChat(adapter=assistant_adapter)
+        else:
+            runnable = AssistantChat(adapter=assistant_adapter)
         # This is a temporary hack until we return an object with metadata about the run
         runnable.experiment = experiment
         return runnable
@@ -71,8 +72,9 @@ def create_experiment_runnable(
     chat_adapter = ChatAdapter.from_experiment(experiment, session, trace_service)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter)
+    else:
+        runnable = SimpleLLMChat(adapter=chat_adapter)
 
-    runnable = SimpleLLMChat(adapter=chat_adapter)
     # This is a temporary hack until we return an object with metadata about the run
     runnable.experiment = experiment
     return runnable

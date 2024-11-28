@@ -18,13 +18,14 @@ def test_safety_response(is_safe_mock):
     is_safe_mock.return_value = False
     session = ExperimentSessionFactory()
     experiment = session.experiment
-    experiment.get_llm_service = lambda: build_fake_llm_service([expected], token_counts=[1])
     layer = SafetyLayer.objects.create(
         prompt_text="Is this message safe?", team=experiment.team, prompt_to_bot="Unsafe reply"
     )
     experiment.safety_layers.add(layer)
 
     expected = "Sorry I can't help with that."
+    experiment.get_llm_service = lambda: build_fake_llm_service([expected], token_counts=[1])
+
     bot = TopicBot(session)
     with patch.object(TopicBot, "_get_safe_response", wraps=bot._get_safe_response) as mock_get_safe_response:
         response = bot.process_input("It's my way or the highway!")
