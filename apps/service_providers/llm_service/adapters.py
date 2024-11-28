@@ -112,7 +112,7 @@ class ChatAdapter(BaseAdapter):
         experiment_is_a_version: bool,
         tools: list = None,
         input_formatter: str | None = None,
-        source_material_id: str | None = None,
+        source_material_id: int | None = None,
         trace_service=None,
     ):
         self.session = session
