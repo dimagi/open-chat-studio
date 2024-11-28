@@ -104,6 +104,8 @@ class PipelineGraph(pydantic.BaseModel):
             raise PipelineBuildError("There are no nodes in the graph")
 
         self._validate_start_end_nodes()
+        if self._check_for_cycles():
+            raise PipelineBuildError("A cycle was detected")
 
         state_graph = StateGraph(PipelineState)
 
@@ -117,6 +119,35 @@ class PipelineGraph(pydantic.BaseModel):
         compiled_graph = state_graph.compile()
         # compiled_graph.get_graph().print_ascii()
         return compiled_graph
+
+    def _check_for_cycles(self):
+        """Detect cycles in a directed graph."""
+        adjacency_list = defaultdict(list)
+        for edge in self.edges:
+            adjacency_list[edge.source].append(edge.target)
+        adjacency_list = dict(adjacency_list)
+
+        state = {node.id: "unvisited" for node in self.nodes}
+
+        def dfs(node_id: str) -> bool:
+            if state[node_id] == "visiting":
+                return True  # Found a cycle
+            if state[node_id] == "visited":
+                return False  # Already processed
+
+            state[node_id] = "visiting"
+            for neighbor in adjacency_list.get(node_id, []):
+                if dfs(neighbor):
+                    return True
+            state[node_id] = "visited"
+            return False
+
+        for node_id in adjacency_list:
+            if state[node_id] == "unvisited":
+                if dfs(node_id):
+                    return True
+
+        return False
 
     def _get_reachable_nodes(self, start_node: Node) -> list[Node]:
         visited = set()

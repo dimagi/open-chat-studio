@@ -697,3 +697,38 @@ def test_split_graphs_should_not_build(pipeline):
         ),
     ):
         create_runnable(pipeline, nodes, edges)
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_cyclical_graph(pipeline):
+    # Ensure that cyclical graphs throw an error
+    start = start_node()
+    passthrough_1 = passthrough_node()
+    passthrough_2 = passthrough_node()
+    end = end_node()
+    nodes = [start, passthrough_1, passthrough_2, end]
+    edges = [
+        {
+            "id": "start -> passthrough 1",
+            "source": start["id"],
+            "target": passthrough_1["id"],
+        },
+        {
+            "id": "passthrough 1 -> passthrough 2",
+            "source": passthrough_1["id"],
+            "target": passthrough_2["id"],
+        },
+        {
+            "id": "passthrough 2 -> passthrough 1",
+            "source": passthrough_2["id"],
+            "target": passthrough_1["id"],
+        },
+        {
+            "id": "passthrough 2 -> end",
+            "source": passthrough_2["id"],
+            "target": end["id"],
+        },
+    ]
+
+    with pytest.raises(PipelineBuildError, match="A cycle was detected"):
+        create_runnable(pipeline, nodes, edges)
