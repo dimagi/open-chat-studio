@@ -105,7 +105,7 @@ class ChatAdapter(BaseAdapter):
         session: ExperimentSession,
         provider_model_name: str,
         llm_service,
-        temperature: int,
+        temperature: float,
         prompt_text: str,
         max_token_limit: int,
         experiment_version_number: int,
