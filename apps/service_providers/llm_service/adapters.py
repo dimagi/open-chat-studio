@@ -116,7 +116,6 @@ class ChatAdapter(BaseAdapter):
         trace_service=None,
     ):
         self.session = session
-        self.team = session.team
         self.provider_model_name = provider_model_name
         self.llm_service = llm_service
         self.temperature = temperature
@@ -127,8 +126,9 @@ class ChatAdapter(BaseAdapter):
         self.tools = tools or []
         self.input_formatter = input_formatter
         self.source_material_id = source_material_id
-
         self.trace_service = trace_service
+
+        self.team = session.team
         self.template_context = PromptTemplateContext(session, source_material_id)
 
     @classmethod
@@ -189,19 +189,21 @@ class AssistantAdapter(BaseAdapter):
         save_message_metadata_only: bool = False,
     ):
         self.session = session
-        self.team = session.team
         self.assistant = assistant
         self.llm_service = assistant.llm_provider.get_llm_service()
-        self.provider_model_name = assistant.llm_provider_model.name
         self.citations_enabled = citations_enabled
         self.experiment_version_number = experiment_version_number
         self.experiment_is_a_version = experiment_is_a_version
-        self.tools = get_assistant_tools(assistant, experiment_session=session)
         self.input_formatter = input_formatter
         self.trace_service = trace_service
         self.save_message_metadata_only = save_message_metadata_only
+
+        self.provider_model_name = assistant.llm_provider_model.name
         self.input_message_metadata = {}
         self.output_message_metadata = {}
+        self.team = session.team
+
+        self.tools = get_assistant_tools(assistant, experiment_session=session)
         self.template_context = PromptTemplateContext(session, source_material_id=None)
 
     @staticmethod
