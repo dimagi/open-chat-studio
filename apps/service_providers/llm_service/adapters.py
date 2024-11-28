@@ -131,9 +131,9 @@ class ChatAdapter(BaseAdapter):
         self.trace_service = trace_service
         self.template_context = PromptTemplateContext(session, source_material_id)
 
-    @staticmethod
-    def from_experiment(experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
-        return ChatAdapter(
+    @classmethod
+    def from_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
+        return cls(
             session=session,
             provider_model_name=experiment.get_llm_provider_model_name(),
             llm_service=experiment.get_llm_service(),
