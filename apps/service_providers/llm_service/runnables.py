@@ -26,7 +26,6 @@ from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
 from apps.assistants.models import ToolResources
-from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -127,8 +126,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         if include_conversation_history:
             self._populate_memory(input)
 
-        if save_input_to_history:
-            self.adapter.save_message_to_history(input, ChatMessageType.HUMAN)
+        self.adapter.pre_run_hook(input, save_input_to_history, message_metadata={})
 
         output = self._get_output_check_cancellation(input, merged_config)
         result = ChainOutput(
@@ -137,9 +135,8 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         if self.cancelled:
             raise GenerationCancelled(result)
 
-        if save_output_to_history:
-            experiment_tag = configurable.get("experiment_tag")
-            self.adapter.save_message_to_history(output, ChatMessageType.AI, experiment_tag=experiment_tag)
+        experiment_tag = configurable.get("experiment_tag")
+        self.adapter.post_run_hook(output, save_output_to_history, experiment_tag=experiment_tag, message_metadata={})
         return result
 
     def _get_input(self, input: str):
@@ -274,7 +271,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             "attachments": message_attachments,
         } | self._extra_input_configs()
 
-        current_thread_id = self._sync_messages_to_thread(self.adapter.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID))
+        current_thread_id = self._sync_messages_to_thread(self.adapter.thread_id)
 
         human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
         self.adapter.pre_run_hook(input, config, human_message_metadata)
@@ -286,10 +283,13 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
 
         if not current_thread_id:
-            self.adapter.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
+            self.adapter.thread_id = thread_id
 
         ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
-        self.adapter.post_run_hook(output, config, ai_message_metadata)
+        experiment_tag = config.get("experiment_tag")
+        self.adapter.post_run_hook(
+            output, save_output_to_history=True, experiment_tag=experiment_tag, message_metadata=ai_message_metadata
+        )
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
@@ -312,7 +312,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 thread = self.adapter.assistant_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
                 _sync_messages_to_existing_thread(current_thread_id, rest)
-                self.adapter.set_chat_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID, current_thread_id)
+                self.adapter.thread_id = current_thread_id
         return current_thread_id
 
     @transaction.atomic()

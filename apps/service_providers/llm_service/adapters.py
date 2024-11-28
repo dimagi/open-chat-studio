@@ -98,6 +98,20 @@ class BaseAdapter(metaclass=ABCMeta):
 
         return chat_message
 
+    def pre_run_hook(self, input: str, save_input_to_history: bool, message_metadata: dict):
+        if self.save_message_metadata_only:
+            self.input_message_metadata = message_metadata
+        elif save_input_to_history:
+            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=message_metadata)
+
+    def post_run_hook(self, output: str, save_output_to_history: bool, experiment_tag: str, message_metadata: dict):
+        if self.save_message_metadata_only:
+            self.output_message_metadata = message_metadata
+        elif save_output_to_history:
+            self.save_message_to_history(
+                output, type_=ChatMessageType.AI, message_metadata=message_metadata, experiment_tag=experiment_tag
+            )
+
 
 class ChatAdapter(BaseAdapter):
     def __init__(
@@ -130,6 +144,7 @@ class ChatAdapter(BaseAdapter):
 
         self.team = session.team
         self.template_context = PromptTemplateContext(session, source_material_id)
+        self.save_message_metadata_only = False
 
     @classmethod
     def for_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
@@ -245,25 +260,16 @@ class AssistantAdapter(BaseAdapter):
     def assistant_builtin_tools(self) -> list:
         return self.assistant.builtin_tools
 
-    def set_chat_metadata(self, key: Chat.MetadataKeys, value):
+    @property
+    def thread_id(self):
+        return self.session.chat.thread_id
+
+    @thread_id.setter
+    def thread_id(self, value):
+        key = Chat.MetadataKeys.OPENAI_THREAD_ID
         if self.trace_service:
             self.trace_service.update_trace({key: value})
         self.session.chat.set_metadata(key, value)
-
-    def pre_run_hook(self, input, config, message_metadata):
-        if self.save_message_metadata_only:
-            self.input_message_metadata = message_metadata
-        elif config.get("configurable", {}).get("save_input_to_history", True):
-            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=message_metadata)
-
-    def post_run_hook(self, output, config, message_metadata):
-        if self.save_message_metadata_only:
-            self.output_message_metadata = message_metadata
-        else:
-            experiment_tag = config.get("configurable", {}).get("experiment_tag")
-            self.save_message_to_history(
-                output, type_=ChatMessageType.AI, message_metadata=message_metadata, experiment_tag=experiment_tag
-            )
 
     def get_assistant_instructions(self):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
@@ -322,10 +328,6 @@ class AssistantAdapter(BaseAdapter):
             for message in reversed(to_sync)
             if message.message_type != "system"
         ]
-
-    def get_metadata(self, key: Chat.MetadataKeys):
-        """Chat metadata"""
-        return self.session.chat.get_metadata(key)
 
     def get_openai_assistant(self) -> OpenAIAssistantRunnable:
         return self.assistant.get_assistant()
