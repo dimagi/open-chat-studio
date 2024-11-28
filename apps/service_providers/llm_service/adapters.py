@@ -7,7 +7,7 @@ Classes:
     - AssistantAdapter: An adapter for handling interactions with an OpenAI Assistant.
 
 Usage:
-    Use the `from_experiment` or `from_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
+    Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
 from abc import ABCMeta
 from functools import cached_property
@@ -132,7 +132,7 @@ class ChatAdapter(BaseAdapter):
         self.template_context = PromptTemplateContext(session, source_material_id)
 
     @classmethod
-    def from_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
+    def for_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
         return cls(
             session=session,
             provider_model_name=experiment.get_llm_provider_model_name(),
@@ -149,7 +149,7 @@ class ChatAdapter(BaseAdapter):
         )
 
     @staticmethod
-    def from_pipeline(experiment: Experiment, session: ExperimentSession) -> Self:
+    def for_pipeline(experiment: Experiment, session: ExperimentSession) -> Self:
         """TODO"""
 
     def get_chat_model(self):
@@ -205,7 +205,7 @@ class AssistantAdapter(BaseAdapter):
         self.template_context = PromptTemplateContext(session, source_material_id=None)
 
     @staticmethod
-    def from_experiment(experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
+    def for_experiment(experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
         return AssistantAdapter(
             session=session,
             assistant=experiment.assistant,
@@ -217,7 +217,7 @@ class AssistantAdapter(BaseAdapter):
         )
 
     @staticmethod
-    def from_pipeline(session: ExperimentSession, node: "AssistantNode") -> Self:
+    def for_pipeline(session: ExperimentSession, node: "AssistantNode") -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         experiment = session.experiment
         return AssistantAdapter(

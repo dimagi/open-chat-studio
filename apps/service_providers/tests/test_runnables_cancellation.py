@@ -86,7 +86,7 @@ def _test_runnable(runnable, session, expected_output):
 
 
 def _get_mocked_history_recording(session, runnable_cls):
-    adapter = ChatAdapter.from_experiment(session.experiment, session)
+    adapter = ChatAdapter.for_experiment(session.experiment, session)
     runnable = runnable_cls(adapter=adapter, check_every_ms=0)
     adapter.save_message_to_history = Mock()
     return runnable

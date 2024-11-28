@@ -572,7 +572,7 @@ class AssistantNode(PipelineNode):
         )
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
-        adapter = AssistantAdapter.from_pipeline(session=session, node=self)
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self)
         if assistant.tools_enabled:
             return AgentAssistantChat(adapter=adapter)
         else:

@@ -52,7 +52,7 @@ def create_experiment_runnable(
 ):
     """Create an experiment runnable based on the experiment configuration."""
     if assistant := experiment.assistant:
-        assistant_adapter = AssistantAdapter.from_experiment(experiment, session, trace_service)
+        assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
         runnable = None
         if assistant.tools_enabled and not disable_tools:
             runnable = AgentAssistantChat(adapter=assistant_adapter)
@@ -69,7 +69,7 @@ def create_experiment_runnable(
     ), "Experiment provider and provider model should be of the same type"
 
     runnable = None
-    chat_adapter = ChatAdapter.from_experiment(experiment, session, trace_service)
+    chat_adapter = ChatAdapter.for_experiment(experiment, session, trace_service)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter)
     else:

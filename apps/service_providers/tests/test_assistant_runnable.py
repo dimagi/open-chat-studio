@@ -521,7 +521,7 @@ def test_get_messages_to_sync_to_thread():
             ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
         ]
     )
-    adapter = AssistantAdapter.from_experiment(session.experiment, session)
+    adapter = AssistantAdapter.for_experiment(session.experiment, session)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
         {"role": "user", "content": "hello2"},
@@ -530,7 +530,7 @@ def test_get_messages_to_sync_to_thread():
 
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
-    adapter = AssistantAdapter.from_experiment(session.experiment, session)
+    adapter = AssistantAdapter.for_experiment(session.experiment, session)
     assistant = AssistantChat(adapter=adapter)
     adapter.save_message_to_history = Mock()
     adapter.get_attachments = lambda _type: get_attachments_return_value or []

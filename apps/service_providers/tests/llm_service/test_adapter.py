@@ -15,7 +15,7 @@ def session():
 @pytest.mark.django_db()
 class TestChatAdapter:
     def test_save_message_to_history_stores_ai_message_on_adapter(self, session):
-        adapter = ChatAdapter.from_experiment(session=session, experiment=session.experiment)
+        adapter = ChatAdapter.for_experiment(session=session, experiment=session.experiment)
         adapter.save_message_to_history(message="hi", type_=ChatMessageType.HUMAN)
         assert adapter.ai_message is None
         adapter.save_message_to_history(message="hi human", type_=ChatMessageType.AI)
@@ -31,12 +31,12 @@ class TestAssistantAdapterWithExperiment:
         if config_source == "experiment":
             session.experiment.assistant = assistant
             session.experiment.save()
-            return AssistantAdapter.from_experiment(session=session, experiment=session.experiment)
+            return AssistantAdapter.for_experiment(session=session, experiment=session.experiment)
         elif config_source == "pipeline":
             node = AssistantNode(
                 assistant_id=assistant.id, citations_enabled=True, input_formatter="here it is: {input}"
             )
-            return AssistantAdapter.from_pipeline(session=session, node=node)
+            return AssistantAdapter.for_pipeline(session=session, node=node)
 
     @pytest.mark.parametrize("config_source", ["pipeline", "experiment"])
     def test_pre_run_hook(self, config_source):
