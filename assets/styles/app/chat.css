@@ -11,6 +11,9 @@
   .message-contents p {
     @apply my-0;
   }
+  .message-contents pre {
+    @apply whitespace-pre-wrap
+  }
 
   .chat-message-system {
     @apply chat-message bg-blue-100;
