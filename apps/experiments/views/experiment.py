@@ -821,7 +821,8 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
-        "experiment_version_number": version_number,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
@@ -1240,8 +1241,12 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
+    experiment_version = request.experiment.default_version
     version_specific_vars = {
-        "experiment_name": request.experiment.default_version.name,
+        "assistant": experiment_version.get_assistant(),
+        "experiment_name": experiment_version.name,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
