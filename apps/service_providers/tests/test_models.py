@@ -32,20 +32,23 @@ def experiment(llm_provider_model):
 @pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"][0] = {
-        "id": "1",
-        "data": {
+    pipeline.data["nodes"].append(
+        {
             "id": "1",
-            "label": "LLM Response with prompt",
-            "type": "LLMResponseWithPrompt",
-            "params": {
-                "llm_provider_id": str(llm_provider.id),
-                "llm_provider_model_id": str(llm_provider_model.id),
-                "prompt": "You are a helpful assistant",
+            "data": {
+                "id": "1",
+                "label": "LLM Response with prompt",
+                "type": "LLMResponseWithPrompt",
+                "params": {
+                    "llm_provider_id": str(llm_provider.id),
+                    "llm_provider_model_id": str(llm_provider_model.id),
+                    "prompt": "You are a helpful assistant",
+                },
             },
-        },
-    }
+        }
+    )
     pipeline.set_nodes()
+    pipeline.save()
     return pipeline
 
 

@@ -94,23 +94,27 @@ def test_converts_old_global_models_to_custom_models_pipelines():
         team=pipeline.team, type=old_global_model.type, name=old_global_model.name
     )
     # pipeline is updated to use the custom model
-    pipeline.node_set.all()[0].params["llm_provider_model_id"] = custom_model.id
-    pipeline.data["nodes"][0]["data"]["params"]["llm_provider_model_id"] = custom_model.id
+    pipeline.refresh_from_db()
+    assert pipeline.node_set.all()[2].params["llm_provider_model_id"] == custom_model.id
+    assert pipeline.data["nodes"][2]["data"]["params"]["llm_provider_model_id"] == custom_model.id
 
 
 def get_pipeline(llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"][0] = {
-        "id": "1",
-        "data": {
+    pipeline.data["nodes"].append(
+        {
             "id": "1",
-            "label": "LLM Response with prompt",
-            "type": "LLMResponseWithPrompt",
-            "params": {
-                "llm_provider_model_id": str(llm_provider_model.id),
-                "prompt": "You are a helpful assistant",
+            "data": {
+                "id": "1",
+                "label": "LLM Response with prompt",
+                "type": "LLMResponseWithPrompt",
+                "params": {
+                    "llm_provider_model_id": str(llm_provider_model.id),
+                    "prompt": "You are a helpful assistant",
+                },
             },
-        },
-    }
+        }
+    )
     pipeline.set_nodes()
+    pipeline.save()
     return pipeline
