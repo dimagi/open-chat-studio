@@ -1,9 +1,10 @@
 import React, {useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {getCachedData} from "../utils";
+import {getCachedData, getNodeId} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 import {NodeData} from "../types/nodeParams";
+import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
   isOpen: boolean;
@@ -11,6 +12,7 @@ type ComponentListParams = {
 }
 
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
+  const addNode = usePipelineStore((state) => state.addNode);
   const {defaultValues, nodeSchemas} = getCachedData();
   const schemaList = Array.from(nodeSchemas.values())
 
@@ -66,6 +68,27 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
   }
 
+  function onClick(
+      event: React.MouseEvent<any>,
+      schema: any
+  ): void {
+      hideHelp();
+      const newId = getNodeId(schema.title)
+      const newNode = {
+          id: newId,
+          type: "pipelineNode",
+          position: { x: 1000, y: 200 },
+          data: {
+              id: newId,
+              type: schema.title,
+              label: schema["ui:label"],
+              params: getDefaultParamValues(schema),
+          },
+      };
+      addNode(newNode, { x: newNode.position.x, y: newNode.position.y });
+      togglePanel();
+  }
+
   function togglePanel() {
     setIsOpen(!isOpen);
   }
@@ -78,6 +101,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
         onDragStart={(event) =>
           onDragStart(event, schema)
         }
+        onClick={(event) => onClick(event, schema) }
         parentRef={refMap[schema.title]}
         hasHelp={!!schema.description}
         toggleHelp={() => toggleHelp(schema.title)}

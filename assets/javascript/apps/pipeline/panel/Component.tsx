@@ -1,17 +1,19 @@
-import React, {DragEventHandler} from "react";
+import React, {DragEventHandler, MouseEventHandler} from "react";
 
 type ComponentProps = {
   label: string;
+  onClick: MouseEventHandler<HTMLDivElement>;
   onDragStart: DragEventHandler<HTMLDivElement>;
   parentRef: React.RefObject<HTMLDivElement>;
   hasHelp: boolean;
   toggleHelp: () => void;
 }
 
-export default function Component({label, onDragStart, parentRef, hasHelp, toggleHelp}: ComponentProps) {
+export default function Component({label, onClick, onDragStart, parentRef, hasHelp, toggleHelp}: ComponentProps) {
   return (
     <div
       draggable={true}
+      onClick={onClick}
       onDragStart={onDragStart}
       className="relative my-2 px-4 py-2 shadow-sm rounded-md border-2 border-stone-300 bg-base-100 hover:cursor-pointer hover:bg-slate-200 dark:hover:bg-opacity-20"
     >
@@ -20,7 +22,11 @@ export default function Component({label, onDragStart, parentRef, hasHelp, toggl
         {hasHelp &&
           <div className="absolute top-0 right-0" ref={parentRef}>
             <button tabIndex={0} role="button" className="btn btn-circle btn-ghost btn-xs text-info"
-                    onClick={toggleHelp}>
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleHelp();
+                    }}
+            >
               <i className={"fa-regular fa-circle-question"}></i>
             </button>
           </div>
