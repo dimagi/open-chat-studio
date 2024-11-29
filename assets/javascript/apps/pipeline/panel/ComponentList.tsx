@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {getCachedData, getNodeId} from "../utils";
+import {getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 import {NodeData} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
@@ -73,13 +73,10 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
       schema: any
   ): void {
       hideHelp();
-      const newId = getNodeId(schema.title)
       const newNode = {
-          id: newId,
           type: "pipelineNode",
           position: { x: 1000, y: 200 },
           data: {
-              id: newId,
               type: schema.title,
               label: schema["ui:label"],
               params: getDefaultParamValues(schema),
