@@ -3,6 +3,7 @@
   "properties": {},
   "title": "StartNode",
   "type": "object",
+  "ui:can_delete": false,
   "ui:label": "Start",
   "ui:show_input": false,
   "ui:show_output": true

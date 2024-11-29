@@ -161,8 +161,10 @@ class NodeSchema(BaseModel):
     label: str
     show_input: bool = True
     show_output: bool = True
+    can_delete: bool = True
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
         schema["ui:show_input"] = self.show_input
         schema["ui:show_output"] = self.show_output
+        schema["ui:can_delete"] = self.can_delete

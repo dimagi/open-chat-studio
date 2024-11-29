@@ -13,6 +13,7 @@
   ],
   "title": "RenderTemplate",
   "type": "object",
+  "ui:can_delete": true,
   "ui:label": "Render a template",
   "ui:show_input": true,
   "ui:show_output": true

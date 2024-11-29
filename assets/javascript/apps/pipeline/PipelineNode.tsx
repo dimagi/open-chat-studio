@@ -52,26 +52,27 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     <>
       <NodeToolbar position={Position.Top}>
         <div className="border border-primary join">
-          <button
-            className="btn btn-xs join-item"
-            onClick={() => deleteNode(id)}
-          >
-            <i className="fa fa-trash-o"></i>
-          </button>
-          <button
-            className="btn btn-xs join-item"
-            onClick={() => editNode()}
-          >
-            <i className="fa fa-pencil"></i>
-          </button>
-          {nodeSchema.description && (
-            <div className="dropdown dropdown-top">
-              <button tabIndex={0} role="button" className="btn btn-xs join-item">
-                <i className={"fa fa-circle-question"}></i>
+            {nodeSchema["ui:can_delete"] && (
+              <button
+                className="btn btn-xs join-item"
+                onClick={() => deleteNode(id)}
+              >
+                  <i className="fa fa-trash-o"></i>
               </button>
-              <HelpContent><p>{nodeSchema.description}</p></HelpContent>
-            </div>
-          )}
+            )}
+            {Object.keys(nodeSchema.properties).length > 0 && (
+              <button className="btn btn-xs join-item" onClick={() => editNode()}>
+                  <i className="fa fa-pencil"></i>
+              </button>
+            )}
+            {nodeSchema.description && (
+              <div className="dropdown dropdown-top">
+                  <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                      <i className={"fa fa-circle-question"}></i>
+                  </button>
+                  <HelpContent><p>{nodeSchema.description}</p></HelpContent>
+              </div>
+            )}
         </div>
       </NodeToolbar>
       <div className={nodeBorder}>

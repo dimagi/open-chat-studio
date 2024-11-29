@@ -38,6 +38,7 @@
   ],
   "title": "ExtractParticipantData",
   "type": "object",
+  "ui:can_delete": true,
   "ui:label": "Update Participant Data",
   "ui:show_input": true,
   "ui:show_output": true

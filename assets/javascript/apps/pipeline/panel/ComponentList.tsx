@@ -70,7 +70,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.map((schema) => {
+  const components = schemaList.filter((schema) => schema["ui:can_delete"]).map((schema) => {
     return (
       <Component
         key={schema.title}

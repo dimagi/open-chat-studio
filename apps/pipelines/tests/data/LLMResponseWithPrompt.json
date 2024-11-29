@@ -63,6 +63,7 @@
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",
+  "ui:can_delete": true,
   "ui:label": "LLM response with prompt",
   "ui:show_input": true,
   "ui:show_output": true

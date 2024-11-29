@@ -26,6 +26,7 @@
   ],
   "title": "LLMResponse",
   "type": "object",
+  "ui:can_delete": true,
   "ui:label": "LLM response",
   "ui:show_input": true,
   "ui:show_output": true

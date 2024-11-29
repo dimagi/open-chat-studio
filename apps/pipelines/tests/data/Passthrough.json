@@ -3,6 +3,7 @@
   "properties": {},
   "title": "Passthrough",
   "type": "object",
+  "ui:can_delete": true,
   "ui:label": "Do Nothing",
   "ui:show_input": true,
   "ui:show_output": true
