@@ -275,7 +275,7 @@ def test_new_human_message_resets_count(session):
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("status", "matches"),
-    {
+    [
         (SessionStatus.SETUP, True),
         (SessionStatus.PENDING, True),
         (SessionStatus.PENDING_PRE_SURVEY, True),
@@ -283,7 +283,7 @@ def test_new_human_message_resets_count(session):
         (SessionStatus.PENDING_REVIEW, False),
         (SessionStatus.COMPLETE, False),
         (SessionStatus.UNKNOWN, False),
-    },
+    ],
 )
 def test_not_triggered_for_complete_chats(status, matches, session):
     session.status = status
