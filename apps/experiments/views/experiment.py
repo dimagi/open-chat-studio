@@ -862,6 +862,9 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
         tool_resource.files.add(*created_files)
 
+    if attachments and not message_text:
+        message_text = "Please look at the attachments and respond appropriately"
+
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,

@@ -1,14 +1,3 @@
-<script>
-  function checkInput() {
-    var message = document.querySelector('input[name="message"]').value;
-    if (message.trim() === "") {
-      document.getElementById('message-submit').disabled = true;
-    } else {
-      document.getElementById('message-submit').disabled = false;
-    }
-  }
-</script>
-
 <form class="w-full p-2 bg-gray-300"
       autocomplete="off"
       hx-post="{% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number %}"
@@ -74,7 +63,7 @@
           {% partial file-search-input %}
         {% endif %}
       {% endif %}
-      <input name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full" oninput="checkInput()">
+      <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-bordered input-primary w-full">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
     {% if assistant %}
@@ -120,10 +109,29 @@
       const byte_limit = megabyte_in_bytes * 512;
       const code_interpreter_max_files = 20
       Alpine.data('fileUploads', () => ({
+        message: "",
         code_interpreter_files: [],
         file_search_files: [],
         total_upload_size_bytes: 0,
         disableCodeInterpreterUpload: false,
+        init() {
+          this.$watchMany(['message', 'code_interpreter_files', 'file_search_files'], (message, cfiles, ffiles) => {
+            const submitButton = document.getElementById('message-submit');
+            if (message || cfiles.length || ffiles.length) {
+              submitButton.removeAttribute('disabled');
+            } else {
+              submitButton.setAttribute('disabled', 'disabled');
+            }
+          });
+        },
+        $watchMany(fields, handler) {
+          fields.forEach((field, idx) => {
+            this.$watch(field, (val) => {
+              const update = fields.map((f) => f === field ? val : this[f]);
+              handler(...update);
+            });
+          });
+        },
         handleFileChange(event, targetArray) {
           const files = Array.from(event.target.files);
 
