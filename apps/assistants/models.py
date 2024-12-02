@@ -65,6 +65,8 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
     files = models.ManyToManyField("files.File", blank=True)
 
+    allow_file_search_attachments = models.BooleanField(default=True)
+    allow_code_interpreter_attachments = models.BooleanField(default=True)
     objects = OpenAiAssistantManager()
 
     class Meta:
@@ -83,11 +85,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     def get_assistant(self):
         return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
 
-    def supports_code_interpreter(self):
-        return "code_interpreter" in self.builtin_tools
+    def supports_code_interpreter_attachments(self):
+        return "code_interpreter" in self.builtin_tools and self.allow_code_interpreter_attachments
 
-    def supports_file_search(self):
-        return "file_search" in self.builtin_tools
+    def supports_file_search_attachments(self):
+        return "file_search" in self.builtin_tools and self.allow_file_search_attachments
 
     @property
     def tools_enabled(self):
