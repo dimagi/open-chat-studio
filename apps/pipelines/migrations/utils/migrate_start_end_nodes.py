@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from apps.pipelines.flow import FlowNode
+from apps.pipelines.flow import FlowEdge, FlowNode, FlowNodeData
 from apps.pipelines.graph import PipelineGraph
 
 from apps.pipelines.nodes.nodes import EndNode, StartNode
@@ -57,39 +57,40 @@ def add_missing_start_end_nodes(pipeline, Node):
     new_edges = []
 
     if not has_start:
-        new_start_node = {
-            "id": str(uuid4()),
-            "type": "pipelineNode",
-            "position": _get_new_position(current_start_node, -200),
-            "data": {"id": str(uuid4()), "type": StartNode.__name__},
-        }
-
-        new_start_edge = {
-            "id": str(uuid4()),
-            "source": new_start_node["id"],
-            "target": current_start_id,
-            "sourceHandle": "output",
-            "targetHandle": "input",
-        }
-        new_nodes.append(new_start_node)
-        new_edges.append(new_start_edge)
+        start_id = str(uuid4())
+        new_start_node = FlowNode(
+            id=start_id,
+            type="startNode",
+            position=_get_new_position(current_start_node, -200),
+            data=FlowNodeData(id=start_id, type=StartNode.__name__),
+        )
+        new_start_edge = FlowEdge(
+            id=str(uuid4()),
+            source=new_start_node.id,
+            target=current_start_id,
+            sourceHandle="output",
+            targetHandle="input",
+        )
+        new_nodes.append(new_start_node.model_dump())
+        new_edges.append(new_start_edge.model_dump())
 
     if not has_end:
-        new_end_node = {
-            "id": str(uuid4()),
-            "type": "pipelineNode",
-            "position": _get_new_position(current_end_node, 350),
-            "data": {"id": str(uuid4()), "type": EndNode.__name__},
-        }
-        new_end_edge = {
-            "id": str(uuid4()),
-            "source": current_end_id,
-            "target": new_end_node["id"],
-            "sourceHandle": "output",
-            "targetHandle": "input",
-        }
-        new_nodes.append(new_end_node)
-        new_edges.append(new_end_edge)
+        end_id = str(uuid4())
+        new_end_node = FlowNode(
+            id=end_id,
+            type="endNode",
+            position=_get_new_position(current_end_node, 350),
+            data=FlowNodeData(id=end_id, type=EndNode.__name__),
+        )
+        new_end_edge = FlowEdge(
+            id=str(uuid4()),
+            source=current_end_id,
+            target=new_end_node.id,
+            sourceHandle="output",
+            targetHandle="input",
+        )
+        new_nodes.append(new_end_node.model_dump())
+        new_edges.append(new_end_edge.model_dump())
 
     if data.get("nodes"):
         data["nodes"].extend(new_nodes)
@@ -140,27 +141,30 @@ def _get_new_position(node: dict, x_offset: int):
 
 
 def _create_default_nodes(pipeline, Node):
-    start_node = {
-        "id": str(uuid4()),
-        "type": "pipelineNode",
-        "position": {
+    start_id= str(uuid4())
+    start_node = FlowNode(
+        id=start_id,
+        type="startNode",
+        position={
             "x": -200,
             "y": 200,
         },
-        "data": {"id": str(uuid4()), "type": StartNode.__name__},
-    }
-    end_node = {
-        "id": str(uuid4()),
-        "type": "pipelineNode",
-        "position": {"x": 1000, "y": 200},
-        "data": {"id": str(uuid4()), "type": EndNode.__name__},
-    }
-    new_edge = {
-        "id": str(uuid4()),
-        "source": start_node["id"],
-        "target": end_node["id"],
-        "sourceHandle": "output",
-        "targetHandle": "input",
-    }
-    pipeline.data = {"nodes": [start_node, end_node], "edges": [new_edge]}
+        data=FlowNodeData(id=start_id, type=StartNode.__name__),
+    )
+    end_id= str(uuid4())
+    end_node = FlowNode(
+        id=end_id,
+        type="endNode",
+        position={"x": 1000, "y": 200},
+        data=FlowNodeData(id=end_id, type=EndNode.__name__),
+    )
+    new_edge = FlowEdge(
+        id=str(uuid4()),
+        source=start_node.id,
+        target=end_node.id,
+        sourceHandle="output",
+        targetHandle="input",
+    )
+    pipeline.data = {"nodes": [start_node.model_dump(), end_node.model_dump()], "edges": [new_edge.model_dump()]}
     _set_new_nodes(pipeline, Node)
+    pipeline.save()
