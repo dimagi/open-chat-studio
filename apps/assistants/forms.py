@@ -40,10 +40,13 @@ class OpenAiAssistantForm(forms.ModelForm):
             "llm_provider",
             "llm_provider_model",
             "temperature",
+            "allow_file_search_attachments",
+            "allow_code_interpreter_attachments",
             "top_p",
         ]
         labels = {
-            "builtin_tools": "Enable Built-in Tools",
+            "allow_file_search_attachments": "Allow ad-hoc files to be uploaded for file search",
+            "allow_code_interpreter_attachments": "Allow ad-hoc files to be uploaded for code interpreter",
         }
         help_texts = {"instructions": INSTRUCTIONS_HELP_TEXT}
 

@@ -65,6 +65,7 @@ IGNORE_APPS = {
     "template_partials",
     "tz_detect",
     "users",
+    "utils_tests",
     "waffle",
     "web",
 }

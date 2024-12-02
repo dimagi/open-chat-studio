@@ -549,7 +549,7 @@ def test_assistant_node(get_assistant_runnable, tools_enabled):
     runnable_mock.invoke = lambda *args, **kwargs: ChainOutput(
         output="Hi there human", prompt_tokens=30, completion_tokens=20
     )
-    runnable_mock.state.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
+    runnable_mock.adapter.get_message_metadata = lambda *args, **kwargs: {"test": "metadata"}
     get_assistant_runnable.return_value = runnable_mock
 
     pipeline = PipelineFactory()
