@@ -11,7 +11,7 @@ from apps.utils.pytest import django_db_transactional
 @django_db_transactional()
 def test_empty_pipeline_gets_start_end_nodes(team):
     pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -36,7 +36,7 @@ def test_compliant_pipeline_not_modified(team):
             "edges": [],
         },
     )
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
     add_missing_start_end_nodes(pipeline, Node)
 
     assert pipeline.node_set.all().count() == 3
@@ -66,7 +66,7 @@ def test_pipeline_gets_start_end_nodes_with_edges(team):
             ],
         },
     )
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -116,7 +116,7 @@ def test_remove_start_end_nodes(team):
             ],
         },
     )
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
 
     remove_all_start_end_nodes(Node)
     pipeline.refresh_from_db()

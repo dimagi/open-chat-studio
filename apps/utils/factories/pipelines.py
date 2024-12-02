@@ -54,7 +54,7 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     def nodes(self, create, *args, **kwargs):
         if not create:
             return
-        self.set_nodes()
+        self.update_nodes_from_data()
 
 
 class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):

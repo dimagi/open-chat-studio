@@ -28,7 +28,7 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | N
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
     pipeline.data = {"edges": edges, "nodes": flow_nodes}
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
     return PipelineGraph.build_runnable_from_pipeline(pipeline)
 
 

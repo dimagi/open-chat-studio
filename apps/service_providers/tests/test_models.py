@@ -47,7 +47,7 @@ def pipeline(llm_provider, llm_provider_model):
             },
         }
     )
-    pipeline.set_nodes()
+    pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline
 
