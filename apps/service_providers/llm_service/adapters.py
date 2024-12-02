@@ -262,7 +262,7 @@ class AssistantAdapter(BaseAdapter):
 
     @property
     def thread_id(self):
-        return self.session.chat.thread_id
+        return self.session.chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID)
 
     @thread_id.setter
     def thread_id(self, value):
