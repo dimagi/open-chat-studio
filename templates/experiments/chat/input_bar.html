@@ -9,7 +9,7 @@
   <div class="flex flex-col" {% if assistant %}x-data="fileUploads"{% endif %}>
     <div class="flex items-center w-full">
       {% if assistant %}
-        {% if assistant.supports_code_interpreter and assistant.supports_file_search %}
+        {% if assistant.supports_code_interpreter_attachments and assistant.supports_file_search_attachments %}
           <div class="flex flex-row gap-2">
             <div class="dropdown dropdown-top">
               <div tabindex="0" role="button" class="btn m-1"><i class="fa-solid fa-paperclip"></i></div>
@@ -51,14 +51,15 @@
               />
             {% endpartialdef %}
           </div>
-        {% elif assistant.supports_code_interpreter %}
+        {% elif assistant.supports_code_interpreter_attachments %}
           <div role="button" class="btn m-1" x-bind:disabled="disableCodeInterpreterUpload"
                @click="$refs.codeInterpreter.click()">
             <i class="fa-solid fa-paperclip"></i>
           </div>
           {% partial code-interpreter-input %}
-        {% elif assistant.supports_file_search %}
-          <div role="button" class="btn m-1" @click="$refs.fileSearch.click()"><i class="fa-solid fa-paperclip"></i>
+        {% elif assistant.supports_file_search_attachments %}
+          <div role="button" class="btn m-1" @click="$refs.fileSearch.click()">
+            <i class="fa-solid fa-paperclip"></i>
           </div>
           {% partial file-search-input %}
         {% endif %}
