@@ -271,6 +271,9 @@ class AssistantAdapter(BaseAdapter):
             self.trace_service.update_trace({key: value})
         self.session.chat.set_metadata(key, value)
 
+    def update_thread_id(self, thread_id: str):
+        self.thread_id = thread_id
+
     def get_assistant_instructions(self):
         # Langchain doesn't support the `additional_instructions` parameter that the API specifies, so we have to
         # override the instructions if we want to pass in dynamic data.

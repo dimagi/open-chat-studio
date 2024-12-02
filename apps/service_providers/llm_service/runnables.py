@@ -312,7 +312,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                 thread = self.adapter.assistant_client.beta.threads.create(messages=first)
                 current_thread_id = thread.id
                 _sync_messages_to_existing_thread(current_thread_id, rest)
-                self.adapter.thread_id = current_thread_id
+                self.adapter.update_thread_id(current_thread_id)
         return current_thread_id
 
     @transaction.atomic()
