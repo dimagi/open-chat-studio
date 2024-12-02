@@ -274,7 +274,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         current_thread_id = self._sync_messages_to_thread(self.adapter.thread_id)
 
         human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
-        self.adapter.pre_run_hook(input, config, human_message_metadata)
+        save_input_to_history = config.get("configurable", {}).get("save_input_to_history", True)
+        self.adapter.pre_run_hook(input, save_input_to_history, human_message_metadata)
 
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
