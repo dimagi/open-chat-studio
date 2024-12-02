@@ -23,6 +23,8 @@ export function getWidget(name: string) {
       return ExpandableTextWidget
     case "select":
       return SelectWidget
+      case "multiselect":
+        return MultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -145,6 +147,59 @@ function SelectWidget(props: WidgetParams) {
     </select>
   </InputField>
 }
+
+
+function MultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  let selectedTools = Array.isArray(props.nodeParams["tools"]) ? props.nodeParams["tools"] : [];
+
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  function getNewNodeData(old: Node, updatedList: Array<string>) {
+    return {
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [props.name]: updatedList,
+        },
+      },
+    };
+  }
+
+  function onUpdate(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.checked) {
+      selectedTools.push(event.target.name)
+    } else {
+      selectedTools = selectedTools.filter((tool) => tool !== event.target.name)
+    }
+    setNode(props.nodeId, (old) => {
+        return getNewNodeData(old, selectedTools);
+      }
+    );
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      {options.map((option) => (
+        <div className="flex items-center mb-1" key={option.value}>
+          <input
+            className="checkbox"
+            name={option.value}
+            onChange={onUpdate}
+            checked={selectedTools.includes(option.value)}
+            id={option.value}
+            key={option.value}
+            type="checkbox"
+          />
+          <span className="ml-2">{option.label}</span>
+        </div>
+      ))}
+    </InputField>
+  )
+}
+
 
 export function TextModal(
   {modalId, humanName, name, value, onChange}: {

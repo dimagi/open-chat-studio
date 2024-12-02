@@ -125,6 +125,7 @@ class Widgets(StrEnum):
     select = "select"
     float = "float"
     range = "range"
+    multiselect = "multiselect"
     none = "none"
 
     # special widgets
@@ -136,6 +137,7 @@ class Widgets(StrEnum):
 class OptionsSource(StrEnum):
     source_material = "source_material"
     assistant = "assistant"
+    agent_tools = "agent_tools"
 
 
 class UiSchema(BaseModel):

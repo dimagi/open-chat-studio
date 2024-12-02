@@ -29,6 +29,7 @@ from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
 class RenderTemplate(PipelineNode):
@@ -178,6 +179,22 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+    tools: list[str] = Field(
+        default_factory=list,
+        description="The tools to enable for the bot",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.agent_tools),
+    )
+
+    @field_validator("tools", mode="before")
+    def check_prompt_variables(cls, value: str, info: FieldValidationInfo):
+        if not value:
+            return []
+        context = {"prompt": info.data["prompt"], "source_material": info.data["source_material_id"], "tools": value}
+        try:
+            validate_prompt_variables(form_data=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+        except ValidationError as e:
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message)
+        return value
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         prompt = ChatPromptTemplate.from_messages(

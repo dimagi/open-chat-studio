@@ -18,7 +18,7 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.base import OptionsSource
@@ -110,6 +110,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             [_option("", "Select an Assistant")]
             + [_option(assistant["id"], assistant["name"]) for assistant in assistants]
         ),
+        OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
     }
 
 
