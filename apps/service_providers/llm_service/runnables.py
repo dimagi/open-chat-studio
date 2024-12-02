@@ -286,7 +286,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             self.adapter.thread_id = thread_id
 
         ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
-        experiment_tag = config.get("experiment_tag")
+        experiment_tag = config.get("configurable", {}).get("experiment_tag")
         self.adapter.post_run_hook(
             output, save_output_to_history=True, experiment_tag=experiment_tag, message_metadata=ai_message_metadata
         )

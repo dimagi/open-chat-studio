@@ -75,7 +75,7 @@ def test_assistant_conversation_new_chat(
 ):
     save_response_annotations.return_value = ("ai response", {})
     chat = session.chat
-    assert chat.thread_id is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -90,7 +90,7 @@ def test_assistant_conversation_new_chat(
 
     result = assistant_runnable.invoke("test")
     assert result.output == "ai response"
-    assert chat.thread_id == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
@@ -147,7 +147,7 @@ def test_assistant_conversation_input_formatting(
     session.experiment.input_formatter = "foo {input} bar"
 
     chat = session.chat
-    assert chat.thread_id is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -305,7 +305,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
     create_files_remote.return_value = ["openai-file-1", "openai-file-2"]
     files = FileFactory.create_batch(2)
     chat = session.chat
-    assert chat.thread_id is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -323,7 +323,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 
     result = assistant.invoke("test", attachments=attachments)
     assert result.output == "ai response"
-    assert chat.thread_id == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     message = chat.messages.filter(message_type="human").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
     assert "openai-file-2" in message.metadata["openai_file_ids"]
@@ -435,7 +435,7 @@ def test_assistant_response_with_annotations(
         )
     assert result.output == expected_output_message
 
-    assert chat.thread_id == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
