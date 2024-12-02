@@ -105,6 +105,7 @@ def experiments_home(request, team_slug: str):
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,
+            "toggle_archived": True,
         },
     )
 
@@ -118,6 +119,10 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
     def get_queryset(self):
         query_set = Experiment.objects.get_all().filter(team=self.request.team, working_version__isnull=True)
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            query_set = query_set.filter(is_archived=False)
+
         search = self.request.GET.get("search")
         if search:
             search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
