@@ -25,6 +25,7 @@ import useEditorStore from "./stores/editorStore";
 import TestMessageBox from "./panel/TestMessageBox";
 import AnnotatedEdge from "./AnnotatedEdge";
 import { EndNode, StartNode } from "./BoundaryNode";
+import { NodeData } from "./types/nodeParams";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -86,14 +87,16 @@ export default function Pipeline() {
     (event: React.DragEvent) => {
       event.preventDefault();
       if (event.dataTransfer.types.some((types) => types === "nodedata")) {
-        const data: { type: string } = JSON.parse(
+        const data: NodeData = JSON.parse(
           event.dataTransfer.getData("nodedata")
         );
+        const flowType = data.flowType;
+        delete data.flowType;
         const newId = getNodeId(data.type);
 
         const newNode = {
           id: newId,
-          type: "pipelineNode",
+          type: flowType,
           position: {x: 0, y: 0},
           data: {
             ...data,
@@ -118,9 +121,7 @@ export default function Pipeline() {
       e.preventDefault();
       (e as unknown as Event).stopImmediatePropagation();
       deleteNode(
-          lastSelection.nodes
-              .filter((node) => nodeSchemas.get(node.data.type)!["ui:can_delete"])
-              .map((node) => node.id)
+          lastSelection.nodes.filter((node) => nodeSchemas.get(node.data.type)!["ui:flow_node_type"] === "pipelineNode").map((node) => node.id)
       );
       deleteEdge(lastSelection.edges.map((edge) => edge.id));
     }

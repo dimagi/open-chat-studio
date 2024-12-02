@@ -26,8 +26,6 @@
   ],
   "title": "AssistantNode",
   "type": "object",
-  "ui:can_delete": true,
-  "ui:label": "OpenAI Assistant",
-  "ui:show_input": true,
-  "ui:show_output": true
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "OpenAI Assistant"
 }

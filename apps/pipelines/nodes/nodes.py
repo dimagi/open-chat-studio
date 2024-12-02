@@ -242,13 +242,13 @@ class Passthrough(PipelineNode):
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", show_input=False, can_delete=False))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", show_output=False, can_delete=False))
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
 class BooleanNode(Passthrough):

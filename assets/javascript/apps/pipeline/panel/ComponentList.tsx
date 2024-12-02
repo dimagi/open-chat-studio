@@ -63,6 +63,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     const nodeData: NodeData = {
       type: schema.title,
       label: schema["ui:label"],
+      flowType: schema["ui:flow_node_type"],
       params: getDefaultParamValues(schema),
     }
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
@@ -74,7 +75,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   ): void {
       hideHelp();
       const newNode = {
-          type: "pipelineNode",
+          type: schema["ui:flow_node_type"],
           position: { x: 1000, y: 200 },
           data: {
               type: schema.title,
@@ -90,7 +91,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.filter((schema) => schema["ui:can_delete"]).map((schema) => {
+  const components = schemaList.filter((schema) => schema["ui:flow_node_type"] === "pipelineNode").map((schema) => {
     return (
       <Component
         key={schema.title}

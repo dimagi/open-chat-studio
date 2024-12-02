@@ -71,8 +71,6 @@
   ],
   "title": "RouterNode",
   "type": "object",
-  "ui:can_delete": true,
-  "ui:label": "Router",
-  "ui:show_input": true,
-  "ui:show_output": true
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "Router"
 }

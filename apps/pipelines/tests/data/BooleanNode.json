@@ -11,8 +11,6 @@
   ],
   "title": "BooleanNode",
   "type": "object",
-  "ui:can_delete": true,
-  "ui:label": "Conditional Node",
-  "ui:show_input": true,
-  "ui:show_output": true
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "Conditional Node"
 }

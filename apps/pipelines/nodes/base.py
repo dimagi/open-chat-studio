@@ -3,7 +3,7 @@ from abc import ABC
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict
@@ -159,12 +159,8 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
-    show_input: bool = True
-    show_output: bool = True
-    can_delete: bool = True
+    flow_node_type: Literal["pipelineNode"] | Literal["startNode"] | Literal["endNode"] = "pipelineNode"
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
-        schema["ui:show_input"] = self.show_input
-        schema["ui:show_output"] = self.show_output
-        schema["ui:can_delete"] = self.can_delete
+        schema["ui:flow_node_type"] = self.flow_node_type

@@ -47,14 +47,11 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     <>
       <NodeToolbar position={Position.Top}>
         <div className="border border-primary join">
-            {nodeSchema["ui:can_delete"] && (
-              <button
-                className="btn btn-xs join-item"
-                onClick={() => deleteNode(id)}
-              >
-                  <i className="fa fa-trash-o"></i>
-              </button>
-            )}
+            <button
+              className="btn btn-xs join-item"
+              onClick={() => deleteNode(id)}>
+                <i className="fa fa-trash-o"></i>
+            </button>
             {Object.keys(nodeSchema.properties).length > 0 && (
               <button className="btn btn-xs join-item" onClick={() => editNode()}>
                   <i className="fa fa-pencil"></i>
@@ -73,7 +70,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
       <div className={nodeBorderClass(nodeErrors, selected)}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
 
-        {nodeSchema["ui:show_input"] && <NodeInput />}
+        <NodeInput />
         <div className="px-4">
           <div>
             {schemaProperties.map((name) => (
@@ -99,7 +96,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             </div>
           )}
         </div>
-        {nodeSchema["ui:show_output"] && <NodeOutputs data={data} />}
+        <NodeOutputs data={data} />
       </div>
     </>
   );
