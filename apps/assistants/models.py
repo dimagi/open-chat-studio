@@ -112,7 +112,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         assistant_version.name = f"{self.name} v{version_number}"
         assistant_version.assistant_id = ""
         assistant_version.save()
-        file_ids = duplicate_files(self.files.iterator())
+        file_ids = duplicate_files(self.files.iterator(chunk_size=50))
         if file_ids:
             OpenAiAssistant.files.through.objects.bulk_create(
                 [
@@ -132,7 +132,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 new_tool_resource.extra["vector_store_id"] = None
             new_tool_resource.save()
 
-            tool_resource_files = duplicate_files(tool_resource.files.iterator())
+            tool_resource_files = duplicate_files(tool_resource.files.iterator(chunk_size=50))
             ToolResources.files.through.objects.bulk_create(
                 [
                     ToolResources.files.through(toolresources_id=new_tool_resource.id, file_id=file_id)
