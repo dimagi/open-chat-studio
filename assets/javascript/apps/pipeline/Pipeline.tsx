@@ -24,6 +24,7 @@ import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
 import TestMessageBox from "./panel/TestMessageBox";
 import AnnotatedEdge from "./AnnotatedEdge";
+import { EndNode, StartNode } from "./BoundaryNode";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -31,6 +32,8 @@ const fitViewOptions: FitViewOptions = {
 
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
+  startNode: StartNode,
+  endNode: EndNode,
 };
 
 const edgeTypes: EdgeTypes = {

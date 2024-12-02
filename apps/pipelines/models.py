@@ -75,22 +75,24 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         default_name = "New Pipeline"
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
-        start_node = {
-            "id": str(uuid4()),
-            "type": "pipelineNode",
-            "position": {
+        start_id = str(uuid4())
+        start_node = FlowNode(
+            id=start_id,
+            type="startNode",
+            position={
                 "x": -200,
                 "y": 200,
             },
-            "data": {"id": str(uuid4()), "type": StartNode.__name__},
-        }
-        end_node = {
-            "id": str(uuid4()),
-            "type": "pipelineNode",
-            "position": {"x": 1000, "y": 200},
-            "data": {"id": str(uuid4()), "type": EndNode.__name__},
-        }
-        default_nodes = [start_node, end_node]
+            data=FlowNodeData(id=start_id, type=StartNode.__name__),
+        )
+        end_id = str(uuid4())
+        end_node = FlowNode(
+            id=end_id,
+            type="endNode",
+            position={"x": 1000, "y": 200},
+            data=FlowNodeData(id=end_id, type=EndNode.__name__),
+        )
+        default_nodes = [start_node.model_dump(), end_node.model_dump()]
         new_pipeline = cls.objects.create(
             team=team,
             data={"nodes": default_nodes, "edges": []},
@@ -148,6 +150,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 FlowNode(
                     id=node.flow_id,
                     position=flow_nodes_by_id[node.flow_id].position,
+                    type=flow_nodes_by_id[node.flow_id].type,
                     data=FlowNodeData(
                         id=node.flow_id,
                         type=node.type,

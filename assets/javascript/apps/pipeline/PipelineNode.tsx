@@ -1,6 +1,6 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {classNames, getCachedData} from "./utils";
+import {getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
@@ -43,11 +43,6 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
-  const defaultBorder = nodeErrors ? "border-error " : ""
-  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
-  const border = selected ? selectedBorder : defaultBorder
-  const nodeBorder = classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
-
   return (
     <>
       <NodeToolbar position={Position.Top}>
@@ -75,7 +70,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
             )}
         </div>
       </NodeToolbar>
-      <div className={nodeBorder}>
+      <div className={nodeBorderClass(nodeErrors, selected)}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
 
         {nodeSchema["ui:show_input"] && <NodeInput />}
