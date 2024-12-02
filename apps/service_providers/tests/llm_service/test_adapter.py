@@ -43,7 +43,7 @@ class TestAssistantAdapterWithExperiment:
         adapter = self._get_adapter(config_source)
         adapter.pre_run_hook(
             input="hi there",
-            config={"configurable": {"save_input_to_history": True}},
+            save_input_to_history=True,
             message_metadata={"key": "value"},
         )
         human_message = adapter.session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
@@ -55,7 +55,9 @@ class TestAssistantAdapterWithExperiment:
     @pytest.mark.parametrize("config_source", ["pipeline", "experiment"])
     def test_post_run_hook(self, config_source):
         adapter = self._get_adapter(config_source)
-        adapter.post_run_hook(output="hi human", config={}, message_metadata={"key": "value"})
+        adapter.post_run_hook(
+            output="hi human", save_output_to_history=True, message_metadata={"key": "value"}, experiment_tag=None
+        )
         ai_message = adapter.session.chat.messages.filter(message_type=ChatMessageType.AI).first()
         if config_source == "experiment":
             assert ai_message.metadata == {"key": "value"}
