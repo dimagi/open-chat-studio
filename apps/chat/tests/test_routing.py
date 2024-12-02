@@ -72,8 +72,8 @@ def test_experiment_routing_with_tracing():
         (False, "not a valid keyword", "keyword1"),
     ],
 )
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_response_with_retries")
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_response_with_retries")
 def test_experiment_routing_with_assistant(
     get_response_with_retries, save_response_annotations, with_default, routing_response, expected_tag
 ):
