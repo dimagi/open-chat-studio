@@ -36,6 +36,14 @@
   <div class="sm:grid sm:grid-cols-2 md:grid-cols-3">
     {% render_form_fields form "tools" "builtin_tools" "custom_action_operations" %}
   </div>
+
+  <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
+    {% render_form_fields form "allow_code_interpreter_attachments" %}
+  </div>
+  <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
+    {% render_form_fields form "allow_file_search_attachments" %}
+  </div>
+
   {% if not object.id %}
     <div class="mt-2" x-show="builtinTools.indexOf('code_interpreter') >= 0" x-cloak>
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
