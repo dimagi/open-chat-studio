@@ -18,12 +18,14 @@ import {PipelineNode} from "./PipelineNode";
 import ComponentList from "./panel/ComponentList";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import usePipelineStore from "./stores/pipelineStore";
-import {getNodeId} from "./utils";
+import {getCachedData, getNodeId} from "./utils";
 import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
 import TestMessageBox from "./panel/TestMessageBox";
 import AnnotatedEdge from "./AnnotatedEdge";
+import { EndNode, StartNode } from "./BoundaryNode";
+import { NodeData } from "./types/nodeParams";
 
 const fitViewOptions: FitViewOptions = {
   padding: 0.2,
@@ -31,6 +33,8 @@ const fitViewOptions: FitViewOptions = {
 
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNode,
+  startNode: StartNode,
+  endNode: EndNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -54,6 +58,7 @@ export default function Pipeline() {
   const currentPipeline = usePipelineManagerStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineManagerStore((state) => state.autoSaveCurrentPipline);
   const savePipeline = usePipelineManagerStore((state) => state.savePipeline);
+  const { nodeSchemas } = getCachedData();
 
   const editingNode = useEditorStore((state) => state.currentNode);
 
@@ -82,14 +87,16 @@ export default function Pipeline() {
     (event: React.DragEvent) => {
       event.preventDefault();
       if (event.dataTransfer.types.some((types) => types === "nodedata")) {
-        const data: { type: string } = JSON.parse(
+        const data: NodeData = JSON.parse(
           event.dataTransfer.getData("nodedata")
         );
+        const flowType = data.flowType;
+        delete data.flowType;
         const newId = getNodeId(data.type);
 
         const newNode = {
           id: newId,
-          type: "pipelineNode",
+          type: flowType,
           position: {x: 0, y: 0},
           data: {
             ...data,
@@ -113,7 +120,9 @@ export default function Pipeline() {
     if (lastSelection) {
       e.preventDefault();
       (e as unknown as Event).stopImmediatePropagation();
-      deleteNode(lastSelection.nodes.map((node) => node.id));
+      deleteNode(
+          lastSelection.nodes.filter((node) => nodeSchemas.get(node.data.type)!["ui:flow_node_type"] === "pipelineNode").map((node) => node.id)
+      );
       deleteEdge(lastSelection.edges.map((edge) => edge.id));
     }
   }

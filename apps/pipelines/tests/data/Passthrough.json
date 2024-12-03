@@ -3,5 +3,6 @@
   "properties": {},
   "title": "Passthrough",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "Do Nothing"
 }

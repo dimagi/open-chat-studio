@@ -1,6 +1,6 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent} from "react";
-import {classNames, getCachedData} from "./utils";
+import {getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
@@ -43,39 +43,33 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     openEditorForNode(nodeProps);
   }
 
-  const defaultBorder = nodeErrors ? "border-error " : ""
-  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
-  const border = selected ? selectedBorder : defaultBorder
-  const nodeBorder = classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
-
   return (
     <>
       <NodeToolbar position={Position.Top}>
         <div className="border border-primary join">
-          <button
-            className="btn btn-xs join-item"
-            onClick={() => deleteNode(id)}
-          >
-            <i className="fa fa-trash-o"></i>
-          </button>
-          <button
-            className="btn btn-xs join-item"
-            onClick={() => editNode()}
-          >
-            <i className="fa fa-pencil"></i>
-          </button>
-          {nodeSchema.description && (
-            <div className="dropdown dropdown-top">
-              <button tabIndex={0} role="button" className="btn btn-xs join-item">
-                <i className={"fa fa-circle-question"}></i>
+            <button
+              className="btn btn-xs join-item"
+              onClick={() => deleteNode(id)}>
+                <i className="fa fa-trash-o"></i>
+            </button>
+            {Object.keys(nodeSchema.properties).length > 0 && (
+              <button className="btn btn-xs join-item" onClick={() => editNode()}>
+                  <i className="fa fa-pencil"></i>
               </button>
-              <HelpContent><p>{nodeSchema.description}</p></HelpContent>
-            </div>
-          )}
+            )}
+            {nodeSchema.description && (
+              <div className="dropdown dropdown-top">
+                  <button tabIndex={0} role="button" className="btn btn-xs join-item">
+                      <i className={"fa fa-circle-question"}></i>
+                  </button>
+                  <HelpContent><p>{nodeSchema.description}</p></HelpContent>
+              </div>
+            )}
         </div>
       </NodeToolbar>
-      <div className={nodeBorder}>
+      <div className={nodeBorderClass(nodeErrors, selected)}>
         <div className="m-1 text-lg font-bold text-center">{nodeSchema["ui:label"]}</div>
+
         <NodeInput />
         <div className="px-4">
           <div>
