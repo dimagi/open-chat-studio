@@ -94,7 +94,7 @@ class OpenAPIOperationExecutor:
             msg = Message()
             msg["content-disposition"] = content_disposition
             filename = msg.get_filename()
-            return response.text, ToolArtifact(
+            return content_disposition, ToolArtifact(
                 content=response.content, filename=filename, content_type=response.headers.get("Content-Type")
             )
         return response.text, None
