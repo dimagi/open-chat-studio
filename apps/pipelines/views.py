@@ -27,6 +27,7 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.meta import absolute_url
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -96,8 +97,11 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
 
-    def _option(value, label, type_=None):
-        return {"value": value, "label": label} | ({"type": type_} if type_ else {})
+    def _option(value, label, type_=None, edit_url: str | None = None):
+        data = {"value": value, "label": label}
+        data = data | ({"type": type_} if type_ else {})
+        data = data | ({"edit_url": edit_url} if edit_url else {})
+        return data
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
@@ -108,7 +112,14 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.assistant: (
             [_option("", "Select an Assistant")]
-            + [_option(assistant["id"], assistant["name"]) for assistant in assistants]
+            + [
+                _option(
+                    value=assistant["id"],
+                    label=assistant["name"],
+                    edit_url=absolute_url(reverse("assistants:edit", args=[team.slug, assistant["id"]])),
+                )
+                for assistant in assistants
+            ]
         ),
         OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
     }

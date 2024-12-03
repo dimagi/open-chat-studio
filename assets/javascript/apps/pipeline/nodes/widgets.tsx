@@ -4,6 +4,7 @@ import React, {
   ReactNode,
   useId,
 } from "react";
+import { useState } from "react";
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
@@ -131,20 +132,39 @@ function ToggleWidget(props: WidgetParams) {
 
 function SelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
+  const selectedOption = options.find((option) => option.value.toString() === props.paramValue);
+  const [link, setLink] = useState<string | undefined>(selectedOption?.edit_url);
+
+  const onUpdate = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selectedOption = options.find((option) => option.value.toString() === event.target.value);
+    setLink(selectedOption?.edit_url);
+    props.updateParamValue(event);
+  };
+  
+
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-    <select
-      className="select select-bordered w-full"
-      name={props.name}
-      onChange={props.updateParamValue}
-      value={props.paramValue}
-      required={props.required}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-row gap-2">
+      <select
+        className="select select-bordered w-full"
+        name={props.name}
+        onChange={onUpdate}
+        value={props.paramValue}
+        required={props.required}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {link && (
+        <div className="tooltip" data-tip="Open in a new tab">
+          <a target="_blank" href={link} className="align-bottom hover:cursor-pointer">
+            <i className="fa-solid fa-up-right-from-square fa-lg"></i>
+          </a>
+        </div>
+      )}
+    </div> 
   </InputField>
 }
 
