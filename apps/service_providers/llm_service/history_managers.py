@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod
+from typing import Self
+
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
@@ -74,7 +77,13 @@ class BaseHistoryManager(metaclass=ABCMeta):
 
 
 class ExperimentHistoryManager(BaseHistoryManager):
-    def __init__(self, session: ExperimentSession, chat_model, max_token_limit: int, trace_service):
+    def __init__(
+        self,
+        session: ExperimentSession,
+        max_token_limit: int | None = None,
+        chat_model: BaseChatModel | None = None,
+        trace_service=None,
+    ):
         self.session = session
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
@@ -82,6 +91,25 @@ class ExperimentHistoryManager(BaseHistoryManager):
 
         self.experiment_version_number = session.experiment.version_number
         self.experiment_is_a_version = session.experiment.is_a_version
+
+    @classmethod
+    def for_llm_chat(
+        cls,
+        session: ExperimentSession,
+        max_token_limit: int,
+        chat_model: BaseChatModel | None = None,
+        trace_service=None,
+    ) -> Self:
+        return cls(
+            session=session,
+            max_token_limit=max_token_limit,
+            chat_model=chat_model,
+            trace_service=trace_service,
+        )
+
+    @classmethod
+    def for_assistant(cls, session: ExperimentSession) -> Self:
+        return cls(session=session)
 
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
@@ -116,12 +144,12 @@ class ExperimentHistoryManager(BaseHistoryManager):
 class PipelineHistoryManager(BaseHistoryManager):
     def __init__(
         self,
-        session: ExperimentSession,
-        node_id: str,
-        history_type: PipelineChatHistoryTypes,
-        history_name: str,
-        max_token_limit: int,
-        chat_model,
+        session: ExperimentSession | None = None,
+        node_id: str | None = None,
+        history_type: PipelineChatHistoryTypes = PipelineChatHistoryTypes.GLOBAL,
+        history_name: str | None = None,
+        max_token_limit: int | None = None,
+        chat_model: BaseChatModel | None = None,
     ):
         self.session = session
         self.node_id = node_id
@@ -129,10 +157,33 @@ class PipelineHistoryManager(BaseHistoryManager):
         self.history_name = history_name
         self.max_token_limit = max_token_limit
         self.chat_model = chat_model
-        self.trace_service = session.experiment.trace_service
+        self.trace_service = session.experiment.trace_service if session else None
 
         self.input_message_metadata = None
         self.output_message_metadata = None
+
+    @classmethod
+    def for_llm_chat(
+        cls,
+        session: ExperimentSession,
+        node_id: str,
+        history_type: PipelineChatHistoryTypes,
+        history_name: str,
+        max_token_limit: int,
+        chat_model: BaseChatModel,
+    ) -> Self:
+        return cls(
+            session=session,
+            node_id=node_id,
+            history_type=history_type,
+            history_name=history_name,
+            max_token_limit=max_token_limit,
+            chat_model=chat_model,
+        )
+
+    @classmethod
+    def for_assistant(cls) -> Self:
+        return cls()
 
     def get_chat_history(self, input_messages: list):
         # session will be None for pipeline test runs
@@ -168,6 +219,9 @@ class PipelineHistoryManager(BaseHistoryManager):
     def add_messages_to_history(
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
     ):
+        self.input_message_metadata = input_message_metadata
+        self.output_message_metadata = output_message_metadata
+
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return
 
@@ -179,8 +233,6 @@ class PipelineHistoryManager(BaseHistoryManager):
             type=self.history_type, name=self._get_history_name(self.node_id)
         )
 
-        self.input_message_metadata = input_message_metadata
-        self.output_message_metadata = output_message_metadata
         message = history.messages.create(human_message=input, ai_message=output, node_id=self.node_id)
         # TODO: Save normal session history here as well
         return message

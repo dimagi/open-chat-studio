@@ -209,7 +209,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         llm_provider = LlmProvider.objects.get(id=self.llm_provider_id)
         llm_service = llm_provider.get_llm_service()
         chat_model = llm_service.get_chat_model(provider_model.name, self.llm_temperature)
-        history_manager = PipelineHistoryManager(
+        history_manager = PipelineHistoryManager.for_llm_chat(
             session=session,
             node_id=node_id,
             history_type=self.history_type,
@@ -603,7 +603,8 @@ class AssistantNode(PipelineNode):
         except OpenAiAssistant.DoesNotExist:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
 
-        runnable = self._get_assistant_runnable(assistant, session=state["experiment_session"], node_id=node_id)
+        session: ExperimentSession | None = state.get("experiment_session")
+        runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
         attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
@@ -618,19 +619,7 @@ class AssistantNode(PipelineNode):
         )
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
-        provider_model = LlmProviderModel.objects.get(id=self.llm_provider_model_id)
-        llm_provider = LlmProvider.objects.get(id=self.llm_provider_id)
-        llm_service = llm_provider.get_llm_service()
-        chat_model = llm_service.get_chat_model(provider_model.name, self.llm_temperature)
-
-        history_manager = PipelineHistoryManager(
-            session=session,
-            node_id=node_id,
-            history_type=self.history_type,
-            history_name=self.history_name,
-            max_token_limit=provider_model.max_token_limit,
-            chat_model=chat_model,
-        )
+        history_manager = PipelineHistoryManager.for_assistant()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self)
         if assistant.tools_enabled:
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)

@@ -51,14 +51,9 @@ def create_experiment_runnable(
     experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
 ):
     """Create an experiment runnable based on the experiment configuration."""
-    history_manager = ExperimentHistoryManager(
-        session=session,
-        max_token_limit=experiment.max_token_limit,
-        chat_model=experiment.get_chat_model(),
-        trace_service=trace_service,
-    )
 
     if assistant := experiment.assistant:
+        history_manager = ExperimentHistoryManager.for_assistant(session=session)
         assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
         runnable = None
         if assistant.tools_enabled and not disable_tools:
@@ -74,6 +69,13 @@ def create_experiment_runnable(
     assert (
         experiment.llm_provider.type == experiment.llm_provider_model.type
     ), "Experiment provider and provider model should be of the same type"
+
+    history_manager = ExperimentHistoryManager.for_llm_chat(
+        session=session,
+        max_token_limit=experiment.max_token_limit,
+        chat_model=experiment.get_chat_model(),
+        trace_service=trace_service,
+    )
 
     runnable = None
     chat_adapter = ChatAdapter.for_experiment(experiment, session, trace_service)
