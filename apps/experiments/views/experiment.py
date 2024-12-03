@@ -124,7 +124,7 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
             description_similarity = TrigramSimilarity("description", search)
             query_set = (
                 query_set.annotate(
-                    similarity=name_similarity + description_similarity, description_similarity=description_similarity
+                    similarity=name_similarity + description_similarity,
                 )
                 .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
                 .order_by("-similarity")
