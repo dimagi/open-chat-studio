@@ -32,7 +32,6 @@ def session(fake_llm_service):
     local_assistant = OpenAiAssistantFactory(assistant_id="assistant_1", tools=["fake_tool"])
     session = ExperimentSessionFactory(experiment__assistant=local_assistant)
     session.experiment.assistant.get_llm_service = lambda *args, **kwargs: fake_llm_service
-    session.get_participant_data = lambda *args, **kwargs: {"name": "Tester"}
     return session
 
 
