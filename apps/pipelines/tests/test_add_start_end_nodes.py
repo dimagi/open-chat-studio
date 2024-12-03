@@ -83,6 +83,77 @@ def test_dangling_edge_has_start_end_nodes(team):
 
 
 @django_db_transactional()
+def test_sentry_6107296412(team):
+    pipeline = Pipeline.objects.create(
+        team=team,
+        data={
+            "edges": [
+                {
+                    "id": "reactflow__edge-LLMResponseWithPrompt-efcB5output-BooleanNode-j4zkainput",
+                    "source": "LLMResponseWithPrompt-efcB5",
+                    "target": "BooleanNode-j4zka",
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                }
+            ],
+            "nodes": [
+                {
+                    "id": "BooleanNode-j4zka",
+                    "data": {
+                        "id": "BooleanNode-j4zka",
+                        "type": "BooleanNode",
+                        "label": "Boolean Node",
+                        "params": {},
+                        "inputParams": [{"name": "input_equals", "type": "<class 'str'>", "default": None}],
+                    },
+                    "type": "pipelineNode",
+                    "position": {"x": 613.296875, "y": 202},
+                },
+                {
+                    "id": "LLMResponseWithPrompt-efcB5",
+                    "data": {
+                        "id": "LLMResponseWithPrompt-efcB5",
+                        "type": "LLMResponseWithPrompt",
+                        "label": "LLM response with prompt",
+                        "params": {},
+                        "inputParams": [
+                            {"name": "llm_provider_id", "type": "LlmProviderId", "default": None},
+                            {"name": "llm_model", "type": "LlmModel", "default": None},
+                            {"name": "llm_temperature", "type": "LlmTemperature", "default": 1},
+                            {"name": "history_type", "type": "HistoryType", "default": "none"},
+                            {"name": "history_name", "type": "HistoryName", "default": None},
+                            {"name": "max_token_limit", "type": "MaxTokenLimit", "default": 8192},
+                            {"name": "source_material_id", "type": "SourceMaterialId", "default": None},
+                            {
+                                "name": "prompt",
+                                "type": "Prompt",
+                                "default": "You are a helpful assistant.",
+                            },
+                        ],
+                    },
+                    "type": "pipelineNode",
+                    "position": {"x": 62.936439804895485, "y": 78.34190341898599},
+                },
+            ],
+            "viewport": {"x": 3.2980612579958346, "y": 17.332422642001603, "zoom": 0.8467453123625279},
+        },
+    )
+
+    Node.objects.create(
+        pipeline=pipeline,
+        flow_id="LLMResponseWithPrompt-efcB5",
+        label="LLM response with prompt",
+        type="LLMResponseWithPrompt",
+        params={},
+    )
+
+    add_missing_start_end_nodes(pipeline, Node)
+    assert pipeline.node_set.all().count() == 4  # The missing Node is recreated
+    assert pipeline.node_set.filter(type=StartNode.__name__).exists()
+    assert pipeline.node_set.filter(type=EndNode.__name__).exists()
+
+
+@django_db_transactional()
 def test_compliant_pipeline_not_modified(team):
     start = start_node()
     end = end_node()
