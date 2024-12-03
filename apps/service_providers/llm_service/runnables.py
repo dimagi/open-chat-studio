@@ -13,6 +13,7 @@ from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage
+from langchain_core.messages.tool import ToolMessage, tool_call
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -27,6 +28,7 @@ from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
 from apps.assistants.models import ToolResources
+from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
@@ -549,16 +551,65 @@ class AgentAssistantChat(AssistantChat):
         return {}
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
+        from apps.assistants.sync import create_files_remote
+
         tool_map = {tool.name: tool for tool in self.adapter.get_tools()}
         response = assistant_runnable.invoke(input)
         while not isinstance(response, AgentFinish):
             tool_outputs = []
-            for action in response:
-                tool_output = tool_map[action.tool].invoke(action.tool_input)
-                tool_outputs.append({"output": tool_output, "tool_call_id": action.tool_call_id})
+            tool_outputs_with_artifacts = []
             last_action = response[-1]
-            response = assistant_runnable.invoke(
-                {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
-            )
+            for action in response:
+                tool_output = tool_map[action.tool].invoke(
+                    tool_call(name=action.tool, args=action.tool_input, id=action.tool_call_id)
+                )
+                if isinstance(tool_output, ToolMessage):
+                    if tool_output.artifact:
+                        tool_outputs_with_artifacts.append(tool_output)
+                    else:
+                        tool_outputs.append({"output": tool_output.content, "tool_call_id": action.tool_call_id})
+                else:
+                    tool_outputs.append({"output": tool_output, "tool_call_id": action.tool_call_id})
+
+            if tool_outputs:
+                # we can't mix normal outputs with artifacts
+                for output in tool_outputs_with_artifacts:
+                    tool_outputs.append({"output": output.content, "tool_call_id": output.tool_call_id})
+
+                response = assistant_runnable.invoke(
+                    {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
+                )
+            else:
+                files = []
+                for output in tool_outputs_with_artifacts:
+                    artifact = output.artifact
+                    if not isinstance(artifact, ToolArtifact):
+                        logger.warning("Unexpected artifact type %s", type(artifact))
+                        continue
+
+                    file = File.from_content(
+                        filename=artifact.filename,
+                        content=artifact.content,
+                        content_type=artifact.content_type,
+                        team_id=self.adapter.team.id,
+                    )
+                    files.append(file)
+
+                client = self.adapter.assistant_client
+                openai_file_ids = create_files_remote(client, files)
+
+                tools = []
+                if "code_interpreter" in self.adapter.assistant_builtin_tools:
+                    tools = [{"type": "code_interpreter"}]
+                elif "file_search" in self.adapter.assistant_builtin_tools:
+                    tools = [{"type": "file_search"}]
+
+                response = assistant_runnable.invoke(
+                    {
+                        "content": "I have uploaded the results as a file for you to use.",
+                        "attachments": [{"file_id": file_id, "tools": tools} for file_id in openai_file_ids],
+                        "thread_id": last_action.thread_id,
+                    }
+                )
 
         return response.thread_id, response.run_id

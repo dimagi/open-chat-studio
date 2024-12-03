@@ -1,5 +1,6 @@
 import enum
 from collections import defaultdict
+from email.message import Message
 from typing import Any
 from urllib.parse import urljoin
 
@@ -13,6 +14,16 @@ from pydantic import BaseModel, Field, create_model
 
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
+
+class ToolArtifact(BaseModel):
+    """
+    Represents a tool artifact.
+    """
+
+    content: bytes
+    filename: str
+    content_type: str
 
 
 class FunctionDef(BaseModel):
@@ -34,6 +45,7 @@ class FunctionDef(BaseModel):
             args_schema=self.args_schema,
             handle_tool_error=True,
             func=executor.call_api,
+            response_format="content_and_artifact",
         )
 
 
@@ -75,10 +87,17 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}")
 
-    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> str:
+    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> tuple[str, Any]:
         response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
         response.raise_for_status()
-        return response.text
+        if content_disposition := response.headers.get("content-disposition"):
+            msg = Message()
+            msg["content-disposition"] = content_disposition
+            filename = msg.get_filename()
+            return response.text, ToolArtifact(
+                content=response.content, filename=filename, content_type=response.headers.get("Content-Type")
+            )
+        return response.text, None
 
     def _get_url(self, path_params):
         url = self.function_def.url
