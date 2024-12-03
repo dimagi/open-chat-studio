@@ -1,10 +1,13 @@
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
+import logging
 from apps.pipelines.flow import FlowEdge, FlowNode, FlowNodeData
 from apps.pipelines.graph import PipelineGraph
 
 from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+logger = logging.getLogger(__name__)
+
 
 def remove_all_start_end_nodes(Node):
     for start_node in Node.objects.filter(type=StartNode.__name__).all():
@@ -48,49 +51,53 @@ def add_missing_start_end_nodes(pipeline, Node):
     node_ids = {n.id for n in graph.nodes}
     incoming = {e.source for e in graph.edges}
     outgoing = {e.target for e in graph.edges}
-    current_start_id = list(node_ids - outgoing)[0]
-    current_end_id = list(node_ids - incoming)[0]
-    current_start_node = next(node for node in data["nodes"] if node["id"] == current_start_id)
-    current_end_node = next(node for node in data["nodes"] if node["id"] == current_end_id)
-
     new_nodes = []
     new_edges = []
 
-    if not has_start:
-        start_id = str(uuid4())
-        new_start_node = FlowNode(
-            id=start_id,
-            type="startNode",
-            position=_get_new_position(current_start_node, -200),
-            data=FlowNodeData(id=start_id, type=StartNode.__name__),
-        )
-        new_start_edge = FlowEdge(
-            id=str(uuid4()),
-            source=new_start_node.id,
-            target=current_start_id,
-            sourceHandle="output",
-            targetHandle="input",
-        )
-        new_nodes.append(new_start_node.model_dump())
-        new_edges.append(new_start_edge.model_dump())
+    try:
+        current_start_id = list(node_ids - outgoing)[0]
+        current_end_id = list(node_ids - incoming)[0]
+        current_start_node = next(node for node in data["nodes"] if node["id"] == current_start_id)
+        current_end_node = next(node for node in data["nodes"] if node["id"] == current_end_id)
+    except (IndexError, StopIteration):
+        new_nodes, new_edges = _get_default_nodes()  # Just add start and end nodes as the pipeline is in a bad state anyway...
+        logger.exception("A pipeline is in a bad state, either it is recursive or pipeline.data['nodes'] doesn't match pipeline.node_set. Pipeline id: %s, team: %s", pipeline.id, pipeline.team)
+    else:
+        if not has_start:
+            start_id = str(uuid4())
+            new_start_node = FlowNode(
+                id=start_id,
+                type="startNode",
+                position=_get_new_position(current_start_node, -200),
+                data=FlowNodeData(id=start_id, type=StartNode.__name__),
+            )
+            new_start_edge = FlowEdge(
+                id=str(uuid4()),
+                source=new_start_node.id,
+                target=current_start_id,
+                sourceHandle="output",
+                targetHandle="input",
+            )
+            new_nodes.append(new_start_node.model_dump())
+            new_edges.append(new_start_edge.model_dump())
 
-    if not has_end:
-        end_id = str(uuid4())
-        new_end_node = FlowNode(
-            id=end_id,
-            type="endNode",
-            position=_get_new_position(current_end_node, 350),
-            data=FlowNodeData(id=end_id, type=EndNode.__name__),
-        )
-        new_end_edge = FlowEdge(
-            id=str(uuid4()),
-            source=current_end_id,
-            target=new_end_node.id,
-            sourceHandle="output",
-            targetHandle="input",
-        )
-        new_nodes.append(new_end_node.model_dump())
-        new_edges.append(new_end_edge.model_dump())
+        if not has_end:
+            end_id = str(uuid4())
+            new_end_node = FlowNode(
+                id=end_id,
+                type="endNode",
+                position=_get_new_position(current_end_node, 350),
+                data=FlowNodeData(id=end_id, type=EndNode.__name__),
+            )
+            new_end_edge = FlowEdge(
+                id=str(uuid4()),
+                source=current_end_id,
+                target=new_end_node.id,
+                sourceHandle="output",
+                targetHandle="input",
+            )
+            new_nodes.append(new_end_node.model_dump())
+            new_edges.append(new_end_edge.model_dump())
 
     if data.get("nodes"):
         data["nodes"].extend(new_nodes)
@@ -140,7 +147,7 @@ def _get_new_position(node: dict, x_offset: int):
     return {"x": x, "y": y}
 
 
-def _create_default_nodes(pipeline, Node):
+def _get_default_nodes():
     start_id= str(uuid4())
     start_node = FlowNode(
         id=start_id,
@@ -165,6 +172,11 @@ def _create_default_nodes(pipeline, Node):
         sourceHandle="output",
         targetHandle="input",
     )
-    pipeline.data = {"nodes": [start_node.model_dump(), end_node.model_dump()], "edges": [new_edge.model_dump()]}
+    return [start_node.model_dump(), end_node.model_dump()], [new_edge.model_dump()]
+
+
+def _create_default_nodes(pipeline, Node):
+    default_nodes, default_edges = _get_default_nodes()
+    pipeline.data = {"nodes": default_nodes, "edges": default_edges}
     _set_new_nodes(pipeline, Node)
     pipeline.save()
