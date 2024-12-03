@@ -9,6 +9,7 @@ from django.db import models, transaction
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.memory import ConversationBufferMemory
+from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
 from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage
@@ -548,10 +549,16 @@ class AgentAssistantChat(AssistantChat):
         return {}
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
-        agent = AgentExecutor.from_agent_and_tools(
-            agent=assistant_runnable,
-            tools=self.adapter.get_tools(),
-            max_execution_time=120,
-        )
-        response: dict = agent.invoke(input, config)
-        return response["thread_id"], response["run_id"]
+        tool_map = {tool.name: tool for tool in self.adapter.get_tools()}
+        response = assistant_runnable.invoke(input)
+        while not isinstance(response, AgentFinish):
+            tool_outputs = []
+            for action in response:
+                tool_output = tool_map[action.tool].invoke(action.tool_input)
+                tool_outputs.append({"output": tool_output, "tool_call_id": action.tool_call_id})
+            last_action = response[-1]
+            response = assistant_runnable.invoke(
+                {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
+            )
+
+        return response.thread_id, response.run_id
