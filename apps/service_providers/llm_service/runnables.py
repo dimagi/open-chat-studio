@@ -611,14 +611,17 @@ class AgentAssistantChat(AssistantChat):
         openai_file_ids = create_files_remote(client, files)
 
         tools = []
+        file_info_text = ""
         if "code_interpreter" in self.adapter.assistant_builtin_tools:
             tools = [{"type": "code_interpreter"}]
+            file_infos = [{file_id: file.content_type} for file, file_id in zip(files, openai_file_ids)]
+            file_info_text = self.adapter.get_file_type_info_text(file_infos)
         elif "file_search" in self.adapter.assistant_builtin_tools:
             tools = [{"type": "file_search"}]
 
         return assistant_runnable.invoke(
             {
-                "content": "I have uploaded the results as a file for you to use.",
+                "content": "I have uploaded the results as a file for you to use." + file_info_text,
                 "attachments": [{"file_id": file_id, "tools": tools} for file_id in openai_file_ids],
                 "thread_id": last_action.thread_id,
             }
