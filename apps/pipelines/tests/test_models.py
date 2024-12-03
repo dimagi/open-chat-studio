@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
@@ -46,3 +47,15 @@ class TestNode:
             assert original_node_assistant_id != node_version_assistant_id
             assert original_node_assistant_id == assistant.id
             assert node_version_assistant_id == assistant_version.id
+
+
+class TestPipeline:
+    @pytest.mark.django_db()
+    def test_simple_invoke(self):
+        """Test that the mock data is not being persisted when doing a simple invoke"""
+        assert ExperimentSession.objects.count() == 0
+        assert Experiment.objects.count() == 0
+        pipeline = PipelineFactory()
+        pipeline.simple_invoke("test")
+        assert ExperimentSession.objects.count() == 0
+        assert Experiment.objects.count() == 0
