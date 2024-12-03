@@ -1,9 +1,13 @@
 from uuid import uuid4
 
+import logging
 from apps.pipelines.flow import FlowEdge, FlowNode, FlowNodeData
 from apps.pipelines.graph import PipelineGraph
 
 from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+logger = logging.getLogger(__name__)
+
 
 def remove_all_start_end_nodes(Node):
     for start_node in Node.objects.filter(type=StartNode.__name__).all():
@@ -57,6 +61,7 @@ def add_missing_start_end_nodes(pipeline, Node):
         current_end_node = next(node for node in data["nodes"] if node["id"] == current_end_id)
     except (IndexError, StopIteration):
         new_nodes, new_edges = _get_default_nodes()  # Just add start and end nodes as the pipeline is in a bad state anyway...
+        logger.exception("A pipeline is in a bad state, either it is recursive or pipeline.data['nodes'] doesn't match pipeline.node_set. Pipeline id: %s, team: %s", pipeline.id, pipeline.team)
     else:
         if not has_start:
             start_id = str(uuid4())
