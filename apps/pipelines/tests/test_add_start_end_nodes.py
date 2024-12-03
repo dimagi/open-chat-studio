@@ -21,6 +21,68 @@ def test_empty_pipeline_gets_start_end_nodes(team):
 
 
 @django_db_transactional()
+def test_recursive_pipeline_has_start_end_nodes(team):
+    passthrough = passthrough_node()
+    pipeline = Pipeline.objects.create(
+        team=team,
+        data={
+            "nodes": [
+                {"id": passthrough["id"], "data": passthrough},
+            ],
+            "edges": [
+                {
+                    "id": "passthrough->passthrough",
+                    "source": passthrough["id"],
+                    "target": passthrough["id"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+            ],
+        },
+    )
+    pipeline.update_nodes_from_data()
+    pipeline.save()
+    pipeline.refresh_from_db()
+
+    add_missing_start_end_nodes(pipeline, Node)
+
+    assert pipeline.node_set.all().count() == 3
+    assert pipeline.node_set.filter(type=StartNode.__name__).exists()
+    assert pipeline.node_set.filter(type=EndNode.__name__).exists()
+
+
+@django_db_transactional()
+def test_dangling_edge_has_start_end_nodes(team):
+    passthrough = passthrough_node()
+    pipeline = Pipeline.objects.create(
+        team=team,
+        data={
+            "nodes": [
+                {"id": passthrough["id"], "data": passthrough},
+            ],
+            "edges": [
+                {
+                    "id": "passthrough->passthrough",
+                    "source": passthrough["id"],
+                    "target": "abcd",
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
+                },
+            ],
+        },
+    )
+    pipeline.update_nodes_from_data()
+    pipeline.save()
+    pipeline.refresh_from_db()
+
+    add_missing_start_end_nodes(pipeline, Node)
+
+    assert pipeline.node_set.all().count() == 3
+    assert pipeline.node_set.filter(type=StartNode.__name__).exists()
+    assert pipeline.node_set.filter(type=EndNode.__name__).exists()
+
+
+@django_db_transactional()
 def test_compliant_pipeline_not_modified(team):
     start = start_node()
     end = end_node()
