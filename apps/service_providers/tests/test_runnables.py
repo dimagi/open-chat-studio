@@ -67,15 +67,19 @@ def runnable(request, session):
     return runnables[request.param]
 
 
-@pytest.mark.django_db()
-def test_runnable(runnable, session, fake_llm_service):
-    history_manager = ExperimentHistoryManager.for_llm_chat(
+def _get_history_manager(session, experiment=None):
+    return ExperimentHistoryManager.for_llm_chat(
         session=session,
-        experiment=session.experiment,
+        experiment=experiment if experiment else session.experiment,
         max_token_limit=session.experiment.max_token_limit,
         chat_model=session.experiment.get_chat_model(),
         trace_service=session.experiment.trace_service,
     )
+
+
+@pytest.mark.django_db()
+def test_runnable(runnable, session, fake_llm_service):
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -96,13 +100,7 @@ def test_runnable(runnable, session, fake_llm_service):
 def test_bot_message_is_tagged_with_experiment_version(runnable, session, fake_llm_service):
     experiment_version = session.experiment.create_new_version()
     experiment_version.get_llm_service = lambda: fake_llm_service
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=experiment_version,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session, experiment_version)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(experiment_version, session), history_manager=history_manager
     )
@@ -118,13 +116,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with {source_material}"
     adapter = ChatAdapter.for_experiment(session.experiment, session)
     adapter.template_context.get_source_material = mock.Mock(return_value="this is the source material")
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(adapter=adapter, history_manager=history_manager)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -135,13 +127,7 @@ def test_runnable_with_source_material(runnable, session, fake_llm_service):
 @pytest.mark.django_db()
 def test_runnable_with_source_material_missing(runnable, session, fake_llm_service):
     session.experiment.prompt_text = "System prompt with {source_material}"
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -186,13 +172,7 @@ def test_runnable_with_custom_actions(session, fake_llm_service):
     CustomActionOperation.objects.create(custom_action=action, experiment=session.experiment, operation_id="pollen_get")
     session.experiment.tools = []
     adapter = ChatAdapter.for_experiment(session.experiment, session)
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = AgentLLMChat(adapter=adapter, history_manager=history_manager)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -223,13 +203,7 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm_service, ext
     session.experiment.input_formatter = "foo {input} bar" + extra_var
     adapter = ChatAdapter.for_experiment(session.experiment, session)
     adapter.template_context.get_current_datetime = mock.Mock(return_value="the current date and time")
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(adapter=adapter, history_manager=history_manager)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
@@ -239,13 +213,7 @@ def test_runnable_runnable_format_input(runnable, session, fake_llm_service, ext
 
 @pytest.mark.django_db()
 def test_runnable_save_input_to_history(runnable, session, chat, fake_llm_service):
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -261,13 +229,7 @@ def test_runnable_save_input_to_history(runnable, session, chat, fake_llm_servic
 
 @pytest.mark.django_db()
 def test_runnable_exclude_conversation_history(runnable, session, chat, fake_llm_service):
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -291,13 +253,7 @@ def test_runnable_with_history(runnable, session, chat, fake_llm_service):
     experiment.llm_provider_model.max_token_limit = 0  # disable compression
     session.chat = chat
     assert chat.messages.count() == 1
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -342,13 +298,7 @@ def test_runnable_with_participant_data(
     participant.save()
 
     session.experiment.prompt_text = "System prompt. Participant data: {participant_data}"
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(
         adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
     )
@@ -368,13 +318,7 @@ def test_runnable_with_current_datetime(runnable, session, fake_llm_service):
     adapter.template_context.get_current_datetime = mock.Mock(
         return_value=pretty_date(datetime.fromisoformat("2024-02-08 13:00:08.877096+00:00"))
     )
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
-    )
+    history_manager = _get_history_manager(session)
     chain = runnable.build(adapter=adapter, history_manager=history_manager)
     result = chain.invoke("hi")
     assert result == ChainOutput(output="this is a test message", prompt_tokens=30, completion_tokens=20)
