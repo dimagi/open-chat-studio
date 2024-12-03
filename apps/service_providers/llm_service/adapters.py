@@ -205,7 +205,7 @@ class AssistantAdapter(BaseAdapter):
     ):
         self.session = session
         self.assistant = assistant
-        self.llm_service = assistant.llm_provider.get_llm_service()
+        self.llm_service = assistant.get_llm_service()
         self.citations_enabled = citations_enabled
         self.experiment_version_number = experiment_version_number
         self.experiment_is_a_version = experiment_is_a_version

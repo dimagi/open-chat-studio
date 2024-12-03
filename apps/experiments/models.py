@@ -668,7 +668,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     def get_llm_service(self):
         if self.assistant:
-            return self.assistant.llm_provider.get_llm_service()
+            return self.assistant.get_llm_service()
         elif self.llm_provider:
             return self.llm_provider.get_llm_service()
 

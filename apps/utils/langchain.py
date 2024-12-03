@@ -17,6 +17,7 @@ from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.token_counters import TokenCounter
 
 
@@ -98,7 +99,7 @@ class FakeLlmService(LlmService):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
-        return self.llm
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)

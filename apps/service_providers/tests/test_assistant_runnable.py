@@ -580,6 +580,7 @@ def _create_run(
     status: Literal[
         "queued", "in_progress", "requires_action", "cancelling", "cancelled", "failed", "completed", "expired"
     ] = "completed",
+    required_action=None,
 ):
     run = Run(
         id="test",
@@ -589,7 +590,7 @@ def _create_run(
         failed_at=None,
         last_error=None,
         metadata={},
-        required_action=None,
+        required_action=required_action,
         started_at=0,
         created_at=0,
         expires_at=0,
