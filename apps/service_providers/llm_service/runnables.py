@@ -29,6 +29,7 @@ from apps.assistants.models import ToolResources
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
+from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 
 if TYPE_CHECKING:
@@ -50,13 +51,20 @@ def create_experiment_runnable(
     experiment: Experiment, session: ExperimentSession, disable_tools: bool = False, trace_service: Any = None
 ):
     """Create an experiment runnable based on the experiment configuration."""
+    history_manager = ExperimentHistoryManager(
+        session=session,
+        max_token_limit=experiment.max_token_limit,
+        chat_model=experiment.get_chat_model(),
+        trace_service=trace_service,
+    )
+
     if assistant := experiment.assistant:
         assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
         runnable = None
         if assistant.tools_enabled and not disable_tools:
-            runnable = AgentAssistantChat(adapter=assistant_adapter)
+            runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
         else:
-            runnable = AssistantChat(adapter=assistant_adapter)
+            runnable = AssistantChat(adapter=assistant_adapter, history_manager=history_manager)
         # This is a temporary hack until we return an object with metadata about the run
         runnable.experiment = experiment
         return runnable
@@ -70,9 +78,9 @@ def create_experiment_runnable(
     runnable = None
     chat_adapter = ChatAdapter.for_experiment(experiment, session, trace_service)
     if experiment.tools_enabled and not disable_tools:
-        runnable = AgentLLMChat(adapter=chat_adapter)
+        runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
     else:
-        runnable = SimpleLLMChat(adapter=chat_adapter)
+        runnable = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
 
     # This is a temporary hack until we return an object with metadata about the run
     runnable.experiment = experiment
@@ -102,6 +110,7 @@ class ChainOutput(Serializable):
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
     adapter: ChatAdapter
+    history_manager: ExperimentHistoryManager | PipelineHistoryManager
     experiment: Experiment | None = None
     memory: BaseMemory = ConversationBufferMemory(return_messages=True, output_key="output", input_key="input")
     cancelled: bool = False
@@ -126,8 +135,6 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         if include_conversation_history:
             self._populate_memory(input)
 
-        self.adapter.pre_run_hook(input, save_input_to_history, message_metadata={})
-
         output = self._get_output_check_cancellation(input, merged_config)
         result = ChainOutput(
             output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
@@ -136,7 +143,16 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
             raise GenerationCancelled(result)
 
         experiment_tag = configurable.get("experiment_tag")
-        self.adapter.post_run_hook(output, save_output_to_history, experiment_tag=experiment_tag, message_metadata={})
+        self.history_manager.add_messages_to_history(
+            input=input,
+            save_input_to_history=save_input_to_history,
+            input_message_metadata={},
+            output=output,
+            save_output_to_history=save_output_to_history,
+            experiment_tag=experiment_tag,
+            output_message_metadata={},
+        )
+
         return result
 
     def _get_input(self, input: str):
@@ -191,7 +207,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def _populate_memory(self, input: str):
         input_messages = self.get_input_messages(input)
-        self.memory.chat_memory.messages = self.adapter.get_chat_history(input_messages)
+        self.memory.chat_memory.messages = self.history_manager.get_chat_history(input_messages)
 
     def get_input_messages(self, input: str) -> list[BaseMessage]:
         """Return a list of messages which represent the fully populated LLM input.
@@ -248,6 +264,7 @@ class AgentLLMChat(LLMChat):
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     adapter: AssistantAdapter
+    history_manager: ExperimentHistoryManager | PipelineHistoryManager
     experiment: Experiment | None = None
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -273,10 +290,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         current_thread_id = self._sync_messages_to_thread(self.adapter.thread_id)
 
-        human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
-        save_input_to_history = config.get("configurable", {}).get("save_input_to_history", True)
-        self.adapter.pre_run_hook(input, save_input_to_history, human_message_metadata)
-
         if current_thread_id:
             input_dict["thread_id"] = current_thread_id
         input_dict["instructions"] = self.adapter.get_assistant_instructions()
@@ -286,10 +299,18 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         if not current_thread_id:
             self.adapter.thread_id = thread_id
 
+        human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
         ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
-        self.adapter.post_run_hook(
-            output, save_output_to_history=True, experiment_tag=experiment_tag, message_metadata=ai_message_metadata
+
+        self.history_manager.add_messages_to_history(
+            input=input,
+            save_input_to_history=config.get("configurable", {}).get("save_input_to_history", True),
+            input_message_metadata=human_message_metadata,
+            output=output,
+            save_output_to_history=True,
+            experiment_tag=experiment_tag,
+            output_message_metadata=ai_message_metadata,
         )
         return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
 
