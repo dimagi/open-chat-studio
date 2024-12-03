@@ -17,7 +17,7 @@ class FlowNodeData(pydantic.BaseModel):
 
 class FlowNode(pydantic.BaseModel):
     id: str
-    type: Literal["pipelineNode"] | Literal["startNode"] | Literal["endNode"] = "pipelineNode"
+    type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     position: dict = {}
     data: FlowNodeData
 

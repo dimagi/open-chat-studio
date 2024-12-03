@@ -159,7 +159,7 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
-    flow_node_type: Literal["pipelineNode"] | Literal["startNode"] | Literal["endNode"] = "pipelineNode"
+    flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
