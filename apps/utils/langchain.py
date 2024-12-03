@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from openai import OpenAI
 from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService
@@ -99,7 +100,8 @@ class FakeLlmService(LlmService):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent)
+        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
