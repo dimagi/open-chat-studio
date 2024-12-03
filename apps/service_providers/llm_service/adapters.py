@@ -15,11 +15,9 @@ from typing import TYPE_CHECKING, Self
 
 from langchain_core.prompts import PromptTemplate, get_template_variables
 
-from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_assistant_tools, get_tool_instances, get_tools
-from apps.chat.conversation import compress_chat_history
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -58,59 +56,6 @@ class BaseAdapter(metaclass=ABCMeta):
 
     def get_tools(self):
         return self.tools
-
-    # Leave public. TopicBot is using this
-    def save_message_to_history(
-        self,
-        message: str,
-        type_: ChatMessageType,
-        message_metadata: dict | None = None,
-        experiment_tag: str | None = None,
-    ):
-        """
-        Create a chat message and appends the file ids from each resource to the `openai_file_ids` array in the
-        chat message metadata.
-        Example resource_file_mapping: {"resource1": ["file1", "file2"], "resource2": ["file3", "file4"]}
-        """
-        metadata = self.get_trace_metadata()
-        metadata = metadata | (message_metadata or {})
-        chat_message = ChatMessage.objects.create(
-            chat=self.session.chat,
-            message_type=type_.value,
-            content=message,
-            metadata=metadata,
-        )
-
-        if experiment_tag:
-            tag, _ = Tag.objects.get_or_create(
-                name=experiment_tag,
-                team=self.session.team,
-                is_system_tag=True,
-                category=TagCategories.BOT_RESPONSE,
-            )
-            chat_message.add_tag(tag, team=self.session.team, added_by=None)
-
-        if type_ == ChatMessageType.AI:
-            self.ai_message = chat_message
-            chat_message.add_version_tag(
-                version_number=self.experiment_version_number, is_a_version=self.experiment_is_a_version
-            )
-
-        return chat_message
-
-    def pre_run_hook(self, input: str, save_input_to_history: bool, message_metadata: dict):
-        if self.save_message_metadata_only:
-            self.input_message_metadata = message_metadata
-        elif save_input_to_history:
-            self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=message_metadata)
-
-    def post_run_hook(self, output: str, save_output_to_history: bool, experiment_tag: str, message_metadata: dict):
-        if self.save_message_metadata_only:
-            self.output_message_metadata = message_metadata
-        elif save_output_to_history:
-            self.save_message_to_history(
-                output, type_=ChatMessageType.AI, message_metadata=message_metadata, experiment_tag=experiment_tag
-            )
 
 
 class ChatAdapter(BaseAdapter):
@@ -168,6 +113,7 @@ class ChatAdapter(BaseAdapter):
     def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode") -> Self:
         from apps.service_providers.models import LlmProvider, LlmProviderModel
 
+        # TODO: Pass these as params. They are available in the node already
         llm_provider = LlmProvider.objects.get(id=node.llm_provider_id)
         provider_model = LlmProviderModel.objects.get(id=node.llm_provider_model_id)
 
@@ -181,7 +127,7 @@ class ChatAdapter(BaseAdapter):
             experiment_version_number=session.experiment.version_number,
             experiment_is_a_version=session.experiment.is_a_version,
             tools=get_tool_instances(node.tools, session),
-            input_formatter="",  # TODO
+            input_formatter="{input}",
             source_material_id=node.source_material_id,
             trace_service=session.experiment.trace_service,  # TODO
             save_message_metadata_only=True,
@@ -195,14 +141,6 @@ class ChatAdapter(BaseAdapter):
 
     def get_prompt(self):
         return self.prompt_text
-
-    def get_chat_history(self, input_messages: list):
-        return compress_chat_history(
-            self.session.chat,
-            llm=self.get_chat_model(),
-            max_token_limit=self.max_token_limit,
-            input_messages=input_messages,
-        )
 
     def check_cancellation(self):
         self.session.chat.refresh_from_db(fields=["metadata"])
