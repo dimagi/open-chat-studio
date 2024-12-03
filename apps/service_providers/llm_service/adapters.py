@@ -19,11 +19,12 @@ from apps.assistants.models import OpenAiAssistant
 from apps.chat.agent.tools import get_assistant_tools, get_tool_instances, get_tools
 from apps.chat.models import Chat, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.main import LlmService, OpenAIAssistantRunnable
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import AssistantNode
+    from apps.service_providers.models import LlmProviderModel
 
 
 class BaseAdapter(metaclass=ABCMeta):
@@ -67,8 +68,6 @@ class ChatAdapter(BaseAdapter):
         temperature: float,
         prompt_text: str,
         max_token_limit: int,
-        experiment_version_number: int,
-        experiment_is_a_version: bool,
         tools: list = None,
         input_formatter: str | None = None,
         source_material_id: int | None = None,
@@ -81,8 +80,6 @@ class ChatAdapter(BaseAdapter):
         self.temperature = temperature
         self.prompt_text = prompt_text
         self.max_token_limit = max_token_limit
-        self.experiment_version_number = experiment_version_number
-        self.experiment_is_a_version = experiment_is_a_version
         self.tools = tools or []
         self.input_formatter = input_formatter
         self.source_material_id = source_material_id
@@ -101,8 +98,6 @@ class ChatAdapter(BaseAdapter):
             temperature=experiment.temperature,
             prompt_text=experiment.prompt_text,
             max_token_limit=experiment.max_token_limit,
-            experiment_version_number=experiment.version_number,
-            experiment_is_a_version=experiment.is_a_version,
             tools=get_tools(session, experiment=experiment),
             input_formatter=experiment.input_formatter,
             source_material_id=experiment.source_material_id,
@@ -110,22 +105,20 @@ class ChatAdapter(BaseAdapter):
         )
 
     @classmethod
-    def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode") -> Self:
-        from apps.service_providers.models import LlmProvider, LlmProviderModel
-
-        # TODO: Pass these as params. They are available in the node already
-        llm_provider = LlmProvider.objects.get(id=node.llm_provider_id)
-        provider_model = LlmProviderModel.objects.get(id=node.llm_provider_model_id)
-
+    def for_pipeline(
+        cls,
+        session: ExperimentSession,
+        node: "AssistantNode",
+        llm_service: LlmService,
+        provider_model: "LlmProviderModel",
+    ) -> Self:
         return cls(
             session=session,
             provider_model_name=provider_model.name,
-            llm_service=llm_provider.get_llm_service(),
+            llm_service=llm_service,
             temperature=node.llm_temperature,
             prompt_text=node.prompt,
             max_token_limit=provider_model.max_token_limit,
-            experiment_version_number=session.experiment.version_number,
-            experiment_is_a_version=session.experiment.is_a_version,
             tools=get_tool_instances(node.tools, session),
             input_formatter="{input}",
             source_material_id=node.source_material_id,
@@ -155,8 +148,6 @@ class AssistantAdapter(BaseAdapter):
         session: ExperimentSession,
         assistant: OpenAiAssistant,
         citations_enabled: bool,
-        experiment_version_number: int,
-        experiment_is_a_version: bool,
         input_formatter: str | None = None,
         trace_service=None,
         save_message_metadata_only: bool = False,
@@ -165,8 +156,6 @@ class AssistantAdapter(BaseAdapter):
         self.assistant = assistant
         self.llm_service = assistant.llm_provider.get_llm_service()
         self.citations_enabled = citations_enabled
-        self.experiment_version_number = experiment_version_number
-        self.experiment_is_a_version = experiment_is_a_version
         self.input_formatter = input_formatter
         self.trace_service = trace_service
         self.save_message_metadata_only = save_message_metadata_only
@@ -185,8 +174,6 @@ class AssistantAdapter(BaseAdapter):
             session=session,
             assistant=experiment.assistant,
             citations_enabled=experiment.citations_enabled,
-            experiment_version_number=experiment.version_number,
-            experiment_is_a_version=experiment.is_a_version,
             input_formatter=experiment.input_formatter,
             trace_service=trace_service,
         )
@@ -199,8 +186,6 @@ class AssistantAdapter(BaseAdapter):
             session=session,
             assistant=assistant,
             citations_enabled=node.citations_enabled,
-            experiment_version_number=experiment.version_number,
-            experiment_is_a_version=experiment.is_a_version,
             input_formatter=node.input_formatter,
             trace_service=experiment.trace_service,
             save_message_metadata_only=True,

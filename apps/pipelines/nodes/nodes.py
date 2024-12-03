@@ -217,7 +217,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
-        chat_adapter = ChatAdapter.for_pipeline(session=session, node=self)
+        chat_adapter = ChatAdapter.for_pipeline(
+            session=session, node=self, llm_service=llm_service, provider_model=provider_model
+        )
         if self.tools_enabled():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
         else:
