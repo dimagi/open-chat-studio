@@ -17,7 +17,7 @@ from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.annotations.models import Tag, TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import get_assistant_tools, get_tools
+from apps.chat.agent.tools import get_assistant_tools, get_tool_instances, get_tools
 from apps.chat.conversation import compress_chat_history
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
@@ -128,6 +128,7 @@ class ChatAdapter(BaseAdapter):
         input_formatter: str | None = None,
         source_material_id: int | None = None,
         trace_service=None,
+        save_message_metadata_only=False,
     ):
         self.session = session
         self.provider_model_name = provider_model_name
@@ -144,7 +145,7 @@ class ChatAdapter(BaseAdapter):
 
         self.team = session.team
         self.template_context = PromptTemplateContext(session, source_material_id)
-        self.save_message_metadata_only = False
+        self.save_message_metadata_only = save_message_metadata_only
 
     @classmethod
     def for_experiment(cls, experiment: Experiment, session: ExperimentSession, trace_service=None) -> Self:
@@ -163,9 +164,28 @@ class ChatAdapter(BaseAdapter):
             trace_service=trace_service,
         )
 
-    @staticmethod
-    def for_pipeline(experiment: Experiment, session: ExperimentSession) -> Self:
-        """TODO"""
+    @classmethod
+    def for_pipeline(cls, session: ExperimentSession, node: "AssistantNode") -> Self:
+        from apps.service_providers.models import LlmProvider, LlmProviderModel
+
+        llm_provider = LlmProvider.objects.get(id=node.llm_provider_id)
+        provider_model = LlmProviderModel.objects.get(id=node.llm_provider_model_id)
+
+        return cls(
+            session=session,
+            provider_model_name=provider_model.name,
+            llm_service=llm_provider.get_llm_service(),
+            temperature=node.llm_temperature,
+            prompt_text=node.prompt,
+            max_token_limit=provider_model.max_token_limit,
+            experiment_version_number=session.experiment.version_number,
+            experiment_is_a_version=session.experiment.is_a_version,
+            tools=get_tool_instances(node.tools, session),
+            input_formatter="",  # TODO
+            source_material_id=node.source_material_id,
+            trace_service=session.experiment.trace_service,  # TODO
+            save_message_metadata_only=True,
+        )
 
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(self.provider_model_name, self.temperature)

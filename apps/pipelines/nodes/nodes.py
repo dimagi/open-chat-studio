@@ -25,9 +25,15 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.adapters import AssistantAdapter
+from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
+from apps.service_providers.llm_service.runnables import (
+    AgentAssistantChat,
+    AgentLLMChat,
+    AssistantChat,
+    ChainOutput,
+    SimpleLLMChat,
+)
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
@@ -197,6 +203,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         return value
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
+        # TODO: Use a HistoryManager with the runnable
+        # Save input to pipeline history
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
@@ -205,11 +213,24 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         if self.history_type != PipelineChatHistoryTypes.NONE and session is not None:
             input_messages = prompt.invoke(context).to_messages()
             context["history"] = self._get_history(session, node_id, input_messages)
-        chain = prompt | super().get_chat_model()
-        output = chain.invoke(context, config=self._config)
+
+        # Get runnable
+        chat_adapter = ChatAdapter.for_pipeline(session=session, node=self)
+        if self.tools_enabled():
+            chat = AgentLLMChat(adapter=chat_adapter)
+        else:
+            chat = SimpleLLMChat(adapter=chat_adapter)
+
+        # Invoke runnable
+        result = chat.invoke(input=input)
+
+        # Save output to pipeline history
         if session is not None:
-            self._save_history(session, node_id, input, output.content)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+            self._save_history(session, node_id, input, result.output)
+        return PipelineState.from_node_output(node_id=node_id, output=result.output)
+
+    def tools_enabled(self) -> bool:
+        return len(self.tools) > 0
 
     def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
         session: ExperimentSession | None = state.get("experiment_session")
