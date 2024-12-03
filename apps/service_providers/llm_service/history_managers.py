@@ -6,7 +6,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 
 
@@ -80,6 +80,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
     def __init__(
         self,
         session: ExperimentSession,
+        experiment: Experiment | None = None,
         max_token_limit: int | None = None,
         chat_model: BaseChatModel | None = None,
         trace_service=None,
@@ -89,27 +90,30 @@ class ExperimentHistoryManager(BaseHistoryManager):
         self.chat_model = chat_model
         self.trace_service = trace_service
 
-        self.experiment_version_number = session.experiment.version_number
-        self.experiment_is_a_version = session.experiment.is_a_version
+        # TODO: Think about passing this in as context metadata rather
+        self.experiment_version_number = experiment.version_number
+        self.experiment_is_a_version = experiment.is_a_version
 
     @classmethod
     def for_llm_chat(
         cls,
         session: ExperimentSession,
+        experiment: Experiment,
         max_token_limit: int,
         chat_model: BaseChatModel | None = None,
         trace_service=None,
     ) -> Self:
         return cls(
             session=session,
+            experiment=experiment,
             max_token_limit=max_token_limit,
             chat_model=chat_model,
             trace_service=trace_service,
         )
 
     @classmethod
-    def for_assistant(cls, session: ExperimentSession) -> Self:
-        return cls(session=session)
+    def for_assistant(cls, session: ExperimentSession, experiment: Experiment) -> Self:
+        return cls(session=session, experiment=experiment)
 
     def get_chat_history(self, input_messages: list):
         return compress_chat_history(
@@ -186,7 +190,6 @@ class PipelineHistoryManager(BaseHistoryManager):
         return cls()
 
     def get_chat_history(self, input_messages: list):
-        # session will be None for pipeline test runs
         if self.history_type == PipelineChatHistoryTypes.NONE or self.session is None:
             return []
 

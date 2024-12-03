@@ -53,7 +53,7 @@ def create_experiment_runnable(
     """Create an experiment runnable based on the experiment configuration."""
 
     if assistant := experiment.assistant:
-        history_manager = ExperimentHistoryManager.for_assistant(session=session)
+        history_manager = ExperimentHistoryManager.for_assistant(session=session, experiment=experiment)
         assistant_adapter = AssistantAdapter.for_experiment(experiment, session, trace_service)
         runnable = None
         if assistant.tools_enabled and not disable_tools:
@@ -72,13 +72,14 @@ def create_experiment_runnable(
 
     history_manager = ExperimentHistoryManager.for_llm_chat(
         session=session,
+        experiment=experiment,
         max_token_limit=experiment.max_token_limit,
         chat_model=experiment.get_chat_model(),
         trace_service=trace_service,
     )
 
     runnable = None
-    chat_adapter = ChatAdapter.for_experiment(experiment, session, trace_service)
+    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session, trace_service=trace_service)
     if experiment.tools_enabled and not disable_tools:
         runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
     else:

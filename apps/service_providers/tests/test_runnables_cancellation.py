@@ -7,6 +7,7 @@ from apps.chat.agent.tools import OneOffReminderTool
 from apps.chat.models import Chat
 from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.adapters import ChatAdapter
+from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
     AgentLLMChat,
     ChainOutput,
@@ -87,6 +88,13 @@ def _test_runnable(runnable, session, expected_output):
 
 def _get_mocked_history_recording(session, runnable_cls):
     adapter = ChatAdapter.for_experiment(session.experiment, session)
-    runnable = runnable_cls(adapter=adapter, check_every_ms=0)
+    history_manager = ExperimentHistoryManager.for_llm_chat(
+        session=session,
+        experiment=session.experiment,
+        max_token_limit=session.experiment.max_token_limit,
+        chat_model=session.experiment.get_chat_model(),
+        trace_service=session.experiment.trace_service,
+    )
+    runnable = runnable_cls(adapter=adapter, history_manager=history_manager, check_every_ms=0)
     adapter.save_message_to_history = Mock()
     return runnable
