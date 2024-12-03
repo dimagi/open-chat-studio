@@ -551,25 +551,11 @@ class AgentAssistantChat(AssistantChat):
         return {}
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
-        from apps.assistants.sync import create_files_remote
-
-        tool_map = {tool.name: tool for tool in self.adapter.get_tools()}
         response = assistant_runnable.invoke(input)
+
         while not isinstance(response, AgentFinish):
-            tool_outputs = []
-            tool_outputs_with_artifacts = []
+            tool_outputs, tool_outputs_with_artifacts = self._invoke_tools(response)
             last_action = response[-1]
-            for action in response:
-                tool_output = tool_map[action.tool].invoke(
-                    tool_call(name=action.tool, args=action.tool_input, id=action.tool_call_id)
-                )
-                if isinstance(tool_output, ToolMessage):
-                    if tool_output.artifact:
-                        tool_outputs_with_artifacts.append(tool_output)
-                    else:
-                        tool_outputs.append({"output": tool_output.content, "tool_call_id": action.tool_call_id})
-                else:
-                    tool_outputs.append({"output": tool_output, "tool_call_id": action.tool_call_id})
 
             if tool_outputs:
                 # we can't mix normal outputs with artifacts
@@ -580,36 +566,60 @@ class AgentAssistantChat(AssistantChat):
                     {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id}
                 )
             else:
-                files = []
-                for output in tool_outputs_with_artifacts:
-                    artifact = output.artifact
-                    if not isinstance(artifact, ToolArtifact):
-                        logger.warning("Unexpected artifact type %s", type(artifact))
-                        continue
-
-                    file = File.from_content(
-                        filename=artifact.filename,
-                        content=artifact.content,
-                        content_type=artifact.content_type,
-                        team_id=self.adapter.team.id,
-                    )
-                    files.append(file)
-
-                client = self.adapter.assistant_client
-                openai_file_ids = create_files_remote(client, files)
-
-                tools = []
-                if "code_interpreter" in self.adapter.assistant_builtin_tools:
-                    tools = [{"type": "code_interpreter"}]
-                elif "file_search" in self.adapter.assistant_builtin_tools:
-                    tools = [{"type": "file_search"}]
-
-                response = assistant_runnable.invoke(
-                    {
-                        "content": "I have uploaded the results as a file for you to use.",
-                        "attachments": [{"file_id": file_id, "tools": tools} for file_id in openai_file_ids],
-                        "thread_id": last_action.thread_id,
-                    }
-                )
+                response = self._handle_tool_artifacts(tool_outputs_with_artifacts, assistant_runnable, last_action)
 
         return response.thread_id, response.run_id
+
+    def _invoke_tools(self, response) -> tuple[list, list]:
+        tool_map = {tool.name: tool for tool in self.adapter.get_tools()}
+
+        tool_outputs = []
+        tool_outputs_with_artifacts = []
+
+        for action in response:
+            tool = tool_map[action.tool]
+            tool_output = tool.invoke(tool_call(name=action.tool, args=action.tool_input, id=action.tool_call_id))
+            if isinstance(tool_output, ToolMessage):
+                if tool_output.artifact:
+                    tool_outputs_with_artifacts.append(tool_output)
+                else:
+                    tool_outputs.append({"output": tool_output.content, "tool_call_id": action.tool_call_id})
+            else:
+                tool_outputs.append({"output": tool_output, "tool_call_id": action.tool_call_id})
+
+        return tool_outputs, tool_outputs_with_artifacts
+
+    def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action):
+        from apps.assistants.sync import create_files_remote
+
+        files = []
+        for output in tool_outputs_with_artifacts:
+            artifact = output.artifact
+            if not isinstance(artifact, ToolArtifact):
+                logger.warning("Unexpected artifact type %s", type(artifact))
+                continue
+
+            file = File.from_content(
+                filename=artifact.filename,
+                content=artifact.content,
+                content_type=artifact.content_type,
+                team_id=self.adapter.team.id,
+            )
+            files.append(file)
+
+        client = self.adapter.assistant_client
+        openai_file_ids = create_files_remote(client, files)
+
+        tools = []
+        if "code_interpreter" in self.adapter.assistant_builtin_tools:
+            tools = [{"type": "code_interpreter"}]
+        elif "file_search" in self.adapter.assistant_builtin_tools:
+            tools = [{"type": "file_search"}]
+
+        return assistant_runnable.invoke(
+            {
+                "content": "I have uploaded the results as a file for you to use.",
+                "attachments": [{"file_id": file_id, "tools": tools} for file_id in openai_file_ids],
+                "thread_id": last_action.thread_id,
+            }
+        )

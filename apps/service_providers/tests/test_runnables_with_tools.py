@@ -9,6 +9,7 @@ from openai.types.beta.threads.required_action_function_tool_call import Functio
 from openai.types.beta.threads.run import RequiredAction, RequiredActionSubmitToolOutputs
 
 from apps.chat.agent.openapi_tool import ToolArtifact
+from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.runnables import AgentAssistantChat
 from apps.service_providers.tests.test_assistant_runnable import _create_run, _create_thread_messages
@@ -70,7 +71,7 @@ def test_assistant_tool_artifact_response(
         create_run.return_value = run
 
         # mock the tool so that it returns an artifact. This should trigger the file upload workflow
-        artifact = ToolArtifact(content=b"test artifact", filename="test.txt", content_type="text/plain")
+        artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
         tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
         runnable = get_runnable(session, tool)
         create_files_remote.return_value = ["file-123abc"]
@@ -88,6 +89,7 @@ def test_assistant_tool_artifact_response(
             "metadata": None,
         },
     )
+    assert File.objects.filter(name="test_artifact.txt").exists()
 
 
 @contextmanager
