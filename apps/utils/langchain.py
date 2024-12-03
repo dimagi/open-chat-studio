@@ -9,7 +9,7 @@ from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, Output
 from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -49,7 +49,7 @@ class FakeLlm(FakeListChatModel):
 
     def _stream(self, messages: list[BaseMessage], *args, **kwargs) -> Iterator[ChatGenerationChunk]:
         response = self._call(messages, *args, **kwargs)
-        if isinstance(response, BaseMessage):
+        if isinstance(response, BaseMessageChunk):
             yield ChatGenerationChunk(message=response)
         else:
             for c in response:
