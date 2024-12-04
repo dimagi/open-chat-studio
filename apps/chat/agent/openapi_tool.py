@@ -111,11 +111,11 @@ class OpenAPIOperationExecutor:
 
     def _get_artifact_response(self, content_disposition, filename, response):
         content_type = response.headers.get("Content-Type", "application/octet-stream")
-        if int(response.headers["Content-Length"]) < 1000**2:
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) < 1000**2:
             # just load it into memory if it's < 1MB
             response.read()
             return content_disposition, ToolArtifact(content=response.content, name=filename, content_type=content_type)
-
         # otherwise stream it to disk
         with tempfile.NamedTemporaryFile(delete=False) as f:
             for chunk in response.iter_bytes():
