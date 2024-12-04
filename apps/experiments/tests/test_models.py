@@ -19,6 +19,7 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -979,6 +980,29 @@ class TestExperimentModel:
         # Get a specific version
         assert experiment.get_version(1) == first_version
         assert first_version.get_version(1) == first_version
+
+    def test_archive_working_experiment_deletes_all_versions(self, experiment):
+        first_version = experiment.create_new_version()
+        second_version = experiment.create_new_version()
+        experiment.archive_working_experiment()
+        experiment.refresh_from_db()
+        first_version.refresh_from_db()
+        second_version.refresh_from_db()
+
+        assert experiment.is_archived is True
+        assert first_version.is_archived is True
+        assert second_version.is_archived is True
+
+    def test_archive_deletes_channels(self, experiment):
+        experiment_channel = ExperimentChannelFactory(experiment=experiment)
+        experiment_version = experiment.create_new_version()
+        experiment_version_channel = ExperimentChannelFactory(experiment=experiment_version)
+        experiment.archive_working_experiment()
+        experiment_channel.refresh_from_db()
+        experiment_version_channel.refresh_from_db()
+
+        assert experiment_channel.deleted is True
+        assert experiment_version_channel.deleted is True
 
 
 @pytest.mark.django_db()
