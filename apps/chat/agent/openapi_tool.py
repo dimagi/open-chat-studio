@@ -1,4 +1,5 @@
 import enum
+import logging
 from collections import defaultdict
 from email.message import Message
 from typing import Any
@@ -14,6 +15,8 @@ from pydantic import BaseModel, Field, create_model
 
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
+logger = logging.getLogger("tools")
 
 
 class ToolArtifact(BaseModel):
@@ -86,6 +89,7 @@ class OpenAPIOperationExecutor:
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
     ) -> tuple[str, ToolArtifact | None]:
+        logger.info("Making custom action request to %s %s", method, url)
         response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
         response.raise_for_status()
         if content_disposition := response.headers.get("content-disposition"):
