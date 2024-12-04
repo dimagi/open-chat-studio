@@ -10,7 +10,7 @@ import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
-
+import DOMPurify from 'dompurify';
 
 export function getWidget(name: string) {
   switch (name) {
@@ -159,7 +159,7 @@ function SelectWidget(props: WidgetParams) {
       </select>
       {link && (
         <div className="tooltip" data-tip="Open in a new tab">
-          <a target="_blank" href={link} className="align-bottom hover:cursor-pointer">
+          <a target="_blank" href={DOMPurify.sanitize(link)} className="align-bottom hover:cursor-pointer">
             <i className="fa-solid fa-up-right-from-square fa-lg"></i>
           </a>
         </div>

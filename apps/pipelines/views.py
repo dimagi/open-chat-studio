@@ -95,13 +95,18 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
+    assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name", "working_version").all()
 
     def _option(value, label, type_=None, edit_url: str | None = None):
         data = {"value": value, "label": label}
         data = data | ({"type": type_} if type_ else {})
         data = data | ({"edit_url": edit_url} if edit_url else {})
         return data
+
+    def _get_assistant_url(assistant_id, working_version):
+        if working_version is None:
+            return absolute_url(reverse("assistants:edit", args=[team.slug, assistant_id]))
+        return None
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
@@ -116,7 +121,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=assistant["id"],
                     label=assistant["name"],
-                    edit_url=absolute_url(reverse("assistants:edit", args=[team.slug, assistant["id"]])),
+                    edit_url=_get_assistant_url(assistant["id"], assistant["working_version"]),
                 )
                 for assistant in assistants
             ]
