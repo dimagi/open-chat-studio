@@ -68,7 +68,6 @@ urlpatterns = [
     path("e/<int:experiment_id>/versions/status", views.version_create_status, name="check_version_creation_status"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:pk>/details/", views.experiment_details, name="experiment-details"),
     path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
     path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
