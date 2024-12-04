@@ -126,7 +126,7 @@ def _convert_to_openai_tool(tool):
     # check if this function can use 'strict' mode
     properties = parameters.get("properties", {})
     # all fields are required
-    is_strict = set(parameters["required"]) == set(properties)
+    is_strict = not properties or set(parameters.get("required", [])) == set(properties)
     if is_strict:
         for prop, schema in properties.items():
             # format and default not supported + type must be present
@@ -469,7 +469,7 @@ def create_files_remote(client, files):
 def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
-    openai_file = _openai_create_file_with_retries(client, bytesio, file.name)
+    openai_file = _openai_create_file_with_retries(client, file.name, bytesio)
     file.external_id = openai_file.id
     file.external_source = "openai"
     file.save()
@@ -482,7 +482,7 @@ def _push_file_to_openai(client: OpenAiAssistant, file: File):
     stop=stop_after_attempt(3),
     before_sleep=before_sleep_log(logger, logging.INFO),
 )
-def _openai_create_file_with_retries(client, bytesio, filename):
+def _openai_create_file_with_retries(client, filename, bytesio):
     return client.files.create(file=(filename, bytesio), purpose="assistants")
 
 
