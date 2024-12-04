@@ -553,8 +553,10 @@ class AgentAssistantChat(AssistantChat):
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response = assistant_runnable.invoke(input)
-
-        while not isinstance(response, AgentFinish):
+        max_time_limit = 120
+        start_time = time.time()
+        time_elapsed = 0.0
+        while time_elapsed < max_time_limit and not isinstance(response, AgentFinish):
             tool_outputs, tool_outputs_with_artifacts = self._invoke_tools(response)
             last_action = response[-1]
 
@@ -568,6 +570,7 @@ class AgentAssistantChat(AssistantChat):
                 )
             else:
                 response = self._handle_tool_artifacts(tool_outputs_with_artifacts, assistant_runnable, last_action)
+            time_elapsed = time.time() - start_time
 
         return response.thread_id, response.run_id
 
