@@ -1,5 +1,6 @@
 import enum
 import logging
+import uuid
 from collections import defaultdict
 from email.message import Message
 from typing import Any
@@ -94,19 +95,25 @@ class OpenAPIOperationExecutor:
         response.raise_for_status()
         if content_disposition := response.headers.get("content-disposition"):
             filename = self._get_filename_from_header(content_disposition)
-            return content_disposition, ToolArtifact(
-                content=response.content, filename=filename, content_type=response.headers.get("Content-Type")
-            )
+            if filename:
+                content_type = response.headers.get("Content-Type", "application/octet-stream")
+                return content_disposition, ToolArtifact(
+                    content=response.content, filename=filename, content_type=content_type
+                )
         return response.text, None
 
     def _get_filename_from_header(self, content_disposition):
+        """Return the attachment filename or None if the content-disposition header is not an attachment."""
         try:
             msg = Message()
             msg["content-disposition"] = content_disposition
+            if msg.get_content_disposition() != "attachment":
+                return
+
             filename = msg.get_filename()
         except Exception as e:
             raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
-        return filename
+        return filename or str(uuid.uuid4())
 
     def _get_url(self, path_params):
         url = self.function_def.url
