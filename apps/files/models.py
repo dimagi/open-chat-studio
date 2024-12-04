@@ -50,7 +50,7 @@ class File(BaseTeamModel):
         if content:
             content_file = ContentFile(content, name=filename)
             new_file.file = content_file
-            new_file.size = content_file.size
+            new_file.content_size = content_file.size
 
         new_file.save()
         return new_file
