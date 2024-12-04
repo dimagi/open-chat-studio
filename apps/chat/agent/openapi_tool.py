@@ -1,5 +1,7 @@
 import enum
 import logging
+import pathlib
+import tempfile
 import uuid
 from collections import defaultdict
 from email.message import Message
@@ -21,9 +23,15 @@ logger = logging.getLogger("tools")
 
 
 class ToolArtifact(BaseModel):
-    content: bytes
-    filename: str
+    name: str
     content_type: str
+    content: bytes = None
+    path: str = None
+
+    def get_content(self):
+        if self.content:
+            return self.content
+        return pathlib.Path(self.path).read_bytes()
 
 
 class FunctionDef(BaseModel):
@@ -91,16 +99,29 @@ class OpenAPIOperationExecutor:
         self, http_client: httpx.Client, url: str, method: str, **kwargs
     ) -> tuple[str, ToolArtifact | None]:
         logger.info("Making custom action request to %s %s", method, url)
-        response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
-        response.raise_for_status()
-        if content_disposition := response.headers.get("content-disposition"):
-            filename = self._get_filename_from_header(content_disposition)
-            if filename:
-                content_type = response.headers.get("Content-Type", "application/octet-stream")
-                return content_disposition, ToolArtifact(
-                    content=response.content, filename=filename, content_type=content_type
-                )
-        return response.text, None
+        with http_client.stream(method.upper(), url, follow_redirects=False, **kwargs) as response:
+            response.raise_for_status()
+            if content_disposition := response.headers.get("content-disposition"):
+                filename = self._get_filename_from_header(content_disposition)
+                if filename:
+                    return self._get_artifact_response(content_disposition, filename, response)
+
+            response.read()
+            return response.text, None
+
+    def _get_artifact_response(self, content_disposition, filename, response):
+        content_type = response.headers.get("Content-Type", "application/octet-stream")
+        if int(response.headers["Content-Length"]) < 1000**2:
+            # just load it into memory if it's < 1MB
+            response.read()
+            return content_disposition, ToolArtifact(content=response.content, name=filename, content_type=content_type)
+
+        # otherwise stream it to disk
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            for chunk in response.iter_bytes():
+                f.write(chunk)
+            f.close()
+            return content_disposition, ToolArtifact(path=f.name, name=filename, content_type=content_type)
 
     def _get_filename_from_header(self, content_disposition):
         """Return the attachment filename or None if the content-disposition header is not an attachment."""

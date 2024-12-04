@@ -112,7 +112,7 @@ def test_openapi_tool_response_content_disposition_attachment(httpx_mock, filena
     assert result.artifact.content == b"content from API call"
     assert result.artifact.content_type == "text/plain"
     if filename:
-        assert result.artifact.filename == "example.txt"
+        assert result.artifact.name == "example.txt"
 
 
 def _test_tool_call(spec_dict, call_args: dict, path=None):

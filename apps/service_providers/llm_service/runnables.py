@@ -1,4 +1,3 @@
-import io
 import logging
 import re
 import time
@@ -619,7 +618,7 @@ class AgentAssistantChat(AssistantChat):
                 continue
 
             openai_file = _openai_create_file_with_retries(
-                self.adapter.assistant_client, artifact.filename, io.BytesIO(artifact.content)
+                self.adapter.assistant_client, artifact.name, artifact.get_content()
             )
             files.append((openai_file.id, artifact.content_type))
 
