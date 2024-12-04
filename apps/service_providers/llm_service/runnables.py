@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 import time
@@ -590,8 +591,6 @@ class AgentAssistantChat(AssistantChat):
         return tool_outputs, tool_outputs_with_artifacts
 
     def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action):
-        from apps.assistants.sync import create_files_remote
-
         files = []
         for output in tool_outputs_with_artifacts:
             artifact = output.artifact
@@ -599,22 +598,17 @@ class AgentAssistantChat(AssistantChat):
                 logger.warning("Unexpected artifact type %s", type(artifact))
                 continue
 
-            file = File.from_content(
-                filename=artifact.filename,
-                content=artifact.content,
-                content_type=artifact.content_type,
-                team_id=self.adapter.team.id,
+            openai_file = self.adapter.assistant_client.files.create(
+                file=(artifact.filename, io.BytesIO(artifact.content)),
+                purpose="assistants",
             )
-            files.append(file)
-
-        client = self.adapter.assistant_client
-        openai_file_ids = create_files_remote(client, files)
+            files.append((openai_file.id, artifact.content_type))
 
         tools = []
         file_info_text = ""
         if "code_interpreter" in self.adapter.assistant_builtin_tools:
             tools = [{"type": "code_interpreter"}]
-            file_infos = [{file_id: file.content_type} for file, file_id in zip(files, openai_file_ids)]
+            file_infos = [{file_id: content_type} for file_id, content_type in files]
             file_info_text = self.adapter.get_file_type_info_text(file_infos)
         elif "file_search" in self.adapter.assistant_builtin_tools:
             tools = [{"type": "file_search"}]
@@ -622,7 +616,7 @@ class AgentAssistantChat(AssistantChat):
         return assistant_runnable.invoke(
             {
                 "content": "I have uploaded the results as a file for you to use." + file_info_text,
-                "attachments": [{"file_id": file_id, "tools": tools} for file_id in openai_file_ids],
+                "attachments": [{"file_id": file_id, "tools": tools} for file_id, _ in files],
                 "thread_id": last_action.thread_id,
             }
         )

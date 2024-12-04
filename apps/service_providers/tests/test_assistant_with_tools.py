@@ -9,7 +9,6 @@ from openai.types.beta.threads.required_action_function_tool_call import Functio
 from openai.types.beta.threads.run import RequiredAction, RequiredActionSubmitToolOutputs
 
 from apps.chat.agent.openapi_tool import ToolArtifact
-from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.runnables import AgentAssistantChat
 from apps.service_providers.tests.test_assistant_runnable import _create_run, _create_thread_messages
@@ -56,14 +55,14 @@ def test_assistant_tool_response(submit_tool_outputs, session):
     )
 
 
-@patch("apps.assistants.sync.create_files_remote")  # called when tool output is being processed
+@patch("openai.resources.files.Files.create")  # called when tool output is being processed
 @patch("openai.resources.beta.threads.messages.Messages.create")  # called when tool output is submitted
 @patch("openai.resources.beta.threads.runs.Runs.create")  # called when tool output is submitted
 @pytest.mark.django_db()
 def test_assistant_tool_artifact_response(
     create_run,
     create_message,
-    create_files_remote,
+    create_files,
     session,
 ):
     with configure_common_mocks(session) as run:
@@ -73,7 +72,7 @@ def test_assistant_tool_artifact_response(
         artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
         tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
         runnable = get_runnable(session, tool)
-        create_files_remote.return_value = ["file-123abc"]
+        create_files.return_value = Mock(id="file-123abc")
 
         result = runnable.invoke("test")
 
@@ -88,17 +87,16 @@ def test_assistant_tool_artifact_response(
             "metadata": None,
         },
     )
-    assert File.objects.filter(name="test_artifact.txt").exists()
 
 
-@patch("apps.assistants.sync.create_files_remote")  # called when tool output is being processed
+@patch("openai.resources.files.Files.create")  # called when tool output is being processed
 @patch("openai.resources.beta.threads.messages.Messages.create")  # called when tool output is submitted
 @patch("openai.resources.beta.threads.runs.Runs.create")  # called when tool output is submitted
 @pytest.mark.django_db()
 def test_assistant_tool_artifact_response_code_interpreter(
     create_run,
     create_message,
-    create_files_remote,
+    create_files,
     session,
 ):
     session.experiment.assistant.builtin_tools = ["code_interpreter"]
@@ -110,7 +108,7 @@ def test_assistant_tool_artifact_response_code_interpreter(
         artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
         tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
         runnable = get_runnable(session, tool)
-        create_files_remote.return_value = ["file-123abc"]
+        create_files.return_value = Mock(id="file-123abc")
 
         result = runnable.invoke("test")
 
@@ -126,7 +124,6 @@ def test_assistant_tool_artifact_response_code_interpreter(
             "metadata": None,
         },
     )
-    assert File.objects.filter(name="test_artifact.txt").exists()
 
 
 @contextmanager
