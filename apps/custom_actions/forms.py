@@ -1,6 +1,7 @@
 from urllib.parse import urljoin
 
 from django import forms
+from django.conf import settings
 from django.core.validators import URLValidator
 from langchain_community.utilities.openapi import OpenAPISpec
 
@@ -104,7 +105,8 @@ def validate_api_schema(api_schema):
     if not server_url:
         raise forms.ValidationError("No server URL found in the schema.")
 
-    url_validator = URLValidator(schemes=["https"])
+    schemes = ["https", "http"] if settings.DEBUG else ["https"]
+    url_validator = URLValidator(schemes=schemes)
 
     # Fist pass with Django's URL validator
     try:
@@ -113,7 +115,7 @@ def validate_api_schema(api_schema):
         raise forms.ValidationError("The server URL is invalid. Ensure that the URL is a valid HTTPS URL")
 
     try:
-        validate_user_input_url(server_url)
+        validate_user_input_url(server_url, strict=not settings.DEBUG)
     except InvalidURL as e:
         raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
 
