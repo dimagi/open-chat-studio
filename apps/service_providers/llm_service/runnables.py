@@ -2,7 +2,6 @@ import io
 import logging
 import re
 import time
-from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
@@ -517,20 +516,15 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             raise exc
 
         error_thread_id, run_id = match.groups()
-        if error_thread_id != thread_id:
+        if thread_id and error_thread_id != thread_id:
             raise GenerationError(f"Thread ID mismatch: {error_thread_id} != {thread_id}", exc)
 
-        self._cancel_run(assistant_runnable, thread_id, run_id)
+        self._cancel_run(assistant_runnable, thread_id or error_thread_id, run_id)
 
     def _cancel_run(self, assistant_runnable, thread_id, run_id):
         logger.info("Cancelling run %s in thread %s", run_id, thread_id)
-        run = assistant_runnable.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
-        cancelling = run.status == "cancelling"
-        while cancelling:
-            run = assistant_runnable.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
-            cancelling = run.status == "cancelling"
-            if cancelling:
-                sleep(assistant_runnable.check_every_ms / 1000)
+        assistant_runnable.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=run_id)
+        assistant_runnable._wait_for_run(run_id, thread_id, progress_states=("in_progress", "queued", "cancelling"))
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
@@ -553,10 +547,21 @@ class AgentAssistantChat(AssistantChat):
 
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         response = assistant_runnable.invoke(input)
-        max_time_limit = 120
+        max_time_limit = 60
         start_time = time.time()
         time_elapsed = 0.0
-        while time_elapsed < max_time_limit and not isinstance(response, AgentFinish):
+        max_iterations = 5
+        iteration_count = 0
+        while not isinstance(response, AgentFinish):
+            if iteration_count >= max_iterations:
+                logger.warning("Agent did not finish after %d iterations", max_iterations)
+                response = response[0]
+                break
+            elif time_elapsed > max_time_limit:
+                logger.warning("Agent did not finish after %d seconds", max_time_limit)
+                response = response[0]
+                break
+
             tool_outputs, tool_outputs_with_artifacts = self._invoke_tools(response)
             last_action = response[-1]
 
@@ -570,7 +575,9 @@ class AgentAssistantChat(AssistantChat):
                 )
             else:
                 response = self._handle_tool_artifacts(tool_outputs_with_artifacts, assistant_runnable, last_action)
+
             time_elapsed = time.time() - start_time
+            iteration_count += 1
 
         return response.thread_id, response.run_id
 
@@ -601,6 +608,8 @@ class AgentAssistantChat(AssistantChat):
         """
         from apps.assistants.sync import _openai_create_file_with_retries
 
+        assistant_runnable.client.beta.threads.runs.cancel(thread_id=last_action.thread_id, run_id=last_action.run_id)
+
         files = []
         for output in tool_outputs_with_artifacts:
             artifact = output.artifact
@@ -621,6 +630,10 @@ class AgentAssistantChat(AssistantChat):
             file_info_text = self.adapter.get_file_type_info_text(file_infos)
         elif "file_search" in self.adapter.assistant_builtin_tools:
             tools = [{"type": "file_search"}]
+
+        assistant_runnable._wait_for_run(
+            last_action.run_id, last_action.thread_id, progress_states=("in_progress", "queued", "cancelling")
+        )
 
         return assistant_runnable.invoke(
             {

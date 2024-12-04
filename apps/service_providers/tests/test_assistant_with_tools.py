@@ -58,9 +58,10 @@ def test_assistant_tool_response(submit_tool_outputs, session):
 @patch("openai.resources.files.Files.create")  # called when tool output is being processed
 @patch("openai.resources.beta.threads.messages.Messages.create")  # called when tool output is submitted
 @patch("openai.resources.beta.threads.runs.Runs.create")  # called when tool output is submitted
+@patch("openai.resources.beta.threads.runs.Runs.cancel", Mock())  # called when tool output is submitted
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "builtin_tools", [([]), (["code_interpreter"]), (["file_search"]), (["code_interpreter", "file_search"])]
+    "builtin_tools", [(["code_interpreter"]), (["file_search"]), (["code_interpreter", "file_search"])]
 )
 def test_assistant_tool_artifact_response(create_run, create_message, create_files, session, builtin_tools):
     session.experiment.assistant.builtin_tools = builtin_tools
@@ -128,7 +129,11 @@ def configure_common_mocks(session):
         )
         create_and_run.return_value = run
         # 1st call on initial invoke, 2nd after tool message
-        retrieve_run.side_effect = [run, _create_run(assistant_id, thread_id)]
+        retrieve_run.side_effect = [
+            run,  # 1st call on initial invoke
+            _create_run(assistant_id, thread_id),  # send call waiting for cancellation
+            _create_run(assistant_id, thread_id),  # 3rd call after tool message
+        ]
         list_messages.return_value = _create_thread_messages(
             assistant_id, run.id, thread_id, [{"assistant": "ai response"}]
         )
