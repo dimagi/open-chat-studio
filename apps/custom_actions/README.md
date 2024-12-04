@@ -27,3 +27,12 @@ When a new version of an experiment is created, the custom action operations are
 schema for each operation is then persisted to the database, ensuring that the exact state of the operation at the
 time of versioning is preserved regardless of changes to the `CustomAction`. It also ensures that the operation is still
 valid when the version is created.
+
+## Tools
+
+Each `CustomActionOperation` results in a single tool which is passed to the LLM. The tool is dynamically constructed
+from the operation schema. See `apps.chat.agent.openapi_tool.FunctionDef.build_tool`.
+
+The tool supports making HTTP requests to the external API. API responses will be returned to the LLM as text unless
+the API responds with a `Content-Disposition` header specifying a file download. In this case, the file will be
+downloaded.
