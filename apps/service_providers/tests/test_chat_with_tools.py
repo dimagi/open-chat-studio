@@ -51,7 +51,7 @@ def test_tool_response(session, fake_llm_service):
 @pytest.mark.django_db()
 def test_tool_artifact_response(session, fake_llm_service):
     # mock the tool so that it returns an artifact. This should be ignored by a normal Chat model
-    artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
+    artifact = ToolArtifact(content=b"test artifact", name="test_artifact.txt", content_type="text/plain")
     tool = _make_tool_for_testing(("test tool output", artifact), response_format="content_and_artifact")
     runnable = get_runnable(session, tool)
     result = runnable.invoke("test")
