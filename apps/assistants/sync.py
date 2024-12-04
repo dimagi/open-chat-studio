@@ -55,6 +55,7 @@ Once enabled on the assistant, the thread can add its own files to its vector st
 files, as well as those provided by the assistant.
 """
 
+import logging
 import pathlib
 from functools import wraps
 from io import BytesIO
@@ -63,12 +64,15 @@ import openai
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+
+logger = logging.getLogger("openai_sync")
 
 
 class OpenAiSyncError(Exception):
@@ -465,13 +469,21 @@ def create_files_remote(client, files):
 def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
-    openai_file = client.files.create(
-        file=(file.name, bytesio),
-        purpose="assistants",
-    )
+    openai_file = _openai_create_file_with_retries(client, bytesio, file.name)
     file.external_id = openai_file.id
     file.external_source = "openai"
     file.save()
+
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=5),
+    reraise=True,
+    retry=retry_if_exception_type(openai.RateLimitError),
+    stop=stop_after_attempt(3),
+    before_sleep=before_sleep_log(logger, logging.INFO),
+)
+def _openai_create_file_with_retries(client, bytesio, filename):
+    return client.files.create(file=(filename, bytesio), purpose="assistants")
 
 
 def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:

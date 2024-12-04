@@ -597,8 +597,9 @@ class AgentAssistantChat(AssistantChat):
         """When artifacts are produced we don't submit the tool outputs to the existing run since
         that only accepts text.
 
-        Instead we create a new run with a new message and add the artifacts as attachments.
+        Instead, we create a new run with a new message and add the artifacts as attachments.
         """
+        from apps.assistants.sync import _openai_create_file_with_retries
 
         files = []
         for output in tool_outputs_with_artifacts:
@@ -607,9 +608,8 @@ class AgentAssistantChat(AssistantChat):
                 logger.warning("Unexpected artifact type %s", type(artifact))
                 continue
 
-            openai_file = self.adapter.assistant_client.files.create(
-                file=(artifact.filename, io.BytesIO(artifact.content)),
-                purpose="assistants",
+            openai_file = _openai_create_file_with_retries(
+                self.adapter.assistant_client, artifact.filename, io.BytesIO(artifact.content)
             )
             files.append((openai_file.id, artifact.content_type))
 
