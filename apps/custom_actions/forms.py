@@ -59,6 +59,9 @@ class CustomActionForm(forms.ModelForm):
         return validate_api_schema(api_schema)
 
     def clean(self):
+        if self.errors:
+            return
+
         from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 
         operations = self.cleaned_data["allowed_operations"]
