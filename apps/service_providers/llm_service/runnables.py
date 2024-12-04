@@ -565,7 +565,8 @@ class AgentAssistantChat(AssistantChat):
             tool_outputs, tool_outputs_with_artifacts = self._invoke_tools(response)
             last_action = response[-1]
 
-            if tool_outputs:
+            has_tools = self.adapter.assistant_builtin_tools  # attachments need to be added to a tool
+            if not has_tools or tool_outputs:
                 # we can't mix normal outputs with artifacts
                 for output in tool_outputs_with_artifacts:
                     tool_outputs.append({"output": output.content, "tool_call_id": output.tool_call_id})
