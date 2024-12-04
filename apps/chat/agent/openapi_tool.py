@@ -17,10 +17,6 @@ from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 
 class ToolArtifact(BaseModel):
-    """
-    Represents a tool artifact.
-    """
-
     content: bytes
     filename: str
     content_type: str
@@ -87,7 +83,9 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}")
 
-    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> tuple[str, Any]:
+    def _make_request(
+        self, http_client: httpx.Client, url: str, method: str, **kwargs
+    ) -> tuple[str, ToolArtifact | None]:
         response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
         response.raise_for_status()
         if content_disposition := response.headers.get("content-disposition"):

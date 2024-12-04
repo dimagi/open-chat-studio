@@ -591,6 +591,12 @@ class AgentAssistantChat(AssistantChat):
         return tool_outputs, tool_outputs_with_artifacts
 
     def _handle_tool_artifacts(self, tool_outputs_with_artifacts, assistant_runnable, last_action):
+        """When artifacts are produced we don't submit the tool outputs to the existing run since
+        that only accepts text.
+
+        Instead we create a new run with a new message and add the artifacts as attachments.
+        """
+
         files = []
         for output in tool_outputs_with_artifacts:
             artifact = output.artifact
