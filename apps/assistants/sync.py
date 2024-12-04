@@ -65,7 +65,7 @@ from openai import OpenAI
 from openai.types.beta import Assistant
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.assistants.utils import get_assistant_tool_options
+from apps.assistants.utils import chunk_list, get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
@@ -426,8 +426,8 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         return vector_store_id
 
     vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids[:100])
-    if len(file_ids) > 100:
-        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=file_ids[100:])
+    for chunk in chunk_list(file_ids[100:], 500):
+        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=chunk)
     return vector_store.id
 
 
