@@ -425,7 +425,9 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
         return vector_store_id
 
-    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
+    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids[:100])
+    if len(file_ids) > 100:
+        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=file_ids[100:])
     return vector_store.id
 
 
