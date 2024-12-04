@@ -64,8 +64,11 @@ class CustomActionForm(forms.ModelForm):
 
         from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 
-        operations = self.cleaned_data["allowed_operations"]
-        schema = self.cleaned_data["api_schema"]
+        schema = self.cleaned_data.get("api_schema")
+        operations = self.cleaned_data.get("allowed_operations")
+        if schema is None or operations is None:
+            return self.cleaned_data
+
         spec = OpenAPISpec.from_spec_dict(schema)
         operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
         invalid_operations = set(operations) - set(operations_by_id)
