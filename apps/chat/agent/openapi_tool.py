@@ -89,13 +89,20 @@ class OpenAPIOperationExecutor:
         response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
         response.raise_for_status()
         if content_disposition := response.headers.get("content-disposition"):
-            msg = Message()
-            msg["content-disposition"] = content_disposition
-            filename = msg.get_filename()
+            filename = self._get_filename_from_header(content_disposition)
             return content_disposition, ToolArtifact(
                 content=response.content, filename=filename, content_type=response.headers.get("Content-Type")
             )
         return response.text, None
+
+    def _get_filename_from_header(self, content_disposition):
+        try:
+            msg = Message()
+            msg["content-disposition"] = content_disposition
+            filename = msg.get_filename()
+        except Exception as e:
+            raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
+        return filename
 
     def _get_url(self, path_params):
         url = self.function_def.url
