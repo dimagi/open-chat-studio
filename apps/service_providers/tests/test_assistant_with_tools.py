@@ -59,47 +59,11 @@ def test_assistant_tool_response(submit_tool_outputs, session):
 @patch("openai.resources.beta.threads.messages.Messages.create")  # called when tool output is submitted
 @patch("openai.resources.beta.threads.runs.Runs.create")  # called when tool output is submitted
 @pytest.mark.django_db()
-def test_assistant_tool_artifact_response(
-    create_run,
-    create_message,
-    create_files,
-    session,
-):
-    with configure_common_mocks(session) as run:
-        create_run.return_value = run
-
-        # mock the tool so that it returns an artifact. This should trigger the file upload workflow
-        artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
-        tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
-        runnable = get_runnable(session, tool)
-        create_files.return_value = Mock(id="file-123abc")
-
-        result = runnable.invoke("test")
-
-    assert result.output == "ai response"
-    assert tool.func.call_args == (("test arg",), {})
-    assert create_message.call_args == (
-        ("test_thread_id",),
-        {
-            "role": "user",
-            "content": "I have uploaded the results as a file for you to use.",
-            "attachments": [{"file_id": "file-123abc", "tools": []}],
-            "metadata": None,
-        },
-    )
-
-
-@patch("openai.resources.files.Files.create")  # called when tool output is being processed
-@patch("openai.resources.beta.threads.messages.Messages.create")  # called when tool output is submitted
-@patch("openai.resources.beta.threads.runs.Runs.create")  # called when tool output is submitted
-@pytest.mark.django_db()
-def test_assistant_tool_artifact_response_code_interpreter(
-    create_run,
-    create_message,
-    create_files,
-    session,
-):
-    session.experiment.assistant.builtin_tools = ["code_interpreter"]
+@pytest.mark.parametrize(
+    "builtin_tools", [([]), (["code_interpreter"]), (["file_search"]), (["code_interpreter", "file_search"])]
+)
+def test_assistant_tool_artifact_response(create_run, create_message, create_files, session, builtin_tools):
+    session.experiment.assistant.builtin_tools = builtin_tools
 
     with configure_common_mocks(session) as run:
         create_run.return_value = run
@@ -114,13 +78,19 @@ def test_assistant_tool_artifact_response_code_interpreter(
 
     assert result.output == "ai response"
     assert tool.func.call_args == (("test arg",), {})
-    file_type_info = "\n\nFile type information:\n\n| File Path | Mime Type |\n| /mnt/data/file-123abc | text/plain |\n"
+
+    file_type_info = ""
+    if "code_interpreter" in builtin_tools:
+        file_type_info = (
+            "\n\nFile type information:\n\n| File Path | Mime Type |" "\n| /mnt/data/file-123abc | text/plain |\n"
+        )
+
     assert create_message.call_args == (
         ("test_thread_id",),
         {
             "role": "user",
             "content": f"I have uploaded the results as a file for you to use.{file_type_info}",
-            "attachments": [{"file_id": "file-123abc", "tools": [{"type": "code_interpreter"}]}],
+            "attachments": [{"file_id": "file-123abc", "tools": [{"type": builtin_tools[0]}] if builtin_tools else []}],
             "metadata": None,
         },
     )
