@@ -171,7 +171,7 @@ function SelectWidget(props: WidgetParams) {
 
 function MultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
-  let selectedTools = Array.isArray(props.nodeParams["tools"]) ? props.nodeParams["tools"] : [];
+  let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
 
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -190,12 +190,12 @@ function MultiSelectWidget(props: WidgetParams) {
 
   function onUpdate(event: ChangeEvent<HTMLInputElement>) {
     if (event.target.checked) {
-      selectedTools.push(event.target.name)
+      selectedValues.push(event.target.name)
     } else {
-      selectedTools = selectedTools.filter((tool) => tool !== event.target.name)
+      selectedValues = selectedValues.filter((tool) => tool !== event.target.name)
     }
     setNode(props.nodeId, (old) => {
-        return getNewNodeData(old, selectedTools);
+        return getNewNodeData(old, selectedValues);
       }
     );
   };
@@ -208,7 +208,7 @@ function MultiSelectWidget(props: WidgetParams) {
             className="checkbox"
             name={option.value}
             onChange={onUpdate}
-            checked={selectedTools.includes(option.value)}
+            checked={selectedValues.includes(option.value)}
             id={option.value}
             key={option.value}
             type="checkbox"
