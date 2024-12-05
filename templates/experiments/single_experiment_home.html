@@ -348,13 +348,13 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       new TomSelect('#tag-multiselect-filter', {
-        plugins: ["remove_button"],
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
         maxItems: null,
         hidePlaceholder: true,
       });
 
       new TomSelect('#participant-filter', {
-        plugins: ["remove_button"],
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
         valueField: 'identifier',
         searchField: ['name', 'identifier'],
         hidePlaceholder: true,
