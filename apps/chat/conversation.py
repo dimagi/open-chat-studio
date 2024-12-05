@@ -125,8 +125,11 @@ def compress_chat_history(
             keep_history_len=keep_history_len,
         )
         if summary is not None:
-            ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-            return [SystemMessage(content=summary)] + history
+            if last_message:
+                ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+                return [SystemMessage(content=summary)] + history
+            else:
+                logging.exception(f"last_message is unexpectedly None for chat_id={chat.id}")
         return history
     except (NameError, ImportError, ValueError, NotImplementedError):
         # typically this is because a library required to count tokens isn't installed
@@ -151,8 +154,11 @@ def compress_pipeline_chat_history(
             keep_history_len=keep_history_len,
         )
         if summary is not None:
-            PipelineChatMessages.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-            return [SystemMessage(content=summary)] + history
+            if last_message:
+                PipelineChatMessages.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
+                return [SystemMessage(content=summary)] + history
+            else:
+                logging.exception(f"last_message is unexpectedly None for chat_id={pipeline_chat_history.id}")
         return history
 
     except (NameError, ImportError, ValueError, NotImplementedError):
@@ -217,7 +223,13 @@ def compress_chat_history_from_messages(
         history_tokens,
     )
 
-    last_message = history[0] if history else pruned_memory[-1]
+    if history:
+        last_message = history[0]
+    elif pruned_memory:
+        last_message = pruned_memory[-1]
+    else:
+        last_message = None
+
     return history, last_message, summary
 
 
