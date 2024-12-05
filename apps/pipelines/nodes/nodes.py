@@ -206,9 +206,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         session: ExperimentSession | None = state.get("experiment_session")
         # Get runnable
         provider_model = self.get_llm_provider_model()
-        llm_provider = LlmProvider.objects.get(id=self.llm_provider_id)
-        llm_service = llm_provider.get_llm_service()
-        chat_model = llm_service.get_chat_model(provider_model.name, self.llm_temperature)
+        chat_model = self.get_chat_model()
         history_manager = PipelineHistoryManager.for_llm_chat(
             session=session,
             node_id=node_id,
