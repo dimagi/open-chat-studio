@@ -107,10 +107,6 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         return [tag["name"] for tag in self.tags_json]
 
     @cached_property
-    def content_type(self) -> ContentType:
-        return
-
-    @cached_property
     def tags_json(self):
         tagged_items = CustomTaggedItem.objects.filter(
             content_type__model=self._meta.model_name, content_type__app_label=self._meta.app_label, object_id=self.id
