@@ -95,7 +95,7 @@ def test_openapi_tool_response_content_disposition_inline(httpx_mock):
         headers={"Content-Disposition": "inline"},
     )
     result = _test_tool_call(spec, {})
-    assert result == b"content from API call"
+    assert result == ToolMessage(content="content from API call", name="test_get", tool_call_id="123")
 
 
 @pytest.mark.parametrize("filename", ["", "; filename=example.txt"])
