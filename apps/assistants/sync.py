@@ -61,7 +61,7 @@ from functools import wraps
 from io import BytesIO
 
 import openai
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [_convert_to_openai_tool(tool) for tool in internal_tools]
+        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -115,9 +115,9 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
         assistant.save()
 
 
-def _convert_to_openai_tool(tool):
+def convert_to_openai_tool(tool):
     """Work around some limitiations of OpenAI function calling"""
-    function = convert_to_openai_tool(tool, strict=True)
+    function = lc_convert_to_openai_tool(tool, strict=True)
     try:
         parameters = function["function"]["parameters"]
     except KeyError:

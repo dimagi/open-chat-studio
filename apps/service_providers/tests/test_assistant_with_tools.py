@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from typing import Any
+from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
@@ -70,7 +71,7 @@ def test_assistant_tool_artifact_response(create_run, create_message, create_fil
         create_run.return_value = run
 
         # mock the tool so that it returns an artifact. This should trigger the file upload workflow
-        artifact = ToolArtifact(content=b"test artifact", filename="test_artifact.txt", content_type="text/plain")
+        artifact = ToolArtifact(content=b"test artifact", name="test_artifact.txt", content_type="text/plain")
         tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
         runnable = get_runnable(session, tool)
         create_files.return_value = Mock(id="file-123abc")
@@ -95,6 +96,10 @@ def test_assistant_tool_artifact_response(create_run, create_message, create_fil
             "metadata": None,
         },
     )
+    # check that the run was created with the correct tools (excluding the artifact tool)
+    assert create_run.call_args_list == [
+        mock.call("test_thread_id", assistant_id="assistant_1", tools=[{"type": tool} for tool in builtin_tools])
+    ]
 
 
 @contextmanager

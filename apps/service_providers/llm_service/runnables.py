@@ -606,12 +606,14 @@ class AgentAssistantChat(AssistantChat):
 
         Instead, we create a new run with a new message and add the artifacts as attachments.
         """
-        from apps.assistants.sync import _openai_create_file_with_retries
+        from apps.assistants.sync import _openai_create_file_with_retries, convert_to_openai_tool
 
         assistant_runnable.client.beta.threads.runs.cancel(thread_id=last_action.thread_id, run_id=last_action.run_id)
 
         files = []
+        seen_tools = set()
         for output in tool_outputs_with_artifacts:
+            seen_tools.add(output.name)
             artifact = output.artifact
             if not isinstance(artifact, ToolArtifact):
                 logger.warning("Unexpected artifact type %s", type(artifact))
@@ -635,10 +637,16 @@ class AgentAssistantChat(AssistantChat):
             last_action.run_id, last_action.thread_id, progress_states=("in_progress", "queued", "cancelling")
         )
 
+        # only allow tools that weren't used in the previous run
+        allowed_tools = [{"type": tool} for tool in self.adapter.assistant_builtin_tools]
+        if unused_tools := [tool for tool in self.adapter.get_tools() if tool.name not in seen_tools]:
+            allowed_tools.extend([convert_to_openai_tool(tool) for tool in unused_tools])
+
         return assistant_runnable.invoke(
             {
                 "content": "I have uploaded the results as a file for you to use." + file_info_text,
                 "attachments": [{"file_id": file_id, "tools": tools} for file_id, _ in files],
                 "thread_id": last_action.thread_id,
+                "tools": allowed_tools,
             }
         )
