@@ -33,6 +33,7 @@ function configureTomSelect() {
   document.querySelectorAll(filter).forEach((el) => {
     let objectInfo = el.getAttribute("data-info");
     let control = new TomSelect(el, {
+      plugins: ["remove_button"],
       maxItems: null,
       create: true,
       onItemAdd: addTag('onItemAdd', objectInfo),
