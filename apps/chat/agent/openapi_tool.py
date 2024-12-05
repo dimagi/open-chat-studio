@@ -99,14 +99,16 @@ class OpenAPIOperationExecutor:
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
     ) -> tuple[str, ToolArtifact | None]:
-        logger.info("Making custom action request to %s %s", method, url)
+        logger.info("[%s] %s %s", self.function_def.name, method.upper(), url)
         with http_client.stream(method.upper(), url, follow_redirects=False, **kwargs) as response:
             response.raise_for_status()
             if content_disposition := response.headers.get("content-disposition"):
                 filename = self._get_filename_from_header(content_disposition)
                 if filename:
+                    logger.info("[%s] response with attachment: %s", self.function_def.name, filename)
                     return self._get_artifact_response(content_disposition, filename, response)
 
+            logger.info("[%s] response with content", self.function_def.name)
             response.read()
             return response.text, None
 

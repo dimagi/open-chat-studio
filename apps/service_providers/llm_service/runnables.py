@@ -36,7 +36,7 @@ from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("runnables")
 
 
 class GenerationError(Exception):
@@ -588,6 +588,7 @@ class AgentAssistantChat(AssistantChat):
         tool_outputs_with_artifacts = []
 
         for action in response:
+            logger.info("Invoking tool %s", action.tool)
             tool = tool_map[action.tool]
             tool_output = tool.invoke(tool_call(name=action.tool, args=action.tool_input, id=action.tool_call_id))
             if isinstance(tool_output, ToolMessage):
@@ -608,6 +609,11 @@ class AgentAssistantChat(AssistantChat):
         """
         from apps.assistants.sync import _openai_create_file_with_retries, convert_to_openai_tool
 
+        logger.info(
+            "Cancelling run %s. Starting new run for thread %s with attachments",
+            last_action.run_id,
+            last_action.thread_id,
+        )
         assistant_runnable.client.beta.threads.runs.cancel(thread_id=last_action.thread_id, run_id=last_action.run_id)
 
         files = []

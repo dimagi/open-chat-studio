@@ -485,6 +485,7 @@ LOGGING = {
         "audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "openai_sync": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "tools": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "runnables": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
 
