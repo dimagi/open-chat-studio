@@ -34,7 +34,7 @@ from apps.service_providers.llm_service.runnables import (
     ChainOutput,
     SimpleLLMChat,
 )
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -216,7 +216,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             chat_model=chat_model,
         )
         chat_adapter = ChatAdapter.for_pipeline(
-            session=session, node=self, llm_service=llm_service, provider_model=provider_model
+            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model
         )
         if self.tools_enabled():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -321,7 +321,6 @@ class RouterNode(Passthrough, HistoryMixin):
         return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
 
     def _process_conditional(self, state: PipelineState, node_id=None):
-        # TODO: Use runnable?
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
