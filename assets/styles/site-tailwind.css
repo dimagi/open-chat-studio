@@ -120,3 +120,11 @@ input[type=number]::-webkit-outer-spin-button {
 .badge-error {
   @apply inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10;
 }
+
+.badge-green {
+  @apply bg-green-100 text-green-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded-md dark:bg-green-900 dark:text-green-300;
+}
+
+.badge-neutral {
+  @apply rounded-md
+}
