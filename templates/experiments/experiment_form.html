@@ -142,6 +142,7 @@
 
     let element = document.getElementById('allowlist-multiselect');
     new TomSelect(element, {
+      plugins: ["remove_button", "caret_position", "input_autogrow"],
       maxItems: null,
       create: true,
       plugins: {
