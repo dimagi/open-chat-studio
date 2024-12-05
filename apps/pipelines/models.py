@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
+from uuid import uuid4
 
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
@@ -67,12 +68,45 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             return ""
         return f"v{self.version_number}"
 
+    @classmethod
+    def create_default(cls, team):
+        from apps.pipelines.nodes.nodes import EndNode, StartNode
+
+        default_name = "New Pipeline"
+        existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
+
+        start_id = str(uuid4())
+        start_node = FlowNode(
+            id=start_id,
+            type="startNode",
+            position={
+                "x": -200,
+                "y": 200,
+            },
+            data=FlowNodeData(id=start_id, type=StartNode.__name__),
+        )
+        end_id = str(uuid4())
+        end_node = FlowNode(
+            id=end_id,
+            type="endNode",
+            position={"x": 1000, "y": 200},
+            data=FlowNodeData(id=end_id, type=EndNode.__name__),
+        )
+        default_nodes = [start_node.model_dump(), end_node.model_dump()]
+        new_pipeline = cls.objects.create(
+            team=team,
+            data={"nodes": default_nodes, "edges": []},
+            name=f"New Pipeline {existing_pipeline_count + 1}",
+        )
+        new_pipeline.update_nodes_from_data()
+        return new_pipeline
+
     def get_absolute_url(self):
         return reverse("pipelines:details", args=[self.team.slug, self.id])
 
-    def set_nodes(self, nodes: list[FlowNode]) -> None:
+    def update_nodes_from_data(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""
-
+        nodes = [FlowNode(**node) for node in self.data["nodes"]]
         # Delete old nodes
         current_ids = set(self.node_ids)
         new_ids = set(node.id for node in nodes)
@@ -116,6 +150,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 FlowNode(
                     id=node.flow_id,
                     position=flow_nodes_by_id[node.flow_id].position,
+                    type=flow_nodes_by_id[node.flow_id].type,
                     data=FlowNodeData(
                         id=node.flow_id,
                         type=node.type,
@@ -126,9 +161,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         flow.nodes = nodes
         return flow.model_dump()
 
-    @cached_property
+    @property
     def node_ids(self):
-        return self.node_set.values_list("flow_id", flat=True).all()
+        return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
     def simple_invoke(self, input: str) -> PipelineState:
         """Invoke the pipeline without a session or the ability to save the run to history"""

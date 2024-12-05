@@ -1,6 +1,7 @@
 from urllib.parse import urljoin
 
 from django import forms
+from django.conf import settings
 from django.core.validators import URLValidator
 from langchain_community.utilities.openapi import OpenAPISpec
 
@@ -59,10 +60,16 @@ class CustomActionForm(forms.ModelForm):
         return validate_api_schema(api_schema)
 
     def clean(self):
+        if self.errors:
+            return
+
         from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 
-        operations = self.cleaned_data["allowed_operations"]
-        schema = self.cleaned_data["api_schema"]
+        schema = self.cleaned_data.get("api_schema")
+        operations = self.cleaned_data.get("allowed_operations")
+        if schema is None or operations is None:
+            return self.cleaned_data
+
         spec = OpenAPISpec.from_spec_dict(schema)
         operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
         invalid_operations = set(operations) - set(operations_by_id)
@@ -98,7 +105,8 @@ def validate_api_schema(api_schema):
     if not server_url:
         raise forms.ValidationError("No server URL found in the schema.")
 
-    url_validator = URLValidator(schemes=["https"])
+    schemes = ["https", "http"] if settings.DEBUG else ["https"]
+    url_validator = URLValidator(schemes=schemes)
 
     # Fist pass with Django's URL validator
     try:
@@ -107,7 +115,7 @@ def validate_api_schema(api_schema):
         raise forms.ValidationError("The server URL is invalid. Ensure that the URL is a valid HTTPS URL")
 
     try:
-        validate_user_input_url(server_url)
+        validate_user_input_url(server_url, strict=not settings.DEBUG)
     except InvalidURL as e:
         raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
 

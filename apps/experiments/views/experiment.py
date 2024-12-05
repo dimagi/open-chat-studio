@@ -407,6 +407,10 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.request.POST.get("action") == "save_and_version":
             return redirect("experiments:create_version", self.request.team.slug, experiment.id)
 
+        if self.request.POST.get("action") == "save_and_archive":
+            experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
+            experiment.archive_working_experiment()
+            return redirect("experiments:experiments_home", self.request.team.slug)
         return response
 
 
@@ -449,7 +453,11 @@ class CreateExperiment(BaseExperimentView, CreateView):
             self.object.files.set(files)
 
         if flag_is_active(self.request, "experiment_versions"):
-            self.object.create_new_version()
+            task_id = async_create_experiment_version.delay(
+                experiment_id=self.object.id, version_description="", make_default=True
+            )
+            self.object.create_version_task_id = task_id
+            self.object.save(update_fields=["create_version_task_id"])
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -1420,7 +1428,10 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def archive_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """
+    Archives a single released version of an experiment, unless it's the default version
+    """
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
@@ -1433,8 +1444,7 @@ def archive_experiment(request, team_slug: str, experiment_id: int, version_numb
     )
     if experiment.is_default_version:
         return redirect(url)
-    experiment.is_archived = True
-    experiment.save()
+    experiment.archive()
     return redirect(url)
 
 

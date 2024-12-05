@@ -71,5 +71,6 @@
   ],
   "title": "RouterNode",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "Router"
 }

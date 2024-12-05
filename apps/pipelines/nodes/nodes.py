@@ -239,6 +239,18 @@ class Passthrough(PipelineNode):
         return PipelineState.from_node_output(node_id=node_id, output=input)
 
 
+class StartNode(Passthrough):
+    """The start of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
+
+
+class EndNode(Passthrough):
+    """The end of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
+
+
 class BooleanNode(Passthrough):
     """Branches based whether the input matches a certain value"""
 

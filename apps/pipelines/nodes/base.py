@@ -3,7 +3,7 @@ from abc import ABC
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cached_property
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict
@@ -87,7 +87,7 @@ class PipelineNode(BaseModel, ABC):
             # in a single node, we should give that node multiple inputs, and
             # read the input from that particular input
             if incoming_edge in state["outputs"]:
-                input = str(state["outputs"][incoming_edge]["message"])
+                input = state["outputs"][incoming_edge]["message"]
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
@@ -159,6 +159,8 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
+    flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
 
     def __call__(self, schema: JsonDict):
         schema["ui:label"] = self.label
+        schema["ui:flow_node_type"] = self.flow_node_type

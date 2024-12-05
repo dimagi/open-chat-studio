@@ -17,5 +17,6 @@
   ],
   "title": "SendEmail",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "Send an email"
 }

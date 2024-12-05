@@ -63,5 +63,6 @@
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "LLM response with prompt"
 }

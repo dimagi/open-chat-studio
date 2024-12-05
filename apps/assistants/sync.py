@@ -67,7 +67,7 @@ from openai.types.beta import Assistant
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.assistants.utils import get_assistant_tool_options
+from apps.assistants.utils import chunk_list, get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
@@ -369,7 +369,8 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
 
     if files_ids:
-        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=files_ids)
+        for chunk in chunk_list(files_ids, 500):
+            client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=chunk)
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
@@ -429,7 +430,9 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
         return vector_store_id
 
-    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
+    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids[:100])
+    for chunk in chunk_list(file_ids[100:], 500):
+        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=chunk)
     return vector_store.id
 
 

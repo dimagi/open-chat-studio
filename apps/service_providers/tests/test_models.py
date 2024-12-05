@@ -1,7 +1,6 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.pipelines.flow import FlowNode
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -33,20 +32,23 @@ def experiment(llm_provider_model):
 @pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"][0] = {
-        "id": "1",
-        "data": {
+    pipeline.data["nodes"].append(
+        {
             "id": "1",
-            "label": "LLM Response with prompt",
-            "type": "LLMResponseWithPrompt",
-            "params": {
-                "llm_provider_id": str(llm_provider.id),
-                "llm_provider_model_id": str(llm_provider_model.id),
-                "prompt": "You are a helpful assistant",
+            "data": {
+                "id": "1",
+                "label": "LLM Response with prompt",
+                "type": "LLMResponseWithPrompt",
+                "params": {
+                    "llm_provider_id": str(llm_provider.id),
+                    "llm_provider_model_id": str(llm_provider_model.id),
+                    "prompt": "You are a helpful assistant",
+                },
             },
-        },
-    }
-    pipeline.set_nodes([FlowNode(**node) for node in pipeline.data["nodes"]])
+        }
+    )
+    pipeline.update_nodes_from_data()
+    pipeline.save()
     return pipeline
 
 
