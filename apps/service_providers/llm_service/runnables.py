@@ -73,8 +73,6 @@ def create_experiment_runnable(
     history_manager = ExperimentHistoryManager.for_llm_chat(
         session=session,
         experiment=experiment,
-        max_token_limit=experiment.max_token_limit,
-        chat_model=experiment.get_chat_model(),
         trace_service=trace_service,
     )
 

@@ -99,16 +99,14 @@ class ExperimentHistoryManager(BaseHistoryManager):
         cls,
         session: ExperimentSession,
         experiment: Experiment,
-        max_token_limit: int,
-        chat_model: BaseChatModel | None = None,
         trace_service=None,
     ) -> Self:
         return cls(
             session=session,
             experiment=experiment,
-            max_token_limit=max_token_limit,
-            chat_model=chat_model,
-            trace_service=trace_service,
+            max_token_limit=experiment.max_token_limit,
+            chat_model=experiment.get_chat_model(),
+            trace_service=trace_service or experiment.trace_service,
         )
 
     @classmethod

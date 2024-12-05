@@ -91,9 +91,6 @@ def _get_mocked_history_recording(session, runnable_cls):
     history_manager = ExperimentHistoryManager.for_llm_chat(
         session=session,
         experiment=session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
     )
     runnable = runnable_cls(adapter=adapter, history_manager=history_manager, check_every_ms=0)
     adapter.save_message_to_history = Mock()

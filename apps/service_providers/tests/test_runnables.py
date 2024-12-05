@@ -71,9 +71,6 @@ def _get_history_manager(session, experiment=None):
     return ExperimentHistoryManager.for_llm_chat(
         session=session,
         experiment=experiment if experiment else session.experiment,
-        max_token_limit=session.experiment.max_token_limit,
-        chat_model=session.experiment.get_chat_model(),
-        trace_service=session.experiment.trace_service,
     )
 
 
