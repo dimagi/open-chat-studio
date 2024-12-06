@@ -1,6 +1,9 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
 {% load tz %}
+{% block page_js %}
+    <script src="{% static 'js/tokenCounter-bundle.js' %}"></script>
+{% endblock %}
 {% block body_wrapper %}
     <div class="container flex flex-row" id="prompt-builder-container" x-data
          @keydown.window="checkForSendShortcutKeypress($event)">
@@ -57,7 +60,8 @@
                 init() {
                     Alpine.effect(() => {
                         if (Alpine.store('promptBuilder').currentState && Alpine.store('promptBuilder').currentState.prompt !== undefined) {
-                            Alpine.store('promptBuilder').promptTokenCount = `(~${window.countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)} tokens)`;
+                            const count = SiteJS.tokenCounter.countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)
+                            Alpine.store('promptBuilder').promptTokenCount = `(~${count} tokens)`;
                         } else {
                             Alpine.store('promptBuilder').promptTokenCount = '';
                         }
