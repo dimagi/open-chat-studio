@@ -150,7 +150,7 @@ django-redis==5.4.0
     # via -r requirements.in
 django-storages[s3]==1.14.2
     # via -r requirements.in
-django-tables2==2.6.0
+django-tables2==2.7.0
     # via -r requirements.in
 django-taggit==5.0.1
     # via -r requirements.in
