@@ -20,6 +20,7 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
   "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
   "LLMResponse": ["llm_model", "history_type"],
+  "AssistantNode": ["assistant_id", "citations_enabled"],
 };
 
 export const showAdvancedButton = (nodeType: string) => {
