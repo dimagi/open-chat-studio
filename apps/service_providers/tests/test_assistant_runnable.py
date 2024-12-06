@@ -51,9 +51,9 @@ def session(request):
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_session(request):
     local_assistant = OpenAiAssistantFactory(
-        id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
+        assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
     )
-    session = ExperimentSessionFactory(id=1)
+    session = ExperimentSessionFactory()
     session.experiment.assistant = local_assistant
     session.experiment.save()
     return session
@@ -420,18 +420,18 @@ def test_assistant_response_with_annotations(
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
-            "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
         )
     else:
         expected_output_message = (
-            "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            "\n[1]: file:dimagi-test:1:9"
+            f"\n[1]: file:dimagi-test:{session.id}:9"
         )
     assert result.output == expected_output_message
 
@@ -482,7 +482,7 @@ def test_assistant_response_with_image_file_content_block(
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
-    assert result.output == f"![{openai_generated_file.name}](file:{db_session.team.slug}:1:10)\nOla"
+    assert result.output == f"![{openai_generated_file.name}](file:{db_session.team.slug}:{db_session.id}:10)\nOla"
     assert db_session.chat.attachments.filter(tool_type="image_file").exists() is True
     assert db_session.chat.attachments.get(tool_type="image_file").files.count() == 1
 
@@ -580,6 +580,7 @@ def _create_run(
     status: Literal[
         "queued", "in_progress", "requires_action", "cancelling", "cancelled", "failed", "completed", "expired"
     ] = "completed",
+    required_action=None,
 ):
     run = Run(
         id="test",
@@ -589,7 +590,7 @@ def _create_run(
         failed_at=None,
         last_error=None,
         metadata={},
-        required_action=None,
+        required_action=required_action,
         started_at=0,
         created_at=0,
         expires_at=0,

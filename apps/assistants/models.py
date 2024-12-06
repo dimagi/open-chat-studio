@@ -83,8 +83,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     def formatted_tools(self):
         return [{"type": tool} for tool in self.builtin_tools]
 
+    def get_llm_service(self):
+        return self.llm_provider.get_llm_service()
+
     def get_assistant(self):
-        return self.llm_provider.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
+        return self.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
 
     def supports_code_interpreter_attachments(self):
         return "code_interpreter" in self.builtin_tools and self.allow_code_interpreter_attachments

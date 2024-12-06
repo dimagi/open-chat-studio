@@ -483,6 +483,9 @@ LOGGING = {
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
         "audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "openai_sync": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "tools": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "runnables": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
 

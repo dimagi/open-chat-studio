@@ -1,4 +1,6 @@
 from io import BytesIO
+from time import sleep
+from typing import Any
 
 import pydantic
 from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
@@ -77,6 +79,15 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
         else:
             run_manager.on_chain_end(response)
             return response
+
+    def _wait_for_run(self, run_id: str, thread_id: str, progress_states=("in_progress", "queued")) -> Any:
+        in_progress = True
+        while in_progress:
+            run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
+            in_progress = run.status in progress_states
+            if in_progress:
+                sleep(self.check_every_ms / 1000)
+        return run
 
 
 class LlmService(pydantic.BaseModel):
