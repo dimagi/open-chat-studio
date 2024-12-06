@@ -5,6 +5,8 @@ from typing import Literal
 
 import pydantic
 
+from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
+
 
 class FlowNodeData(pydantic.BaseModel):
     id: str
@@ -15,7 +17,7 @@ class FlowNodeData(pydantic.BaseModel):
 
 class FlowNode(pydantic.BaseModel):
     id: str
-    type: Literal["pipelineNode"] = "pipelineNode"
+    type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     position: dict = {}
     data: FlowNodeData
 
@@ -24,8 +26,8 @@ class FlowEdge(pydantic.BaseModel):
     id: str
     source: str
     target: str
-    sourceHandle: str | None = None
-    targetHandle: str | None = None
+    sourceHandle: str | None = STANDARD_OUTPUT_NAME
+    targetHandle: str | None = STANDARD_INPUT_NAME
 
 
 class Flow(pydantic.BaseModel):

@@ -12,6 +12,13 @@ export function classNames(...classes: Array<string | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
+export function nodeBorderClass(nodeErrors : Record<string, string>, selected : boolean ): string {
+  const defaultBorder = nodeErrors ? "border-error " : ""
+  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
+  const border = selected ? selectedBorder : defaultBorder
+  return classNames(border, "border py-2 shadow-md rounded-xl border-2 bg-base-100")
+}
+
 const localCache = {
   loaded: false,
   nodeSchemas: null as unknown as Map<string, JsonSchema>,

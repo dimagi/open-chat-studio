@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
@@ -125,12 +125,14 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
 
         search = self.request.GET.get("search")
         if search:
-            search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
-            search_query = SearchQuery(search)
+            name_similarity = TrigramSimilarity("name", search)
+            description_similarity = TrigramSimilarity("description", search)
             query_set = (
-                query_set.annotate(document=search_vector, rank=SearchRank(search_vector, search_query))
-                .filter(Q(document=search_query) | Q(owner__username__icontains=search))
-                .order_by("-rank")
+                query_set.annotate(
+                    similarity=name_similarity + description_similarity,
+                )
+                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
+                .order_by("-similarity")
             )
         return query_set
 
@@ -458,7 +460,11 @@ class CreateExperiment(BaseExperimentView, CreateView):
             self.object.files.set(files)
 
         if flag_is_active(self.request, "experiment_versions"):
-            self.object.create_new_version()
+            task_id = async_create_experiment_version.delay(
+                experiment_id=self.object.id, version_description="", make_default=True
+            )
+            self.object.create_version_task_id = task_id
+            self.object.save(update_fields=["create_version_task_id"])
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -830,7 +836,8 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
-        "experiment_version_number": version_number,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,
@@ -869,6 +876,9 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
+
+    if attachments and not message_text:
+        message_text = "Please look at the attachments and respond appropriately"
 
     result = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
@@ -1249,8 +1259,12 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
+    experiment_version = request.experiment.default_version
     version_specific_vars = {
-        "experiment_name": request.experiment.default_version.name,
+        "assistant": experiment_version.get_assistant(),
+        "experiment_name": experiment_version.name,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
         request,

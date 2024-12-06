@@ -24,7 +24,7 @@ type OverlayPanelProps = {
        aria-modal={props.isOpen}
        tabIndex={-1}
        className={classNames(
-         "absolute bg-white dark:bg-gray-800 shadow-lg rounded-md p-4 z-20 transition-all duration-300 transform",
+         "absolute bg-white dark:bg-gray-800 shadow-lg rounded-md z-20 transition-all duration-300 transform",
          "border border-gray-200 dark:border-gray-700",
          openClasses,
          props.classes,

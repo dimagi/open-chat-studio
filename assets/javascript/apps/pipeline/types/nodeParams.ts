@@ -26,5 +26,6 @@ export type JsonSchema = {
 export type NodeData = {
   type: string;
   label: string;
+  flowType?: string;
   params: NodeParams;
 };

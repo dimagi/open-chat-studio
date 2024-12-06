@@ -34,3 +34,4 @@ line-ending = "auto"
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = true
+fixture-parentheses = true

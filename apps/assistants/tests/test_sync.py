@@ -7,6 +7,7 @@ from openai.pagination import SyncCursorPage
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
+    _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
@@ -302,3 +303,28 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     # Test in sync
     resource.files.set(files)
     assert get_out_of_sync_files(local_assistant) == ({}, {})
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("file_ids", "expect_batch_api_called"),
+    [
+        ([f"file_{file_id}" for file_id in range(780)], True),
+        ([f"file_{file_id}" for file_id in range(10)], False),
+    ],
+)
+@patch("openai.resources.beta.vector_stores.VectorStores.create", return_value=ObjectWithId(id="vs_123"))
+@patch("openai.resources.beta.vector_stores.file_batches.FileBatches.create")
+def test_vector_store_create_batch_files(create_file_batch, create_vector_store, file_ids, expect_batch_api_called):
+    """The `client.beta.vector_stores.create` API can only handle 100 file_ids whereas the batch API can handle 500"""
+    local_assistant = OpenAiAssistantFactory(builtin_tools=["file_search"], assistant_id="")
+
+    _update_or_create_vector_store(local_assistant, "test_v_store", vector_store_id=None, file_ids=file_ids)
+    assert create_vector_store.call_count == 1
+    create_vector_store.assert_called_with(name="test_v_store", file_ids=file_ids[:100])
+    if expect_batch_api_called:
+        assert create_file_batch.call_count == 2
+        assert len(create_file_batch.call_args_list[0][1]["file_ids"]) == 500
+        assert len(create_file_batch.call_args_list[1][1]["file_ids"]) == 180
+    else:
+        assert create_file_batch.call_count == 0

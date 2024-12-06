@@ -82,7 +82,7 @@ class TasksTest(TestCase):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 def test_no_activity_ping_with_assistant_bot(save_response_annotations):
     save_response_annotations.return_value = "Hey, answer me!", {}
     session = ExperimentSessionFactory()

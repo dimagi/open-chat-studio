@@ -16,13 +16,13 @@ from openai.types.file_object import FileObject
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage
+from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.runnables import (
-    AssistantRunnable,
+    AssistantChat,
     GenerationCancelled,
     GenerationError,
     create_experiment_runnable,
 )
-from apps.service_providers.llm_service.state import ExperimentAssistantState
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -51,9 +51,9 @@ def session(request):
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_session(request):
     local_assistant = OpenAiAssistantFactory(
-        id=1, assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
+        assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
     )
-    session = ExperimentSessionFactory(id=1)
+    session = ExperimentSessionFactory()
     session.experiment.assistant = local_assistant
     session.experiment.save()
     return session
@@ -61,12 +61,12 @@ def db_session(request):
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -75,7 +75,7 @@ def test_assistant_conversation_new_chat(
 ):
     save_response_annotations.return_value = ("ai response", {})
     chat = session.chat
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -90,17 +90,17 @@ def test_assistant_conversation_new_chat(
 
     result = assistant_runnable.invoke("test")
     assert result.output == "ai response"
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
 
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.messages.Messages.create")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
@@ -129,12 +129,12 @@ def test_assistant_conversation_existing_chat(
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -147,7 +147,7 @@ def test_assistant_conversation_input_formatting(
     session.experiment.input_formatter = "foo {input} bar"
 
     chat = session.chat
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -165,11 +165,11 @@ def test_assistant_conversation_input_formatting(
 
 @pytest.mark.django_db()
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_file_type_info")
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_file_type_info")
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -203,11 +203,11 @@ def test_assistant_includes_file_type_information(
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_raises_error(session):
     experiment = session.experiment
 
@@ -220,11 +220,11 @@ def test_assistant_runnable_raises_error(session):
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 def test_assistant_runnable_handles_cancellation_status(session):
     experiment = session.experiment
 
@@ -271,12 +271,12 @@ def test_assistant_runnable_handles_cancellation_status(session):
 )
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
 @patch(
-    "apps.service_providers.llm_service.state.ExperimentAssistantState.get_messages_to_sync_to_thread",
+    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
     Mock(return_value=[]),
 )
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.state.ExperimentAssistantState.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantRunnable._get_output_with_annotations")
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.save_message_to_history", Mock())
+@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
 def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
     save_response_annotations.return_value = ("normal response", {})
     thread_id = "thread_abc"
@@ -305,7 +305,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
     create_files_remote.return_value = ["openai-file-1", "openai-file-2"]
     files = FileFactory.create_batch(2)
     chat = session.chat
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) is None
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
 
     thread_id = "test_thread_id"
     run = _create_run(ASSISTANT_ID, thread_id)
@@ -323,7 +323,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 
     result = assistant.invoke("test", attachments=attachments)
     assert result.output == "ai response"
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     message = chat.messages.filter(message_type="human").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
     assert "openai-file-2" in message.metadata["openai_file_ids"]
@@ -420,22 +420,22 @@ def test_assistant_response_with_annotations(
     if cited_file_missing:
         # The cited file link is empty, since it's missing from the DB
         expected_output_message = (
-            "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*\n\\[1\\]: existing.txt"
         )
     else:
         expected_output_message = (
-            "![test.png](file:dimagi-test:1:10)\n"
-            "Hi there human. The generated file can be [downloaded here](file:dimagi-test:1:10)."
+            f"![test.png](file:dimagi-test:{session.id}:10)\n"
+            f"Hi there human. The generated file can be [downloaded here](file:dimagi-test:{session.id}:10)."
             " A made up link to *file1.pdf* *file2.pdf*"
             " Also, leaves are tree stuff [1]. Another link to nothing *file3.pdf*"
-            "\n[1]: file:dimagi-test:1:9"
+            f"\n[1]: file:dimagi-test:{session.id}:9"
         )
     assert result.output == expected_output_message
 
-    assert chat.get_metadata(chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
+    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) == thread_id
     assert chat.attachments.filter(tool_type="file_path").exists()
     message = chat.messages.filter(message_type="ai").first()
     assert "openai-file-1" in message.metadata["openai_file_ids"]
@@ -482,7 +482,7 @@ def test_assistant_response_with_image_file_content_block(
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
-    assert result.output == f"![{openai_generated_file.name}](file:{db_session.team.slug}:1:10)\nOla"
+    assert result.output == f"![{openai_generated_file.name}](file:{db_session.team.slug}:{db_session.id}:10)\nOla"
     assert db_session.chat.attachments.filter(tool_type="image_file").exists() is True
     assert db_session.chat.attachments.get(tool_type="image_file").files.count() == 1
 
@@ -497,21 +497,22 @@ def test_assistant_response_with_image_file_content_block(
     ],
 )
 def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
-    state = Mock(spec=ExperimentAssistantState)
-    state.get_messages_to_sync_to_thread.return_value = messages
-    assistant_runnable = AssistantRunnable(state=state)
+    adapter = Mock(spec=AssistantAdapter)
+    adapter.get_messages_to_sync_to_thread.return_value = messages
+    assistant_runnable = AssistantChat(adapter=adapter)
     assistant_runnable._sync_messages_to_thread(thread_id)
 
-    assert state.get_messages_to_sync_to_thread.called
+    assert adapter.get_messages_to_sync_to_thread.called
     if messages_created:
-        assert state.raw_client.beta.threads.messages.create.call_count == len(messages)
-    assert state.raw_client.beta.threads.create.called == thread_created
-    assert state.set_chat_metadata.called == thread_created
+        assert adapter.assistant_client.beta.threads.messages.create.call_count == len(messages)
+    assert adapter.assistant_client.beta.threads.create.called == thread_created
+    if thread_created:
+        adapter.update_thread_id.assert_called
 
 
 @pytest.mark.django_db()
 def test_get_messages_to_sync_to_thread():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory(experiment__assistant=OpenAiAssistantFactory())
     chat = session.chat
     ChatMessage.objects.bulk_create(
         [
@@ -521,8 +522,8 @@ def test_get_messages_to_sync_to_thread():
             ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
         ]
     )
-    state = ExperimentAssistantState(session.experiment, session)
-    to_sync = state.get_messages_to_sync_to_thread()
+    adapter = AssistantAdapter.for_experiment(session.experiment, session)
+    to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
         {"role": "user", "content": "hello2"},
         {"role": "assistant", "content": "hello3"},
@@ -530,10 +531,10 @@ def test_get_messages_to_sync_to_thread():
 
 
 def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
-    state = ExperimentAssistantState(session.experiment, session)
-    assistant = AssistantRunnable(state=state)
-    state.save_message_to_history = Mock()
-    state.get_attachments = lambda _type: get_attachments_return_value or []
+    adapter = AssistantAdapter.for_experiment(session.experiment, session)
+    assistant = AssistantChat(adapter=adapter)
+    adapter.save_message_to_history = Mock()
+    adapter.get_attachments = lambda _type: get_attachments_return_value or []
     return assistant
 
 
@@ -579,6 +580,7 @@ def _create_run(
     status: Literal[
         "queued", "in_progress", "requires_action", "cancelling", "cancelled", "failed", "completed", "expired"
     ] = "completed",
+    required_action=None,
 ):
     run = Run(
         id="test",
@@ -588,7 +590,7 @@ def _create_run(
         failed_at=None,
         last_error=None,
         metadata={},
-        required_action=None,
+        required_action=required_action,
         started_at=0,
         created_at=0,
         expires_at=0,

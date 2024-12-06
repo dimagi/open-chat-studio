@@ -1,4 +1,6 @@
+import pytest
 from langchain_community.utilities.openapi import OpenAPISpec
+from langchain_core.messages import ToolMessage
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.tests.test_openapi_tool import _make_openapi_schema
@@ -85,9 +87,37 @@ def test_openapi_tool_headers(httpx_mock):
     _test_tool_call(spec, {"headers": {"x-custom-name": "bob"}})
 
 
+def test_openapi_tool_response_content_disposition_inline(httpx_mock):
+    spec = _make_openapi_schema({"parameters": []})
+    httpx_mock.add_response(
+        url="https://example.com/test",
+        content=b"content from API call",
+        headers={"Content-Disposition": "inline"},
+    )
+    result = _test_tool_call(spec, {})
+    assert result == ToolMessage(content="content from API call", name="test_get", tool_call_id="123")
+
+
+@pytest.mark.parametrize("filename", ["", "; filename=example.txt"])
+def test_openapi_tool_response_content_disposition_attachment(httpx_mock, filename):
+    spec = _make_openapi_schema({"parameters": []})
+    httpx_mock.add_response(
+        url="https://example.com/test",
+        content=b"content from API call",
+        headers={"Content-Disposition": f"attachment{filename}", "Content-Type": "text/plain"},
+    )
+    result = _test_tool_call(spec, {})
+    assert isinstance(result, ToolMessage)
+    assert result.content == f"attachment{filename}"
+    assert result.artifact.content == b"content from API call"
+    assert result.artifact.content_type == "text/plain"
+    if filename:
+        assert result.artifact.name == "example.txt"
+
+
 def _test_tool_call(spec_dict, call_args: dict, path=None):
     spec = OpenAPISpec.from_spec_dict(spec_dict)
     path = path or list(spec.paths)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=anonymous_auth_service)
-    tool.run(call_args)
+    return tool.run(call_args, tool_call_id="123")

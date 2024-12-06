@@ -4,6 +4,7 @@ import OverlayPanel from "../components/OverlayPanel";
 import {getCachedData} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 import {NodeData} from "../types/nodeParams";
+import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
   isOpen: boolean;
@@ -11,6 +12,7 @@ type ComponentListParams = {
 }
 
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
+  const addNode = usePipelineStore((state) => state.addNode);
   const {defaultValues, nodeSchemas} = getCachedData();
   const schemaList = Array.from(nodeSchemas.values())
 
@@ -61,16 +63,35 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     const nodeData: NodeData = {
       type: schema.title,
       label: schema["ui:label"],
+      flowType: schema["ui:flow_node_type"],
       params: getDefaultParamValues(schema),
     }
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
+  }
+
+  function onClick(
+      event: React.MouseEvent<any>,
+      schema: any
+  ): void {
+      hideHelp();
+      const newNode = {
+          type: schema["ui:flow_node_type"],
+          position: { x: 1000, y: 200 },
+          data: {
+              type: schema.title,
+              label: schema["ui:label"],
+              params: getDefaultParamValues(schema),
+          },
+      };
+      addNode(newNode, { x: newNode.position.x, y: newNode.position.y });
+      togglePanel();
   }
 
   function togglePanel() {
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.map((schema) => {
+  const components = schemaList.filter((schema) => schema["ui:flow_node_type"] === "pipelineNode").map((schema) => {
     return (
       <Component
         key={schema.title}
@@ -78,6 +99,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
         onDragStart={(event) =>
           onDragStart(event, schema)
         }
+        onClick={(event) => onClick(event, schema) }
         parentRef={refMap[schema.title]}
         hasHelp={!!schema.description}
         toggleHelp={() => toggleHelp(schema.title)}
@@ -120,7 +142,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
         />
       </button>
 
-      <OverlayPanel classes="top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen} onScroll={onscroll}>
+      <OverlayPanel classes="p-4 top-16 left-4 w-72 max-h-[70vh] overflow-y-auto" isOpen={isOpen} onScroll={onscroll}>
         {isOpen && (
           <>
             <h2 className="text-xl text-center font-bold">Available Nodes</h2>

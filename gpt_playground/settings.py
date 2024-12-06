@@ -37,7 +37,7 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Application definition
 
 DJANGO_APPS = [
-    "django.contrib.admin",
+    # "django.contrib.admin",  # replaced by "apps.web.apps.OcsAdminConfig"
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.humanize",
@@ -80,13 +80,14 @@ THIRD_PARTY_APPS = [
 ]
 
 PROJECT_APPS = [
+    "apps.web.apps.OcsAdminConfig",
     "apps.audit",
     "apps.users",
     "apps.api",
     "apps.chat",
     "apps.custom_actions",
     "apps.experiments",
-    "apps.web",
+    "apps.web.apps.WebConfig",
     "apps.teams",
     "apps.channels",
     "apps.service_providers",
@@ -481,6 +482,10 @@ LOGGING = {
         },
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
+        "audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "openai_sync": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "tools": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "runnables": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
 

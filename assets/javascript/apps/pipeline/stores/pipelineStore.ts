@@ -175,17 +175,22 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
         x: position.x,
         y: position.y,
       });
+    const actualPosition = {
+      x: insidePosition.x + node.position!.x - minimumX,
+      y: insidePosition.y + node.position!.y - minimumY,
+    }
+    while (newNodes.some(node => node.position.x === actualPosition.x && node.position.y === actualPosition.y)) {
+      actualPosition.x += 50;
+      actualPosition.y += 50;
+    }
 
     const newId = getNodeId(node.data.type);
 
     // Create a new node object
     const newNode = {
       id: newId,
-      type: "pipelineNode",
-      position: {
-        x: insidePosition.x + node.position!.x - minimumX,
-        y: insidePosition.y + node.position!.y - minimumY,
-      },
+      type: node.type,
+      position: actualPosition,
       data: {
         ...cloneDeep(node.data),
         id: newId,

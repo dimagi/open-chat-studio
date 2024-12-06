@@ -84,11 +84,11 @@ jobs:
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
-        run: pytest --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+        run: pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 

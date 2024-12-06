@@ -55,20 +55,24 @@ Once enabled on the assistant, the thread can add its own files to its vector st
 files, as well as those provided by the assistant.
 """
 
+import logging
 import pathlib
 from functools import wraps
 from io import BytesIO
 
 import openai
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.assistants.utils import get_assistant_tool_options
+from apps.assistants.utils import chunk_list, get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+
+logger = logging.getLogger("openai_sync")
 
 
 class OpenAiSyncError(Exception):
@@ -101,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [_convert_to_openai_tool(tool) for tool in internal_tools]
+        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -111,9 +115,9 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
         assistant.save()
 
 
-def _convert_to_openai_tool(tool):
+def convert_to_openai_tool(tool):
     """Work around some limitiations of OpenAI function calling"""
-    function = convert_to_openai_tool(tool, strict=True)
+    function = lc_convert_to_openai_tool(tool, strict=True)
     try:
         parameters = function["function"]["parameters"]
     except KeyError:
@@ -122,7 +126,7 @@ def _convert_to_openai_tool(tool):
     # check if this function can use 'strict' mode
     properties = parameters.get("properties", {})
     # all fields are required
-    is_strict = set(parameters["required"]) == set(properties)
+    is_strict = not properties or set(parameters.get("required", [])) == set(properties)
     if is_strict:
         for prop, schema in properties.items():
             # format and default not supported + type must be present
@@ -365,7 +369,8 @@ def _sync_vector_store_files_to_openai(client, vector_store_id, files_ids: list[
         client.beta.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
 
     if files_ids:
-        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=files_ids)
+        for chunk in chunk_list(files_ids, 500):
+            client.beta.vector_stores.file_batches.create(vector_store_id=vector_store_id, file_ids=chunk)
 
 
 def _ocs_assistant_to_openai_kwargs(assistant: OpenAiAssistant) -> dict:
@@ -425,7 +430,9 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
         _sync_vector_store_files_to_openai(client, vector_store_id, file_ids)
         return vector_store_id
 
-    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids)
+    vector_store = client.beta.vector_stores.create(name=name, file_ids=file_ids[:100])
+    for chunk in chunk_list(file_ids[100:], 500):
+        client.beta.vector_stores.file_batches.create(vector_store_id=vector_store.id, file_ids=chunk)
     return vector_store.id
 
 
@@ -465,13 +472,21 @@ def create_files_remote(client, files):
 def _push_file_to_openai(client: OpenAiAssistant, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
-    openai_file = client.files.create(
-        file=(file.name, bytesio),
-        purpose="assistants",
-    )
+    openai_file = _openai_create_file_with_retries(client, file.name, bytesio)
     file.external_id = openai_file.id
     file.external_source = "openai"
     file.save()
+
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=5),
+    reraise=True,
+    retry=retry_if_exception_type(openai.RateLimitError),
+    stop=stop_after_attempt(3),
+    before_sleep=before_sleep_log(logger, logging.INFO),
+)
+def _openai_create_file_with_retries(client, filename, bytesio):
+    return client.files.create(file=(filename, bytesio), purpose="assistants")
 
 
 def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:

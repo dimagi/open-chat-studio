@@ -1,3 +1,5 @@
+from collections.abc import Generator
+
 from apps.service_providers.models import LlmProviderTypes
 
 
@@ -10,3 +12,8 @@ def get_assistant_tool_options():
         ("code_interpreter", "Code Interpreter"),
         ("file_search", "File Search"),
     ]
+
+
+def chunk_list(list_: list, chunk_size: int) -> Generator[list, None, None]:
+    for i in range(0, len(list_), chunk_size):
+        yield list_[i : i + chunk_size]

@@ -7,6 +7,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import LogEntry, Pipeline, PipelineRunStatus
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
+from apps.pipelines.nodes.nodes import StartNode
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_transactional
@@ -36,12 +37,12 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
         ai_message_id=ai_message.id,
         messages=[
             input,  # the input to the graph
-            input,  # The output of the first Passthrough
-            input,  # the output of the last Passthrough
+            input,  # The output of the start node
+            input,  # the output of the end node
         ],
         outputs={
-            "first": {"message": "foo"},
-            "second": {"message": "foo"},
+            pipeline.node_ids[0]: {"message": "foo"},
+            pipeline.node_ids[1]: {"message": "foo"},
         },
     )
 
@@ -105,13 +106,13 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
     input = "What's up"
     error_message = "Bad things are afoot"
 
-    class FailingPassthrough(PipelineNode):
+    class FailingNode(PipelineNode):
         def process(self, *args, **kwargs) -> RunnableLambda:
             raise Exception(error_message)
 
     from apps.pipelines.nodes import nodes
 
-    with patch.object(nodes, "Passthrough", FailingPassthrough):
+    with patch.object(nodes, StartNode.__name__, FailingNode):
         with pytest.raises(Exception, match=error_message):
             pipeline.invoke(PipelineState(messages=[input]), session)
 
