@@ -17,7 +17,7 @@ function getTimeSeriesData (start, end, data) {
   const dataDict = listToDict(data)
   const chartData = []
   const current = new Date(start)
-  while (current <= end) { // eslint-disable-line no-unmodified-loop-condition
+  while (current <= end) {  
     const curString = toDateString(current)
     chartData.push({
       x: curString,
