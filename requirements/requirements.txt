@@ -233,7 +233,7 @@ jsonschema-specifications==2023.7.1
     # via jsonschema
 kombu==5.3.3
     # via celery
-langchain==0.3.7
+langchain==0.3.9
     # via
     #   -r requirements.in
     #   langchain-community
@@ -241,7 +241,7 @@ langchain-anthropic==0.2.3
     # via -r requirements.in
 langchain-community==0.3.3
     # via -r requirements.in
-langchain-core==0.3.15
+langchain-core==0.3.21
     # via
     #   -r requirements.in
     #   langchain
