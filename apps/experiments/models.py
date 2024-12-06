@@ -748,22 +748,18 @@ class Experiment(BaseTeamModel, VersionsMixin):
             version.compare(prev_version.version)
         return version.fields_changed
 
+    @transaction.atomic()
     def archive(self):
         super().archive()
-        self.delete_experiment_channels()
+        if self.is_working_version:
+            self.delete_experiment_channels()
+            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
 
     def delete_experiment_channels(self):
         from apps.channels.models import ExperimentChannel
 
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
-
-    def archive_working_experiment(self):
-        if self.is_working_version:
-            if self.has_versions:
-                for version in self.versions.all():
-                    version.archive()
-            self.archive()
 
     def _copy_pipeline_to_new_version(self, new_version):
         if not self.pipeline:
