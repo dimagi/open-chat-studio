@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 import httpx
+from django.conf import settings
 from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -86,7 +87,7 @@ class OpenAPIOperationExecutor:
             url = _format_url(url, path_params.model_dump())
 
         try:
-            validate_user_input_url(url)
+            validate_user_input_url(url, strict=not settings.DEBUG)
         except InvalidURL as e:
             raise ToolException(str(e))
 

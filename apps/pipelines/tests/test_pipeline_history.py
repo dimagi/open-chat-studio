@@ -2,10 +2,9 @@ from unittest import mock
 
 import pytest
 
-from apps.pipelines.flow import FlowNode
-from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
@@ -40,51 +39,22 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
-
-    data = {
-        "edges": [
-            {
-                "id": "llm-1->llm-2",
-                "source": "llm-1",
-                "target": "llm-2",
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            }
-        ],
-        "nodes": [
-            {
-                "data": {
-                    "id": "llm-1",
-                    "label": "Get the robot to respond",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "history_type": "node",
-                        "prompt": "Node 1:",
-                    },
-                },
-                "id": "llm-1",
-            },
-            {
-                "data": {
-                    "id": "llm-2",
-                    "label": "Get the robot to respond again",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 2:",
-                        # No history_type
-                    },
-                },
-                "id": "llm-2",
-            },
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
-    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    llm_1 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 1:",
+        history_type="node",
+    )
+    llm_2 = llm_response_with_prompt_node(
+        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 2:", history_type=None
+    )  # No history_type
+    nodes = [
+        start_node(),
+        llm_1,
+        llm_2,
+        end_node(),
+    ]
+    runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
     runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][-1]
@@ -96,12 +66,12 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
         [(message.type, message.content) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
-    history = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-1")
+    history = PipelineChatHistory.objects.get(session=experiment_session.id, name=llm_1["id"])
     assert history.type == "node"
     assert history.messages.count() == 1
     assert history.messages.first().as_tuples() == [("human", user_input), ("ai", f"Node 1: {user_input}")]
 
-    assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").exists()
+    assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name=llm_2["id"]).exists()
 
     user_input_2 = "Saying more stuff"
     output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
@@ -115,7 +85,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     new_messages = history.messages.last().as_tuples()
     assert new_messages == [("human", user_input_2), ("ai", f"Node 1: {user_input_2}")]
 
-    history_2 = PipelineChatHistory.objects.filter(session=experiment_session.id, name="llm-2").count()
+    history_2 = PipelineChatHistory.objects.filter(session=experiment_session.id, name=llm_2["id"]).count()
     assert history_2 == 0
 
     expected_call_messages = [
@@ -141,51 +111,20 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
-
-    data = {
-        "edges": [
-            {
-                "id": "llm-1->llm-2",
-                "source": "llm-1",
-                "target": "llm-2",
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            }
-        ],
-        "nodes": [
-            {
-                "data": {
-                    "id": "llm-1",
-                    "label": "Get the robot to respond",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "history_type": "node",
-                        "prompt": "Node 1:",
-                    },
-                },
-                "id": "llm-1",
-            },
-            {
-                "data": {
-                    "id": "llm-2",
-                    "label": "Get the robot to respond again",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 2:",
-                        "history_type": "node",
-                    },
-                },
-                "id": "llm-2",
-            },
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
-    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    llm_1 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 1:",
+        history_type="node",
+    )
+    llm_2 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 2:",
+        history_type="node",
+    )
+    nodes = [start_node(), llm_1, llm_2, end_node()]
+    runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
     output_1 = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
@@ -194,12 +133,12 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     expected_output = f"Node 2: Node 1: {user_input}"
     assert output_1 == expected_output
 
-    history = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-1")
+    history = PipelineChatHistory.objects.get(session=experiment_session.id, name=llm_1["id"])
     assert history.type == "node"
     assert history.messages.count() == 1
     assert history.messages.first().as_tuples() == [("human", user_input), ("ai", f"Node 1: {user_input}")]
 
-    history_2 = PipelineChatHistory.objects.get(session=experiment_session.id, name="llm-2")
+    history_2 = PipelineChatHistory.objects.get(session=experiment_session.id, name=llm_2["id"])
     assert history_2.type == "node"
     assert history_2.messages.count() == 1
     assert history_2.messages.first().as_tuples() == [
@@ -250,49 +189,20 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
-    data = {
-        "edges": [
-            {
-                "id": "llm-1->llm-2",
-                "source": "llm-1",
-                "target": "llm-2",
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            }
-        ],
-        "nodes": [
-            {
-                "data": {
-                    "id": "llm-1",
-                    "label": "Get the robot to respond",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "history_type": "global",
-                        "prompt": "Node 1:",
-                    },
-                },
-                "id": "llm-1",
-            },
-            {
-                "data": {
-                    "id": "llm-2",
-                    "label": "Get the robot to respond again",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 2:",
-                        "history_type": "node",
-                    },
-                },
-                "id": "llm-2",
-            },
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
+    llm_1 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 1:",
+        history_type="global",
+    )
+    llm_2 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 2:",
+        history_type="node",
+    )
+    nodes = [start_node(), llm_1, llm_2, end_node()]
+    create_runnable(pipeline, nodes)
     pipeline.save()
 
     experiment = experiment_session.experiment
@@ -364,72 +274,25 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
-    data = {
-        "edges": [
-            {
-                "id": "llm-1->llm-2",
-                "source": "llm-1",
-                "target": "llm-2",
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-            {
-                "id": "llm-2->llm-3",
-                "source": "llm-2",
-                "target": "llm-3",
-                "sourceHandle": "output",
-                "targetHandle": "input",
-            },
-        ],
-        "nodes": [
-            {
-                "data": {
-                    "id": "llm-1",
-                    "label": "Get the robot to respond",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "history_type": "named",
-                        "history_name": "history1",
-                        "prompt": "Node 1:",
-                    },
-                },
-                "id": "llm-1",
-            },
-            {
-                "data": {
-                    "id": "llm-2",
-                    "label": "Get the robot to respond again",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 2:",
-                        "history_type": "named",
-                        "history_name": "history1",
-                    },
-                },
-                "id": "llm-2",
-            },
-            {
-                "data": {
-                    "id": "llm-3",
-                    "label": "No History",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "prompt": "Node 3:",
-                    },
-                },
-                "id": "llm-3",
-            },
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
-    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    llm_1 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 1:",
+        history_type="named",
+        history_name="history1",
+    )
+    llm_2 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 2:",
+        history_type="named",
+        history_name="history1",
+    )
+    llm_3 = llm_response_with_prompt_node(
+        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 3:", history_type=None
+    )
+    nodes = [start_node(), llm_1, llm_2, llm_3, end_node()]
+    runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
     runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][-1]
@@ -487,28 +350,14 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
-    data = {
-        "edges": [],
-        "nodes": [
-            {
-                "data": {
-                    "id": "llm-1",
-                    "label": "Get the robot to respond",
-                    "type": "LLMResponseWithPrompt",
-                    "params": {
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": experiment_session.experiment.llm_provider_model.id,
-                        "history_type": "none",
-                        "prompt": "Node 1:",
-                    },
-                },
-                "id": "llm-1",
-            },
-        ],
-    }
-    pipeline.data = data
-    pipeline.set_nodes([FlowNode(**node) for node in data["nodes"]])
-    runnable = PipelineGraph.build_runnable_from_pipeline(pipeline)
+    llm_1 = llm_response_with_prompt_node(
+        str(provider.id),
+        str(experiment_session.experiment.llm_provider_model.id),
+        prompt="Node 1:",
+        history_type="none",
+    )
+    nodes = [start_node(), llm_1, end_node()]
+    runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
     runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][-1]

@@ -13,5 +13,6 @@
   ],
   "title": "RenderTemplate",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "Render a template"
 }

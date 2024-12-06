@@ -1,0 +1,8 @@
+{
+  "description": "The end of the pipeline",
+  "properties": {},
+  "title": "EndNode",
+  "type": "object",
+  "ui:flow_node_type": "endNode",
+  "ui:label": "End"
+}

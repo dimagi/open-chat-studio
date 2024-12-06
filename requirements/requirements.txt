@@ -40,11 +40,11 @@ backoff==2.2.1
     # via langfuse
 billiard==4.2.0
     # via celery
-boto3==1.35.51
+boto3==1.35.71
     # via
     #   -r requirements.in
     #   django-storages
-botocore==1.35.51
+botocore==1.35.71
     # via
     #   boto3
     #   s3transfer
@@ -150,7 +150,7 @@ django-redis==5.4.0
     # via -r requirements.in
 django-storages[s3]==1.14.2
     # via -r requirements.in
-django-tables2==2.6.0
+django-tables2==2.7.0
     # via -r requirements.in
 django-taggit==5.0.1
     # via -r requirements.in
@@ -233,7 +233,7 @@ jsonschema-specifications==2023.7.1
     # via jsonschema
 kombu==5.3.3
     # via celery
-langchain==0.3.7
+langchain==0.3.9
     # via
     #   -r requirements.in
     #   langchain-community
@@ -241,7 +241,7 @@ langchain-anthropic==0.2.3
     # via -r requirements.in
 langchain-community==0.3.3
     # via -r requirements.in
-langchain-core==0.3.15
+langchain-core==0.3.21
     # via
     #   -r requirements.in
     #   langchain
@@ -468,7 +468,7 @@ tqdm==4.66.3
     #   huggingface-hub
     #   openai
     #   transformers
-transformers==4.46.1
+transformers==4.46.3
     # via -r requirements.in
 turn-python==0.2.0
     # via -r requirements.in

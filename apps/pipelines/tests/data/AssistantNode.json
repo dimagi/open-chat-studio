@@ -26,5 +26,6 @@
   ],
   "title": "AssistantNode",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "OpenAI Assistant"
 }

@@ -1,0 +1,8 @@
+{
+  "description": "The start of the pipeline",
+  "properties": {},
+  "title": "StartNode",
+  "type": "object",
+  "ui:flow_node_type": "startNode",
+  "ui:label": "Start"
+}

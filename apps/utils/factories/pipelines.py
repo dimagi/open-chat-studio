@@ -1,6 +1,7 @@
 import factory
 
 from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.utils.factories.team import TeamFactory
 
 
@@ -25,29 +26,23 @@ class PipelineFactory(factory.django.DjangoModelFactory):
         "edges": [
             {
                 "id": "1->2",
-                "source": "first",
-                "target": "second",
-                "sourceHandle": "output",
-                "targetHandle": "input",
+                "source": "start",
+                "target": "end",
             },
         ],
         "nodes": [
             {
-                "id": "1",
+                "id": "start",
                 "data": {
-                    "id": "first",
-                    "type": "Passthrough",
-                    "label": "Passthrough",
-                    "params": {},
+                    "id": "start",
+                    "type": StartNode.__name__,
                 },
             },
             {
-                "id": "2",
+                "id": "end",
                 "data": {
-                    "id": "second",
-                    "type": "Passthrough",
-                    "label": "Passthrough",
-                    "params": {},
+                    "id": "end",
+                    "type": EndNode.__name__,
                 },
             },
         ],
@@ -59,9 +54,7 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     def nodes(self, create, *args, **kwargs):
         if not create:
             return
-
-        NodeFactory(pipeline=self, flow_id="first")
-        NodeFactory(pipeline=self, flow_id="second")
+        self.update_nodes_from_data()
 
 
 class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):

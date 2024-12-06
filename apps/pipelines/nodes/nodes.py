@@ -25,9 +25,9 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.service_providers.llm_service.runnables import AssistantAgentRunnable, AssistantRunnable, ChainOutput
-from apps.service_providers.llm_service.state import PipelineAssistantState
+from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
 from apps.service_providers.models import LlmProviderModel
 
 
@@ -237,6 +237,18 @@ class Passthrough(PipelineNode):
         if self.logger:
             self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
         return PipelineState.from_node_output(node_id=node_id, output=input)
+
+
+class StartNode(Passthrough):
+    """The start of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
+
+
+class EndNode(Passthrough):
+    """The end of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
 class BooleanNode(Passthrough):
@@ -569,21 +581,14 @@ class AssistantNode(PipelineNode):
             node_id=node_id,
             output=output,
             message_metadata={
-                "input": runnable.state.get_message_metadata(ChatMessageType.HUMAN),
-                "output": runnable.state.get_message_metadata(ChatMessageType.AI),
+                "input": runnable.adapter.get_message_metadata(ChatMessageType.HUMAN),
+                "output": runnable.adapter.get_message_metadata(ChatMessageType.AI),
             },
         )
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
-        assistant_state = PipelineAssistantState(
-            assistant=assistant,
-            session=session,
-            trace_service=session.experiment.trace_service,
-            input_formatter=self.input_formatter,
-            citations_enabled=self.citations_enabled,
-        )
-
+        adapter = AssistantAdapter.for_pipeline(session=session, node=self)
         if assistant.tools_enabled:
-            return AssistantAgentRunnable(state=assistant_state)
+            return AgentAssistantChat(adapter=adapter)
         else:
-            return AssistantRunnable(state=assistant_state)
+            return AssistantChat(adapter=adapter)

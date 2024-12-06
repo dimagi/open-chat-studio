@@ -11,5 +11,6 @@
   ],
   "title": "BooleanNode",
   "type": "object",
+  "ui:flow_node_type": "pipelineNode",
   "ui:label": "Conditional Node"
 }

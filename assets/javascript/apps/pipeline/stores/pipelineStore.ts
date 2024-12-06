@@ -189,7 +189,7 @@ const usePipelineStore = create<PipelineStoreType>((set, get) => ({
     // Create a new node object
     const newNode = {
       id: newId,
-      type: "pipelineNode",
+      type: node.type,
       position: actualPosition,
       data: {
         ...cloneDeep(node.data),
