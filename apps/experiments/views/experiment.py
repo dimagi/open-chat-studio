@@ -16,7 +16,7 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Q, When
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -496,7 +496,7 @@ class EditExperiment(BaseExperimentView, UpdateView):
 
     def post(self, request, *args, **kwargs):
         if self.get_object().is_archived:
-            raise HttpResponseNotAllowed("Cannot edit archived experiments.")
+            raise PermissionDenied("Cannot edit archived experiments.")
         return super().post(request, *args, **kwargs)
 
 
