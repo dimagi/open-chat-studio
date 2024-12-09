@@ -125,6 +125,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         return False
 
     def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
+        ai_message = None
         callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
@@ -132,27 +133,27 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         include_conversation_history = configurable.get("include_conversation_history", True)
         save_input_to_history = configurable.get("save_input_to_history", True)
         save_output_to_history = configurable.get("save_output_to_history", True)
-
-        if include_conversation_history:
-            self._populate_memory(input)
-
-        output = self._get_output_check_cancellation(input, merged_config)
-        result = ChainOutput(
-            output=output, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
-        )
-        if self.cancelled:
-            raise GenerationCancelled(result)
-
         experiment_tag = configurable.get("experiment_tag")
-        self.history_manager.add_messages_to_history(
-            input=input,
-            save_input_to_history=save_input_to_history,
-            input_message_metadata={},
-            output=output,
-            save_output_to_history=save_output_to_history,
-            experiment_tag=experiment_tag,
-            output_message_metadata={},
-        )
+
+        try:
+            if include_conversation_history:
+                self._populate_memory(input)
+            ai_message = self._get_output_check_cancellation(input, merged_config)
+            result = ChainOutput(
+                output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
+            )
+            if self.cancelled:
+                raise GenerationCancelled(result)
+        finally:
+            self.history_manager.add_messages_to_history(
+                input=input,
+                save_input_to_history=save_input_to_history,
+                input_message_metadata={},
+                output=ai_message,
+                save_output_to_history=save_output_to_history,
+                experiment_tag=experiment_tag,
+                output_message_metadata={},
+            )
 
         return result
 
@@ -273,47 +274,51 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def invoke(
         self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
     ) -> ChainOutput:
-        human_message_resource_file_ids = self._upload_tool_resource_files(attachments)
-        message_attachments = []
-        for resource_name, openai_file_ids in human_message_resource_file_ids.items():
-            message_attachments.extend(
-                [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
-            )
-
         callback = self.adapter.callback_handler
         config = ensure_config(config)
         merged_config = merge_configs(config, {"callbacks": [callback]})
-
-        input_dict = {
-            "content": self.adapter.format_input(input),
-            "attachments": message_attachments,
-        } | self._extra_input_configs()
-
-        current_thread_id = self._sync_messages_to_thread(self.adapter.thread_id)
-
-        if current_thread_id:
-            input_dict["thread_id"] = current_thread_id
-        input_dict["instructions"] = self.adapter.get_assistant_instructions()
-        thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
-        output, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
-
-        if not current_thread_id:
-            self.adapter.thread_id = thread_id
-
-        human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
-        ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
+        save_input_to_history = config.get("configurable", {}).get("save_input_to_history", True)
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
+        human_message_resource_file_ids = self._upload_tool_resource_files(attachments)
+        human_message_metadata = self.adapter.get_input_message_metadata(human_message_resource_file_ids)
+        ai_message = None
+        ai_message_metadata = {}
 
-        self.history_manager.add_messages_to_history(
-            input=input,
-            save_input_to_history=config.get("configurable", {}).get("save_input_to_history", True),
-            input_message_metadata=human_message_metadata,
-            output=output,
-            save_output_to_history=True,
-            experiment_tag=experiment_tag,
-            output_message_metadata=ai_message_metadata,
-        )
-        return ChainOutput(output=output, prompt_tokens=0, completion_tokens=0)
+        try:
+            message_attachments = []
+            for resource_name, openai_file_ids in human_message_resource_file_ids.items():
+                message_attachments.extend(
+                    [{"file_id": file_id, "tools": [{"type": resource_name}]} for file_id in openai_file_ids]
+                )
+
+            input_dict = {
+                "content": self.adapter.format_input(input),
+                "attachments": message_attachments,
+            } | self._extra_input_configs()
+
+            current_thread_id = self._sync_messages_to_thread(self.adapter.thread_id)
+
+            if current_thread_id:
+                input_dict["thread_id"] = current_thread_id
+            input_dict["instructions"] = self.adapter.get_assistant_instructions()
+            thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
+            ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
+            ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
+
+            if not current_thread_id:
+                self.adapter.thread_id = thread_id
+
+        finally:
+            self.history_manager.add_messages_to_history(
+                input=input,
+                save_input_to_history=save_input_to_history,
+                input_message_metadata=human_message_metadata,
+                output=ai_message,
+                save_output_to_history=True,
+                experiment_tag=experiment_tag,
+                output_message_metadata=ai_message_metadata,
+            )
+        return ChainOutput(output=ai_message, prompt_tokens=0, completion_tokens=0)
 
     def _sync_messages_to_thread(self, current_thread_id):
         """Sync any messages that need to be sent to the thread. Create a new thread if necessary

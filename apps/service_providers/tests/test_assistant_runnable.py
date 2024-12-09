@@ -15,7 +15,7 @@ from openai.types.file_object import FileObject
 
 from apps.channels.datamodels import Attachment
 from apps.chat.agent.tools import TOOL_CLASS_MAP
-from apps.chat.models import Chat, ChatAttachment, ChatMessage
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
@@ -607,3 +607,15 @@ def _create_run(
         parallel_tool_calls=False,
     )
     return run
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.llm_service.runnables.AssistantChat._sync_messages_to_thread")
+def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_session):
+    sync_messages_to_thread.side_effect = Exception("Error")
+    assistant = create_experiment_runnable(db_session.experiment, db_session)
+
+    with pytest.raises(Exception, match="Error"):
+        assistant.invoke("test", attachments=[])
+    assert ChatMessage.objects.count() == 1
+    assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1

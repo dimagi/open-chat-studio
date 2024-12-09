@@ -325,3 +325,17 @@ def test_runnable_with_current_datetime(runnable, session, fake_llm_service):
 
 def _messages_to_dict(messages: Sequence[BaseMessage]) -> list[dict]:
     return [{message.type: message.content} for message in messages]
+
+
+@pytest.mark.django_db()
+@patch("apps.service_providers.llm_service.runnables.LLMChat._populate_memory")
+def test_input_message_is_saved_on_chain_error(populate_memory, runnable, session):
+    populate_memory.side_effect = Exception("Error")
+    history_manager = _get_history_manager(session)
+    chain = runnable.build(
+        adapter=ChatAdapter.for_experiment(session.experiment, session), history_manager=history_manager
+    )
+    with pytest.raises(Exception, match="Error"):
+        chain.invoke("hi")
+    assert ChatMessage.objects.count() == 1
+    assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1

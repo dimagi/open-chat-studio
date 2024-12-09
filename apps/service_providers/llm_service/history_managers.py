@@ -134,7 +134,7 @@ class ExperimentHistoryManager(BaseHistoryManager):
         if save_input_to_history:
             self.save_message_to_history(input, type_=ChatMessageType.HUMAN, message_metadata=input_message_metadata)
 
-        if save_output_to_history:
+        if output and save_output_to_history:
             self.save_message_to_history(
                 output,
                 type_=ChatMessageType.AI,
