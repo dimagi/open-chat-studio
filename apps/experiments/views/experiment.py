@@ -105,6 +105,7 @@ def experiments_home(request, team_slug: str):
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,
+            "toggle_archived": True,
         },
     )
 
@@ -117,7 +118,11 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True, is_archived=False)
+        query_set = Experiment.objects.get_all().filter(team=self.request.team, working_version__isnull=True)
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            query_set = query_set.filter(is_archived=False)
+
         search = self.request.GET.get("search")
         if search:
             name_similarity = TrigramSimilarity("name", search)
