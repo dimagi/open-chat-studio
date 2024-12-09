@@ -34,7 +34,7 @@
       <div class="py-3 grid grid-cols-3">
         <dt class="text-sm font-medium leading-6">Tags</dt>
         <dd class="col-span-2 mr-2">
-          {% include "annotations/tag_ui.html" with object=experiment_session.chat allow_edit=experiment.is_not_archived %}
+          {% include "annotations/tag_ui.html" with object=experiment_session.chat allow_edit=experiment.is_editable %}
         </dd>
       </div>
       {% if perms.annotations.add_usercomment %}
@@ -51,7 +51,7 @@
             </dd>
           </div>
           <div class="col-span-3 mr-2" x-cloak x-show="showComments">
-            {% include "experiments/components/user_comments.html" with object=experiment_session.chat allow_edit=experiment.is_not_archived %}
+            {% include "experiments/components/user_comments.html" with object=experiment_session.chat allow_edit=experiment.is_editable %}
           </div>
         </div>
       {% endif %}

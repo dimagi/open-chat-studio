@@ -171,7 +171,7 @@ class VersionsMixin:
         self.is_archived = True
         self.save()
 
-    def is_not_archived(self) -> bool:
+    def is_editable(self) -> bool:
         return not self.is_archived
 
 

@@ -35,7 +35,7 @@
       </div>
       <div class="justify-self-end">
         <div class="join">
-          {% if experiment.is_not_archived %}
+          {% if experiment.is_editable %}
             <div class="tooltip" data-tip="Chat to the bot">
               <div class="dropdown dropdown-hover">
                 <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm !rounded-l-full">
@@ -79,7 +79,7 @@
       </div>
     </div>
     <h2 class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
-    {% if experiment.is_not_archived %}
+    {% if experiment.is_editable %}
       <div class="my-4">
         <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
         <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
@@ -292,7 +292,7 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
-          {% if experiment.is_not_archived %}
+          {% if experiment.is_editable %}
             {% include 'experiments/create_version_button.html' %}
           {% endif %}
           <div id="versions-table"
@@ -324,7 +324,7 @@
         {% if experiment.assistant %}
           Assistants cannot be router bots. Please use a normal bot
         {% elif can_make_child_routes %}
-          {% if experiment.is_not_archived %}
+          {% if experiment.is_editable %}
             <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'processor' %}"><i class="fa-regular fa-plus"></i> Create child route</a>
           {% endif %}
           {% render_table child_routes_table %}
@@ -337,7 +337,7 @@
     <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Terminal Bot" id="tab-terminal_bots"/>
     <div role="tabpanel" class="tab-content" id="content-terminal_bots">
       <div class="app-card">
-        {% if terminal_bots_table.data|length == 0 and experiment.is_not_archived%}
+        {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
           <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
         {% endif %}
         {% render_table terminal_bots_table %}
