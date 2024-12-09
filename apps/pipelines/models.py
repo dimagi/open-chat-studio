@@ -166,12 +166,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
-    def simple_invoke(self, input: str) -> PipelineState:
+    def simple_invoke(self, input: str, user_id: int) -> PipelineState:
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
 
         output = ""
-        with temporary_session(self.team) as session:
+        with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
             output = runnable.invoke(PipelineState(messages=[input], experiment_session=session))
             output = PipelineState(**output).json_safe()

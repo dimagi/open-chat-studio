@@ -253,7 +253,9 @@ def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
 @permission_required("pipelines.change_pipeline")
 def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
     message = json.loads(request.body).get("message")
-    result = get_response_for_pipeline_test_message.delay(pipeline_id=pipeline_pk, message_text=message)
+    result = get_response_for_pipeline_test_message.delay(
+        pipeline_id=pipeline_pk, message_text=message, user_id=request.user.id
+    )
     return JsonResponse({"task_id": result.task_id})
 
 

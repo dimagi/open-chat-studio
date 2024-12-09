@@ -1,10 +1,23 @@
+from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.channels.models import ExperimentChannel
+from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    LlmProviderModelFactory,
+)
+from apps.utils.factories.user import UserFactory
+from apps.utils.langchain import (
+    FakeLlmEcho,
+    build_fake_llm_service,
+)
+from apps.utils.pytest import django_db_with_data
 
 
 @pytest.mark.django_db()
@@ -51,11 +64,64 @@ class TestNode:
 
 class TestPipeline:
     @pytest.mark.django_db()
-    def test_simple_invoke(self):
+    @pytest.mark.parametrize("participant_exists", [True, False])
+    def test_simple_invoke(self, participant_exists, team_with_users):
         """Test that the mock data is not being persisted when doing a simple invoke"""
-        assert ExperimentSession.objects.count() == 0
-        assert Experiment.objects.count() == 0
+        team = team_with_users
+        requesting_user = team_with_users.members.first()
+        pipeline = PipelineFactory(team=team)
+        temporary_instance_models = [
+            ExperimentSession,
+            Experiment,
+            ExperimentChannel,
+        ]
+
+        if participant_exists:
+            Participant.objects.create(user=requesting_user, team=team)
+        else:
+            temporary_instance_models.append(Participant)
+
+        for model in temporary_instance_models:
+            assert model.objects.count() == 0
+
+        pipeline.simple_invoke("test", requesting_user.id)
+
+        for model in temporary_instance_models:
+            assert model.objects.count() == 0
+
+        if participant_exists:
+            assert Participant.objects.filter(user=requesting_user).exists()
+
+    @django_db_with_data(available_apps=("apps.service_providers", "apps.users"))
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    @mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+    def test_simple_invoke_with_pipeline(self, get_llm_service):
+        """Test simple invoke with a pipeline that has an LLM node"""
+        provider = LlmProviderFactory()
+        provider_model = LlmProviderModelFactory()
+        llm = FakeLlmEcho()
+        service = build_fake_llm_service(None, [0], llm)
+        get_llm_service.return_value = service
+
+        llm_node = llm_response_with_prompt_node(
+            str(provider.id),
+            str(provider_model.id),
+            prompt="Help the user. User data: {participant_data}. Source material: {source_material}",
+            history_type="global",
+        )
+        nodes = [start_node(), llm_node, end_node()]
         pipeline = PipelineFactory()
-        pipeline.simple_invoke("test")
+        create_runnable(pipeline, nodes)
+        pipeline.save()
+
+        user_input = "The User Input"
+        user = UserFactory()
+        pipeline.simple_invoke(user_input, user.id)["messages"][-1]
+        expected_call_messages = [
+            [("system", "Help the user. User data: . Source material: "), ("human", user_input)],
+        ]
+        assert [
+            [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        ] == expected_call_messages
+
         assert ExperimentSession.objects.count() == 0
-        assert Experiment.objects.count() == 0
