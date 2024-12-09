@@ -885,6 +885,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return Version(
             instance=self,
             fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
                 VersionField(group_name="General", name="description", raw_value=self.description),
                 VersionField(
                     group_name="General",
