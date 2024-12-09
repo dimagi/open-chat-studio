@@ -171,6 +171,9 @@ class VersionsMixin:
         self.is_archived = True
         self.save()
 
+    def is_not_archived(self) -> bool:
+        return not self.is_archived
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
