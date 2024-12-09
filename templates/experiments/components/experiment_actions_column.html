@@ -9,4 +9,9 @@
      href="{% url 'experiments:edit' record.team.slug record.id %}" title="Edit">
     <i class="fa-solid fa-pencil"></i>
   </a>
+{% else %}
+  <a class="btn btn-sm"
+     href="{% url 'experiments:edit' record.team.slug record.id %}" title="Edit">
+    <i class="fa-solid fa-eye"></i>
+  </a>
 {% endif %}
