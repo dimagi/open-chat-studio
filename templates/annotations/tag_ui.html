@@ -2,8 +2,21 @@
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
     {% for tag in object.tags_json %}
-      <div class="badge {% if not tag.is_system_tag %}badge-neutral{% elif tag.category == 'safety_layer_response' %}badge-error{% else %}badge-warning{% endif %}"
-           title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
+      <div
+        class="
+               {% if not tag.is_system_tag %}
+                 badge badge-neutral
+                 {% if tag.added_by == request.user.email %}
+                   ring-1 ring-blue-400
+                 {% endif %}
+               {% elif tag.category == 'safety_layer_response' %}
+                 badge-error
+               {% else %}
+                 badge-warning
+               {% endif %}
+               tooltip"
+        title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
+        data-tip="Added by {% if tag.added_by == request.user.email %}me{% else %}{{ tag.added_by }}{% endif %}"
       >{{ tag.name }}</div>
     {% endfor %}
     {% if allow_edit|default_if_none:True and perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}

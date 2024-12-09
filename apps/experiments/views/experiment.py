@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
@@ -105,6 +105,7 @@ def experiments_home(request, team_slug: str):
             "new_object_url": reverse("experiments:new", args=[team_slug]),
             "table_url": reverse("experiments:table", args=[team_slug]),
             "enable_search": True,
+            "toggle_archived": True,
         },
     )
 
@@ -117,15 +118,21 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.filter(team=self.request.team, working_version__isnull=True, is_archived=False)
+        query_set = Experiment.objects.get_all().filter(team=self.request.team, working_version__isnull=True)
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            query_set = query_set.filter(is_archived=False)
+
         search = self.request.GET.get("search")
         if search:
-            search_vector = SearchVector("name", weight="A") + SearchVector("description", weight="B")
-            search_query = SearchQuery(search)
+            name_similarity = TrigramSimilarity("name", search)
+            description_similarity = TrigramSimilarity("description", search)
             query_set = (
-                query_set.annotate(document=search_vector, rank=SearchRank(search_vector, search_query))
-                .filter(Q(document=search_query) | Q(owner__username__icontains=search))
-                .order_by("-rank")
+                query_set.annotate(
+                    similarity=name_similarity + description_similarity,
+                )
+                .filter(Q(similarity__gt=0.2) | Q(owner__username__icontains=search))
+                .order_by("-similarity")
             )
         return query_set
 
@@ -407,6 +414,10 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.request.POST.get("action") == "save_and_version":
             return redirect("experiments:create_version", self.request.team.slug, experiment.id)
 
+        if self.request.POST.get("action") == "save_and_archive":
+            experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
+            experiment.archive_working_experiment()
+            return redirect("experiments:experiments_home", self.request.team.slug)
         return response
 
 
@@ -449,7 +460,11 @@ class CreateExperiment(BaseExperimentView, CreateView):
             self.object.files.set(files)
 
         if flag_is_active(self.request, "experiment_versions"):
-            self.object.create_new_version()
+            task_id = async_create_experiment_version.delay(
+                experiment_id=self.object.id, version_description="", make_default=True
+            )
+            self.object.create_version_task_id = task_id
+            self.object.save(update_fields=["create_version_task_id"])
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -1420,7 +1435,10 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def archive_experiment(request, team_slug: str, experiment_id: int, version_number: int):
+def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """
+    Archives a single released version of an experiment, unless it's the default version
+    """
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
@@ -1433,8 +1451,7 @@ def archive_experiment(request, team_slug: str, experiment_id: int, version_numb
     )
     if experiment.is_default_version:
         return redirect(url)
-    experiment.is_archived = True
-    experiment.save()
+    experiment.archive()
     return redirect(url)
 
 

@@ -980,6 +980,18 @@ class TestExperimentModel:
         assert experiment.get_version(1) == first_version
         assert first_version.get_version(1) == first_version
 
+    def test_archive_working_experiment_deletes_all_versions(self, experiment):
+        first_version = experiment.create_new_version()
+        second_version = experiment.create_new_version()
+        experiment.archive()
+        experiment.refresh_from_db()
+        first_version.refresh_from_db()
+        second_version.refresh_from_db()
+
+        assert experiment.is_archived is True
+        assert first_version.is_archived is True
+        assert second_version.is_archived is True
+
 
 @pytest.mark.django_db()
 class TestExperimentObjectManager:

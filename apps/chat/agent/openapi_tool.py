@@ -1,9 +1,15 @@
 import enum
+import logging
+import pathlib
+import tempfile
+import uuid
 from collections import defaultdict
+from email.message import Message
 from typing import Any
 from urllib.parse import urljoin
 
 import httpx
+from django.conf import settings
 from langchain.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -13,6 +19,20 @@ from pydantic import BaseModel, Field, create_model
 
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
+logger = logging.getLogger("tools")
+
+
+class ToolArtifact(BaseModel):
+    name: str
+    content_type: str
+    content: bytes = None
+    path: str = None
+
+    def get_content(self):
+        if self.content:
+            return self.content
+        return pathlib.Path(self.path).read_bytes()
 
 
 class FunctionDef(BaseModel):
@@ -34,6 +54,7 @@ class FunctionDef(BaseModel):
             args_schema=self.args_schema,
             handle_tool_error=True,
             func=executor.call_api,
+            response_format="content_and_artifact",
         )
 
 
@@ -75,10 +96,48 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}")
 
-    def _make_request(self, http_client: httpx.Client, url: str, method: str, **kwargs) -> str:
-        response = http_client.request(method.upper(), url, follow_redirects=False, **kwargs)
-        response.raise_for_status()
-        return response.text
+    def _make_request(
+        self, http_client: httpx.Client, url: str, method: str, **kwargs
+    ) -> tuple[str, ToolArtifact | None]:
+        logger.info("[%s] %s %s", self.function_def.name, method.upper(), url)
+        with http_client.stream(method.upper(), url, follow_redirects=False, **kwargs) as response:
+            response.raise_for_status()
+            if content_disposition := response.headers.get("content-disposition"):
+                filename = self._get_filename_from_header(content_disposition)
+                if filename:
+                    logger.info("[%s] response with attachment: %s", self.function_def.name, filename)
+                    return self._get_artifact_response(content_disposition, filename, response)
+
+            logger.info("[%s] response with content", self.function_def.name)
+            response.read()
+            return response.text, None
+
+    def _get_artifact_response(self, content_disposition, filename, response):
+        content_type = response.headers.get("Content-Type", "application/octet-stream")
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) < 1000**2:
+            # just load it into memory if it's < 1MB
+            response.read()
+            return content_disposition, ToolArtifact(content=response.content, name=filename, content_type=content_type)
+        # otherwise stream it to disk
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            for chunk in response.iter_bytes():
+                f.write(chunk)
+            f.close()
+            return content_disposition, ToolArtifact(path=f.name, name=filename, content_type=content_type)
+
+    def _get_filename_from_header(self, content_disposition):
+        """Return the attachment filename or None if the content-disposition header is not an attachment."""
+        try:
+            msg = Message()
+            msg["content-disposition"] = content_disposition
+            if msg.get_content_disposition() != "attachment":
+                return
+
+            filename = msg.get_filename()
+        except Exception as e:
+            raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
+        return filename or str(uuid.uuid4())
 
     def _get_url(self, path_params):
         url = self.function_def.url
@@ -86,7 +145,7 @@ class OpenAPIOperationExecutor:
             url = _format_url(url, path_params.model_dump())
 
         try:
-            validate_user_input_url(url)
+            validate_user_input_url(url, strict=not settings.DEBUG)
         except InvalidURL as e:
             raise ToolException(str(e))
 

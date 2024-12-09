@@ -161,12 +161,14 @@ def runserver(c: Context, public=False):
 
 
 @task
-def celery(c: Context, gevent=False):
+def celery(c: Context, gevent=False, beat=True):
     cmd = "celery -A gpt_playground worker -l INFO"
     if gevent:
         cmd += " --pool gevent --concurrency 10"
     else:
-        cmd += " -B --pool=solo"
+        cmd += " --pool=solo"
+        if beat:
+            cmd += " -B"
 
     if gevent:
         cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")

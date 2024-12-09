@@ -25,7 +25,8 @@
       </div>
     {% endif %}
   </div>
-  {% if enable_search %}
+
+  {% if enable_search and not toggle_archived %}
     <div class="my-2">
       <input class="input input-bordered join-item" type="search"
              name="{{ search_param_name|default:"search" }}" placeholder="Search..."
@@ -35,9 +36,38 @@
              hx-indicator=".htmx-indicator">
       <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
     </div>
+
+  {% elif enable_search and toggle_archived %}
+    <form
+      hx-get="{{ table_url }}"
+      hx-target="div.table-container"
+      hx-trigger="change, keyup delay:500ms, submit"
+      hx-indicator=".htmx-indicator">
+      <div class="my-2 flex gap-x-2">
+        <div class="my-2">
+          <input class="input input-bordered join-item"
+                 type="search"
+                 name="{{ search_param_name|default:'search' }}"
+                 placeholder="Search..."
+                 value="{{ request.GET.search|default:'' }}"
+                 hx-trigger="keyup[this.value.length === 0 || this.value.length > 2], search">
+          <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
+        </div>
+        <div class="my-2">
+          <label for="show_archived" class="label cursor-pointer flex items-center space-x-2">
+            <span class="label-text mr-2">Show Archived</span>
+            <input type="checkbox"
+                   name="show_archived"
+                   class="toggle"
+                   {% if request.GET.show_archived == "on" %}checked{% else %}unchecked{% endif %}>
+          </label>
+        </div>
+      </div>
+    </form>
   {% else %}
     <hr class="my-2">
   {% endif %}
+
   <div hx-get="{{ table_url }}{% querystring %}"
        hx-trigger="load" hx-swap="outerHTML">
     {% include "table/table_placeholder.html" %}

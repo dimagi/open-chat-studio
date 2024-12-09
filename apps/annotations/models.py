@@ -108,9 +108,18 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     @cached_property
     def tags_json(self):
+        tagged_items = CustomTaggedItem.objects.filter(
+            content_type__model=self._meta.model_name, content_type__app_label=self._meta.app_label, object_id=self.id
+        ).prefetch_related("tag", "user")
         return [
-            {"name": tag.name, "id": tag.id, "is_system_tag": tag.is_system_tag, "category": tag.category}
-            for tag in self.tags.all()
+            {
+                "name": tagged_item.tag.name,
+                "id": tagged_item.tag.id,
+                "is_system_tag": tagged_item.tag.is_system_tag,
+                "category": tagged_item.tag.category,
+                "added_by": tagged_item.user.email if tagged_item.user else "System",
+            }
+            for tagged_item in tagged_items
         ]
 
 

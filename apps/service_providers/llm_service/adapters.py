@@ -154,7 +154,7 @@ class AssistantAdapter(BaseAdapter):
     ):
         self.session = session
         self.assistant = assistant
-        self.llm_service = assistant.llm_provider.get_llm_service()
+        self.llm_service = assistant.get_llm_service()
         self.citations_enabled = citations_enabled
         self.input_formatter = input_formatter
         self.trace_service = trace_service
@@ -231,11 +231,14 @@ class AssistantAdapter(BaseAdapter):
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])
         if self.assistant.include_file_info and code_interpreter_attachments:
             file_type_info = self.get_file_type_info(code_interpreter_attachments)
-            instructions += "\n\nFile type information:\n\n| File Path | Mime Type |\n"
-            for file_info in file_type_info:
-                for file_name, mime_type in file_info.items():
-                    instructions += f"| /mnt/data/{file_name} | {mime_type} |\n"
+            instructions += self.get_file_type_info_text(file_type_info)
+        return instructions
 
+    def get_file_type_info_text(self, file_type_infos: list[dict[str, str]]) -> str:
+        instructions = "\n\nFile type information:\n\n| File Path | Mime Type |\n"
+        for file_info in file_type_infos:
+            for file_name, mime_type in file_info.items():
+                instructions += f"| /mnt/data/{file_name} | {mime_type} |\n"
         return instructions
 
     def get_file_type_info(self, attachments: list) -> list:

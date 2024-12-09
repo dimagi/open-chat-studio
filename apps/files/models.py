@@ -35,6 +35,10 @@ class File(BaseTeamModel):
             # leading '.' is included
             filename = f"{filename}{extension}"
 
+        return cls.from_content(filename, file_content_bytes, content_type, team_id, external_id, external_source)
+
+    @classmethod
+    def from_content(cls, filename, content, content_type, team_id, external_id="", external_source=""):
         new_file = File(
             name=filename,
             external_id=external_id,
@@ -43,10 +47,10 @@ class File(BaseTeamModel):
             content_type=content_type,
         )
 
-        if external_file:
-            content_file = ContentFile(file_content_bytes, name=filename)
+        if content:
+            content_file = ContentFile(content, name=filename)
             new_file.file = content_file
-            new_file.size = content_file.size
+            new_file.content_size = content_file.size
 
         new_file.save()
         return new_file

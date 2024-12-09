@@ -11,6 +11,7 @@ module.exports = {
     'pipeline': './assets/javascript/apps/pipeline.tsx',
     adminDashboard: './assets/javascript/admin-dashboard.js',
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
+    'tokenCounter': './assets/javascript/tiktoken.js',
   },
   output: {
     path: path.resolve(__dirname, './static'),

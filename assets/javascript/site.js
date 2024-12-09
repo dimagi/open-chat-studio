@@ -4,5 +4,4 @@ import 'htmx.org';
 import './htmx';
 import './alpine';
 import './alertify';
-import './tiktoken';
 import './tom-select';
