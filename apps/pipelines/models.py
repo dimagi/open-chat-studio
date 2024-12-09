@@ -16,6 +16,7 @@ from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsOb
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.helpers import temporary_session
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -168,15 +169,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def simple_invoke(self, input: str) -> PipelineState:
         """Invoke the pipeline without a session or the ability to save the run to history"""
         from apps.pipelines.graph import PipelineGraph
-        from apps.utils.factories.experiment import ExperimentSessionFactory
 
         output = ""
-        with transaction.atomic():
+        with temporary_session(self.team) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            session = ExperimentSessionFactory()
             output = runnable.invoke(PipelineState(messages=[input], experiment_session=session))
             output = PipelineState(**output).json_safe()
-            transaction.set_rollback(True)
         return output
 
     def invoke(
