@@ -416,7 +416,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
         if self.request.POST.get("action") == "save_and_archive":
             experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
-            experiment.archive_working_experiment()
+            experiment.archive()
             return redirect("experiments:experiments_home", self.request.team.slug)
         return response
 
