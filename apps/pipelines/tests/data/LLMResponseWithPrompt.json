@@ -55,6 +55,16 @@
       "title": "Prompt",
       "type": "string",
       "ui:widget": "expandable_text"
+    },
+    "tools": {
+      "description": "The tools to enable for the bot",
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array",
+      "ui:optionsSource": "agent_tools",
+      "ui:widget": "multiselect"
     }
   },
   "required": [

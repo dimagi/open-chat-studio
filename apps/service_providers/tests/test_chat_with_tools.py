@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool, Tool
 
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.service_providers.llm_service.adapters import ChatAdapter
+from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import AgentLLMChat
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service
@@ -68,6 +69,7 @@ def test_tool_artifact_response(session, fake_llm_service):
 def get_runnable(session, tool):
     with patch("apps.service_providers.llm_service.adapters.get_tools") as get_tools:
         get_tools.return_value = [tool]
+        history_manager = ExperimentHistoryManager.for_llm_chat(session=session, experiment=session.experiment)
         adapter = ChatAdapter.for_experiment(session.experiment, session)
-        runnable = AgentLLMChat(adapter=adapter)
+        runnable = AgentLLMChat(adapter=adapter, history_manager=history_manager)
     return runnable

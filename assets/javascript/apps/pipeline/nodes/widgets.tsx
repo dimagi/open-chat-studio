@@ -4,12 +4,13 @@ import React, {
   ReactNode,
   useId,
 } from "react";
+import { useState } from "react";
 import {TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
 import {NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
-
+import DOMPurify from 'dompurify';
 
 export function getWidget(name: string) {
   switch (name) {
@@ -23,6 +24,8 @@ export function getWidget(name: string) {
       return ExpandableTextWidget
     case "select":
       return SelectWidget
+      case "multiselect":
+        return MultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -129,22 +132,94 @@ function ToggleWidget(props: WidgetParams) {
 
 function SelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
+  const selectedOption = options.find((option) => option.value.toString() === props.paramValue);
+  const [link, setLink] = useState<string | undefined>(selectedOption?.edit_url);
+
+  const onUpdate = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selectedOption = options.find((option) => option.value.toString() === event.target.value);
+    setLink(selectedOption?.edit_url);
+    props.updateParamValue(event);
+  };
+  
+
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-    <select
-      className="select select-bordered w-full"
-      name={props.name}
-      onChange={props.updateParamValue}
-      value={props.paramValue}
-      required={props.required}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-row gap-2">
+      <select
+        className="select select-bordered w-full"
+        name={props.name}
+        onChange={onUpdate}
+        value={props.paramValue}
+        required={props.required}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {link && (
+        <div className="tooltip" data-tip="Open in a new tab">
+          <a target="_blank" href={DOMPurify.sanitize(link)} className="align-bottom hover:cursor-pointer">
+            <i className="fa-solid fa-up-right-from-square fa-lg"></i>
+          </a>
+        </div>
+      )}
+    </div> 
   </InputField>
 }
+
+
+function MultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  function getNewNodeData(old: Node, updatedList: Array<string>) {
+    return {
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [props.name]: updatedList,
+        },
+      },
+    };
+  }
+
+  function onUpdate(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.checked) {
+      selectedValues.push(event.target.name)
+    } else {
+      selectedValues = selectedValues.filter((tool) => tool !== event.target.name)
+    }
+    setNode(props.nodeId, (old) => {
+        return getNewNodeData(old, selectedValues);
+      }
+    );
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      {options.map((option) => (
+        <div className="flex items-center mb-1" key={option.value}>
+          <input
+            className="checkbox"
+            name={option.value}
+            onChange={onUpdate}
+            checked={selectedValues.includes(option.value)}
+            id={option.value}
+            key={option.value}
+            type="checkbox"
+          />
+          <span className="ml-2">{option.label}</span>
+        </div>
+      ))}
+    </InputField>
+  )
+}
+
 
 export function TextModal(
   {modalId, humanName, name, value, onChange}: {
