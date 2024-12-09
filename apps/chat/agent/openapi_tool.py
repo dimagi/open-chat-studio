@@ -101,7 +101,11 @@ class OpenAPIOperationExecutor:
     ) -> tuple[str, ToolArtifact | None]:
         logger.info("[%s] %s %s", self.function_def.name, method.upper(), url)
         with http_client.stream(method.upper(), url, follow_redirects=False, **kwargs) as response:
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError:
+                response.read()  # read the response to get the error message
+                raise
             if content_disposition := response.headers.get("content-disposition"):
                 filename = self._get_filename_from_header(content_disposition)
                 if filename:
