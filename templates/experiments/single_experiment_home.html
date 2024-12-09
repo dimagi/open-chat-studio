@@ -19,7 +19,11 @@
       <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
         {% flag "experiment_versions" %}
-          {% if deployed_version %}
+          {% if experiment.is_archived %}
+            <div class="badge badge-warning badge-sm">
+              Archived
+            </div>
+          {% elif deployed_version %}
             <div class="tooltip" data-tip="Current published version">
               <a class="badge badge-success badge-sm"
                  href="#versions">
