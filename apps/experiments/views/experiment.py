@@ -389,7 +389,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
     def get_queryset(self):
-        return Experiment.objects.filter(team=self.request.team)
+        return Experiment.objects.get_all().filter(team=self.request.team)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -622,7 +622,7 @@ def version_create_status(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
     user_sessions = (
         ExperimentSession.objects.with_last_message_created_at()
         .filter(
