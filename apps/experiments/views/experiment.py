@@ -15,7 +15,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, F, IntegerField, Q, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -172,10 +172,12 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        experiment_row = Experiment.objects.filter(id=self.kwargs["experiment_id"])
-        other_versions = Experiment.objects.filter(
-            working_version=self.kwargs["experiment_id"], is_archived=False
-        ).all()
+        experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
+        other_versions = (
+            Experiment.objects.get_all()
+            .filter(working_version=self.kwargs["experiment_id"], is_archived=F("working_version__is_archived"))
+            .all()
+        )
         return (experiment_row | other_versions).order_by("-version_number")
 
 
