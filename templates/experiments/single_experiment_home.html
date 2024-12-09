@@ -268,7 +268,7 @@
                   <td class="overflow-hidden px-3 py-3 text-left">{{ session.last_message_created_at }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">{{session.experiment_version_for_display }}</td>
                   <td class="overflow-hidden px-3 py-3 text-left">
-                    {% if session.is_complete %}
+                    {% if session.is_complete or not experiment.is_editable %}
                       <a class="btn btn-sm btn-outline btn-primary"
                          href="{% url 'experiments:experiment_session_view' team.slug experiment.public_id session.external_id %}"
                          class="link">Review Chat</a>
