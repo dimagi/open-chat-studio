@@ -16,7 +16,7 @@ from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, When
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -489,8 +489,13 @@ class EditExperiment(BaseExperimentView, UpdateView):
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
         if obj.working_version:
-            raise Http404("Cannot edit experiment versions.")
+            raise Http404("Experiment not found.")
         return obj
+
+    def post(self, request, *args, **kwargs):
+        if self.get_object().is_archived:
+            raise HttpResponseNotAllowed("Cannot edit archived experiments.")
+        return super().post(request, *args, **kwargs)
 
 
 def _get_voice_provider_alpine_context(request):
