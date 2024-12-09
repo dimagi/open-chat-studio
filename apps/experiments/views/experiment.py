@@ -118,7 +118,11 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.get_all().filter(team=self.request.team, working_version__isnull=True)
+        query_set = (
+            Experiment.objects.get_all()
+            .filter(team=self.request.team, working_version__isnull=True)
+            .order_by("is_archived")
+        )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
             query_set = query_set.filter(is_archived=False)
