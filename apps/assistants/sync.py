@@ -254,8 +254,8 @@ def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> li
 
 
 @wrap_openai_errors
-def is_synced_with_openai(assistant: OpenAiAssistant) -> list[str]:
-    """Checks if the assistant in OCS is in sync with the assistant in OpenAI."""
+def get_diff_with_openai_assistant(assistant: OpenAiAssistant) -> list[str]:
+    """Returns a simple diff of the assistant configuration between OCS and OpenAI."""
 
     diffs = []
     client = assistant.llm_provider.get_llm_service().get_raw_client()

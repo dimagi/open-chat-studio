@@ -181,6 +181,9 @@ class ExperimentVersionsTable(tables.Table):
         orderable = False
         empty_text = "No versions yet!"
 
+    def render_created_at(self, record):
+        return record.created_at if record.working_version_id else ""
+
 
 def _get_route_url(url_name, request, record, value):
     return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])

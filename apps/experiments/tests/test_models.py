@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db.utils import IntegrityError
+from django.test import override_settings
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -980,7 +981,15 @@ class TestExperimentModel:
         assert experiment.get_version(1) == first_version
         assert first_version.get_version(1) == first_version
 
-    def test_archive_working_experiment_deletes_all_versions(self, experiment):
+    def test_archive_working_experiment(self, experiment):
+        """Test that archiving an experiment archives all versions and deletes its scheduled messages"""
+        session = ExperimentSessionFactory(experiment=experiment)
+        event_action, _ = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
+        ScheduledMessageFactory(
+            experiment=experiment, team=experiment.team, participant=session.participant, action=event_action
+        )
+        assert ScheduledMessage.objects.filter(experiment=experiment).exists() is True
+
         first_version = experiment.create_new_version()
         second_version = experiment.create_new_version()
         experiment.archive()
@@ -991,6 +1000,36 @@ class TestExperimentModel:
         assert experiment.is_archived is True
         assert first_version.is_archived is True
         assert second_version.is_archived is True
+        assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_is_dirty(self, experiment):
+        # Not dirty when no versions exists
+        assert experiment.is_dirty is False
+
+        experiment.create_new_version()
+        assert experiment.is_dirty is False
+
+        experiment.prompt_text = "something new"
+        experiment.save(update_fields=["prompt_text"])
+        experiment.refresh_from_db()
+        # Clear the cached property
+        del experiment.is_dirty
+        assert experiment.is_dirty is True
+
+    def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
+        params = self._get_params(experiment_id, time_period, frequency, repetitions)
+        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+
+    def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
+        return {
+            "name": "Test",
+            "time_period": time_period,
+            "frequency": frequency,
+            "repetitions": repetitions,
+            "prompt_text": "hi",
+            "experiment_id": experiment_id,
+        }
 
 
 @pytest.mark.django_db()
