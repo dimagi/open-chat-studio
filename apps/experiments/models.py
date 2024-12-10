@@ -739,7 +739,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
-    def compare_with_latest(self):
+    @cached_property
+    def is_dirty(self) -> bool:
         """
         Returns a boolean if the experiment differs from the lastest version
         """

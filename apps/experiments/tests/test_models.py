@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db.utils import IntegrityError
+from django.test import override_settings
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -991,6 +992,21 @@ class TestExperimentModel:
         assert experiment.is_archived is True
         assert first_version.is_archived is True
         assert second_version.is_archived is True
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_is_dirty(self, experiment):
+        # Not dirty when no versions exists
+        assert experiment.is_dirty is False
+
+        experiment.create_new_version()
+        assert experiment.is_dirty is False
+
+        experiment.prompt_text = "something new"
+        experiment.save(update_fields=["prompt_text"])
+        experiment.refresh_from_db()
+        # Clear the cached property
+        del experiment.is_dirty
+        assert experiment.is_dirty is True
 
 
 @pytest.mark.django_db()

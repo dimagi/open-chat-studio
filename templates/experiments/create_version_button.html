@@ -8,8 +8,15 @@
       <span class="loading loading-bars loading-xs"></span> Creating Version
     </button>
   </div>
-{% else %}
+{% elif is_dirty %}
   <a x-init='htmx.trigger("#versions-table", "refetch-versions")' class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}">
     <i class="fa-regular fa-plus"></i> Create Version
   </a>
+{% else %}
+  <div class="flex flex-row gap-2">
+    <button class="btn btn-sm btn-outline btn-primary mb-2 no-animation" disabled>
+      Creating Version
+    </button>
+    <span class="text-xs">No changes detected</span>
+  </div>
 {% endif %}
