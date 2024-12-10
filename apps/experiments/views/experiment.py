@@ -31,6 +31,7 @@ from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.annotations.models import Tag
+from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -582,17 +583,36 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         description = form.cleaned_data["version_description"]
         is_default = form.cleaned_data["is_default_version"]
         working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
+
         if working_version.create_version_task_id:
             messages.error(self.request, "Version creation is already in progress.")
-        else:
-            task_id = async_create_experiment_version.delay(
-                experiment_id=working_version.id, version_description=description, make_default=is_default
-            )
-            working_version.create_version_task_id = task_id
-            working_version.save(update_fields=["create_version_task_id"])
-            messages.success(self.request, "Creating new version. This might take a few minutes.")
+            return HttpResponseRedirect(self.get_success_url())
+
+        if self._is_assistant_out_of_sync():
+            messages.error(self.request, "Assistant is out of sync with OpenAI. Please update the assistant first.")
+            return HttpResponseRedirect(self.get_success_url())
+
+        task_id = async_create_experiment_version.delay(
+            experiment_id=working_version.id, version_description=description, make_default=is_default
+        )
+        working_version.create_version_task_id = task_id
+        working_version.save(update_fields=["create_version_task_id"])
+        messages.success(self.request, "Creating new version. This might take a few minutes.")
 
         return HttpResponseRedirect(self.get_success_url())
+
+    def _is_assistant_out_of_sync(self) -> bool:
+        experiment = self.get_object()
+        if not experiment.assistant:
+            return False
+
+        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
+            return True
+
+        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
+        if files_missing_local or files_missing_remote:
+            return True
+        return False
 
     def get_success_url(self):
         url = reverse(
