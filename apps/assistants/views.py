@@ -23,9 +23,9 @@ from .sync import (
     OpenAiSyncError,
     delete_file_from_openai,
     delete_openai_assistant,
+    get_diff_with_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
-    is_synced_with_openai,
     push_assistant_to_openai,
     sync_from_openai,
 )
@@ -153,7 +153,7 @@ def check_sync_status(request, team_slug, pk):
 
     error = None
     try:
-        diffs = is_synced_with_openai(assistant)
+        diffs = get_diff_with_openai_assistant(assistant)
     except OpenAiSyncError as e:
         error = str(e)
         diffs = []
