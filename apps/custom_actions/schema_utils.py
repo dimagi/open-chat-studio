@@ -13,10 +13,10 @@ def get_standalone_schema_for_action_operation(action_operation):
     if not operation:
         raise ValidationError("Custom action operation is no longer available")
 
-    return get_standalone_spec(action.api_schema, operation.path, operation.method)
+    return get_standalone_spec(action.server_url, action.api_schema, operation.path, operation.method)
 
 
-def get_standalone_spec(openapi_spec: dict, path: str, method: str):
+def get_standalone_spec(server_url: str, openapi_spec: dict, path: str, method: str):
     """Returns a standalone OpenAPI spec for a single operation."""
     openapi_spec = trim_spec(openapi_spec)
     info = openapi_spec["info"]
@@ -24,6 +24,7 @@ def get_standalone_spec(openapi_spec: dict, path: str, method: str):
     info["description"] = f"Standalone OpenAPI spec for {method} {path}"
     paths = openapi_spec.pop("paths")
     openapi_spec["paths"] = {path: {method: paths[path][method]}}
+    openapi_spec["servers"] = [{"url": server_url}]
     return openapi_spec
 
 
@@ -32,7 +33,7 @@ def trim_spec(openapi_spec: dict) -> dict:
     If there are any refs in the schema, they will be resolved.
     """
     openapi_spec = resolve_references(openapi_spec)
-    top_level_keys = ["openapi", "info", "servers", "paths"]
+    top_level_keys = ["openapi", "info", "paths"]
     for key in list(openapi_spec.keys()):
         if key not in top_level_keys:
             del openapi_spec[key]

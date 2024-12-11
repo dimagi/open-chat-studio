@@ -3,7 +3,9 @@
   <div class="grid grid-cols-6">
     <div class="col-span-5">
       <div class="flex">
-        <h1 class="{{ title_class|default:"pg-title" }}">{{ title }}</h1>
+        <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
+          <a href="#{{ title|slugify }}">{{ title }}</a>
+        </h1>
         {% if info_link %}
           <a class="mx-2 text-xs text-neutral-500" href="{{ info_link }}" target="_blank">Learn more <i class="text-xs fa fa-circle-question"></i></a>
         {% endif %}

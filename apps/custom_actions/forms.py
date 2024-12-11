@@ -1,3 +1,4 @@
+from functools import cached_property
 from urllib.parse import urljoin
 
 from django import forms
@@ -21,6 +22,11 @@ class CustomActionForm(forms.ModelForm):
         help_text="Use this field to provide additional instructions to the LLM",
         max_length=1000,
     )
+    server_url = forms.URLField(
+        label="Base URL",
+        help_text="The base URL of the API server. This will be used to generate the API calls for the LLM.",
+        required=True,
+    )
     api_schema = JsonOrYamlField(
         widget=forms.Textarea(attrs={"rows": "10"}),
         required=True,
@@ -40,7 +46,7 @@ class CustomActionForm(forms.ModelForm):
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "api_schema", "allowed_operations")
+        fields = ("name", "description", "auth_provider", "prompt", "server_url", "api_schema", "allowed_operations")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -54,6 +60,17 @@ class CustomActionForm(forms.ModelForm):
             self.fields["allowed_operations"].choices = [
                 (path, [(op.operation_id, str(op)) for op in ops]) for path, ops in grouped_ops.items()
             ]
+        self.fields["server_url"].validators = [self.url_validator]
+
+    def clean_server_url(self):
+        server_url = self.cleaned_data["server_url"]
+
+        try:
+            validate_user_input_url(server_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
+
+        return server_url
 
     def clean_api_schema(self):
         api_schema = self.cleaned_data["api_schema"]
@@ -63,29 +80,20 @@ class CustomActionForm(forms.ModelForm):
         if self.errors:
             return
 
-        from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-
         schema = self.cleaned_data.get("api_schema")
         operations = self.cleaned_data.get("allowed_operations")
         if schema is None or operations is None:
             return self.cleaned_data
 
-        spec = OpenAPISpec.from_spec_dict(schema)
-        operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
-        invalid_operations = set(operations) - set(operations_by_id)
-        if invalid_operations:
-            raise forms.ValidationError(
-                {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
-            )
-
-        for op_id in operations:
-            op = operations_by_id[op_id]
-            try:
-                openapi_spec_op_to_function_def(spec, op.path, op.method)
-            except ValueError as e:
-                raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
+        server_url = self.cleaned_data["server_url"]
+        validate_api_schema_full(operations, schema, server_url, self.url_validator)
 
         return {**self.cleaned_data, "allowed_operations": operations}
+
+    @cached_property
+    def url_validator(self):
+        schemes = ["https", "http"] if settings.DEBUG else ["https"]
+        return URLValidator(schemes=schemes)
 
 
 def validate_api_schema(api_schema):
@@ -96,36 +104,34 @@ def validate_api_schema(api_schema):
     except ValueError:
         raise forms.ValidationError("Invalid OpenAPI schema.")
 
-    servers = api_schema.get("servers", [])
-    if not servers:
-        raise forms.ValidationError("No servers found in the schema.")
-    if len(servers) > 1:
-        raise forms.ValidationError("Multiple servers found in the schema. Only one is allowed.")
-    server_url = servers[0].get("url")
-    if not server_url:
-        raise forms.ValidationError("No server URL found in the schema.")
-
-    schemes = ["https", "http"] if settings.DEBUG else ["https"]
-    url_validator = URLValidator(schemes=schemes)
-
-    # Fist pass with Django's URL validator
-    try:
-        url_validator(server_url)
-    except forms.ValidationError:
-        raise forms.ValidationError("The server URL is invalid. Ensure that the URL is a valid HTTPS URL")
-
-    try:
-        validate_user_input_url(server_url, strict=not settings.DEBUG)
-    except InvalidURL as e:
-        raise forms.ValidationError(f"The server URL is invalid: {str(e)}")
-
     paths = api_schema.get("paths", {})
     if not paths:
         raise forms.ValidationError("No paths found in the schema.")
 
-    for path in paths:
-        try:
-            url_validator(urljoin(server_url, path))
-        except forms.ValidationError:
-            raise forms.ValidationError(f"Invalid path: {path}")
+    api_schema.pop("servers", None)
+
     return api_schema
+
+
+def validate_api_schema_full(operations, schema, server_url, url_validator):
+    from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+
+    spec = OpenAPISpec.from_spec_dict(schema)
+    operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
+    invalid_operations = set(operations) - set(operations_by_id)
+    if invalid_operations:
+        raise forms.ValidationError(
+            {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
+        )
+    for op_id in operations:
+        op = operations_by_id[op_id]
+
+        try:
+            url_validator(urljoin(server_url, op.path))
+        except forms.ValidationError:
+            raise forms.ValidationError(f"Invalid path: {op.path}")
+
+        try:
+            openapi_spec_op_to_function_def(spec, op.path, op.method)
+        except ValueError as e:
+            raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
