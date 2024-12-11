@@ -12,10 +12,9 @@
       <div>
         {% if message_details.message %}
           {% include 'experiments/chat/ai_message.html' with message=message_details.message %}
-        {% elif message_details.error %}
+        {% elif message_details.error_msg %}
           <p class="chat-message-system pg-text-danger">
-            Sorry something went wrong. This was likely an intermittent error related to load.
-            Please try again, and wait a few minutes if this keeps happening.
+            {{ message_details.error_msg }}
           </p>
         {% else %}
           <span class="loading loading-dots loading-sm"></span>

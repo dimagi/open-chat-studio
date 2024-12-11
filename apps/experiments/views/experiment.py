@@ -91,6 +91,11 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
+DEFAULT_ERROR_MESSAGE = (
+    "Sorry something went wrong. This was likely an intermittent error related to load."
+    "Please try again, and wait a few minutes if this keeps happening."
+)
+
 
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
@@ -932,15 +937,17 @@ def get_message_response(request, team_slug: str, experiment_id: str, session_id
     # don't render empty messages
     skip_render = progress["complete"] and progress["success"] and not progress["result"]
 
-    message_details = {"message": None, "error": False, "complete": progress["complete"]}
+    message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
         result = progress["result"]
-        if result["message_id"]:
-            message_details["message"] = ChatMessage.objects.get(id=result["message_id"])
-        else:
-            message_details["message"] = {"content": result["response"]}
+        if message_id := result["message_id"]:
+            message_details["message"] = ChatMessage.objects.get(id=message_id)
+        elif response := result["response"]:
+            message_details["message"] = {"content": response}
+        if error := result["error"]:
+            message_details["error_msg"] = error if experiment.debug_mode_enabled else DEFAULT_ERROR_MESSAGE
     elif progress["complete"]:
-        message_details["error"] = True
+        message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
 
     return TemplateResponse(
         request,
