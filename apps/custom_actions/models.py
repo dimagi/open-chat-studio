@@ -53,7 +53,6 @@ class CustomAction(BaseTeamModel):
         self._operations = [op.model_dump() for op in value]
 
     def save(self, *args, **kwargs):
-        self.server_url = self.api_schema.get("servers", [{}])[0].get("url", "")
         try:
             self.operations = get_operations_from_spec_dict(self.api_schema)
         except Exception as e:
