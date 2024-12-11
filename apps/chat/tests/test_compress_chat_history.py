@@ -148,6 +148,31 @@ def test_compression_exhausts_history(mock_get_new_summary, chat):
     assert mock_get_new_summary.call_count == 2
 
 
+@mock.patch("apps.chat.conversation._get_new_summary")
+def test_compression_exhausts_history_and_pruned_memory(_get_new_summary, chat):
+    class Llm(FakeLlmSimpleTokenCount):
+        def get_num_tokens_from_messages(*args, **kwargs):
+            # Force the while loop inside compress_chat_history_from_messages to run until the `history` array
+            # is empty
+            return 80
+
+    def _clear_pruned_memory(llm, pruned_memory, summary, max_token_limit):
+        # Simulate the while loop running until the pruned memory is cleared
+        pruned_memory.clear()
+        return "Summary"
+
+    ChatMessage.objects.bulk_create(
+        [ChatMessage(chat=chat, content=f"Hello {i}", message_type=ChatMessageType.HUMAN) for i in range(5)]
+    )
+
+    llm = Llm(responses=[])
+    _get_new_summary.side_effect = _clear_pruned_memory
+    result = compress_chat_history(chat, llm, 20, input_messages=[])
+    assert len(result) == 1
+    last_message = ChatMessage.objects.order_by("created_at").last()
+    assert last_message.summary == "Summary"
+
+
 def test_get_new_summary_with_large_history():
     """Test that we can compress a large history into a summary without exceeding the token limit
     for the LLM. This isn't usually an issue since we generate summaries incrementally but when sessions
