@@ -80,34 +80,13 @@ class CustomActionForm(forms.ModelForm):
         if self.errors:
             return
 
-        from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-
         schema = self.cleaned_data.get("api_schema")
         operations = self.cleaned_data.get("allowed_operations")
         if schema is None or operations is None:
             return self.cleaned_data
 
         server_url = self.cleaned_data["server_url"]
-        spec = OpenAPISpec.from_spec_dict(schema)
-        operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
-        invalid_operations = set(operations) - set(operations_by_id)
-        if invalid_operations:
-            raise forms.ValidationError(
-                {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
-            )
-
-        for op_id in operations:
-            op = operations_by_id[op_id]
-
-            try:
-                self.url_validator(urljoin(server_url, op.path))
-            except forms.ValidationError:
-                raise forms.ValidationError(f"Invalid path: {op.path}")
-
-            try:
-                openapi_spec_op_to_function_def(spec, op.path, op.method)
-            except ValueError as e:
-                raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})
+        validate_api_schema_full(operations, schema, server_url, self.url_validator)
 
         return {**self.cleaned_data, "allowed_operations": operations}
 
@@ -132,3 +111,27 @@ def validate_api_schema(api_schema):
     api_schema.pop("servers", None)
 
     return api_schema
+
+
+def validate_api_schema_full(operations, schema, server_url, url_validator):
+    from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+
+    spec = OpenAPISpec.from_spec_dict(schema)
+    operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
+    invalid_operations = set(operations) - set(operations_by_id)
+    if invalid_operations:
+        raise forms.ValidationError(
+            {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
+        )
+    for op_id in operations:
+        op = operations_by_id[op_id]
+
+        try:
+            url_validator(urljoin(server_url, op.path))
+        except forms.ValidationError:
+            raise forms.ValidationError(f"Invalid path: {op.path}")
+
+        try:
+            openapi_spec_op_to_function_def(spec, op.path, op.method)
+        except ValueError as e:
+            raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"})

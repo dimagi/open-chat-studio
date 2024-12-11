@@ -90,6 +90,7 @@ def custom_action(experiment):
         prompt="Custom action prompt",
         api_schema=ACTION_SCHEMA,
         allowed_operations=["weather_get"],
+        server_url="https://api.weather.com",
     )
 
 
