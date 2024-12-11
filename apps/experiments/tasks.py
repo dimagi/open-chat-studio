@@ -51,31 +51,35 @@ def async_create_experiment_version(
 def get_response_for_webchat_task(
     self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
 ) -> dict:
-    experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
-        id=experiment_session_id
-    )
-    experiment = Experiment.objects.get(id=experiment_id)
-    web_channel = WebChannel(
-        experiment,
-        experiment_session.experiment_channel,
-        experiment_session=experiment_session,
-    )
-    message_attachments = []
-    for file_entry in attachments:
-        type, file_id = file_entry.values()
-        message_attachments.append(Attachment(file_id=file_id, type=type))
+    response = {"response": None, "message_id": None, "error": None}
+    try:
+        experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
+            id=experiment_session_id
+        )
+        experiment = Experiment.objects.get(id=experiment_id)
+        web_channel = WebChannel(
+            experiment,
+            experiment_session.experiment_channel,
+            experiment_session=experiment_session,
+        )
+        message_attachments = []
+        for file_entry in attachments:
+            type, file_id = file_entry.values()
+            message_attachments.append(Attachment(file_id=file_id, type=type))
 
-    message = BaseMessage(
-        participant_id=experiment_session.participant.identifier,
-        message_text=message_text,
-        attachments=message_attachments,
-    )
-    update_taskbadger_data(self, web_channel, message)
-    with current_team(experiment_session.team):
-        return {
-            "response": web_channel.new_user_message(message),
-            "message_id": web_channel.bot.get_ai_message_id(),
-        }
+        message = BaseMessage(
+            participant_id=experiment_session.participant.identifier,
+            message_text=message_text,
+            attachments=message_attachments,
+        )
+        update_taskbadger_data(self, web_channel, message)
+        with current_team(experiment_session.team):
+            response["response"] = web_channel.new_user_message(message)
+            response["message_id"] = web_channel.bot.get_ai_message_id()
+    except Exception as e:
+        response["error"] = str(e)
+
+    return response
 
 
 @shared_task
