@@ -15,7 +15,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, F, IntegerField, Q, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -119,7 +119,11 @@ class ExperimentTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        query_set = Experiment.objects.get_all().filter(team=self.request.team, working_version__isnull=True)
+        query_set = (
+            Experiment.objects.get_all()
+            .filter(team=self.request.team, working_version__isnull=True)
+            .order_by("is_archived")
+        )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
             query_set = query_set.filter(is_archived=False)
@@ -169,10 +173,12 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "experiments.view_experiment"
 
     def get_queryset(self):
-        experiment_row = Experiment.objects.filter(id=self.kwargs["experiment_id"])
-        other_versions = Experiment.objects.filter(
-            working_version=self.kwargs["experiment_id"], is_archived=False
-        ).all()
+        experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
+        other_versions = (
+            Experiment.objects.get_all()
+            .filter(working_version=self.kwargs["experiment_id"], is_archived=F("working_version__is_archived"))
+            .all()
+        )
         return (experiment_row | other_versions).order_by("-version_number")
 
 
@@ -390,7 +396,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
 
     def get_queryset(self):
-        return Experiment.objects.filter(team=self.request.team)
+        return Experiment.objects.get_all().filter(team=self.request.team)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -417,7 +423,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
 
         if self.request.POST.get("action") == "save_and_archive":
             experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
-            experiment.archive_working_experiment()
+            experiment.archive()
             return redirect("experiments:experiments_home", self.request.team.slug)
         return response
 
@@ -486,8 +492,13 @@ class EditExperiment(BaseExperimentView, UpdateView):
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
         if obj.working_version:
-            raise Http404("Cannot edit experiment versions.")
+            raise Http404("Experiment not found.")
         return obj
+
+    def post(self, request, *args, **kwargs):
+        if self.get_object().is_archived:
+            raise PermissionDenied("Cannot edit archived experiments.")
+        return super().post(request, *args, **kwargs)
 
 
 def _get_voice_provider_alpine_context(request):
@@ -642,7 +653,7 @@ def version_create_status(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
     user_sessions = (
         ExperimentSession.objects.with_last_message_created_at()
         .filter(
@@ -872,6 +883,9 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
     working_experiment = request.experiment
     session = request.experiment_session
+
+    if working_experiment.is_archived:
+        raise PermissionDenied("Cannot chat with an archived experiment.")
 
     try:
         experiment_version = working_experiment.get_version(version_number)

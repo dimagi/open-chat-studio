@@ -197,6 +197,8 @@ def compress_chat_history_from_messages(
 ):
     summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else None
     history, pruned_memory = history[-keep_history_len:], history[:-keep_history_len]
+    # The latest message
+    latest_message = history[-1]
 
     summary_tokens = (
         llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
@@ -228,7 +230,8 @@ def compress_chat_history_from_messages(
     elif pruned_memory:
         last_message = pruned_memory[-1]
     else:
-        last_message = None
+        # When the summary was too large and the history and pruned_memory was exhausted
+        last_message = latest_message
 
     return history, last_message, summary
 

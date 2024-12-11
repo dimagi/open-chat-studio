@@ -65,7 +65,7 @@
                           {% endif %}
                           {% if perms.annotations.add_usercomment %}
                             <div class="grow">
-                              {% include "annotations/tag_ui.html" with object=message %}
+                              {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
                             </div>
                           {% endif %}
                         </div>
@@ -89,7 +89,7 @@
                             <i class="fa-solid fa-close"></i>
                           </button>
                         </div>
-                        {% include "experiments/components/user_comments.html" with object=message %}
+                        {% include "experiments/components/user_comments.html" with object=message allow_edit=experiment.is_editable %}
                       </div>
                     {% endif %}
                   </td>

@@ -7,6 +7,7 @@ from apps.chat.agent.tools import OneOffReminderTool
 from apps.chat.models import Chat
 from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.adapters import ChatAdapter
+from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
     AgentLLMChat,
     ChainOutput,
@@ -41,7 +42,7 @@ def session(fake_llm_service):
 @patch("apps.service_providers.llm_service.adapters.get_tools")
 def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = []
-    runnable = _get_mocked_history_recording(session, SimpleLLMChat)
+    runnable = _get_runnable_with_mocked_history(session, SimpleLLMChat)
     _test_runnable(runnable, session, "This is")
 
 
@@ -49,7 +50,7 @@ def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
 @patch("apps.service_providers.llm_service.adapters.get_tools")
 def test_agent_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
-    runnable = _get_mocked_history_recording(session, AgentLLMChat)
+    runnable = _get_runnable_with_mocked_history(session, AgentLLMChat)
 
     fake_llm_service.llm.responses = [
         AIMessageChunk(
@@ -85,8 +86,12 @@ def _test_runnable(runnable, session, expected_output):
     assert exc_info.value.output == ChainOutput(output=expected_output, prompt_tokens=30, completion_tokens=20)
 
 
-def _get_mocked_history_recording(session, runnable_cls):
+def _get_runnable_with_mocked_history(session, runnable_cls):
     adapter = ChatAdapter.for_experiment(session.experiment, session)
-    runnable = runnable_cls(adapter=adapter, check_every_ms=0)
-    adapter.save_message_to_history = Mock()
+    history_manager = ExperimentHistoryManager.for_llm_chat(
+        session=session,
+        experiment=session.experiment,
+    )
+    runnable = runnable_cls(adapter=adapter, history_manager=history_manager, check_every_ms=0)
+    history_manager.add_messages_to_history = Mock()
     return runnable

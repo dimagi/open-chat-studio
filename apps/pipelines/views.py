@@ -18,7 +18,7 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import AgentTools, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.base import OptionsSource
@@ -27,6 +27,7 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.meta import absolute_url
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -94,10 +95,21 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name").all()
+    assistants = OpenAiAssistant.objects.filter(team=team).values("id", "name", "working_version_id").all()
 
-    def _option(value, label, type_=None):
-        return {"value": value, "label": label} | ({"type": type_} if type_ else {})
+    def _option(value, label, type_=None, edit_url: str | None = None):
+        data = {"value": value, "label": label}
+        data = data | ({"type": type_} if type_ else {})
+        data = data | ({"edit_url": edit_url} if edit_url else {})
+        return data
+
+    def _get_assistant_url(assistant_id: int, working_version_id: int | None):
+        """
+        Always link to the working version. If `working_version_id` is None, it means the assistant is the working
+        version
+        """
+        assistant_id = assistant_id if working_version_id is None else working_version_id
+        return absolute_url(reverse("assistants:edit", args=[team.slug, assistant_id]))
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
@@ -108,8 +120,16 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         ),
         OptionsSource.assistant: (
             [_option("", "Select an Assistant")]
-            + [_option(assistant["id"], assistant["name"]) for assistant in assistants]
+            + [
+                _option(
+                    value=assistant["id"],
+                    label=assistant["name"],
+                    edit_url=_get_assistant_url(assistant["id"], assistant["working_version_id"]),
+                )
+                for assistant in assistants
+            ]
         ),
+        OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
     }
 
 
@@ -233,7 +253,9 @@ def run_details(request, team_slug: str, run_pk: int, pipeline_pk: int):
 @permission_required("pipelines.change_pipeline")
 def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
     message = json.loads(request.body).get("message")
-    result = get_response_for_pipeline_test_message.delay(pipeline_id=pipeline_pk, message_text=message)
+    result = get_response_for_pipeline_test_message.delay(
+        pipeline_id=pipeline_pk, message_text=message, user_id=request.user.id
+    )
     return JsonResponse({"task_id": result.task_id})
 
 
