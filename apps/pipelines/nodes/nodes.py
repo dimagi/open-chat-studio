@@ -25,10 +25,17 @@ from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat, ChainOutput
+from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
+from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.runnables import (
+    AgentAssistantChat,
+    AgentLLMChat,
+    AssistantChat,
+    ChainOutput,
+    SimpleLLMChat,
+)
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
 class RenderTemplate(PipelineNode):
@@ -178,29 +185,50 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         default="You are a helpful assistant. Answer the user's query as best you can",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+    tools: list[str] = Field(
+        default_factory=list,
+        description="The tools to enable for the bot",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.agent_tools),
+    )
+
+    @field_validator("tools", mode="before")
+    def check_prompt_variables(cls, value: str, info: FieldValidationInfo):
+        if not value:
+            return []
+        context = {"prompt": info.data["prompt"], "source_material": info.data["source_material_id"], "tools": value}
+        try:
+            validate_prompt_variables(form_data=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+        except ValidationError as e:
+            raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message)
+        return value
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
+        session: ExperimentSession | None = state.get("experiment_session")
+        # Get runnable
+        provider_model = self.get_llm_provider_model()
+        chat_model = self.get_chat_model()
+        history_manager = PipelineHistoryManager.for_llm_chat(
+            session=session,
+            node_id=node_id,
+            history_type=self.history_type,
+            history_name=self.history_name,
+            max_token_limit=provider_model.max_token_limit,
+            chat_model=chat_model,
         )
-        context = self._get_context(input, state, prompt, node_id)
-        session: ExperimentSession | None = state.get("experiment_session")
-        if self.history_type != PipelineChatHistoryTypes.NONE and session is not None:
-            input_messages = prompt.invoke(context).to_messages()
-            context["history"] = self._get_history(session, node_id, input_messages)
-        chain = prompt | super().get_chat_model()
-        output = chain.invoke(context, config=self._config)
-        if session is not None:
-            self._save_history(session, node_id, input, output.content)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+        chat_adapter = ChatAdapter.for_pipeline(
+            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model
+        )
+        if self.tools_enabled():
+            chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
+        else:
+            chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
 
-    def _get_context(self, input, state: PipelineState, prompt: ChatPromptTemplate, node_id: str):
-        session: ExperimentSession | None = state.get("experiment_session")
-        context = {"input": input}
+        # Invoke runnable
+        result = chat.invoke(input=input)
+        return PipelineState.from_node_output(node_id=node_id, output=result.output)
 
-        template_context = PromptTemplateContext(session, self.source_material_id)
-        context.update(template_context.get_context(prompt.input_variables))
-        return context
+    def tools_enabled(self) -> bool:
+        return len(self.tools) > 0
 
 
 class SendEmail(PipelineNode):
@@ -572,7 +600,8 @@ class AssistantNode(PipelineNode):
         except OpenAiAssistant.DoesNotExist:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
 
-        runnable = self._get_assistant_runnable(assistant, session=state["experiment_session"])
+        session: ExperimentSession | None = state.get("experiment_session")
+        runnable = self._get_assistant_runnable(assistant, session=session, node_id=node_id)
         attachments = [Attachment.model_validate(params) for params in state.get("attachments", [])]
         chain_output: ChainOutput = runnable.invoke(input, config={}, attachments=attachments)
         output = chain_output.output
@@ -586,9 +615,10 @@ class AssistantNode(PipelineNode):
             },
         )
 
-    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session):
+    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession, node_id: str):
+        history_manager = PipelineHistoryManager.for_assistant()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self)
         if assistant.tools_enabled:
-            return AgentAssistantChat(adapter=adapter)
+            return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
-            return AssistantChat(adapter=adapter)
+            return AssistantChat(adapter=adapter, history_manager=history_manager)

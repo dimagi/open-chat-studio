@@ -224,8 +224,8 @@ class TopicBot:
 
     def get_ai_message_id(self) -> int | None:
         """Returns the generated AI message's ID. The caller can use this to fetch more information on this message"""
-        if self.generator_chain and self.generator_chain.adapter.ai_message:
-            return self.generator_chain.adapter.ai_message.id
+        if self.generator_chain and self.generator_chain.history_manager.ai_message:
+            return self.generator_chain.history_manager.ai_message.id
 
     def _get_safe_response(self, safety_layer: SafetyLayer):
         if safety_layer.prompt_to_bot:
@@ -238,14 +238,14 @@ class TopicBot:
             self._save_message_to_history(bot_response, ChatMessageType.AI)
             self.generator_chain = self.chain
 
-        if self.generator_chain and self.generator_chain.adapter.ai_message:
-            self.generator_chain.adapter.ai_message.add_system_tag(
+        if self.generator_chain and self.generator_chain.history_manager.ai_message:
+            self.generator_chain.history_manager.ai_message.add_system_tag(
                 safety_layer.name, tag_category=TagCategories.SAFETY_LAYER_RESPONSE
             )
         return bot_response
 
     def _save_message_to_history(self, message: str, message_type: ChatMessageType):
-        self.chain.adapter.save_message_to_history(message, type_=message_type)
+        self.chain.history_manager.save_message_to_history(message, type_=message_type)
 
 
 class SafetyBot:
