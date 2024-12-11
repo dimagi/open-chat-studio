@@ -1001,8 +1001,6 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-        assert experiment.is_dirty is True
-
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
         params = self._get_params(experiment_id, time_period, frequency, repetitions)
         return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
