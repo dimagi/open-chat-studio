@@ -19,19 +19,14 @@
       <div class="flex-1 flex flex-row gap-2">
         <h1 class="pg-title">{{ experiment.name }}</h1>
         {% flag "experiment_versions" %}
-          <div>
-            {% if deployed_version %}
-              <div class="tooltip" data-tip="Current published version">
-                <a class="badge badge-success badge-sm"
-                   href="#versions">
-                  v{{ deployed_version }}
-                </a>
-              </div>
-            {% endif %}
-            {% if experiment.is_dirty and not experiment.create_version_task_id %}
-              <span class="badge badge-warning badge-sm">New changes detected</span>
-            {% endif %}
-          </div>
+          {% if deployed_version %}
+            <div class="tooltip" data-tip="Current published version">
+              <a class="badge badge-success badge-sm"
+                 href="#versions">
+                v{{ deployed_version }}
+              </a>
+            </div>
+          {% endif %}
         {% endflag %}
       </div>
       <div class="justify-self-end">
@@ -282,7 +277,7 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
-          {% include 'experiments/create_version_button.html' with is_dirty=experiment.is_dirty %}
+          {% include 'experiments/create_version_button.html' %}
           <div id="versions-table"
                hx-trigger="load,refetch-versions"
                hx-target="this"
