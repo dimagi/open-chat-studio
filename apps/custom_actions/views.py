@@ -51,12 +51,14 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
         return {**super().get_form_kwargs(), "request": self.request}
 
     def get_success_url(self):
-        messages.info(self.request, "Select the operations you want to allow for this custom action.")
-        return reverse("custom_actions:edit", args=[self.request.team.slug, self.object.id])
+        return reverse("single_team:manage_team", args=[self.request.team.slug])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
-        return super().form_valid(form)
+        resp = super().form_valid(form)
+        self.object.allowed_operations = list(self.object.get_operations_by_id())
+        self.object.save(update_fields=["allowed_operations"])
+        return resp
 
 
 class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
