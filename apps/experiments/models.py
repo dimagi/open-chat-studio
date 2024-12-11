@@ -171,6 +171,9 @@ class VersionsMixin:
         self.is_archived = True
         self.save()
 
+    def is_editable(self) -> bool:
+        return not self.is_archived
+
 
 @audit_fields(*model_audit_fields.SOURCE_MATERIAL_FIELDS, audit_special_queryset_writes=True)
 class SourceMaterial(BaseTeamModel, VersionsMixin):
@@ -885,6 +888,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return Version(
             instance=self,
             fields=[
+                VersionField(group_name="General", name="name", raw_value=self.name),
                 VersionField(group_name="General", name="description", raw_value=self.description),
                 VersionField(
                     group_name="General",

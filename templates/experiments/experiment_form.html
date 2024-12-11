@@ -123,15 +123,17 @@
     </div>
 {% endblock form %}
 {% block form_actions %}
-  <div class="mt-2">
-    <input type="submit" class="pg-button-primary" value="{{ button_text }}">
-    {% if experiment.id %}
-      {% flag "experiment_versions" %}
-        <button type="submit" class="pg-button-secondary" name="action" {% if disable_version_button %}disabled="True"{% endif %} value="save_and_version">Create Version</button>
-      {% endflag %}
-      <button type="submit" class="pg-button-danger" name="action" value="save_and_archive" onclick="return confirm('Are you sure you want to archive this experiment?');">Archive</button>
-    {% endif %}
-  </div>
+  {% if not experiment or experiment.is_editable %}
+    <div class="mt-2">
+      <input type="submit" class="pg-button-primary" value="{{ button_text }}">
+      {% if experiment.id %}
+        {% flag "experiment_versions" %}
+          <button type="submit" class="pg-button-secondary" name="action" {% if disable_version_button %}disabled="True"{% endif %} value="save_and_version">Create Version</button>
+        {% endflag %}
+        <button type="submit" class="pg-button-danger" name="action" value="save_and_archive" onclick="return confirm('Are you sure you want to archive this experiment?');">Archive</button>
+      {% endif %}
+    </div>
+  {% endif %}
 {% endblock %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
