@@ -940,11 +940,11 @@ def get_message_response(request, team_slug: str, experiment_id: str, session_id
     message_details = {"message": None, "error_msg": False, "complete": progress["complete"]}
     if progress["complete"] and progress["success"]:
         result = progress["result"]
-        if message_id := result["message_id"]:
+        if message_id := result.get("message_id"):
             message_details["message"] = ChatMessage.objects.get(id=message_id)
-        elif response := result["response"]:
+        elif response := result.get("response"):
             message_details["message"] = {"content": response}
-        if error := result["error"]:
+        if error := result.get("error"):
             message_details["error_msg"] = error if experiment.debug_mode_enabled else DEFAULT_ERROR_MESSAGE
     elif progress["complete"]:
         message_details["error_msg"] = DEFAULT_ERROR_MESSAGE
