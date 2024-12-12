@@ -886,6 +886,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
             op_details = action.get_operations_by_id().get(op.operation_id)
             return f"{action.name}: {op_details}"
 
+        def _format_assistant(assistant) -> str:
+            return assistant.name.split(f" v{assistant.version_number}")[0]
+
         return Version(
             instance=self,
             fields=[
@@ -968,7 +971,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
                     queryset=self.get_custom_action_operations(),
                     to_display=format_custom_action_operation,
                 ),
-                VersionField(group_name="Assistant", name="assistant", raw_value=self.assistant),
+                VersionField(
+                    group_name="Assistant", name="assistant", raw_value=self.assistant, to_display=_format_assistant
+                ),
                 VersionField(group_name="Pipeline", name="pipeline", raw_value=self.pipeline),
                 VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
                 # Triggers
