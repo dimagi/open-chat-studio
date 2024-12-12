@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.db.models import Model, QuerySet
 
+from apps.utils.models import VersioningMixin
+
 if TYPE_CHECKING:
     pass
 
@@ -18,7 +20,7 @@ def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = No
     When comparing models, fields in `exclude_model_fields` will be excluded.
     """
     exclude_model_fields = exclude_model_fields or []
-    if isinstance(original, Model) and isinstance(new, Model):
+    if isinstance(original, VersioningMixin) and isinstance(new, VersioningMixin):
         return bool(original.compare_with_model(new, exclude_model_fields))
     return original != new
 
