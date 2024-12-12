@@ -18,8 +18,8 @@ def temporary_session(team: Team, user_id: int):
         experiment = Experiment.objects.create(
             team=team, name="Temporary Experiment", owner=user, consent_form=consent_form
         )
-        channel = ExperimentChannel.objects.create(
-            team=team, name="Temporary Channel", experiment=experiment, platform=ChannelPlatform.WEB
+        channel, created = ExperimentChannel.objects.get_or_create(
+            team=team, platform=ChannelPlatform.WEB, defaults={"name": "Temporary Channel", "experiment": experiment}
         )
         chat = Chat.objects.create(team=team, name="Temporary Chat")
         participant, _ = Participant.objects.get_or_create(user=user, team=team, platform=ChannelPlatform.WEB)

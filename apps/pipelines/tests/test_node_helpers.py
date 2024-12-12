@@ -1,8 +1,11 @@
 import pytest
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.nodes.helpers import temporary_session
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory, UserFactory
 
 
@@ -10,7 +13,10 @@ from apps.utils.factories.team import TeamFactory, UserFactory
 def test_temporary_session_is_temporary():
     session_id = None
     user = UserFactory()
-    with temporary_session(TeamFactory(), user.id) as session:
+    team = TeamFactory()
+    channel = ExperimentChannelFactory(team=team, platform=ChannelPlatform.WEB)
+    session = ExperimentSessionFactory(team=team, experiment=channel.experiment, experiment_channel=channel)
+    with temporary_session(team, user.id) as session:
         session_id = session.id
         message = session.chat.messages.create(message_type=ChatMessageType.HUMAN, content="Hello, world!")
 
