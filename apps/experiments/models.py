@@ -340,6 +340,13 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team_id", "is_default"],
+                name="unique_default_consent_form_per_team",
+                condition=Q(is_default=True),
+            ),
+        ]
 
     @classmethod
     def get_default(cls, team):
