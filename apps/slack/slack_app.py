@@ -62,6 +62,7 @@ def get_slack_app():
     )
     app.use(load_installation)
     app.event({"type": "message"})(new_message)
+    return app
 
 
 app: App = SimpleLazyObject(get_slack_app)  # type: ignore
