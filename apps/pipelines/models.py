@@ -188,7 +188,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         logging_callback.logger.debug("Starting pipeline run", input=input["messages"][-1])
         try:
-            output = runnable.invoke(input, config=RunnableConfig(callbacks=[logging_callback]))
+            callbacks = [logging_callback]
+            if trace_service := session.experiment.trace_service:
+                trace_service_callback = trace_service.get_callback(
+                    participant_id=str(session.participant.identifier),
+                    session_id=str(session.external_id),
+                )
+                callbacks.append(trace_service_callback)
+
+            output = runnable.invoke(input, config=RunnableConfig(callbacks=callbacks))
             output = PipelineState(**output).json_safe()
             pipeline_run.output = output
             if save_run_to_history and session is not None:
