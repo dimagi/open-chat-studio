@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import timedelta
 
@@ -18,6 +19,8 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -77,6 +80,7 @@ def get_response_for_webchat_task(
             response["response"] = web_channel.new_user_message(message)
             response["message_id"] = web_channel.bot.get_ai_message_id()
     except Exception as e:
+        logger.exception(e)
         response["error"] = str(e)
 
     return response
