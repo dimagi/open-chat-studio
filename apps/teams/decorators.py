@@ -1,9 +1,10 @@
 from functools import wraps
 
+from django.conf import settings
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 
-from apps.web.superuser_utils import has_temporary_superuser_access
+from apps.web.superuser_utils import apply_temporary_superuser_access, has_temporary_superuser_access
 
 
 class TeamAccessDenied(Http404):
@@ -34,9 +35,18 @@ def valid_auth_and_membership(request):
         raise Http404
 
     if not request.team_membership:
-        if request.user.is_superuser and has_temporary_superuser_access(request, request.team.slug):
-            return True
-
-        raise TeamAccessDenied
+        return check_superuser_team_access(request, request.team.slug)
 
     return True
+
+
+def check_superuser_team_access(request, team_slug):
+    if request.user.is_superuser:
+        if has_temporary_superuser_access(request, team_slug):
+            return True
+        if settings.DEBUG:
+            # allow superusers to access any team in DEBUG mode
+            apply_temporary_superuser_access(request, team_slug)
+            return True
+
+    raise TeamAccessDenied
