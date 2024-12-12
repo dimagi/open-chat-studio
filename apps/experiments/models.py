@@ -120,15 +120,11 @@ class VersionsMixin:
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
-    def create_new_version(self, save=True, update_fields: dict | None = None):
+    def create_new_version(self, save=True):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID
-
-        `update_fields` is a dictionary of field values to update on the new version.
         """
-        update_fields = update_fields or {}
-
         working_version_id = self.id
         new_instance = self._meta.model.objects.get(id=working_version_id)
         new_instance.pk = None
@@ -136,9 +132,6 @@ class VersionsMixin:
         new_instance._state.adding = True
         if hasattr(new_instance, "working_version_id"):
             new_instance.working_version_id = working_version_id
-
-        for attr, value in update_fields.items():
-            setattr(new_instance, attr, value)
 
         if save:
             new_instance.save()
@@ -373,6 +366,15 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         super().archive()
         consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+
+    def create_new_version(self, save=True):
+        new_version = super().create_new_version(save=False)
+        new_version.is_default = False
+        new_version.save()
+        return new_version
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["is_default"]
 
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
@@ -728,7 +730,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         new_version.version_number = version_number
 
         self._copy_attr_to_new_version("source_material", new_version)
-        self._copy_attr_to_new_version("consent_form", new_version, update_fields={"is_default": False})
+        self._copy_attr_to_new_version("consent_form", new_version)
         self._copy_attr_to_new_version("pre_survey", new_version)
         self._copy_attr_to_new_version("post_survey", new_version)
 
@@ -790,7 +792,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         new_version.assistant = self.assistant.create_new_version()
         new_version.save(update_fields=["assistant"])
 
-    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment", update_fields: dict | None = None):
+    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
@@ -813,7 +815,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
-            setattr(new_version, attr_name, attr_instance.create_new_version(update_fields=update_fields))
+            setattr(new_version, attr_name, attr_instance.create_new_version())
 
     def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []
