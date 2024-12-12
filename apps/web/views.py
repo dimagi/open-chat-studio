@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
 
-from apps.teams.decorators import TeamAccessDenied, login_and_team_required
+from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
@@ -125,7 +125,7 @@ def global_search(request):
         if result := candidate.search(query):
             team = result.team
             if not is_member(request.user, team):
-                raise TeamAccessDenied
+                check_superuser_team_access(request, team.slug)
 
             if not request.user.has_perm(candidate.permission):
                 raise Http404
