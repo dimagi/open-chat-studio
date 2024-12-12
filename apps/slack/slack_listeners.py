@@ -20,17 +20,9 @@ from apps.chat.channels import SlackChannel
 from apps.experiments.models import ExperimentSession
 from apps.slack.exceptions import TeamAccessException
 from apps.slack.models import SlackInstallation
-from apps.slack.slack_app import app
 from apps.slack.utils import make_session_external_id
 
 logger = logging.getLogger("slack.events")
-
-
-def register_listeners():
-    """Register these after DB setup is complete to avoid hitting the
-    wrong DB e.g. during tests"""
-    app.use(load_installation)
-    app.event({"type": "message"})(new_message)
 
 
 def new_message(event, context: BoltContext):

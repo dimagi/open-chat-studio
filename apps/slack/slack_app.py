@@ -20,6 +20,7 @@ from apps.web.meta import absolute_url
 from . import const
 from .const import INSTALLATION_CONFIG
 from .slack_datastores import DjangoInstallationStore, DjangoOAuthStateStore
+from .slack_listeners import load_installation, new_message
 
 bolt_logger = get_bolt_logger(App)
 
@@ -32,7 +33,7 @@ def get_slack_app():
         settings.SLACK_SCOPES,
     )
 
-    return App(
+    app = App(
         signing_secret=signing_secret,
         logger=bolt_logger,
         oauth_flow=CustomOauthFlow(
@@ -59,6 +60,8 @@ def get_slack_app():
             ),
         ),
     )
+    app.use(load_installation)
+    app.event({"type": "message"})(new_message)
 
 
 app: App = SimpleLazyObject(get_slack_app)  # type: ignore
