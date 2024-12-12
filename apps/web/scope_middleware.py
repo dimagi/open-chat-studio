@@ -1,4 +1,3 @@
-import sentry_sdk
 import taskbadger
 
 
@@ -19,9 +18,6 @@ class RequestContextMiddleware:
         request.taskbadger_scope["view_kwargs"] = make_json_safe(view_kwargs)
         if request.user and not request.user.is_anonymous:
             request.taskbadger_scope["user"] = request.user.username
-        if view_kwargs.get("team_slug"):
-            scope = sentry_sdk.get_current_scope()
-            scope.set_tag("team", view_kwargs["team_slug"])
 
 
 def make_json_safe(view_kwargs):
