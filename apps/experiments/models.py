@@ -757,6 +757,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if self.is_working_version:
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
+            self.scheduled_messages.all().delete()
 
     def delete_experiment_channels(self):
         from apps.channels.models import ExperimentChannel
