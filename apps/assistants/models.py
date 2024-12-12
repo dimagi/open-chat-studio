@@ -10,7 +10,6 @@ from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
-from apps.files.utils import duplicate_files
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -127,13 +126,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 new_tool_resource.extra["vector_store_id"] = None
             new_tool_resource.save()
 
-            tool_resource_files = duplicate_files(tool_resource.files.iterator(chunk_size=50))
-            ToolResources.files.through.objects.bulk_create(
-                [
-                    ToolResources.files.through(toolresources_id=new_tool_resource.id, file_id=file_id)
-                    for file_id in tool_resource_files
-                ]
-            )
+            new_tool_resource.files.set(tool_resource.files.all())
 
         self._copy_custom_action_operations_to_new_version(assistant_version)
 
