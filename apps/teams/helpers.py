@@ -61,4 +61,5 @@ def create_default_team_for_user(user: CustomUser, team_name: str = None):
 
 
 def get_team_membership_for_request(request: HttpRequest):
-    return Membership.objects.filter(team=request.team, user=request.user).first()
+    if request.user.is_authenticated and request.team:
+        return Membership.objects.filter(team=request.team, user=request.user).first()

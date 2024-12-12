@@ -16,10 +16,7 @@ def _get_team(request, view_kwargs):
 
 def _get_team_membership(request):
     if not hasattr(request, "_cached_team_membership"):
-        team_membership = None
-        if request.user.is_authenticated and request.team:
-            team_membership = get_team_membership_for_request(request)
-        request._cached_team_membership = team_membership
+        request._cached_team_membership = get_team_membership_for_request(request)
     return request._cached_team_membership
 
 
