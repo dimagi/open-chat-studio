@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
+        data["tools"].extend([convert_to_openai_tool(tool) for tool in internal_tools])
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
