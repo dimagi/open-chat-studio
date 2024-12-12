@@ -5,7 +5,7 @@ from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
 
 from .backends import make_user_team_owner
-from .models import Team
+from .models import Membership, Team
 
 
 def get_default_team_name_for_user(user: CustomUser):
@@ -58,3 +58,7 @@ def create_default_team_for_user(user: CustomUser, team_name: str = None):
     team = Team.objects.create(name=team_name, slug=slug)
     make_user_team_owner(team, user)
     return team
+
+
+def get_team_membership_for_request(request: HttpRequest):
+    return Membership.objects.filter(team=request.team, user=request.user).first()
