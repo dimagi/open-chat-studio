@@ -100,7 +100,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         return self.custom_action_operations.exists()
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["assistant_id"]
+        return super().get_fields_to_exclude() + ["assistant_id", "name"]
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
@@ -134,9 +134,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         return assistant_version
 
     def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
-        exclude = exclude_fields.copy()
-        exclude.append("name")
-        changes = super().compare_with_model(new, exclude)
+        changes = super().compare_with_model(new, exclude_fields)
         new_name = new.name.split(f" v{new.version_number}")[0]
         if self.name != new_name:
             changes.add("name")
