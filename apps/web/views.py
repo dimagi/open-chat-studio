@@ -1,8 +1,10 @@
+import re
+
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
-from django.http import Http404, HttpResponseRedirect
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.http import Http404, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -10,10 +12,14 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
 
-from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import TeamAccessDenied, login_and_team_required
 from apps.teams.models import Membership, Team
+from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
+from apps.web.search import get_searchable_models
 from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
+
+UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
 
 
 def home(request):
@@ -104,3 +110,26 @@ def release_superuser_powers(request, slug):
     remove_temporary_superuser_access(request, slug)
 
     return HttpResponseRedirect("/")
+
+
+@login_required
+def global_search(request):
+    query = request.GET.get("q")
+    if not query:
+        return HttpResponseBadRequest("No query provided")
+
+    if not UUID_PATTERN.match(query):
+        return HttpResponseBadRequest("Only UUID searches are supported")
+
+    for candidate in get_searchable_models():
+        if result := candidate.search(query):
+            team = result.team
+            if not is_member(request.user, team):
+                raise TeamAccessDenied
+
+            if not request.user.has_perm(candidate.permission):
+                raise Http404
+
+            return HttpResponseRedirect(result.get_absolute_url())
+
+    raise Http404
