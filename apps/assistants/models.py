@@ -64,8 +64,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
-    files = models.ManyToManyField("files.File", blank=True)
-
     allow_file_search_attachments = models.BooleanField(default=True)
     allow_code_interpreter_attachments = models.BooleanField(default=True)
     objects = OpenAiAssistantManager()
@@ -117,14 +115,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         assistant_version.name = f"{self.name} v{version_number}"
         assistant_version.assistant_id = ""
         assistant_version.save()
-        file_ids = duplicate_files(self.files.iterator(chunk_size=50))
-        if file_ids:
-            OpenAiAssistant.files.through.objects.bulk_create(
-                [
-                    OpenAiAssistant.files.through(openaiassistant_id=assistant_version.id, file_id=file_id)
-                    for file_id in file_ids
-                ]
-            )
         assistant_version.tools = self.tools.copy()
         for tool_resource in self.tool_resources.all():
             new_tool_resource = ToolResources.objects.create(
