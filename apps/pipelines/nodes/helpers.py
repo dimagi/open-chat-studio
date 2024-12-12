@@ -14,7 +14,7 @@ def temporary_session(team: Team, user_id: int):
     """A temporary sesssion setup that is rolled back after the context exits."""
     with transaction.atomic():
         user = CustomUser.objects.get(id=user_id)
-        consent_form = ConsentForm.objects.get(team=team, is_default=True)
+        consent_form = ConsentForm.get_default(team)
         experiment = Experiment.objects.create(
             team=team, name="Temporary Experiment", owner=user, consent_form=consent_form
         )

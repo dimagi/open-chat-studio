@@ -120,11 +120,15 @@ class VersionsMixin:
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True, update_fields: dict | None = None):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID
+
+        `update_fields` is a dictionary of field values to update on the new version.
         """
+        update_fields = update_fields or {}
+
         working_version_id = self.id
         new_instance = self._meta.model.objects.get(id=working_version_id)
         new_instance.pk = None
@@ -132,6 +136,9 @@ class VersionsMixin:
         new_instance._state.adding = True
         if hasattr(new_instance, "working_version_id"):
             new_instance.working_version_id = working_version_id
+
+        for attr, value in update_fields.items():
+            setattr(new_instance, attr, value)
 
         if save:
             new_instance.save()
@@ -721,7 +728,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         new_version.version_number = version_number
 
         self._copy_attr_to_new_version("source_material", new_version)
-        self._copy_attr_to_new_version("consent_form", new_version)
+        self._copy_attr_to_new_version("consent_form", new_version, update_fields={"is_default": False})
         self._copy_attr_to_new_version("pre_survey", new_version)
         self._copy_attr_to_new_version("post_survey", new_version)
 
@@ -783,7 +790,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         new_version.assistant = self.assistant.create_new_version()
         new_version.save(update_fields=["assistant"])
 
-    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
+    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment", update_fields: dict | None = None):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
@@ -806,7 +813,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         ):
             setattr(new_version, attr_name, latest_attr_version)
         else:
-            setattr(new_version, attr_name, attr_instance.create_new_version())
+            setattr(new_version, attr_name, attr_instance.create_new_version(update_fields=update_fields))
 
     def _copy_safety_layers_to_new_version(self, new_version: "Experiment"):
         duplicated_layers = []

@@ -12,6 +12,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.experiments.models import (
+    ConsentForm,
     Experiment,
     ExperimentRoute,
     ParticipantData,
@@ -742,6 +743,7 @@ class TestExperimentModel:
     def _setup_original_experiment(self):
         experiment = ExperimentFactory()
         team = experiment.team
+        experiment.consent_form = ConsentForm.get_default(team)
 
         # Setup Safety Layers
         layer1 = SafetyLayer.objects.create(
@@ -843,7 +845,11 @@ class TestExperimentModel:
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
-        self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
+        self._assert_attribute_duplicated(
+            "consent_form", original_experiment, new_version, changed_fields_extra=["is_default"]
+        )
+        assert original_experiment.consent_form.is_default is True
+        assert new_version.consent_form.is_default is False
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
@@ -954,11 +960,16 @@ class TestExperimentModel:
                 expected_changed_fields=["id", "action", "working_version", "experiment"],
             )
 
-    def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
+    def _assert_attribute_duplicated(
+        self, attr_name, original_experiment, new_version, changed_fields_extra: list | None = None
+    ):
+        default_fields_that_differ = ["id", "working_version"]
+        if changed_fields_extra:
+            default_fields_that_differ.extend(changed_fields_extra)
         _compare_models(
             original=getattr(original_experiment, attr_name),
             new=getattr(new_version, attr_name),
-            expected_changed_fields=["id", "working_version"],
+            expected_changed_fields=default_fields_that_differ,
         )
 
     def test_get_version(self, experiment):
