@@ -10,6 +10,7 @@ from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -138,6 +139,22 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         new_name = new.name.split(f" v{new.version_number}")[0]
         if self.name != new_name:
             changes.add("name")
+
+        tool_resources = {r.tool_type: r for r in self.tool_resources.all()}
+        new_tool_resources = {r.tool_type: r for r in new.tool_resources.all()}
+        if set(tool_resources) != set(new_tool_resources):
+            changes.add("tool_resources")
+        else:
+            exclude_fields = self.DEFAULT_EXCLUDED_KEYS + ["extra", "assistant"]
+            for tool_type, resource in tool_resources.items():
+                new_resource = new_tool_resources[tool_type]
+                if tool_changes := resource.compare_with_model(new_resource, exclude_fields):
+                    changes.update([f"tool_resources.{tool_type}.{change}" for change in tool_changes])
+
+        custom_actions = VersionField("custom_actions", queryset=self.custom_action_operations.all())
+        custom_actions.compare(VersionField("custom_actions", queryset=new.custom_action_operations.all()))
+        if custom_actions.changed:
+            changes.add("custom_actions")
         return changes
 
     def _copy_custom_action_operations_to_new_version(self, new_version):
