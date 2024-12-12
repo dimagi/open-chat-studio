@@ -21,6 +21,7 @@ from apps.experiments.models import ExperimentSession
 from apps.slack.exceptions import TeamAccessException
 from apps.slack.models import SlackInstallation
 from apps.slack.utils import make_session_external_id
+from apps.teams.utils import current_team
 
 logger = logging.getLogger("slack.events")
 
@@ -53,6 +54,11 @@ def respond_to_message(event, context: BoltContext, session=None):
     if session and session.team_id != experiment.team_id:
         raise TeamAccessException("Session and Channel teams do not match")
 
+    with current_team(experiment.team):
+        _respond_to_message(event, channel_id, thread_ts, experiment_channel, experiment, session, context)
+
+
+def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experiment, session, context):
     slack_user = event.get("user")
 
     if not session:
