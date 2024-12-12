@@ -595,6 +595,9 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, CreateView):
         is_default = form.cleaned_data["is_default_version"]
         working_version = Experiment.objects.get(id=self.kwargs["experiment_id"])
 
+        if working_version.is_archived:
+            raise PermissionDenied("Unable to version an archived experiment.")
+
         if working_version.create_version_task_id:
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
