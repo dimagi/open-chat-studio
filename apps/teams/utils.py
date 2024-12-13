@@ -31,7 +31,10 @@ def set_current_team(team):
     ```
     """
     _context.set(team)
-    sentry_sdk.get_current_scope().set_tag("team", team.slug)
+    if team:
+        sentry_sdk.get_current_scope().set_tag("team", team.slug)
+    else:
+        sentry_sdk.get_current_scope().remove_tag("team")
 
 
 def unset_current_team():
