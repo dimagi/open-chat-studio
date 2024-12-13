@@ -888,7 +888,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, version_number: int, session_id: str):
+def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
     working_experiment = request.experiment
     session = request.experiment_session
 
