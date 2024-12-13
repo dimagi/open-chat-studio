@@ -1,13 +1,38 @@
+from urllib.parse import quote as urlquote
+
 from django.contrib import admin
-from django.db.models.query import QuerySet
+from django.contrib.admin.utils import quote
+from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.urls import reverse
+from django.utils.html import format_html
 
 from apps.experiments import models
 
 
 class VersionedModelAdminMixin:
+    @admin.display(description="Version Family")
+    def version_family(self, obj):
+        if obj.working_version:
+            label = self._get_working_version_label(obj.working_version)
+            return self._get_object_link(obj.working_version, label)
+        return ""
+
+    def _get_working_version_label(self, working_version):
+        return working_version.name
+
+    def _get_object_link(self, obj, link_text=None):
+        """Copied from django.contrib.admin"""
+        opts = obj._meta
+        obj_url = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_change",
+            args=(quote(obj.pk),),
+            current_app=self.admin_site.name,
+        )
+        return format_html('<a href="{}">{}</a>', urlquote(obj_url), link_text or str(obj))
+
     def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return self.model.objects.get_all()
+        return self.model.objects.get_all().select_related("working_version")
 
 
 @admin.register(models.PromptBuilderHistory)
@@ -18,7 +43,13 @@ class PromptBuilderHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(models.SourceMaterial)
 class SourceMaterialAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = ("topic", "team", "owner")
+    list_display = (
+        "topic",
+        "team",
+        "owner",
+        "version_family",
+        "is_archived",
+    )
     list_filter = (
         "team",
         "owner",
@@ -39,6 +70,8 @@ class SafetyLayerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "team",
         "name",
         "messages_to_review",
+        "version_family",
+        "is_archived",
     )
     list_filter = ("team",)
 
@@ -73,7 +106,7 @@ class SurveyAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(models.Experiment)
-class ExperimentAdmin(admin.ModelAdmin):
+class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "team",
@@ -83,6 +116,7 @@ class ExperimentAdmin(admin.ModelAdmin):
         "llm_provider_model",
         "version_family",
         "version_number",
+        "is_archived",
     )
     list_filter = ("team", "owner", "source_material")
     inlines = [SafetyLayerInline]
@@ -90,16 +124,17 @@ class ExperimentAdmin(admin.ModelAdmin):
     readonly_fields = ("public_id",)
     search_fields = ("public_id", "name")
 
-    @admin.display(description="Version Family")
-    def version_family(self, obj):
-        if obj.working_version:
-            return obj.working_version.name
-        return obj.name
-
 
 @admin.register(models.ExperimentRoute)
 class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = ("parent", "child", "keyword", "is_default")
+    list_display = (
+        "parent",
+        "child",
+        "keyword",
+        "is_default",
+        "version_family",
+        "is_archived",
+    )
 
 
 @admin.register(models.ExperimentSession)
@@ -127,6 +162,8 @@ class ConsentFormAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "name",
         "consent_text",
         "is_default",
+        "version_family",
+        "is_archived",
     )
     readonly_fields = ("is_default",)
     list_filter = ("team",)
