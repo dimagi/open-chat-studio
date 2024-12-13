@@ -1,15 +1,20 @@
 {% if experiment.create_version_task_id %}
-  <div class="tooltip" data-tip="A new version is being created"
-       hx-get="{% url 'experiments:check_version_creation_status' experiment.team.slug experiment.id %}"
-       hx-trigger="every 2s"
-       hx-swap="outerHTML"
-  >
-    <button class="btn btn-sm btn-outline btn-primary mb-2 no-animation" disabled>
-      <span class="loading loading-bars loading-xs"></span> Creating Version
-    </button>
+  <div id="version_check">
+    <div class="tooltip" data-tip="A new version is being created"
+         hx-get="{% url 'experiments:check_version_creation_status' experiment.team.slug experiment.id %}"
+         hx-trigger="every 2s"
+         hx-swap="outerHTML"
+         hx-target="#version_check"
+    >
+      <button class="btn btn-sm btn-outline btn-primary no-animation" disabled>
+        <span class="loading loading-bars loading-xs"></span> Creating Version
+      </button>
+    </div>
   </div>
 {% else %}
-  <a x-init='htmx.trigger("#versions-table", "refetch-versions")' class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}">
+  <a class="btn btn-sm btn-outline btn-success" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}"
+     {% if trigger_refresh %}x-init='htmx.trigger("#versions-table", "refetch-versions")'{% endif %}
+  >
     <i class="fa-regular fa-plus"></i> Create Version
   </a>
 {% endif %}

@@ -277,5 +277,6 @@ class DeleteFileFromAssistant(BaseDeleteFileView):
         )
 
         client = resource.assistant.llm_provider.get_llm_service().get_raw_client()
-        delete_file_from_openai(client, file)
+        if delete_file_from_openai(client, file):
+            file.save()
         return HttpResponse()

@@ -15,7 +15,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, F, IntegerField, Q, When
+from django.db.models import Case, Count, IntegerField, Q, When
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -179,11 +179,7 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
 
     def get_queryset(self):
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
-        other_versions = (
-            Experiment.objects.get_all()
-            .filter(working_version=self.kwargs["experiment_id"], is_archived=F("working_version__is_archived"))
-            .all()
-        )
+        other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
 
 
@@ -654,6 +650,7 @@ def version_create_status(request, team_slug: str, experiment_id: int):
         {
             "active_tab": "experiments",
             "experiment": experiment,
+            "trigger_refresh": experiment.create_version_task_id is not None,
         },
     )
 
@@ -1514,9 +1511,12 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
 
 @login_and_team_required
 def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment_version = get_object_or_404(
-        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
-    )
+    try:
+        experiment_version = Experiment.objects.get_all().get(
+            team=request.team, working_version_id=experiment_id, version_number=version_number
+        )
+    except Experiment.DoesNotExist:
+        raise Http404
 
     context = {"version_details": experiment_version.version, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)

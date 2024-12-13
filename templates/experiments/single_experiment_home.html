@@ -292,9 +292,6 @@
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
-          {% if experiment.is_editable %}
-            {% include 'experiments/create_version_button.html' %}
-          {% endif %}
           <div id="versions-table"
                hx-trigger="load,refetch-versions"
                hx-target="this"

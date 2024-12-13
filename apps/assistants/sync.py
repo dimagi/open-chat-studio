@@ -61,6 +61,7 @@ from functools import wraps
 from io import BytesIO
 
 import openai
+from django.db.models import Count, Subquery
 from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
@@ -139,14 +140,15 @@ def convert_to_openai_tool(tool):
 @wrap_openai_errors
 def delete_file_from_openai(client: OpenAI, file: File):
     if not file.external_id or file.external_source != "openai":
-        return
+        return False
 
     try:
         client.files.delete(file.external_id)
     except openai.NotFoundError:
-        pass
+        logger.debug("File %s not found in OpenAI", file.external_id)
     file.external_id = ""
     file.external_source = ""
+    return True
 
 
 @wrap_openai_errors
@@ -172,19 +174,51 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
 
 @wrap_openai_errors
 def delete_openai_assistant(assistant: OpenAiAssistant):
+    """Deletes the assistant from OpenAI and removes all associated files.
+
+    This function should be idempotent and safe to call multiple times."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     try:
         client.beta.assistants.delete(assistant.assistant_id)
     except openai.NotFoundError:
-        pass
+        logger.debug("Assistant %s not found in OpenAI", assistant.assistant_id)
 
-    for resource in assistant.tool_resources.all():
+    tool_resources = list(assistant.tool_resources.all())
+    for resource in tool_resources:
         if resource.tool_type == "file_search" and "vector_store_id" in resource.extra:
             vector_store_id = resource.extra.pop("vector_store_id")
-            client.beta.vector_stores.delete(vector_store_id=vector_store_id)
+            try:
+                client.beta.vector_stores.delete(vector_store_id=vector_store_id)
+            except openai.NotFoundError:
+                logger.debug("Vector store %s not found in OpenAI", vector_store_id)
+            resource.save(update_fields=["extra"])
 
-        for file in resource.files.all():
-            delete_file_from_openai(client, file)
+        delete_openai_files_for_resource(client, assistant.team, resource)
+
+
+def delete_openai_files_for_resource(client, team, resource: ToolResources):
+    files_to_delete = _get_files_to_delete(team, resource.id)
+    files_to_update = []
+    for file in files_to_delete:
+        if delete_file_from_openai(client, file):
+            files_to_update.append(file.id)
+
+    if files_to_update:
+        File.objects.filter(id__in=files_to_update).update(external_id="", external_source="")
+
+
+def _get_files_to_delete(team, tool_resource_id):
+    """Get files linked to the tool resource that are not referenced by any other tool resource."""
+    files_with_single_reference = (
+        ToolResources.files.through.objects.filter(toolresources__assistant__team=team)
+        .values("file")
+        .annotate(count=Count("toolresources"))
+        .filter(count=1)
+        .values("file_id")
+    )
+
+    subquery = Subquery(files_with_single_reference)
+    return File.objects.filter(toolresources=tool_resource_id, id__in=subquery).iterator()
 
 
 def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:

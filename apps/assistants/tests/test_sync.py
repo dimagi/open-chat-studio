@@ -238,6 +238,8 @@ def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, moc
     mock_delete.assert_called_with(local_assistant.assistant_id)
     assert mock_file_delete.call_count == 3
     assert mock_vector_store_delete.call_count == 1
+    search_resource.refresh_from_db()
+    assert search_resource.extra == {}
 
 
 @pytest.mark.django_db()
