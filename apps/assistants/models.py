@@ -173,19 +173,29 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task
-        from apps.pipelines.models import Node
 
-        # don't delete assistant if it's still referenced by an experiment or pipeline
-        if self.experiment_set.filter(is_archived=False).exists():
+        # don't archive assistant if it's still referenced by an active experiment or pipeline
+        if self.get_related_experiments_queryset().exists():
             return
 
-        if Node.objects.filter(type="AssistantNode").filter(params__assistant_id=str(self.id)).exists():
+        if self.get_related_pipeline_node_queryset().exists():
             return
 
         super().archive()
         self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
 
         delete_openai_assistant_task.delay(self.id)
+
+    def get_related_experiments_queryset(self):
+        return self.experiment_set.filter(is_archived=False)
+
+    def get_related_pipeline_node_queryset(self):
+        from apps.pipelines.models import Node
+
+        return Node.objects.filter(type="AssistantNode").filter(
+            params__assistant_id=str(self.id),
+            pipeline__is_archived=False,
+        )
 
 
 @audit_fields(
