@@ -16,7 +16,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
     invitation = get_object_or_404(Invitation, id=invitation_id)
     if not invitation.is_accepted:
         # set invitation in the session in case needed later - e.g. to redirect after login
-        request.session["invitation_id"] = invitation_id
+        request.session["invitation_id"] = str(invitation_id)
     else:
         clear_invite_from_session(request)
     if request.user.is_authenticated and is_member(request.user, invitation.team):
