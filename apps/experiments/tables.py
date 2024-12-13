@@ -163,12 +163,8 @@ class ExperimentVersionsTable(tables.Table):
     version_number = columns.Column(verbose_name="Version Number", accessor="version_number")
     created_at = columns.Column(verbose_name="Created On", accessor="created_at")
     version_description = columns.Column(verbose_name="Description", default="")
-    is_default = columns.TemplateColumn(
-        template_code="""{% if record.is_default_version %}
-        <span aria-label="true">✓</span>
-        {% endif %}""",
-        verbose_name="Published",
-    )
+    is_default_version = columns.BooleanColumn(yesno="✓,", verbose_name="Published")
+    is_archived = columns.BooleanColumn(yesno="✓,", verbose_name="Archived")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_actions.html",
         verbose_name="",
