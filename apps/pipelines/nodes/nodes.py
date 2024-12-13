@@ -1,4 +1,6 @@
+import datetime
 import json
+import time
 from typing import Literal
 
 import tiktoken
@@ -14,13 +16,14 @@ from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
+from RestrictedPython import compile_restricted_function, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -622,3 +625,97 @@ class AssistantNode(PipelineNode):
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             return AssistantChat(adapter=adapter, history_manager=history_manager)
+
+
+class CodeNode(PipelineNode):
+    """Runs python"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
+    code: str = Field(
+        description="The code to run",
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),  # TODO: add a code widget
+    )
+
+    @field_validator("code")
+    def validate_code(cls, value, info: FieldValidationInfo):
+        if not value:
+            value = "return input"
+
+        byte_code = compile_restricted_function(
+            "input,shared_state",
+            value,
+            name="main",
+            filename="<inline code>",
+        )
+
+        if byte_code.errors:
+            raise PydanticCustomError("invalid_code", "{errors}", {"errors": "\n".join(byte_code.errors)})
+        return value
+
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
+        function_name = "main"
+        function_args = "input"
+        byte_code = compile_restricted_function(
+            function_args,
+            self.code,
+            name=function_name,
+            filename="<inline code>",
+        )
+
+        custom_locals = {}
+        custom_globals = self._get_custom_globals()
+        exec(byte_code.code, custom_globals, custom_locals)
+
+        try:
+            result = str(custom_locals[function_name](input))
+        except Exception as exc:
+            raise PipelineNodeRunError(exc) from exc
+        return PipelineState.from_node_output(node_id=node_id, output=result)
+
+    def _get_custom_globals(self):
+        from RestrictedPython.Eval import (
+            default_guarded_getitem,
+            default_guarded_getiter,
+        )
+
+        custom_globals = safe_globals.copy()
+        custom_globals.update(
+            {
+                "__builtins__": self._get_custom_builtins(),
+                "json": json,
+                "datetime": datetime,
+                "time": time,
+                "_getitem_": default_guarded_getitem,
+                "_getiter_": default_guarded_getiter,
+                "_write_": lambda x: x,
+            }
+        )
+        return custom_globals
+
+    def _get_custom_builtins(self):
+        allowed_modules = {
+            "json",
+            "re",
+            "datetime",
+            "time",
+        }
+        custom_builtins = safe_builtins.copy()
+        custom_builtins.update(
+            {
+                "min": min,
+                "max": max,
+                "sum": sum,
+                "abs": abs,
+                "all": all,
+                "any": any,
+                "datetime": datetime,
+            }
+        )
+
+        def guarded_import(name, *args, **kwargs):
+            if name not in allowed_modules:
+                raise ImportError(f"Importing '{name}' is not allowed")
+            return __import__(name, *args, **kwargs)
+
+        custom_builtins["__import__"] = guarded_import
+        return custom_builtins
