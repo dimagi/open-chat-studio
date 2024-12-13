@@ -5,9 +5,9 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import DjangoModelPermissions
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
-from .helpers import get_team_membership_for_request
 from .models import UserAPIKey
 
 

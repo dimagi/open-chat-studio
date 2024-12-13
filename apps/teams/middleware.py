@@ -1,8 +1,7 @@
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
 
-from apps.teams.helpers import get_team_for_request
-from apps.teams.models import Membership
+from apps.teams.helpers import get_team_for_request, get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
 
@@ -17,13 +16,7 @@ def _get_team(request, view_kwargs):
 
 def _get_team_membership(request):
     if not hasattr(request, "_cached_team_membership"):
-        team_membership = None
-        if request.user.is_authenticated and request.team:
-            try:
-                team_membership = Membership.objects.get(team=request.team, user=request.user)
-            except Membership.DoesNotExist:
-                pass
-        request._cached_team_membership = team_membership
+        request._cached_team_membership = get_team_membership_for_request(request)
     return request._cached_team_membership
 
 

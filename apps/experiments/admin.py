@@ -88,6 +88,7 @@ class ExperimentAdmin(admin.ModelAdmin):
     inlines = [SafetyLayerInline]
     exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
+    search_fields = ("public_id", "name")
 
     @admin.display(description="Version Family")
     def version_family(self, obj):

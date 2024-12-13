@@ -11,6 +11,7 @@ urlpatterns = [
     path("status/<str:subset>/", views.HealthCheck.as_view()),
     path("sudo/<slug:slug>/", views.acquire_superuser_powers, name="sudo"),
     path("sudo/<slug:slug>/release/", views.release_superuser_powers, name="release_sudo"),
+    path("search", views.global_search, name="global_search"),
 ]
 
 team_urlpatterns = (

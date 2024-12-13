@@ -3,9 +3,10 @@ from django.utils.translation import gettext as _
 
 from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
+from apps.web.superuser_utils import has_temporary_superuser_access
 
 from .backends import make_user_team_owner
-from .models import Team
+from .models import Membership, Team
 
 
 def get_default_team_name_for_user(user: CustomUser):
@@ -58,3 +59,22 @@ def create_default_team_for_user(user: CustomUser, team_name: str = None):
     team = Team.objects.create(name=team_name, slug=slug)
     make_user_team_owner(team, user)
     return team
+
+
+def get_team_membership_for_request(request: HttpRequest):
+    if request.user.is_authenticated and request.team:
+        membership = Membership.objects.filter(team=request.team, user=request.user).first()
+        if not membership and request.user.is_superuser and has_temporary_superuser_access(request, request.team.slug):
+            membership = SuperuserMembership(request.user, request.team)
+        return membership
+
+
+class SuperuserMembership:
+    """Dummy membership for superusers who have temporary access to a team."""
+
+    def __init__(self, user: CustomUser, team: Team):
+        self.user = user
+        self.team = team
+
+    def is_team_admin(self):
+        return self.user.is_superuser
