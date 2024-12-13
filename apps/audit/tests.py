@@ -80,6 +80,7 @@ class AuthedRequest:
 
     class Team:
         id = 17
+        slug = "seventeen"
 
     def __init__(self, auth=True, session=None):
         self.user = self.User()
