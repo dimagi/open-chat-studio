@@ -6,7 +6,7 @@ from django.db import models, transaction
 from django.db.models import F
 from django.urls import reverse
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
@@ -172,10 +172,32 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
             return self.custom_action_operations.select_related("custom_action")
 
     def archive(self):
-        super().archive()
         from apps.assistants.tasks import delete_openai_assistant_task
 
-        delete_openai_assistant_task.delay(self.id)
+        # don't archive assistant if it's still referenced by an active experiment or pipeline
+        if self.get_related_experiments_queryset().exists():
+            return
+
+        if self.get_related_pipeline_node_queryset().exists():
+            return
+
+        super().archive()
+        if self.is_working_version:
+            # TODO: should this delete the assistant from OpenAI?
+            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
+        else:
+            delete_openai_assistant_task.delay(self.id)
+
+    def get_related_experiments_queryset(self):
+        return self.experiment_set.filter(is_archived=False)
+
+    def get_related_pipeline_node_queryset(self):
+        from apps.pipelines.models import Node
+
+        return Node.objects.filter(type="AssistantNode").filter(
+            params__assistant_id=str(self.id),
+            pipeline__is_archived=False,
+        )
 
 
 @audit_fields(
