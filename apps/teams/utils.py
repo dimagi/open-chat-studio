@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+import sentry_sdk
+
 _context = ContextVar("team")
 
 
@@ -29,10 +31,15 @@ def set_current_team(team):
     ```
     """
     _context.set(team)
+    if team:
+        sentry_sdk.get_current_scope().set_tag("team", team.slug)
+    else:
+        sentry_sdk.get_current_scope().remove_tag("team")
 
 
 def unset_current_team():
     _context.set(None)
+    sentry_sdk.get_current_scope().remove_tag("team")
 
 
 @contextmanager
