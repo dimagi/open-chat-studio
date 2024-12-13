@@ -650,6 +650,7 @@ def version_create_status(request, team_slug: str, experiment_id: int):
         {
             "active_tab": "experiments",
             "experiment": experiment,
+            "trigger_refresh": experiment.create_version_task_id is not None,
         },
     )
 

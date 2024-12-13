@@ -22,5 +22,9 @@
             onclick="document.querySelector('#versionDetailsModal').showModal();">
       View Details
     </button>
+  {% else %}
+    {% if record.is_editable %}
+      {% include 'experiments/create_version_button.html' with experiment=record %}
+    {% endif %}
   {% endif %}
 </div>
