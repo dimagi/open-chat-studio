@@ -83,12 +83,12 @@ urlpatterns = [
         name="experiment_chat_session",
     ),
     path(
-        "e/<str:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
+        "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
         views.experiment_session_message,
         name="experiment_session_message",
     ),
     path(
-        "e/<str:experiment_id>/session/<str:session_id>/get_response/<slug:task_id>/",
+        "e/<uuid:experiment_id>/session/<str:session_id>/get_response/<slug:task_id>/",
         views.get_message_response,
         name="get_message_response",
     ),
@@ -100,8 +100,8 @@ urlpatterns = [
     # events
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
-    path("e/<slug:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
-    path("e/<slug:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
+    path("e/<int:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
+    path("e/<int:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
     path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
     path(
         "e/<int:experiment_id>/exports/result/<slug:task_id>",
@@ -110,47 +110,47 @@ urlpatterns = [
     ),
     # public links
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/",
         views.start_session_from_invite,
         name="start_session_from_invite",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/pre-survey/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/pre-survey/",
         views.experiment_pre_survey,
         name="experiment_pre_survey",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/chat/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/chat/",
         views.experiment_chat,
         name="experiment_chat",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/end/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/review/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/review/",
         views.experiment_review,
         name="experiment_review",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/complete/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/complete/",
         views.experiment_complete,
         name="experiment_complete",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/view/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/view/",
         views.experiment_session_details_view,
         name="experiment_session_view",
     ),
     path(
-        "e/<slug:experiment_id>/s/<str:session_id>/paginate/",
+        "e/<uuid:experiment_id>/s/<str:session_id>/paginate/",
         views.experiment_session_pagination_view,
         name="experiment_session_pagination_view",
     ),
     # public link
-    path("e/<slug:experiment_id>/start/", views.start_session_public, name="start_session_public"),
+    path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     # Experiment Routes
     path(
         "e/<int:experiment_id>/experiment_routes/<str:type>/new",
@@ -169,7 +169,7 @@ urlpatterns = [
     ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
     path(
-        "e/<slug:experiment_id>/verify_token/<str:token>/",
+        "e/<uuid:experiment_id>/verify_token/<str:token>/",
         views.verify_public_chat_token,
         name="verify_public_chat_token",
     ),

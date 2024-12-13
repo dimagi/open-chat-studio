@@ -1,5 +1,6 @@
 import textwrap
 import time
+import uuid
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
@@ -86,7 +87,7 @@ from apps.channels.tasks import handle_api_message
     ],
 )
 @api_view(["POST"])
-def chat_completions(request, experiment_id: str):
+def chat_completions(request, experiment_id: uuid.UUID):
     messages = request.data.get("messages", [])
     try:
         last_message = messages.pop()
