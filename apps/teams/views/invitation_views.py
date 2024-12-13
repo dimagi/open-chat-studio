@@ -1,3 +1,5 @@
+import uuid
+
 from allauth.account.views import SignupView
 from django.contrib import messages
 from django.http import HttpResponseRedirect
@@ -10,7 +12,7 @@ from ..models import Invitation
 from ..roles import is_member
 
 
-def accept_invitation(request, invitation_id):
+def accept_invitation(request, invitation_id: uuid.UUID):
     invitation = get_object_or_404(Invitation, id=invitation_id)
     if not invitation.is_accepted:
         # set invitation in the session in case needed later - e.g. to redirect after login

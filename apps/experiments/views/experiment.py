@@ -888,7 +888,7 @@ def experiment_chat_session(request, team_slug: str, experiment_id: int, session
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
     working_experiment = request.experiment
     session = request.experiment_session
 
@@ -948,7 +948,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: int, sess
 
 @experiment_session_view()
 @verify_session_access_cookie
-def get_message_response(request, team_slug: str, experiment_id: str, session_id: str, task_id: str):
+def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
@@ -1014,7 +1014,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     )
 
 
-def start_session_public(request, team_slug: str, experiment_id: str):
+def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
@@ -1108,7 +1108,7 @@ def _verify_user_or_start_session(identifier, request, session):
     return TemplateResponse(request=request, template="account/participant_email_verify.html")
 
 
-def verify_public_chat_token(request, team_slug: str, experiment_id: str, token: str):
+def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
         claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
         session = get_object_or_404(ExperimentSession, external_id=claims["session"])
@@ -1120,7 +1120,7 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: str, token:
 
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: str):
+def experiment_invitations(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     experiment_version = experiment.default_version
     sessions = experiment.sessions.order_by("-created_at").filter(
@@ -1193,7 +1193,7 @@ def get_export_download_link(request, team_slug: str, experiment_id: str, task_i
 
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
-def send_invitation(request, team_slug: str, experiment_id: str, session_id: str):
+def send_invitation(request, team_slug: str, experiment_id: int, session_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
     send_experiment_invitation(session)
@@ -1224,7 +1224,7 @@ def _record_consent_and_redirect(request, team_slug: str, experiment_session: Ex
 
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
-def start_session_from_invite(request, team_slug: str, experiment_id: str, session_id: str):
+def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     experiment_session = get_object_or_404(ExperimentSession, experiment=experiment, external_id=session_id)
     default_version = experiment.default_version
@@ -1265,7 +1265,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: str, sessi
 
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_PRE_SURVEY])
 @verify_session_access_cookie
-def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     if request.method == "POST":
         form = SurveyCompletedForm(request.POST)
         if form.is_valid():
@@ -1302,7 +1302,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: str, session_i
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
-def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_version = request.experiment.default_version
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
@@ -1325,7 +1325,7 @@ def experiment_chat(request, team_slug: str, experiment_id: str, session_id: str
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 @require_POST
-def end_experiment(request, team_slug: str, experiment_id: str, session_id: str):
+def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_session = request.experiment_session
     experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
     experiment_session.end(commit=True)
@@ -1334,7 +1334,7 @@ def end_experiment(request, team_slug: str, experiment_id: str, session_id: str)
 
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
 @verify_session_access_cookie
-def experiment_review(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     form = None
     survey_link = None
     survey_text = None
@@ -1374,7 +1374,7 @@ def experiment_review(request, team_slug: str, experiment_id: str, session_id: s
 
 @experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
 @verify_session_access_cookie
-def experiment_complete(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return TemplateResponse(
         request,
         "experiments/experiment_complete.html",
@@ -1388,7 +1388,7 @@ def experiment_complete(request, team_slug: str, experiment_id: str, session_id:
 
 @experiment_session_view()
 @verify_session_access_cookie
-def experiment_session_details_view(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
 
@@ -1425,7 +1425,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: str,
 
 @experiment_session_view()
 @login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: str, session_id: str):
+def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     session = request.experiment_session
     experiment = request.experiment
     query = ExperimentSession.objects.exclude(external_id=session_id).filter(experiment=experiment)

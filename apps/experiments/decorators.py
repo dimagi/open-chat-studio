@@ -1,3 +1,4 @@
+import uuid
 from functools import wraps
 
 from django.contrib import messages
@@ -22,7 +23,7 @@ def experiment_session_view(allowed_states=None):
         """
 
         @wraps(view_func)
-        def decorated_view(request, team_slug: str, experiment_id: str, session_id: str, **kwargs):
+        def decorated_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, **kwargs):
             request.experiment = get_object_or_404(
                 Experiment.objects.get_all(), public_id=experiment_id, team=request.team
             )
