@@ -172,6 +172,15 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
             return self.custom_action_operations.select_related("custom_action")
 
     def archive(self):
+        # don't delete assistant if it's still referenced by an experiment or pipeline
+        if self.experiment_set.filter(is_archived=False).exists():
+            return
+
+        from apps.pipelines.models import Node
+
+        if Node.objects.filter(type="AssistantNode").filter(params__assistant_id=str(self.id)).exists():
+            return
+
         super().archive()
         from apps.assistants.tasks import delete_openai_assistant_task
 
