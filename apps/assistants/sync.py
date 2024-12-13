@@ -174,6 +174,9 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
 
 @wrap_openai_errors
 def delete_openai_assistant(assistant: OpenAiAssistant):
+    """Deletes the assistant from OpenAI and removes all associated files.
+
+    This function should be idempotent and safe to call multiple times."""
     client = assistant.llm_provider.get_llm_service().get_raw_client()
     try:
         client.beta.assistants.delete(assistant.assistant_id)
@@ -188,6 +191,7 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
                 client.beta.vector_stores.delete(vector_store_id=vector_store_id)
             except openai.NotFoundError:
                 pass
+            resource.save(update_fields=["extra"])
 
         delete_openai_files_for_resource(client, assistant.team, resource)
 
