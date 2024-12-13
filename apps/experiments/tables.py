@@ -41,7 +41,6 @@ class ExperimentTable(tables.Table):
         empty_text = "No experiments found."
 
     def render_type(self, record):
-        print(record)
         if record.assistant_id:
             return "Assistant"
         if record.pipeline_id:
