@@ -205,9 +205,15 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.archive()
-        messages.success(request, "Assistant Archived")
-        return HttpResponse()
+        archived = assistant.archive()
+        if archived:
+            messages.success(request, "Assistant Archived")
+            return HttpResponse()
+        else:
+            messages.error(
+                request, "Error archiving assistant. It is likely being referenced by an experiment or pipeline."
+            )
+            return HttpResponse(headers={"HX-Reswap": "none"})
 
 
 class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
