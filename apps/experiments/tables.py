@@ -21,7 +21,7 @@ class ExperimentTable(tables.Table):
     )
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
-    topic = columns.Column(accessor="source_material__topic", verbose_name="Topic", orderable=True)
+    type = columns.Column(orderable=False, empty_values=())
     is_public = columns.Column(verbose_name="Publically accessible", orderable=False)
     is_archived = columns.Column(verbose_name="Archived")
     actions = columns.TemplateColumn(
@@ -39,6 +39,14 @@ class ExperimentTable(tables.Table):
         }
         orderable = False
         empty_text = "No experiments found."
+
+    def render_type(self, record):
+        print(record)
+        if record.assistant_id:
+            return "Assistant"
+        if record.pipeline_id:
+            return "Pipeline"
+        return "Base LLM"
 
 
 class SafetyLayerTable(tables.Table):
