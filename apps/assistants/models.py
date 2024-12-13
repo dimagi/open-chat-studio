@@ -170,6 +170,12 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         else:
             return self.custom_action_operations.select_related("custom_action")
 
+    def archive(self):
+        super().archive()
+        from apps.assistants.tasks import delete_openai_assistant_task
+
+        delete_openai_assistant_task.delay(self.id)
+
 
 @audit_fields(
     "assistant_id",

@@ -169,7 +169,7 @@ class VersionsMixin:
 
     def archive(self):
         self.is_archived = True
-        self.save()
+        self.save(update_fields=["is_archived"])
 
     def is_editable(self) -> bool:
         return not self.is_archived
@@ -774,6 +774,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
+
+        if self.assistant:
+            self.assistant.archive()
 
     def delete_experiment_channels(self):
         from apps.channels.models import ExperimentChannel
