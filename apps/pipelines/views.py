@@ -27,7 +27,6 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.web.meta import absolute_url
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -108,7 +107,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         Always link to the working version. If `working_version_id` is None, it means the assistant is the working
         version
         """
-        return absolute_url(reverse("assistants:edit", args=[team.slug, assistant_id]))
+        return reverse("assistants:edit", args=[team.slug, assistant_id])
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
