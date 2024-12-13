@@ -458,6 +458,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
         ],
     )
 
+LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -478,14 +479,14 @@ LOGGING = {
         },
         "ocs": {
             "handlers": ["console"],
-            "level": env("GPT_PLAYGROUND_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO"),
+            "level": LOG_LEVEL,
         },
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "audit": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "openai_sync": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "tools": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "runnables": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "audit": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "openai_sync": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "tools": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "runnables": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
     },
 }
 
