@@ -26,7 +26,7 @@ class ConsentFormFactory(factory.django.DjangoModelFactory):
 
     name = "Consent form"
     consent_text = "Do you give consent?"
-    is_default = True
+    is_default = False
     team = factory.SubFactory(TeamFactory)
 
 

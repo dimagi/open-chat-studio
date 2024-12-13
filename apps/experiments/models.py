@@ -340,6 +340,13 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team_id", "is_default"],
+                name="unique_default_consent_form_per_team",
+                condition=Q(is_default=True),
+            ),
+        ]
 
     @classmethod
     def get_default(cls, team):
@@ -359,6 +366,15 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         super().archive()
         consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+
+    def create_new_version(self, save=True):
+        new_version = super().create_new_version(save=False)
+        new_version.is_default = False
+        new_version.save()
+        return new_version
+
+    def get_fields_to_exclude(self):
+        return super().get_fields_to_exclude() + ["is_default"]
 
 
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)

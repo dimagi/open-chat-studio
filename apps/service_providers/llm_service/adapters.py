@@ -122,7 +122,7 @@ class ChatAdapter(BaseAdapter):
             tools=get_tool_instances(node.tools, session),
             input_formatter="{input}",
             source_material_id=node.source_material_id,
-            trace_service=session.experiment.trace_service,  # TODO
+            trace_service=session.experiment.trace_service,
             save_message_metadata_only=True,
         )
 
