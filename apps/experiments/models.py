@@ -905,6 +905,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return f"{action.name}: {op_details}"
 
         def _format_assistant(assistant) -> str:
+            if not assistant:
+                return ""
             return assistant.name.split(f" v{assistant.version_number}")[0]
 
         return Version(
