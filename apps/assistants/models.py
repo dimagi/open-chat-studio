@@ -6,7 +6,7 @@ from django.db import models, transaction
 from django.db.models import F
 from django.urls import reverse
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
@@ -182,6 +182,8 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
             return
 
         super().archive()
+        self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
+
         from apps.assistants.tasks import delete_openai_assistant_task
 
         delete_openai_assistant_task.delay(self.id)
