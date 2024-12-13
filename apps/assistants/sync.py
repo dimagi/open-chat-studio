@@ -145,7 +145,7 @@ def delete_file_from_openai(client: OpenAI, file: File):
     try:
         client.files.delete(file.external_id)
     except openai.NotFoundError:
-        pass
+        logger.debug("File %s not found in OpenAI", file.external_id)
     file.external_id = ""
     file.external_source = ""
     return True
@@ -181,7 +181,7 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
     try:
         client.beta.assistants.delete(assistant.assistant_id)
     except openai.NotFoundError:
-        pass
+        logger.debug("Assistant %s not found in OpenAI", assistant.assistant_id)
 
     tool_resources = list(assistant.tool_resources.all())
     for resource in tool_resources:
@@ -190,7 +190,7 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
             try:
                 client.beta.vector_stores.delete(vector_store_id=vector_store_id)
             except openai.NotFoundError:
-                pass
+                logger.debug("Vector store %s not found in OpenAI", vector_store_id)
             resource.save(update_fields=["extra"])
 
         delete_openai_files_for_resource(client, assistant.team, resource)

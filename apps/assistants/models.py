@@ -67,6 +67,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     allow_file_search_attachments = models.BooleanField(default=True)
     allow_code_interpreter_attachments = models.BooleanField(default=True)
     objects = OpenAiAssistantManager()
+    all_objects = AuditingManager()
 
     class Meta:
         ordering = ["name"]

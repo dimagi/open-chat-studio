@@ -1,7 +1,11 @@
+import logging
+
 import openai
 from celery import shared_task
 
 from apps.assistants.sync import OpenAiSyncError, delete_openai_assistant
+
+logger = logging.getLogger("openai_sync")
 
 
 @shared_task(
@@ -21,8 +25,9 @@ def delete_openai_assistant_task(assistant_id: int):
     from apps.assistants.models import OpenAiAssistant
 
     try:
-        assistant = OpenAiAssistant.objects.get(id=assistant_id, is_archived=True)
+        assistant = OpenAiAssistant.all_objects.get(id=assistant_id, is_archived=True)
     except OpenAiAssistant.DoesNotExist:
+        logger.warning("Assistant with id %s not found or not archived, skipping deletion", assistant_id)
         return
 
     try:
