@@ -26,7 +26,7 @@ class OpenAiAssistantTable(tables.Table):
             actions.AjaxAction(
                 "assistants:delete_local",
                 title="Archive",
-                icon_class="fa-solid fa-trash",
+                icon_class="fa-solid fa-box-archive",
                 required_permissions=["assistants.delete_openaiassistant"],
                 confirm_message="This will only not delete the assistant from OpenAI.",
                 hx_method="delete",
