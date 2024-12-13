@@ -140,7 +140,7 @@ def convert_to_openai_tool(tool):
 @wrap_openai_errors
 def delete_file_from_openai(client: OpenAI, file: File):
     if not file.external_id or file.external_source != "openai":
-        return
+        return False
 
     try:
         client.files.delete(file.external_id)
@@ -148,6 +148,7 @@ def delete_file_from_openai(client: OpenAI, file: File):
         pass
     file.external_id = ""
     file.external_source = ""
+    return True
 
 
 @wrap_openai_errors
@@ -183,11 +184,23 @@ def delete_openai_assistant(assistant: OpenAiAssistant):
     for resource in tool_resources:
         if resource.tool_type == "file_search" and "vector_store_id" in resource.extra:
             vector_store_id = resource.extra.pop("vector_store_id")
-            client.beta.vector_stores.delete(vector_store_id=vector_store_id)
+            try:
+                client.beta.vector_stores.delete(vector_store_id=vector_store_id)
+            except openai.NotFoundError:
+                pass
 
-        files_to_delete = _get_files_to_delete(assistant.team, resource.id)
-        for file in files_to_delete:
-            delete_file_from_openai(client, file)
+        delete_openai_files_for_resource(client, assistant.team, resource)
+
+
+def delete_openai_files_for_resource(client, team, resource: ToolResources):
+    files_to_delete = _get_files_to_delete(team, resource.id)
+    files_to_update = []
+    for file in files_to_delete:
+        if delete_file_from_openai(client, file):
+            files_to_update.append(file.id)
+
+    if files_to_update:
+        File.objects.filter(id__in=files_to_update).update(external_id="", external_source="")
 
 
 def _get_files_to_delete(team, tool_resource_id):
@@ -200,7 +213,8 @@ def _get_files_to_delete(team, tool_resource_id):
         .values("file_id")
     )
 
-    return File.objects.filter(toolresources=tool_resource_id, id__in=Subquery(files_with_single_reference)).iterator()
+    subquery = Subquery(files_with_single_reference)
+    return File.objects.filter(toolresources=tool_resource_id, id__in=subquery).iterator()
 
 
 def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:
