@@ -774,8 +774,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
-
-        if self.assistant:
+        elif self.assistant:
             self.assistant.archive()
 
     def delete_experiment_channels(self):
@@ -906,6 +905,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
             return f"{action.name}: {op_details}"
 
         def _format_assistant(assistant) -> str:
+            if not assistant:
+                return ""
             return assistant.name.split(f" v{assistant.version_number}")[0]
 
         return Version(
