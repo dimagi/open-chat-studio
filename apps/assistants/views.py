@@ -3,6 +3,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
@@ -16,6 +17,7 @@ from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 
+from ..generics.chips import Chip
 from ..teams.decorators import login_and_team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
@@ -205,9 +207,27 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
     @transaction.atomic()
     def delete(self, request, team_slug: str, pk: int):
         assistant = get_object_or_404(OpenAiAssistant, team=request.team, pk=pk)
-        assistant.archive()
-        messages.success(request, "Assistant Archived")
-        return HttpResponse()
+        archived = assistant.archive()
+        if archived:
+            messages.success(request, "Assistant Archived")
+            return HttpResponse()
+        else:
+            experiments = [
+                Chip(label=experiment.name, url=experiment.get_absolute_url())
+                for experiment in assistant.get_related_experiments_queryset()
+            ]
+            pipeline_nodes = [
+                Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
+                for node in assistant.get_related_pipeline_node_queryset().select_related("pipeline")
+            ]
+            response = render_to_string(
+                "assistants/partials/referenced_objects.html",
+                context={
+                    "experiments": experiments,
+                    "pipeline_nodes": pipeline_nodes,
+                },
+            )
+            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
 class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):

@@ -176,10 +176,10 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
         # don't archive assistant if it's still referenced by an active experiment or pipeline
         if self.get_related_experiments_queryset().exists():
-            return
+            return False
 
         if self.get_related_pipeline_node_queryset().exists():
-            return
+            return False
 
         super().archive()
         if self.is_working_version:
@@ -187,6 +187,8 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
         else:
             delete_openai_assistant_task.delay(self.id)
+
+        return True
 
     def get_related_experiments_queryset(self):
         return self.experiment_set.filter(is_archived=False)

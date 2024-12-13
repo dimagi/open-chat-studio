@@ -23,10 +23,13 @@ class OpenAiAssistantTable(tables.Table):
                 icon_class="fa-solid fa-rotate",
                 required_permissions=["assistants.change_openaiassistant"],
             ),
-            actions.delete_action(
+            actions.AjaxAction(
                 "assistants:delete_local",
+                title="Archive",
+                icon_class="fa-solid fa-box-archive",
                 required_permissions=["assistants.delete_openaiassistant"],
-                confirm_message="This will only delete the assistant from the local system.",
+                confirm_message="This will only not delete the assistant from OpenAI.",
+                hx_method="delete",
             ),
             actions.AjaxAction(
                 "assistants:delete",

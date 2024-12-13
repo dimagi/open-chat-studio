@@ -1,0 +1,20 @@
+<div>
+  <p>This assistant is still referenced by other objects. You must archive those first.</p>
+  {% if experiments %}
+    <h2 class="font-semibold my-2">Experiments</h2>
+    <ul class="list-disc list-inside">
+      {% for experiment in experiments %}
+        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if pipeline_nodes %}
+    <h2 class="font-semibold my-2">Pipelines</h2>
+    <ul class="list-disc list-inside">
+      {% for node in pipeline_nodes %}
+        <li>{% include "generic/chip.html" with chip=node %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

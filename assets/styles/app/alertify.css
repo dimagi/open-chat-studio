@@ -1,18 +1,18 @@
 @layer components {
     .alertify .ajs-dialog {
-        @apply bg-white shadow-md rounded-lg;
+        @apply bg-base-100 shadow-lg rounded-lg;
     }
 
     .alertify .ajs-header {
-        @apply text-black font-bold bg-white border-b border-gray-300 rounded-t-lg;
+        @apply text-base-content font-bold bg-base-100 border-b border-base-300 rounded-t-lg;
     }
 
     .alertify .ajs-body {
-        @apply text-black;
+        @apply text-base-content;
     }
 
     .alertify .ajs-body .ajs-content .ajs-input {
-        @apply w-full m-1 p-2 border border-gray-300 rounded block;
+        @apply w-full m-1 p-2 border border-base-300 rounded block;
     }
 
     .alertify .ajs-body .ajs-content p {
@@ -20,15 +20,15 @@
     }
 
     .alertify .ajs-footer {
-        @apply bg-white p-4 border-t border-gray-300 rounded-b-lg;
+        @apply bg-base-100 p-4 border-t border-base-300 rounded-b-lg;
     }
 
     .alertify .ajs-footer .ajs-buttons .ajs-button {
-        @apply text-black font-bold uppercase bg-transparent border-none;
+        @apply text-base-content font-bold uppercase bg-transparent border-none;
     }
 
     .alertify .ajs-footer .ajs-buttons .ajs-button.ajs-ok {
-        @apply text-blue-500;
+        @apply text-info;
     }
 
     .alertify-notifier .ajs-message {
