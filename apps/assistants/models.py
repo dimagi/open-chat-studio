@@ -10,7 +10,7 @@ from field_audit.models import AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
-from apps.files.utils import duplicate_files
+from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -64,8 +64,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
-    files = models.ManyToManyField("files.File", blank=True)
-
     allow_file_search_attachments = models.BooleanField(default=True)
     allow_code_interpreter_attachments = models.BooleanField(default=True)
     objects = OpenAiAssistantManager()
@@ -103,7 +101,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         return self.custom_action_operations.exists()
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["assistant_id"]
+        return super().get_fields_to_exclude() + ["assistant_id", "name"]
 
     @transaction.atomic()
     def create_new_version(self, *args, **kwargs):
@@ -117,14 +115,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         assistant_version.name = f"{self.name} v{version_number}"
         assistant_version.assistant_id = ""
         assistant_version.save()
-        file_ids = duplicate_files(self.files.iterator(chunk_size=50))
-        if file_ids:
-            OpenAiAssistant.files.through.objects.bulk_create(
-                [
-                    OpenAiAssistant.files.through(openaiassistant_id=assistant_version.id, file_id=file_id)
-                    for file_id in file_ids
-                ]
-            )
         assistant_version.tools = self.tools.copy()
         for tool_resource in self.tool_resources.all():
             new_tool_resource = ToolResources.objects.create(
@@ -137,13 +127,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
                 new_tool_resource.extra["vector_store_id"] = None
             new_tool_resource.save()
 
-            tool_resource_files = duplicate_files(tool_resource.files.iterator(chunk_size=50))
-            ToolResources.files.through.objects.bulk_create(
-                [
-                    ToolResources.files.through(toolresources_id=new_tool_resource.id, file_id=file_id)
-                    for file_id in tool_resource_files
-                ]
-            )
+            new_tool_resource.files.set(tool_resource.files.all())
 
         self._copy_custom_action_operations_to_new_version(assistant_version)
 
@@ -151,12 +135,26 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         return assistant_version
 
     def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
-        exclude = exclude_fields.copy()
-        exclude.append("name")
-        changes = super().compare_with_model(new, exclude)
+        changes = super().compare_with_model(new, exclude_fields)
         new_name = new.name.split(f" v{new.version_number}")[0]
         if self.name != new_name:
             changes.add("name")
+
+        tool_resources = {r.tool_type: r for r in self.tool_resources.all()}
+        new_tool_resources = {r.tool_type: r for r in new.tool_resources.all()}
+        if set(tool_resources) != set(new_tool_resources):
+            changes.add("tool_resources")
+        else:
+            exclude_fields = self.DEFAULT_EXCLUDED_KEYS + ["extra", "assistant"]
+            for tool_type, resource in tool_resources.items():
+                new_resource = new_tool_resources[tool_type]
+                if tool_changes := resource.compare_with_model(new_resource, exclude_fields):
+                    changes.update([f"tool_resources.{tool_type}.{change}" for change in tool_changes])
+
+        custom_actions = VersionField("custom_actions", queryset=self.custom_action_operations.all())
+        custom_actions.compare(VersionField("custom_actions", queryset=new.custom_action_operations.all()))
+        if custom_actions.changed:
+            changes.add("custom_actions")
         return changes
 
     def _copy_custom_action_operations_to_new_version(self, new_version):

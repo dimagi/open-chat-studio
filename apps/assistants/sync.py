@@ -105,7 +105,7 @@ def push_assistant_to_openai(assistant: OpenAiAssistant, internal_tools: list | 
     data["tool_resources"] = _sync_tool_resources(assistant)
 
     if internal_tools:
-        data["tools"] = [convert_to_openai_tool(tool) for tool in internal_tools]
+        data["tools"].extend([convert_to_openai_tool(tool) for tool in internal_tools])
 
     if assistant.assistant_id:
         client.beta.assistants.update(assistant.assistant_id, **data)
@@ -469,7 +469,7 @@ def create_files_remote(client, files):
     return file_ids
 
 
-def _push_file_to_openai(client: OpenAiAssistant, file: File):
+def _push_file_to_openai(client, file: File):
     with file.file.open("rb") as fh:
         bytesio = BytesIO(fh.read())
     openai_file = _openai_create_file_with_retries(client, file.name, bytesio)
@@ -486,6 +486,7 @@ def _push_file_to_openai(client: OpenAiAssistant, file: File):
     before_sleep=before_sleep_log(logger, logging.INFO),
 )
 def _openai_create_file_with_retries(client, filename, bytesio):
+    logger.debug("Creating file in OpenAI: %s", filename)
     return client.files.create(file=(filename, bytesio), purpose="assistants")
 
 

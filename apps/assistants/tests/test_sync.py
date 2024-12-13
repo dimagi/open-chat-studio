@@ -94,7 +94,7 @@ def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list
 
     # Make sure that all tools in TOOL_CLASS_MAP was speceified
     tool_specs = mock_update.call_args_list[0].kwargs.get("tools")
-    tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs])
+    tool_names = set([tool_spec["function"]["name"] for tool_spec in tool_specs if "function" in tool_spec])
     expected_tools = set(tools.TOOL_CLASS_MAP.keys())
     assert expected_tools - tool_names == set()
 
@@ -204,7 +204,6 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     assert imported_assistant.temperature == remote_assistant.temperature
     assert imported_assistant.top_p == remote_assistant.top_p
     assert imported_assistant.builtin_tools == ["code_interpreter", "file_search"]
-    assert imported_assistant.files.count() == 0
     assert imported_assistant.tool_resources.count() == 2
     code_files = imported_assistant.tool_resources.filter(tool_type="code_interpreter").first().files.all()
     assert [(f.external_source, f.external_id) for f in code_files] == [

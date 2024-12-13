@@ -1,5 +1,6 @@
 import pytest
 
+from apps.assistants.models import ToolResources
 from apps.files.models import File
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.files import FileFactory
@@ -9,7 +10,7 @@ from apps.utils.factories.files import FileFactory
 def test_deleting_assistant_with_files():
     assistant = OpenAiAssistantFactory()
     files = FileFactory.create_batch(3)
-    assistant.files.set(files)
+    ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter").files.set(files)
 
     assistant.delete()
 
@@ -20,10 +21,10 @@ def test_deleting_assistant_with_files():
 def test_deleting_assistant_with_files_multiple_references(caplog):
     assistant = OpenAiAssistantFactory()
     files = FileFactory.create_batch(3)
-    assistant.files.set(files)
+    ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter").files.set(files)
 
     assistant2 = OpenAiAssistantFactory()
-    assistant2.files.set(files[:1])
+    ToolResources.objects.create(assistant=assistant2, tool_type="code_interpreter").files.set(files[:1])
 
     assistant.delete()
 
