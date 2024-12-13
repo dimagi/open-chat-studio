@@ -182,9 +182,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
             return
 
         super().archive()
-        self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
-
-        delete_openai_assistant_task.delay(self.id)
+        if self.is_working_version:
+            # TODO: should this delete the assistant from OpenAI?
+            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
+        else:
+            delete_openai_assistant_task.delay(self.id)
 
     def get_related_experiments_queryset(self):
         return self.experiment_set.filter(is_archived=False)
