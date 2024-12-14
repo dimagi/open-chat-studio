@@ -633,7 +633,7 @@ class CodeNode(PipelineNode):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
     code: str = Field(
         description="The code to run",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),  # TODO: add a code widget
+        json_schema_extra=UiSchema(widget=Widgets.code),
     )
 
     @field_validator("code")

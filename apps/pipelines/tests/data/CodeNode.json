@@ -1,0 +1,18 @@
+{
+  "description": "Runs python",
+  "properties": {
+    "code": {
+      "description": "The code to run",
+      "title": "Code",
+      "type": "string",
+      "ui:widget": "code"
+    }
+  },
+  "required": [
+    "code"
+  ],
+  "title": "CodeNode",
+  "type": "object",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "Python Node"
+}
