@@ -290,6 +290,7 @@ export function CodeWidget(props: WidgetParams) {
         value={concatenate(props.paramValue)}
         onChange={onChangeCallback}
         isDarkMode={isDarkMode}
+        inputError={props.inputError}
       />
     </>
   );
@@ -297,12 +298,13 @@ export function CodeWidget(props: WidgetParams) {
 
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode }: {
+  { modalId, humanName, value, onChange, isDarkMode, inputError }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
     isDarkMode: boolean;
+    inputError: string | undefined;
   }) {
   return (
     <dialog
@@ -330,6 +332,9 @@ export function CodeModal(
               python(),
             ]}
           />
+        </div>
+        <div className="flex flex-col">
+            <span className="text-red-500">{inputError}</span>
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">
