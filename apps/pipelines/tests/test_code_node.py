@@ -25,7 +25,7 @@ import json
 import datetime
 import re
 import time
-def main(input):
+def main(input, **kwargs):
     return json.loads(input)
 """
 
@@ -35,11 +35,10 @@ def main(input):
 @pytest.mark.parametrize(
     ("code", "input", "output"),
     [
-        ("def main(input):\n\treturn f'Hello, {input}!'", "World", "Hello, World!"),
+        ("def main(input, **kwargs):\n\treturn f'Hello, {input}!'", "World", "Hello, World!"),
         ("", "foo", "foo"),  # No code just returns the input
-        ("def main(input):\n\t'foo'", "", "None"),  # No return value will return "None"
+        ("def main(input, **kwargs):\n\t'foo'", "", "None"),  # No return value will return "None"
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
-        ("def main(blah):\n\treturn f'Hello, {blah}!'", "World", "Hello, World!"),  # Renaming the argument works
     ],
 )
 def test_code_node(pipeline, code, input, output):
@@ -55,7 +54,7 @@ EXTRA_FUNCTION = """
 def other(foo):
     return f"other {foo}"
 
-def main(input):
+def main(input, **kwargs):
     return other(input)
 """
 
@@ -75,7 +74,11 @@ def main(input):
             ),
         ),
         ("def other(input):\n\treturn input", "", "You must define a 'main' function"),
-        ("def main(input, others):\n\treturn input", "", "The main function should take a single argument as input"),
+        (
+            "def main(input, others, **kwargs):\n\treturn input",
+            "",
+            r"The main function should have the signature main\(input, \*\*kwargs\) only\.",
+        ),
     ],
 )
 def test_code_node_build_errors(pipeline, code, input, error):
@@ -93,8 +96,12 @@ def test_code_node_build_errors(pipeline, code, input, error):
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
-        ("import collections\ndef main(input):\n\treturn input", "", "Importing 'collections' is not allowed"),
-        ("def main(input):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
+        (
+            "import collections\ndef main(input, **kwargs):\n\treturn input",
+            "",
+            "Importing 'collections' is not allowed",
+        ),
+        ("def main(input, **kwargs):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
 def test_code_node_runtime_errors(pipeline, code, input, error):

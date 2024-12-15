@@ -630,7 +630,7 @@ class AssistantNode(PipelineNode):
 
 DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
-def main(input: str) -> str:
+def main(input: str, **kwargs) -> str:
     return input
 """
 
@@ -670,8 +670,8 @@ class CodeNode(PipelineNode):
                         "You may use nested functions inside that function if required"
                     )
 
-            if len(inspect.signature(main).parameters) > 1:
-                raise SyntaxError("The main function should take a single argument as input")
+            if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
+                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
 
         except SyntaxError as exc:
             raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
