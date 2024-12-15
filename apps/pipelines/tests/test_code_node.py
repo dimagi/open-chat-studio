@@ -20,19 +20,13 @@ def pipeline():
     return PipelineFactory()
 
 
-EXTRA_FUNCTION = """
-def other(foo):
-    return f"other {foo}"
-
-return other(input)
-"""
-
 IMPORTS = """
 import json
 import datetime
 import re
 import time
-return json.loads(input)
+def main(input):
+    return json.loads(input)
 """
 
 
@@ -41,11 +35,11 @@ return json.loads(input)
 @pytest.mark.parametrize(
     ("code", "input", "output"),
     [
-        ("return f'Hello, {input}!'", "World", "Hello, World!"),
+        ("def main(input):\n\treturn f'Hello, {input}!'", "World", "Hello, World!"),
         ("", "foo", "foo"),  # No code just returns the input
-        (EXTRA_FUNCTION, "blah", "other blah"),  # Calling a separate function is possible
-        ("'foo'", "", "None"),  # No return value will return "None"
+        ("def main(input):\n\t'foo'", "", "None"),  # No return value will return "None"
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
+        ("def main(blah):\n\treturn f'Hello, {blah}!'", "World", "Hello, World!"),  # Renaming the argument works
     ],
 )
 def test_code_node(pipeline, code, input, output):
@@ -57,16 +51,13 @@ def test_code_node(pipeline, code, input, output):
     assert create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1] == output
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
-@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
-def test_code_node_syntax_error(pipeline):
-    nodes = [
-        start_node(),
-        code_node("this{}"),
-        end_node(),
-    ]
-    with pytest.raises(PipelineNodeBuildError, match="SyntaxError: invalid syntax at statement: 'this{}'"):
-        create_runnable(pipeline, nodes).invoke(PipelineState(messages=["World"]))["messages"][-1]
+EXTRA_FUNCTION = """
+def other(foo):
+    return f"other {foo}"
+
+def main(input):
+    return other(input)
+"""
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -74,8 +65,36 @@ def test_code_node_syntax_error(pipeline):
 @pytest.mark.parametrize(
     ("code", "input", "error"),
     [
-        ("import collections", "", "Importing 'collections' is not allowed"),
-        ("return f'Hello, {blah}!'", "", "name 'blah' is not defined"),
+        ("this{}", "", "SyntaxError: invalid syntax at statement: 'this{}"),
+        (
+            EXTRA_FUNCTION,
+            "",
+            (
+                "You can only define a single function, 'main' at the top level. "
+                "You may use nested functions inside that function if required"
+            ),
+        ),
+        ("def other(input):\n\treturn input", "", "You must define a 'main' function"),
+        ("def main(input, others):\n\treturn input", "", "The main function should take a single argument as input"),
+    ],
+)
+def test_code_node_build_errors(pipeline, code, input, error):
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    with pytest.raises(PipelineNodeBuildError, match=error):
+        create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+@pytest.mark.parametrize(
+    ("code", "input", "error"),
+    [
+        ("import collections\ndef main(input):\n\treturn input", "", "Importing 'collections' is not allowed"),
+        ("def main(input):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
 def test_code_node_runtime_errors(pipeline, code, input, error):

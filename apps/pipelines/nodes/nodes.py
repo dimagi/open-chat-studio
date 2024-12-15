@@ -1,4 +1,5 @@
 import datetime
+import inspect
 import json
 import time
 from typing import Literal
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted_function, safe_builtins, safe_globals
+from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
@@ -627,11 +628,19 @@ class AssistantNode(PipelineNode):
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
+DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
+# Return a string to pass to the next node.
+def main(input: str) -> str:
+    return input
+"""
+
+
 class CodeNode(PipelineNode):
     """Runs python"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
     code: str = Field(
+        default=DEFAULT_FUNCTION,
         description="The code to run",
         json_schema_extra=UiSchema(widget=Widgets.code),
     )
@@ -639,34 +648,47 @@ class CodeNode(PipelineNode):
     @field_validator("code")
     def validate_code(cls, value, info: FieldValidationInfo):
         if not value:
-            value = "return input"
+            value = DEFAULT_FUNCTION
+        try:
+            byte_code = compile_restricted(
+                value,
+                filename="<inline code>",
+                mode="exec",
+            )
+            custom_locals = {}
+            exec(byte_code, {}, custom_locals)
 
-        byte_code = compile_restricted_function(
-            "input,shared_state",
-            value,
-            name="main",
-            filename="<inline code>",
-        )
+            try:
+                main = custom_locals["main"]
+            except KeyError:
+                raise SyntaxError("You must define a 'main' function")
 
-        if byte_code.errors:
-            raise PydanticCustomError("invalid_code", "{errors}", {"errors": "\n".join(byte_code.errors)})
+            for name, item in custom_locals.items():
+                if name != "main" and inspect.isfunction(item):
+                    raise SyntaxError(
+                        "You can only define a single function, 'main' at the top level. "
+                        "You may use nested functions inside that function if required"
+                    )
+
+            if len(inspect.signature(main).parameters) > 1:
+                raise SyntaxError("The main function should take a single argument as input")
+
+        except SyntaxError as exc:
+            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
         return value
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
         function_name = "main"
-        function_args = "input"
-        byte_code = compile_restricted_function(
-            function_args,
+        byte_code = compile_restricted(
             self.code,
-            name=function_name,
             filename="<inline code>",
+            mode="exec",
         )
 
         custom_locals = {}
         custom_globals = self._get_custom_globals()
-        exec(byte_code.code, custom_globals, custom_locals)
-
         try:
+            exec(byte_code, custom_globals, custom_locals)
             result = str(custom_locals[function_name](input))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
