@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.http import HttpRequest
 from django.template import Context
-from django_tables2 import tables
+from django_tables2 import columns, tables
 
 from apps.generics import actions
 
@@ -23,6 +23,7 @@ class TagTable(tables.Table):
             ),
         ]
     )
+    is_system_tag = columns.BooleanColumn(yesno="✓,", verbose_name="Is System Tag")
 
     class Meta:
         model = Tag

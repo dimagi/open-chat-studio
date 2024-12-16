@@ -22,8 +22,8 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
-    is_public = columns.Column(verbose_name="Publically accessible", orderable=False)
-    is_archived = columns.Column(verbose_name="Archived")
+    is_public = columns.BooleanColumn(verbose_name="Publically accessible", orderable=False, yesno="✓,")
+    is_archived = columns.BooleanColumn(verbose_name="Archived", yesno="✓,")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
@@ -118,6 +118,8 @@ class ConsentFormTable(tables.Table):
             ),
         ]
     )
+    capture_identifier = columns.BooleanColumn(yesno="✓,", verbose_name="Capture Identfier")
+    is_default = columns.BooleanColumn(yesno="✓,", verbose_name="Is default")
 
     class Meta:
         model = ConsentForm
