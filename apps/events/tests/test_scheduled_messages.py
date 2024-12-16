@@ -9,8 +9,9 @@ from freezegun import freeze_time
 
 from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
 from apps.events.tasks import _get_messages_to_fire, poll_scheduled_messages
+from apps.experiments.models import ExperimentRoute
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
@@ -260,3 +261,40 @@ def test_schedule_update():
     _assert_next_trigger_date(message3, message3_next_trigger_data)
     assert message1.next_trigger_date < message1_prev_trigger_date
     assert message2.next_trigger_date < message2_prev_trigger_date
+
+
+@pytest.mark.django_db()
+def test_schedule_trigger_for_versioned_routes():
+    router = ExperimentFactory()
+    child = ExperimentFactory(team=router.team)
+    session = ExperimentSessionFactory(experiment=router)
+
+    ExperimentRoute.objects.create(
+        team=router.team,
+        parent=router,
+        child=child,
+        keyword="keyword1",
+    )
+
+    event_action, params = _construct_event_action(frequency=1, time_period=TimePeriod.DAYS, experiment_id=None)
+    sm = ScheduledMessageFactory(
+        team=router.team, action=event_action, experiment=router, participant=session.participant
+    )
+    # No experiment specified, so the router should be used
+    assert sm._get_experiment_to_generate_response() == router
+
+    new_params = sm.action.params
+    new_params["experiment_id"] = child.id
+    sm.action.params = new_params
+    sm.action.save()
+
+    # No versions yet, so the working version of the child should be used
+    assert sm._get_experiment_to_generate_response() == child
+
+    default_router = router.create_new_version(make_default=True)
+    sm.refresh_from_db()
+    child_version = default_router.child_links.first().child
+    assert new_params["experiment_id"] == child_version.working_version_id
+    # The router is versioned and the deployed version is not the working version, so the child of the deployed version
+    # should be used
+    assert sm._get_experiment_to_generate_response() == child_version
