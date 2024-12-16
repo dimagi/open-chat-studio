@@ -1126,15 +1126,15 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             latest_child_version: ExperimentRoute | None = new_instance.child.latest_version
 
             if latest_child_version:
-                is_identical_to_working_version = not differs(
-                    self.child, latest_child_version, exclude_model_fields=self.fields_to_exclude_for_child
-                )
-                if is_identical_to_working_version:
+                # Compare experimens using their `version` instances for a comprehensive comparison
+                child_version = self.child.version
+                latest_version = latest_child_version.version
+                child_version.compare(latest_version)
+
+                if not child_version.fields_changed:
                     new_child = latest_child_version
                 else:
-                    fields_changed = self.child.compare_with_model(
-                        latest_child_version, self.fields_to_exclude_for_child
-                    )
+                    fields_changed = [f.name for f in child_version.fields if f.changed]
                     description = self._generate_version_description(fields_changed)
                     new_child = new_instance.child.create_new_version(version_description=description)
             else:
@@ -1180,14 +1180,17 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         results = list(super().compare_with_model(route, fields_to_exclude))
 
         # Now compare the children
-        child_changes = self.child.compare_with_model(route.child, self.fields_to_exclude_for_child)
+        version1 = self.child.version
+        version2 = route.child.version
+        version1.compare(version2)
+        child_changes = [field.name for field in version1.fields if field.changed]
 
         results.extend(list(child_changes))
         return set(results)
 
     @property
     def fields_to_exclude_for_child(self):
-        fields_to_keep = ["prompt_text", "voice_provider", "synthetic_voice", "llm_provider", "llm"]
+        fields_to_keep = ["prompt_text", "voice_provider", "synthetic_voice", "llm_provider", "llm", "assistant"]
         return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
 
     class Meta:
