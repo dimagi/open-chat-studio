@@ -1188,11 +1188,6 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         results.extend(list(child_changes))
         return set(results)
 
-    @property
-    def fields_to_exclude_for_child(self):
-        fields_to_keep = ["prompt_text", "voice_provider", "synthetic_voice", "llm_provider", "llm", "assistant"]
-        return [field.name for field in Experiment._meta.get_fields() if field.name not in fields_to_keep]
-
     class Meta:
         constraints = [
             UniqueConstraint(fields=["parent", "child"], condition=Q(is_archived=False), name="unique_parent_child"),
