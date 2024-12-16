@@ -60,16 +60,22 @@
       return;
     }
     url = url + "?since=" + lastDateTime
-    console.log(url);
     fetch(url)
-      .then(response => response.text())
+      .then(response => {
+        if (response.status !== 200) {
+          console.error('Messages not found');
+          return;
+        }
+        return response.text();
+      })
       .then(data => {
-        if (data && data) {
+        if (data) {
           appendMessage(data);
           console.log(data);
           scrollToBottom();
         }
-      });
+      })
+      .catch(error => console.error('Error fetching messages:', error));
   }
 
   function cancelPolling() {

@@ -984,7 +984,7 @@ def poll_messages(request, team_slug: str, experiment_id: int, session_id: int):
     params = request.GET.dict()
     since_param = params.get("since")
     experiment_session = get_object_or_404(
-        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team=request.team
+        ExperimentSession, participant__user=user, experiment_id=experiment_id, id=session_id, team__slug=team_slug
     )
 
     since = timezone.now()
