@@ -31,6 +31,8 @@ class OpenAiAssistantManager(VersionsObjectManagerMixin, AuditingManager):
     audit_special_queryset_writes=True,
 )
 class OpenAiAssistant(BaseTeamModel, VersionsMixin):
+    ALLOWED_INSTRUCTIONS_VARIABLES = {"participant_data", "current_datetime"}
+
     assistant_id = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     instructions = models.TextField()
