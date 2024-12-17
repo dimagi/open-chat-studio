@@ -177,7 +177,7 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     return assistant
 
 
-def validate_instructions(instructions: str) -> bool:
+def validate_instructions(instructions: str):
     validate_prompt_variables(
         form_data={"instructions": instructions},
         prompt_key="instructions",
