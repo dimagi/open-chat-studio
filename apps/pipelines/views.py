@@ -98,7 +98,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
                 for experiment in pipeline.get_related_experiments_queryset()
             ]
 
-            query = pipeline.get_static_trigger_experiments()
+            query = pipeline.get_static_trigger_experiment_ids()
             static_trigger_experiments = [
                 Chip(label=experiment.name, url=experiment.get_absolute_url())
                 for experiment in Experiment.objects.filter(id__in=Subquery(query)).all()
