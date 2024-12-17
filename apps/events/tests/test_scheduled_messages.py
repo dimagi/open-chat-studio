@@ -280,7 +280,7 @@ def test_schedule_trigger_for_versioned_routes():
     sm = ScheduledMessageFactory(
         team=router.team, action=event_action, experiment=router, participant=session.participant
     )
-    # No experiment specified, so the router should be used
+    # No experiment specified, so the router should be used (no version yet, so router == default version)
     assert sm._get_experiment_to_generate_response() == router
 
     new_params = sm.action.params
@@ -292,9 +292,20 @@ def test_schedule_trigger_for_versioned_routes():
     assert sm._get_experiment_to_generate_response() == child
 
     default_router = router.create_new_version(make_default=True)
+    router.refresh_from_db()
+    del router.default_version
     sm.refresh_from_db()
     child_version = default_router.child_links.first().child
     assert new_params["experiment_id"] == child_version.working_version_id
     # The router is versioned and the deployed version is not the working version, so the child of the deployed version
     # should be used
     assert sm._get_experiment_to_generate_response() == child_version
+
+    new_params = sm.action.params
+    new_params["experiment_id"] = None
+    sm.action.params = new_params
+    sm.action.save()
+    sm.refresh_from_db()
+    # Clear the `params` cached property on ScheduledMessage
+    del sm.params
+    assert sm._get_experiment_to_generate_response() == router.default_version
