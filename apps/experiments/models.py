@@ -769,13 +769,22 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def archive(self):
+        """
+        Archive the experiment and all versions in the case where this is the working version. The linked assistant and
+        pipeline for the working version should not be archived.
+        """
         super().archive()
+        self.static_triggers.update(is_archived=True)
+
         if self.is_working_version:
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
-        elif self.assistant:
-            self.assistant.archive()
+        else:
+            if self.assistant:
+                self.assistant.archive()
+            elif self.pipeline:
+                self.pipeline.archive()
 
     def delete_experiment_channels(self):
         from apps.channels.models import ExperimentChannel
