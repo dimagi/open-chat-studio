@@ -270,7 +270,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         if self.get_related_experiments_queryset().exists():
             return False
 
-        if self.get_related_actions_queryset().exists():
+        if self.get_static_trigger_experiments():
             return False
 
         super().archive()
@@ -289,11 +289,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_related_experiments_queryset(self) -> models.QuerySet:
         return self.experiment_set.filter(is_archived=False)
 
-    def get_related_actions_queryset(self) -> models.QuerySet:
+    def get_static_trigger_experiments(self) -> models.QuerySet:
         from apps.events.models import EventAction, EventActionType
 
-        return EventAction.objects.filter(
-            action_type=EventActionType.PIPELINE_START, params__pipeline_id=self.id, static_trigger__is_archived=False
+        return (
+            EventAction.objects.filter(
+                action_type=EventActionType.PIPELINE_START,
+                params__pipeline_id=self.id,
+                static_trigger__is_archived=False,
+            )
+            .annotate(experiment=models.F("static_trigger__experiment"))
+            .values("experiment")
         )
 
 
