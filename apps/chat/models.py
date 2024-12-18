@@ -219,8 +219,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         self.add_tag(tag, team=self.chat.team, added_by=None)
 
     def rating(self) -> str | None:
-        if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).first():
-            return rating.name
+        if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
+            return rating
 
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
