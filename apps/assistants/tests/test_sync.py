@@ -1,4 +1,5 @@
 import dataclasses
+import re
 from io import BytesIO
 from unittest.mock import call, patch
 
@@ -7,6 +8,7 @@ from openai.pagination import SyncCursorPage
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import (
+    OpenAiSyncError,
     _update_or_create_vector_store,
     delete_openai_assistant,
     get_out_of_sync_files,
@@ -216,6 +218,18 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     assert [(f.external_source, f.external_id) for f in file_search_files] == [
         ("openai", file.id) for file in file_search_files_expected
     ]
+
+
+@pytest.mark.django_db()
+@patch("openai.resources.beta.Assistants.retrieve")
+def test_import_openai_assistant_raises_for_invalid_instructions(mock_retrieve):
+    remote_assistant = AssistantFactory(instructions="This is a test with a {invalid_variable}")
+    mock_retrieve.return_value = remote_assistant
+    llm_provider = LlmProviderFactory()
+
+    expected_error_msg = "{'instructions': ['Prompt contains unknown variables: invalid_variable']}"
+    with pytest.raises(OpenAiSyncError, match=re.escape(expected_error_msg)):
+        import_openai_assistant("123", llm_provider, llm_provider.team)
 
 
 @pytest.mark.django_db()

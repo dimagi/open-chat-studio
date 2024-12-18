@@ -74,7 +74,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         validate_prompt_variables(
             form_data=cleaned_data,
             prompt_key="instructions",
-            known_vars={"participant_data", "current_datetime"},
+            known_vars=OpenAiAssistant.ALLOWED_INSTRUCTIONS_VARIABLES,
         )
         return cleaned_data
 

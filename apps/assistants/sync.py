@@ -62,6 +62,7 @@ from io import BytesIO
 
 import openai
 from django.db.models import Count, Subquery
+from django.forms import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
 from openai.types.beta import Assistant
@@ -72,6 +73,7 @@ from apps.assistants.utils import chunk_list, get_assistant_tool_options
 from apps.files.models import File
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+from apps.utils.prompt import validate_prompt_variables
 
 logger = logging.getLogger("openai_sync")
 
@@ -94,6 +96,8 @@ def wrap_openai_errors(fn):
                     pass
 
             raise OpenAiSyncError(message) from e
+        except ValidationError as e:
+            raise OpenAiSyncError(str(e)) from e
 
     return _inner
 
@@ -167,9 +171,18 @@ def import_openai_assistant(assistant_id: str, llm_provider: LlmProvider, team: 
     client = llm_provider.get_llm_service().get_raw_client()
     openai_assistant = client.beta.assistants.retrieve(assistant_id)
     kwargs = _openai_assistant_to_ocs_kwargs(openai_assistant, team=team, llm_provider=llm_provider)
+    validate_instructions(kwargs["instructions"])
     assistant = OpenAiAssistant.objects.create(**kwargs)
     _sync_tool_resources_from_openai(openai_assistant, assistant)
     return assistant
+
+
+def validate_instructions(instructions: str):
+    validate_prompt_variables(
+        form_data={"instructions": instructions},
+        prompt_key="instructions",
+        known_vars=OpenAiAssistant.ALLOWED_INSTRUCTIONS_VARIABLES,
+    )
 
 
 @wrap_openai_errors
