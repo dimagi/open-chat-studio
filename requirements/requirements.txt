@@ -28,6 +28,8 @@ anyio==4.4.0
     #   openai
 asgiref==3.8.1
     # via django
+async-timeout==5.0.1
+    # via redis
 attrs==23.1.0
     # via
     #   aiohttp
@@ -241,7 +243,7 @@ langchain-anthropic==0.2.3
     # via -r requirements.in
 langchain-community==0.3.3
     # via -r requirements.in
-langchain-core==0.3.21
+langchain-core==0.3.25
     # via
     #   -r requirements.in
     #   langchain
