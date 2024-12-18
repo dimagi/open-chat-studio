@@ -9,8 +9,7 @@ def rate_message(request, team_slug: str, message_id: int, rating: str):
         raise Http404()
 
     message = get_object_or_404(ChatMessage, id=message_id, message_type=ChatMessageType.AI)
-    # TODO
-    # message.add_rating(rating)
+    message.add_rating(rating)
 
     return render(
         request,
