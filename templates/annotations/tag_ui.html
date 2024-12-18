@@ -15,7 +15,6 @@
                  badge-warning
                {% endif %}
                tooltip"
-        title="{% if tag.is_system_tag %}System Tag{% else %}User Tag{% endif %}: {{ tag.name }}"
         data-tip="Added by {% if tag.added_by == request.user.email %}me{% else %}{{ tag.added_by }}{% endif %}"
       >{{ tag.name }}</div>
     {% endfor %}
