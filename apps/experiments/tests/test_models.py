@@ -591,7 +591,7 @@ class TestExperimentRoute:
         assert len(queryset) == 2
 
         queryset = ExperimentRoute.eligible_children(team=parent.team)
-        assert len(queryset) == 4
+        assert len(queryset) == 3
 
     def test_compare_with_model_testcase_1(self):
         """

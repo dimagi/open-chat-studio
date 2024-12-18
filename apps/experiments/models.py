@@ -1101,7 +1101,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         else:
             eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
 
-        return eligible_experiments
+        return eligible_experiments.filter(working_version_id=None)
 
     @transaction.atomic()
     def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
