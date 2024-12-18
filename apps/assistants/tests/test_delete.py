@@ -1,12 +1,14 @@
 import uuid
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from apps.assistants.models import ToolResources
 from apps.assistants.sync import _get_files_to_delete, delete_openai_files_for_resource
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.pipelines import PipelineFactory
 
 
 @pytest.fixture()
@@ -27,14 +29,13 @@ def code_resource(assistant):
     return tool_resource
 
 
+@pytest.mark.django_db()
 class TestAssistantDeletion:
-    @pytest.mark.django_db()
     def test_files_to_delete_when_only_referenced_by_one_resource(self, code_resource):
         files_to_delete = list(_get_files_to_delete(code_resource.assistant.team, code_resource.id))
         assert len(files_to_delete) == 2
         assert {f.id for f in files_to_delete} == {f.id for f in code_resource.files.all()}
 
-    @pytest.mark.django_db()
     def test_files_not_to_delete_when_referenced_by_multiple_resources(self, code_resource):
         all_files = list(code_resource.files.all())
         tool_resource = ToolResources.objects.create(tool_type="file_search", assistant=code_resource.assistant)
@@ -48,7 +49,6 @@ class TestAssistantDeletion:
         files_to_delete = list(_get_files_to_delete(tool_resource.assistant.team, tool_resource.id))
         assert len(files_to_delete) == 0
 
-    @pytest.mark.django_db()
     def test_delete_openai_files_for_resource(self, code_resource):
         all_files = list(code_resource.files.all())
         assert all(f.external_id for f in all_files)
@@ -60,3 +60,49 @@ class TestAssistantDeletion:
         all_files = list(code_resource.files.all())
         assert not any(f.external_id for f in all_files)
         assert not any(f.external_source for f in all_files)
+
+
+# assistant.refresh_from_db()
+
+
+@pytest.mark.django_db()
+class TestAssistantArchival:
+    def test_archive_assistant(self):
+        assistant = OpenAiAssistantFactory()
+        assert assistant.is_archived is False
+        assistant.archive()
+        assert assistant.is_archived is True
+
+    def test_archive_assistant_with_still_exisiting_experiment_and_pipeline(self):
+        experiment = ExperimentFactory()
+        assistant = OpenAiAssistantFactory()
+        experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.assistant = assistant
+        experiment.save()
+
+        assistant.archive()
+        assert assistant.is_archived is False  # archiving failed
+
+        experiment.archive()
+        assistant.archive()
+        assert assistant.is_archived is True  # archiving successful
+
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_versioned_assistant_with_still_exisiting_experiment_and_pipeline(self):
+        assistant = OpenAiAssistantFactory()
+        v2_assistant = assistant.create_new_version()
+        experiment = ExperimentFactory()
+        experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.assistant = v2_assistant
+        experiment.save()
+
+        assistant.archive()
+        assert assistant.is_archived is False  # archiving failed
+        assert v2_assistant.is_archived is False
+
+        experiment.archive()
+        assistant.archive()
+        v2_assistant.refresh_from_db()
+
+        assert assistant.is_archived is True  # archiving successful
+        assert v2_assistant.is_archived is True
