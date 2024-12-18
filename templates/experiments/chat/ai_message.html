@@ -24,5 +24,6 @@
         <p>{{ message.content|render_markdown }}</p>
       </div>
     </div>
+    {% include 'experiments/chat/components/message_rating.html' with team_slug=experiment.team.slug %}
   </div>
 </div>
