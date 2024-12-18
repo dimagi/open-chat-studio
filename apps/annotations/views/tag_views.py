@@ -11,7 +11,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.forms import TagForm
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -126,7 +126,12 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
                 "team_slug": team_slug,
                 "object": obj,
                 "edit_mode": request.GET.get("edit"),
-                "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+                "available_tags": [
+                    t.name
+                    for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False)
+                    .exclude(category=TagCategories.RESPONSE_RATING)
+                    .all()
+                ],
             },
         )
 
