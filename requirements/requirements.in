@@ -33,7 +33,7 @@ ffmpeg # Audio transcription
 httpx
 jinja2
 langchain>=0.3,<0.4
-langchain-core>=0.3,<0.4
+langchain-core>=0.3.23,<0.4
 langchain-anthropic
 langchain-openai
 langchain-community>=0.3,<0.4
