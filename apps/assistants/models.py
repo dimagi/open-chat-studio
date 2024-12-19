@@ -9,7 +9,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.models import Experiment, VersionsMixin, VersionsObjectManagerMixin
 from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -195,11 +195,20 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self):
+    def get_related_experiments_queryset(self, query=None):
+        if query:
+            return Experiment.objects.filter(assistant_id__in=query, is_archived=False)
+
         return self.experiment_set.filter(is_archived=False)
 
-    def get_related_pipeline_node_queryset(self):
+    def get_related_pipeline_node_queryset(self, query=None):
         from apps.pipelines.models import Node
+
+        if query:
+            return Node.objects.filter(type="AssistantNode").filter(
+                params__assistant_id__in=query,
+                pipeline__is_archived=False,
+            )
 
         return Node.objects.filter(type="AssistantNode").filter(
             params__assistant_id=str(self.id),

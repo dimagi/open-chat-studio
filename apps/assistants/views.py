@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -212,13 +213,23 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
             messages.success(request, "Assistant Archived")
             return HttpResponse()
         else:
+            version_query = None
+            if assistant.is_working_version:
+                version_query = list(
+                    map(
+                        str,
+                        OpenAiAssistant.objects.filter(
+                            Q(id=assistant.id) | Q(working_version__id=assistant.id)
+                        ).values_list("id", flat=True),
+                    )
+                )
             experiments = [
                 Chip(label=experiment.name, url=experiment.get_absolute_url())
-                for experiment in assistant.get_related_experiments_queryset()
+                for experiment in assistant.get_related_experiments_queryset(query=version_query)
             ]
             pipeline_nodes = [
                 Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
-                for node in assistant.get_related_pipeline_node_queryset().select_related("pipeline")
+                for node in assistant.get_related_pipeline_node_queryset(query=version_query).select_related("pipeline")
             ]
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
