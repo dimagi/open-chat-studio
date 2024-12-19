@@ -14,6 +14,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -907,7 +908,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def _format_assistant(assistant) -> str:
             if not assistant:
                 return ""
-            return assistant.name.split(f" v{assistant.version_number}")[0]
+            name = assistant.name.split(f" v{assistant.version_number}")[0]
+            template = get_template("generic/chip.html")
+            url = (
+                assistant.get_absolute_url()
+                if assistant.is_working_version
+                else assistant.working_version.get_absolute_url()
+            )
+            return template.render({"chip": Chip(label=name, url=url)})
 
         return Version(
             instance=self,
