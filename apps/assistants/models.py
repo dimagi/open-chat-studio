@@ -9,7 +9,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
+from apps.experiments.models import Experiment, VersionsMixin, VersionsObjectManagerMixin
 from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
@@ -176,27 +176,39 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task
 
-        # don't archive assistant if it's still referenced by an active experiment or pipeline
-        if self.get_related_experiments_queryset().exists():
+        if self.get_related_experiments_queryset().exists() or self.get_related_pipeline_node_queryset().exists():
             return False
-
-        if self.get_related_pipeline_node_queryset().exists():
-            return False
+        if self.is_working_version:
+            for (
+                version
+            ) in self.versions.all():  # first perform all checks so assistants are not archived prior to return False
+                if (
+                    version.get_related_experiments_queryset().exists()
+                    or version.get_related_pipeline_node_queryset().exists()
+                ):
+                    return False
+            for version in self.versions.all():
+                delete_openai_assistant_task.delay(version.id)
+            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
 
         super().archive()
-        if self.is_working_version:
-            # TODO: should this delete the assistant from OpenAI?
-            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
-        else:
-            delete_openai_assistant_task.delay(self.id)
-
+        delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self):
+    def get_related_experiments_queryset(self, query=None):
+        if query:
+            return Experiment.objects.filter(assistant_id__in=query, is_archived=False)
+
         return self.experiment_set.filter(is_archived=False)
 
-    def get_related_pipeline_node_queryset(self):
+    def get_related_pipeline_node_queryset(self, query=None):
         from apps.pipelines.models import Node
+
+        if query:
+            return Node.objects.filter(type="AssistantNode").filter(
+                params__assistant_id__in=query,
+                pipeline__is_archived=False,
+            )
 
         return Node.objects.filter(type="AssistantNode").filter(
             params__assistant_id=str(self.id),
