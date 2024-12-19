@@ -209,6 +209,19 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             tag = f"{tag}-unreleased"
         self.add_system_tag(tag=tag, tag_category=TagCategories.EXPERIMENT_VERSION)
 
+    def add_rating(self, tag: str):
+        tag, _ = Tag.objects.get_or_create(
+            name=tag,
+            team=self.chat.team,
+            is_system_tag=False,
+            category=TagCategories.RESPONSE_RATING,
+        )
+        self.add_tag(tag, team=self.chat.team, added_by=None)
+
+    def rating(self) -> str | None:
+        if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
+            return rating
+
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
         if self.message_type != ChatMessageType.AI:

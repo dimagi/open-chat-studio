@@ -173,6 +173,11 @@ urlpatterns = [
         views.verify_public_chat_token,
         name="verify_public_chat_token",
     ),
+    path(
+        "messages/<int:message_id>/rate/<str:rating>/",
+        views.rate_message,
+        name="rate_message",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
