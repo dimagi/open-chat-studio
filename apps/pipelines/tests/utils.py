@@ -174,3 +174,15 @@ def extract_structured_data_node(provider_id: str, provider_model_id: str, data_
             "data_schema": data_schema,
         },
     }
+
+
+def code_node(code: str | None = None):
+    if code is None:
+        code = "return f'Hello, {input}!'"
+    return {
+        "id": str(uuid4()),
+        "type": nodes.CodeNode.__name__,
+        "params": {
+            "code": code,
+        },
+    }

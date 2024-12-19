@@ -121,6 +121,7 @@ class PipelineNode(BaseModel, ABC):
 
 class Widgets(StrEnum):
     expandable_text = "expandable_text"
+    code = "code"
     toggle = "toggle"
     select = "select"
     float = "float"
