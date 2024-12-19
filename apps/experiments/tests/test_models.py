@@ -994,7 +994,17 @@ class TestExperimentModel:
     def test_archive_working_experiment(self, experiment):
         """Test that archiving an experiment archives all versions and deletes its scheduled messages"""
         session = ExperimentSessionFactory(experiment=experiment)
-        event_action, _ = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
+        event_action = EventActionFactory(
+            action_type=EventActionType.SCHEDULETRIGGER,
+            params={
+                "name": "Test",
+                "time_period": TimePeriod.DAYS,
+                "frequency": 1,
+                "repetitions": 1,
+                "prompt_text": "hi",
+                "experiment_id": experiment.id,
+            },
+        )
         ScheduledMessageFactory(
             experiment=experiment, team=experiment.team, participant=session.participant, action=event_action
         )
@@ -1012,19 +1022,61 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-    def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
-        params = self._get_params(experiment_id, time_period, frequency, repetitions)
-        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_with_assistant(self, delete_openai_assistant_task):
+        """
+        Archiving an assistant experiment should only archive the assistant when it is not still being referenced by
+        another experiment or pipeline or when referenced by the working version
+        """
 
-    def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
-        return {
-            "name": "Test",
-            "time_period": time_period,
-            "frequency": frequency,
-            "repetitions": repetitions,
-            "prompt_text": "hi",
-            "experiment_id": experiment_id,
-        }
+        assistant = OpenAiAssistantFactory()
+        experiment1 = ExperimentFactory(assistant=assistant)
+        experiment2 = ExperimentFactory(assistant=assistant)
+
+        # Version assistant should be archived and removed from OpenAI. Only the version points to it
+        new_version = experiment1.create_new_version()
+        assistant_version = new_version.assistant
+        new_version.archive()
+        delete_openai_assistant_task.assert_called_with(assistant_version.id)
+        delete_openai_assistant_task.reset_mock()
+        self._assert_archived(assistant_version, True)
+
+        experiment1.archive()
+        self._assert_archived(experiment1, True)
+        self._assert_archived(assistant, False)
+
+        experiment2.archive()
+        self._assert_archived(experiment2, True)
+        self._assert_archived(assistant, False)
+
+        delete_openai_assistant_task.assert_not_called()
+
+    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_archive_with_pipeline(self, delete_openai_assistant_task):
+        assistant = OpenAiAssistantFactory()
+        pipeline = PipelineFactory()
+        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        experiment = ExperimentFactory(pipeline=pipeline)
+
+        # For a version, the pipeline should be archived as well as the assistant that it references
+        new_version = experiment.create_new_version()
+        assert assistant.versions.count() == 1
+        assistant_version = assistant.versions.first()
+        new_version.archive()
+        self._assert_archived(new_version.pipeline, True)
+        self._assert_archived(assistant_version, True)
+        delete_openai_assistant_task.assert_called_with(assistant_version.id)
+        delete_openai_assistant_task.reset_mock()
+
+        experiment.archive()
+        self._assert_archived(experiment.pipeline, False)
+        self._assert_archived(assistant, False)
+
+    def _assert_archived(self, model_obj, archived: bool):
+        model_obj.refresh_from_db(fields=["is_archived"])
+        assert model_obj.is_archived == archived
 
 
 @pytest.mark.django_db()

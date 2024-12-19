@@ -4,9 +4,11 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.channels.models import ExperimentChannel
+from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -125,3 +127,33 @@ class TestPipeline:
         ] == expected_call_messages
 
         assert ExperimentSession.objects.count() == 0
+
+    @pytest.mark.django_db()
+    def test_archive_pipeline(self):
+        assistant = OpenAiAssistantFactory()
+        pipeline = PipelineFactory()
+        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        start_pipeline__action = EventActionFactory(
+            action_type=EventActionType.PIPELINE_START,
+            params={
+                "pipeline_id": pipeline.id,
+            },
+        )
+        experiment1 = ExperimentFactory()
+        experiment2 = ExperimentFactory()
+        static_trigger = StaticTriggerFactory(experiment=experiment2, action=start_pipeline__action)
+
+        # Experiment and Static trigger still uses it
+        assert pipeline.archive() is False
+
+        experiment1.archive()
+        # Static trigger from experiment2 still uses it
+        assert pipeline.archive() is False
+
+        static_trigger.archive()
+        # Nothing uses it, so archive it
+        assert pipeline.archive() is True
+
+        # Double check that the node didn't archive the assistant
+        assistant.refresh_from_db()
+        assert assistant.is_archived is False

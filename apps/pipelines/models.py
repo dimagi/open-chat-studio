@@ -262,12 +262,45 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return pipeline_version
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
+        """
+        Archive this record only when it is not still being referenced by other records. If this record is the working
+        version, all of its versions will be archived as well. The same goes for its nodes.
+        """
+        if self.get_related_experiments_queryset().exists():
+            return False
+
+        if len(self.get_static_trigger_experiment_ids()) > 0:
+            return False
+
         super().archive()
-        self.node_set.update(is_archived=True)
+        for node in self.node_set.all():
+            node.archive()
+
+        if self.is_working_version:
+            for version in self.versions.filter(is_archived=False):
+                version.archive()
+
+        return True
 
     def get_node_param_values(self, node_cls, param_name: str) -> list:
         return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        return self.experiment_set.filter(is_archived=False)
+
+    def get_static_trigger_experiment_ids(self) -> models.QuerySet:
+        from apps.events.models import EventAction, EventActionType
+
+        return (
+            EventAction.objects.filter(
+                action_type=EventActionType.PIPELINE_START,
+                params__pipeline_id=self.id,
+                static_trigger__is_archived=False,
+            )
+            .annotate(trigger_experiment_id=models.F("static_trigger__experiment"))
+            .values("trigger_experiment_id")
+        )
 
 
 class Node(BaseModel, VersionsMixin):
@@ -310,6 +343,20 @@ class Node(BaseModel, VersionsMixin):
         if save:
             new_version.save()
         return new_version
+
+    def archive(self):
+        """
+        Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
+        archived when the pipeline they belong to is archived.
+        """
+        from apps.assistants.models import OpenAiAssistant
+
+        super().archive()
+        if self.is_a_version and self.type == "AssistantNode":
+            assistant_id = self.params.get("assistant_id")
+            if assistant_id:
+                assistant = OpenAiAssistant.objects.get(id=assistant_id)
+                assistant.archive()
 
 
 class PipelineRunStatus(models.TextChoices):
