@@ -87,6 +87,7 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
+from apps.generics.chips import Chip
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -680,11 +681,20 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     if experiment != experiment.default_version:
         deployed_version = experiment.default_version.version_number
 
+    pipeline_chip = None
+    assistant_chip = None
+    if pipeline := experiment.pipeline:
+        pipeline_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
+    elif assistant := experiment.assistant:
+        assistant_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
         {
             "active_tab": "experiments",
+            "pipeline_chip": pipeline_chip,
+            "assistant_chip": assistant_chip,
             "experiment": experiment,
             "user_sessions": user_sessions,
             "platforms": available_platforms,
