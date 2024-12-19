@@ -6,14 +6,16 @@
             hx-post="{% url 'experiments:rate_message' team_slug=team_slug message_id=message.id rating='👍' %}"
             hx-swap="outerHTML"
             hx-target="#rating-{{message.id}}"
-            class="text-sm p-1 rounded-md hover:bg-gray-50">
+            class="text-sm p-1 rounded-md hover:bg-gray-50"
+            title="Good response">
             👍
         </button>
         <button
             hx-post="{% url 'experiments:rate_message' team_slug=team_slug message_id=message.id rating='👎' %}"
             hx-swap="outerHTML"
             hx-target="#rating-{{message.id}}"
-            class="text-sm p-1 rounded-md hover:bg-gray-50">
+            class="text-sm p-1 rounded-md hover:bg-gray-50"
+            title="Bad response">
             👎
         </button>
     {% endif %}
