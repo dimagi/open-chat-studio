@@ -1,0 +1,16 @@
+{
+  "description": "Runs python",
+  "properties": {
+    "code": {
+      "default": "# You must define a main function, which takes the node input as a string.\n# Return a string to pass to the next node.\ndef main(input: str, **kwargs) -> str:\n    return input\n",
+      "description": "The code to run",
+      "title": "Code",
+      "type": "string",
+      "ui:widget": "code"
+    }
+  },
+  "title": "CodeNode",
+  "type": "object",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:label": "Python Node"
+}

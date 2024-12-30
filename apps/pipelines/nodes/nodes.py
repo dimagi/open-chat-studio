@@ -1,4 +1,7 @@
+import datetime
+import inspect
 import json
+import time
 from typing import Literal
 
 import tiktoken
@@ -14,13 +17,14 @@ from pydantic import BaseModel, Field, create_model, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
+from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -622,3 +626,118 @@ class AssistantNode(PipelineNode):
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             return AssistantChat(adapter=adapter, history_manager=history_manager)
+
+
+DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
+# Return a string to pass to the next node.
+def main(input: str, **kwargs) -> str:
+    return input
+"""
+
+
+class CodeNode(PipelineNode):
+    """Runs python"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Python Node"))
+    code: str = Field(
+        default=DEFAULT_FUNCTION,
+        description="The code to run",
+        json_schema_extra=UiSchema(widget=Widgets.code),
+    )
+
+    @field_validator("code")
+    def validate_code(cls, value, info: FieldValidationInfo):
+        if not value:
+            value = DEFAULT_FUNCTION
+        try:
+            byte_code = compile_restricted(
+                value,
+                filename="<inline code>",
+                mode="exec",
+            )
+            custom_locals = {}
+            exec(byte_code, {}, custom_locals)
+
+            try:
+                main = custom_locals["main"]
+            except KeyError:
+                raise SyntaxError("You must define a 'main' function")
+
+            for name, item in custom_locals.items():
+                if name != "main" and inspect.isfunction(item):
+                    raise SyntaxError(
+                        "You can only define a single function, 'main' at the top level. "
+                        "You may use nested functions inside that function if required"
+                    )
+
+            if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
+                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
+
+        except SyntaxError as exc:
+            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+        return value
+
+    def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
+        function_name = "main"
+        byte_code = compile_restricted(
+            self.code,
+            filename="<inline code>",
+            mode="exec",
+        )
+
+        custom_locals = {}
+        custom_globals = self._get_custom_globals()
+        try:
+            exec(byte_code, custom_globals, custom_locals)
+            result = str(custom_locals[function_name](input))
+        except Exception as exc:
+            raise PipelineNodeRunError(exc) from exc
+        return PipelineState.from_node_output(node_id=node_id, output=result)
+
+    def _get_custom_globals(self):
+        from RestrictedPython.Eval import (
+            default_guarded_getitem,
+            default_guarded_getiter,
+        )
+
+        custom_globals = safe_globals.copy()
+        custom_globals.update(
+            {
+                "__builtins__": self._get_custom_builtins(),
+                "json": json,
+                "datetime": datetime,
+                "time": time,
+                "_getitem_": default_guarded_getitem,
+                "_getiter_": default_guarded_getiter,
+                "_write_": lambda x: x,
+            }
+        )
+        return custom_globals
+
+    def _get_custom_builtins(self):
+        allowed_modules = {
+            "json",
+            "re",
+            "datetime",
+            "time",
+        }
+        custom_builtins = safe_builtins.copy()
+        custom_builtins.update(
+            {
+                "min": min,
+                "max": max,
+                "sum": sum,
+                "abs": abs,
+                "all": all,
+                "any": any,
+                "datetime": datetime,
+            }
+        )
+
+        def guarded_import(name, *args, **kwargs):
+            if name not in allowed_modules:
+                raise ImportError(f"Importing '{name}' is not allowed")
+            return __import__(name, *args, **kwargs)
+
+        custom_builtins["__import__"] = guarded_import
+        return custom_builtins
