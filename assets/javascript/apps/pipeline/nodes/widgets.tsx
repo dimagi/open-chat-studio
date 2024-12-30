@@ -9,6 +9,7 @@ import { useState } from "react";
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from "@codemirror/lang-python";
 import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
+import { CompletionContext, snippetCompletion as snip } from '@codemirror/autocomplete'
 import { TypedOption } from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import { classNames, concatenate, getCachedData, getSelectOptions } from "../utils";
@@ -306,6 +307,31 @@ export function CodeModal(
     isDarkMode: boolean;
     inputError: string | undefined;
   }) {
+  const customCompletions = {
+    get_participant_data: snip("get_participant_data(\"${key_name}\")", {
+      label: "get_participant_data",
+      type: "keyword",
+      detail: "Gets participant data for the given key",
+      boost: 1
+    }),
+    set_participant_data: snip("set_participant_data(\"${key_name}\", ${data})", {
+      label: "set_participant_data",
+      type: "keyword",
+      detail: "Sets participant data for the given key",
+      boost: 1
+    }),
+  }
+  function pythonCompletions(context: CompletionContext) {
+    const word = context.matchBefore(/\w*/)
+    if (!word || (word.from == word.to && !context.explicit))
+      return null
+    return {
+      from: word.from,
+      options: Object.values(customCompletions).filter(completion =>
+        completion.label.toLowerCase().startsWith(word.text.toLowerCase())
+      )
+    }
+  }
   return (
     <dialog
       id={modalId}
@@ -330,6 +356,9 @@ export function CodeModal(
             theme={isDarkMode ? githubDark : githubLight}
             extensions={[
               python(),
+              python().language.data.of({
+                autocomplete: pythonCompletions
+              })
             ]}
           />
         </div>
