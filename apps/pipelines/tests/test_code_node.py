@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 
+from apps.experiments.models import ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import (
@@ -11,6 +12,7 @@ from apps.pipelines.tests.utils import (
     end_node,
     start_node,
 )
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -18,6 +20,11 @@ from apps.utils.pytest import django_db_with_data
 @pytest.fixture()
 def pipeline():
     return PipelineFactory()
+
+
+@pytest.fixture()
+def experiment_session():
+    return ExperimentSessionFactory()
 
 
 IMPORTS = """
@@ -112,3 +119,63 @@ def test_code_node_runtime_errors(pipeline, code, input, error):
     ]
     with pytest.raises(PipelineNodeRunError, match=error):
         create_runnable(pipeline, nodes).invoke(PipelineState(messages=[input]))["messages"][-1]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_get_participant_data(pipeline, experiment_session):
+    ParticipantData.objects.create(
+        team=experiment_session.team,
+        content_object=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
+    )
+
+    code = """
+def main(input, **kwargs):
+    return get_participant_data("fun_facts")["body_type"]
+"""
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+            "messages"
+        ][-1]
+        == "robot"
+    )
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_update_participant_data(pipeline, experiment_session):
+    output = "moody"
+    participant_data = ParticipantData.objects.create(
+        team=experiment_session.team,
+        content_object=experiment_session.experiment,
+        participant=experiment_session.participant,
+        data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
+    )
+
+    code = f"""
+def main(input, **kwargs):
+    facts = get_participant_data("fun_facts")
+    facts["personality"] = "{output}"
+    set_participant_data("fun_facts", facts)
+    return get_participant_data("fun_facts")["personality"]
+"""
+    nodes = [
+        start_node(),
+        code_node(code),
+        end_node(),
+    ]
+    assert (
+        create_runnable(pipeline, nodes).invoke(PipelineState(experiment_session=experiment_session, messages=[input]))[
+            "messages"
+        ][-1]
+        == output
+    )
+    participant_data.refresh_from_db()
+    assert participant_data.data["fun_facts"]["personality"] == output
