@@ -5,6 +5,7 @@ import time
 from typing import Literal
 
 import tiktoken
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from jinja2 import meta
@@ -23,7 +24,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
@@ -630,6 +631,11 @@ class AssistantNode(PipelineNode):
 
 DEFAULT_FUNCTION = """# You must define a main function, which takes the node input as a string.
 # Return a string to pass to the next node.
+
+# Available functions:
+# - get_participant_data(key_name: str) -> str | None
+# - set_participant_data(key_name: str, data: Any) -> None
+
 def main(input: str, **kwargs) -> str:
     return input
 """
@@ -686,7 +692,7 @@ class CodeNode(PipelineNode):
         )
 
         custom_locals = {}
-        custom_globals = self._get_custom_globals()
+        custom_globals = self._get_custom_globals(state)
         try:
             exec(byte_code, custom_globals, custom_locals)
             result = str(custom_locals[function_name](input))
@@ -694,7 +700,7 @@ class CodeNode(PipelineNode):
             raise PipelineNodeRunError(exc) from exc
         return PipelineState.from_node_output(node_id=node_id, output=result)
 
-    def _get_custom_globals(self):
+    def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
             default_guarded_getitem,
             default_guarded_getiter,
@@ -710,9 +716,36 @@ class CodeNode(PipelineNode):
                 "_getitem_": default_guarded_getitem,
                 "_getiter_": default_guarded_getiter,
                 "_write_": lambda x: x,
+                "get_participant_data": self._get_participant_data(state),
+                "set_participant_data": self._set_participant_data(state),
             }
         )
         return custom_globals
+
+    def _set_participant_data(self, state: PipelineState):
+        def set_particpant_data(key_name: str, value: str) -> None:
+            content_type = ContentType.objects.get_for_model(Experiment)
+            session = state["experiment_session"]
+            participant_data, _ = ParticipantData.objects.get_or_create(
+                participant=session.participant,
+                content_type=content_type,
+                object_id=session.experiment.id,
+                team=session.experiment.team,
+            )
+            participant_data.data[key_name] = value
+            participant_data.save()
+
+        return set_particpant_data
+
+    def _get_participant_data(self, state: PipelineState):
+        def get_particpant_data(key_name: str):
+            session = state["experiment_session"]
+            participant_data: ParticipantData = ParticipantData.objects.for_experiment(session.experiment).get(
+                participant=session.participant
+            )
+            return participant_data.data.get(key_name)
+
+        return get_particpant_data
 
     def _get_custom_builtins(self):
         allowed_modules = {
