@@ -43,6 +43,11 @@
       "ui:widget": "none",
       "type": "string"
     },
+    "name": {
+      "description": "The node name",
+      "title": "Name",
+      "type": "string"
+    },
     "prompt": {
       "default": "You are an extremely helpful router",
       "minLength": 1,
@@ -67,7 +72,8 @@
   },
   "required": [
     "llm_provider_id",
-    "llm_provider_model_id"
+    "llm_provider_model_id",
+    "name"
   ],
   "title": "RouterNode",
   "type": "object",

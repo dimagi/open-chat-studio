@@ -107,6 +107,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
     error_message = "Bad things are afoot"
 
     class FailingNode(PipelineNode):
+        name: str = "failure"
+
         def process(self, *args, **kwargs) -> RunnableLambda:
             raise Exception(error_message)
 

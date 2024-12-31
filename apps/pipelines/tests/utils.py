@@ -33,11 +33,11 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict] | N
 
 
 def start_node():
-    return {"id": str(uuid4()), "type": nodes.StartNode.__name__}
+    return {"id": str(uuid4()), "type": nodes.StartNode.__name__, "params": {"name": "start"}}
 
 
 def end_node():
-    return {"id": str(uuid4()), "type": nodes.EndNode.__name__}
+    return {"id": str(uuid4()), "type": nodes.EndNode.__name__, "params": {"name": "end"}}
 
 
 def email_node():
@@ -46,6 +46,7 @@ def email_node():
         "label": "Send an email",
         "type": "SendEmail",
         "params": {
+            "name": "email",
             "recipient_list": "test@example.com",
             "subject": "This is an interesting email",
         },
@@ -67,6 +68,7 @@ def llm_response_with_prompt_node(
         )
 
     params = {
+        "name": "llm response with prompt",
         "llm_provider_id": provider_id,
         "llm_provider_model_id": provider_model_id,
         "prompt": prompt,
@@ -92,6 +94,7 @@ def llm_response_node(provider_id: str, provider_model_id: str):
         "id": str(uuid4()),
         "type": nodes.LLMResponse.__name__,
         "params": {
+            "name": "llm response",
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
         },
@@ -105,6 +108,7 @@ def render_template_node(template_string: str | None = None):
         "id": str(uuid4()),
         "type": nodes.RenderTemplate.__name__,
         "params": {
+            "name": "render template",
             "template_string": template_string,
         },
     }
@@ -114,6 +118,7 @@ def passthrough_node():
     return {
         "id": str(uuid4()),
         "type": nodes.Passthrough.__name__,
+        "params": {"name": "passthrough"},
     }
 
 
@@ -121,7 +126,7 @@ def boolean_node():
     return {
         "id": str(uuid4()),
         "type": nodes.BooleanNode.__name__,
-        "params": {"input_equals": "hello"},
+        "params": {"name": "boolean", "input_equals": "hello"},
     }
 
 
@@ -130,6 +135,7 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str]):
         "id": str(uuid4()),
         "type": nodes.RouterNode.__name__,
         "params": {
+            "name": "router",
             "prompt": "You are a router",
             "keywords": keywords,
             "num_outputs": len(keywords),
@@ -144,6 +150,7 @@ def assistant_node(assistant_id: str):
         "id": str(uuid4()),
         "type": nodes.AssistantNode.__name__,
         "params": {
+            "name": "assistant",
             "assistant_id": assistant_id,
             "citations_enabled": True,
             "input_formatter": "",
@@ -156,6 +163,7 @@ def extract_participant_data_node(provider_id: str, provider_model_id: str, data
         "id": str(uuid4()),
         "type": nodes.ExtractParticipantData.__name__,
         "params": {
+            "name": "extract participant data",
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
             "data_schema": data_schema,
@@ -169,6 +177,7 @@ def extract_structured_data_node(provider_id: str, provider_model_id: str, data_
         "id": str(uuid4()),
         "type": nodes.ExtractStructuredData.__name__,
         "params": {
+            "name": "extract structured data",
             "llm_provider_id": provider_id,
             "llm_provider_model_id": provider_model_id,
             "data_schema": data_schema,
@@ -183,6 +192,7 @@ def code_node(code: str | None = None):
         "id": str(uuid4()),
         "type": nodes.CodeNode.__name__,
         "params": {
+            "name": "code node",
             "code": code,
         },
     }
