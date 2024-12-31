@@ -5,7 +5,7 @@ import usePipelineStore from "./stores/pipelineStore";
 import usePipelineManagerStore from "./stores/pipelineManagerStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
-import {getNodeInputWidget, showAdvancedButton} from "./nodes/GetInputWidget";
+import {getNodeInputWidget} from "./nodes/GetInputWidget";
 import NodeInput from "./nodes/NodeInput";
 import NodeOutputs from "./nodes/NodeOutputs";
 import {HelpContent} from "./panel/ComponentHelp";
@@ -87,14 +87,12 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
               </React.Fragment>
             ))}
           </div>
-          {showAdvancedButton(data.type) && (
-            <div className="mt-2">
-              <button className="btn btn-sm btn-ghost w-full"
-                      onClick={() => editNode()}>
-                Advanced
-              </button>
-            </div>
-          )}
+          <div className="mt-2">
+            <button className="btn btn-sm btn-ghost w-full"
+                    onClick={() => editNode()}>
+              Advanced
+            </button>
+          </div>
         </div>
         <NodeOutputs data={data} />
       </div>

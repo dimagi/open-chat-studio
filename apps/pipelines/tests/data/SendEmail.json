@@ -1,6 +1,11 @@
 {
   "description": "Send the input to the node to the list of addresses provided",
   "properties": {
+    "name": {
+      "description": "The node name",
+      "title": "Name",
+      "type": "string"
+    },
     "recipient_list": {
       "description": "A comma-separated list of email addresses",
       "title": "Recipient List",
@@ -12,6 +17,7 @@
     }
   },
   "required": [
+    "name",
     "recipient_list",
     "subject"
   ],

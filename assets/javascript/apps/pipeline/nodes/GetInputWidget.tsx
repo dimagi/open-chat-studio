@@ -23,17 +23,14 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "AssistantNode": ["assistant_id", "citations_enabled"],
 };
 
-export const showAdvancedButton = (nodeType: string) => {
-  return nodeTypeToInputParamsMap[nodeType] !== undefined;
-}
-
 export const getNodeInputWidget = (param: InputWidgetParams) => {
   if (!param.nodeType) {
     return <></>;
   }
 
   const allowedInNode = nodeTypeToInputParamsMap[param.nodeType];
-  if (allowedInNode && !allowedInNode.includes(param.name)) {
+  if (param.name == "name" || (allowedInNode && !allowedInNode.includes(param.name))) {
+    /* name param is always in the advanced box */
     return <></>;
   }
   return getInputWidget(param);

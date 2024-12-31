@@ -6,7 +6,7 @@ from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
 
 from apps.experiments.models import ExperimentSession
@@ -77,6 +77,9 @@ class PipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+    name: str = Field(
+        description="The node name",
+    )
 
     def process(self, node_id: str, incoming_edges: list, state: PipelineState, config) -> PipelineState:
         self._config = config

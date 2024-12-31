@@ -300,12 +300,14 @@ class Passthrough(PipelineNode):
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
+    name: str = "start"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
+    name: str = "end"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
@@ -638,6 +640,7 @@ class AssistantNode(PipelineNode):
         output = chain_output.output
 
         return PipelineState.from_node_output(
+            node_name=self.name,
             node_id=node_id,
             output=output,
             message_metadata={

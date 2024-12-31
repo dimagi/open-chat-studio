@@ -1,6 +1,11 @@
 {
   "description": "Renders a Jinja template",
   "properties": {
+    "name": {
+      "description": "The node name",
+      "title": "Name",
+      "type": "string"
+    },
     "template_string": {
       "description": "Use {{your_variable_name}} to refer to designate input",
       "title": "Template String",
@@ -9,6 +14,7 @@
     }
   },
   "required": [
+    "name",
     "template_string"
   ],
   "title": "RenderTemplate",

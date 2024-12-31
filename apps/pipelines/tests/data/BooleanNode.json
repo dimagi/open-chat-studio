@@ -1,12 +1,18 @@
 {
   "description": "Branches based whether the input matches a certain value",
   "properties": {
+    "name": {
+      "description": "The node name",
+      "title": "Name",
+      "type": "string"
+    },
     "input_equals": {
       "title": "Input Equals",
       "type": "string"
     }
   },
   "required": [
+    "name",
     "input_equals"
   ],
   "title": "BooleanNode",

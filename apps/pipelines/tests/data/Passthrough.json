@@ -1,6 +1,15 @@
 {
   "description": "Returns the input without modification",
-  "properties": {},
+  "properties": {
+    "name": {
+      "description": "The node name",
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
   "title": "Passthrough",
   "type": "object",
   "ui:can_add": false,
