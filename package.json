@@ -50,7 +50,7 @@
   "dependencies": {
     "@codemirror/lang-python": "^6.1.6",
     "@uiw/codemirror-theme-github": "^4.23.6",
-    "@uiw/react-codemirror": "^4.23.6",
+    "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
     "axios": "^1.7.7",
