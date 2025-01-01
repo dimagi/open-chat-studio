@@ -372,6 +372,11 @@ export function CodeModal(
                 autocomplete: pythonCompletions
               })
             ]}
+            basicSetup={{
+                lineNumbers: true,
+                tabSize: 4,
+                indentOnInput: true,
+            }}
           />
         </div>
         <div className="flex flex-col">
