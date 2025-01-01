@@ -145,6 +145,19 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str]):
     }
 
 
+def state_key_router_node(state_key: str, keywords: list[str]):
+    return {
+        "id": str(uuid4()),
+        "type": nodes.StateKeyRouterNode.__name__,
+        "params": {
+            "name": "state key router",
+            "state_key": state_key,
+            "keywords": keywords,
+            "num_outputs": len(keywords),
+        },
+    }
+
+
 def assistant_node(assistant_id: str):
     return {
         "id": str(uuid4()),
