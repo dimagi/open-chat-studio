@@ -696,20 +696,22 @@ class CodeNode(PipelineNode):
             try:
                 main = custom_locals["main"]
             except KeyError:
-                raise SyntaxError("You must define a 'main' function")
+                raise SyntaxError(["You must define a 'main' function"])
 
             for name, item in custom_locals.items():
                 if name != "main" and inspect.isfunction(item):
                     raise SyntaxError(
-                        "You can only define a single function, 'main' at the top level. "
-                        "You may use nested functions inside that function if required"
+                        [
+                            "You can only define a single function, 'main' at the top level. "
+                            "You may use nested functions inside that function if required"
+                        ]
                     )
 
             if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
-                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
+                raise SyntaxError(["The main function should have the signature main(input, **kwargs) only."])
 
         except SyntaxError as exc:
-            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+            raise PydanticCustomError("invalid_code", "{error}", {"error": ",".join(exc.msg)})
         return value
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
