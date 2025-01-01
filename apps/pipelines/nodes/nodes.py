@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import tiktoken
 from django.contrib.contenttypes.models import ContentType
@@ -82,7 +82,7 @@ class RenderTemplate(PipelineNode):
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         output = template.render(content)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -185,7 +185,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -255,7 +255,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         # Invoke runnable
         result = chat.invoke(input=input)
-        return PipelineState.from_node_output(node_id=node_id, output=result.output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
         return len(self.tools) > 0 or len(self.custom_actions) > 0
@@ -283,7 +283,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=None)
 
 
 class Passthrough(PipelineNode):
@@ -294,7 +294,7 @@ class Passthrough(PipelineNode):
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
             self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return PipelineState.from_node_output(node_id=node_id, output=input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class StartNode(Passthrough):
@@ -427,7 +427,7 @@ class ExtractStructuredDataNodeMixin:
 
         self.post_extraction_hook(new_reference_data, state)
         output = json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -729,7 +729,7 @@ class CodeNode(PipelineNode):
             result = str(custom_locals[function_name](input))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_id=node_id, output=result)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
 
     def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
@@ -778,9 +778,25 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": participant_data_proxy.get,
                 "set_participant_data": participant_data_proxy.set,
+                "get_state_key": self._get_state_key(state),
+                "set_state_key": self._set_state_key(state),
             }
         )
         return custom_globals
+
+    def _get_state_key(self, state: PipelineState):
+        def get_state_key(key_name: str):
+            return state["shared_state"].get(key_name)
+
+        return get_state_key
+
+    def _set_state_key(self, state: PipelineState):
+        def set_state_key(key_name: str, value):
+            if key_name == "outputs":
+                raise PipelineNodeRunError("Cannot set the outputs key of the shared state")
+            state["shared_state"][key_name] = value
+
+        return set_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {

@@ -27,11 +27,25 @@ def add_messages(left: dict, right: dict):
     return output
 
 
+def add_shared_state_messages(left: dict, right: dict):
+    output = {**left}
+    try:
+        output["outputs"].update(right["outputs"])
+    except KeyError:
+        output["outputs"] = right.get("outputs", {})
+    for key, value in right.items():
+        if key != "outputs":
+            output[key] = value
+
+    return output
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     pipeline_version: int
+    shared_state: Annotated[dict, add_shared_state_messages]
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list | None = None
@@ -44,8 +58,9 @@ class PipelineState(dict):
         return copy
 
     @classmethod
-    def from_node_output(cls, node_id: str, output: Any = None, **kwargs) -> Self:
+    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
         kwargs["outputs"] = {node_id: {"message": output}}
+        kwargs["shared_state"] = {"outputs": {node_name: output}}
         if output is not None:
             kwargs["messages"] = [output]
         return cls(**kwargs)
@@ -95,6 +110,7 @@ class PipelineNode(BaseModel, ABC):
                 break
         else:  # This is the first node in the graph
             input = state["messages"][-1]
+            state["shared_state"]["user_input"] = input
         return self._process(input=input, state=state, node_id=node_id)
 
     def process_conditional(self, state: PipelineState, node_id: str | None = None) -> str:
