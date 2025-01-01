@@ -660,6 +660,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Available functions:
 # - get_participant_data(key_name: str) -> str | None
 # - set_participant_data(key_name: str, data: Any) -> None
+# - get_state_key(key_name: str) -> str | None
+# - set_state_key(key_name: str, data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
