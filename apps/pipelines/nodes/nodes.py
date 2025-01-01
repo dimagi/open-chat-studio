@@ -330,7 +330,7 @@ class BooleanNode(Passthrough):
 
 
 class RouterNode(Passthrough, HistoryMixin):
-    """Routes the input to one of the linked nodes"""
+    """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
 
@@ -380,6 +380,28 @@ class RouterNode(Passthrough, HistoryMixin):
             return keyword.lower()
         else:
             return self.keywords[0].lower()
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+
+
+class StateKeyRouterNode(Passthrough):
+    """Routes the input to a linked node using the shared state of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="State Key Router"))
+
+    state_key: str
+    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
+    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+
+    def _process_conditional(self, state: PipelineState, node_id=None):
+        try:
+            return state["shared_state"][self.state_key]
+        except KeyError:
+            raise PipelineNodeRunError(f"The key '{self.state_key}' is not defined in the shared state")
 
     def get_output_map(self):
         """Returns a mapping of the form:

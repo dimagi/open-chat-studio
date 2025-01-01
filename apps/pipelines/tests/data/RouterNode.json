@@ -1,5 +1,5 @@
 {
-  "description": "Routes the input to one of the linked nodes",
+  "description": "Routes the input to one of the linked nodes using an LLM",
   "properties": {
     "llm_provider_id": {
       "title": "LLM Model",

@@ -13,6 +13,7 @@ from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
+    code_node,
     create_runnable,
     email_node,
     end_node,
@@ -24,6 +25,7 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     router_node,
     start_node,
+    state_key_router_node,
 )
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -366,6 +368,51 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     assert output["messages"][-1] == "D d"
     output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
     assert output["messages"][-1] == "A z"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.pipelines.nodes.base.PipelineNode.logger", mock.Mock())
+def test_state_key_router(pipeline):
+    # The state key router will switch based on a state key, and pass its input through
+
+    code_set = """
+def main(input, **kwargs):
+    if "go to first" in input.lower():
+        set_state_key("route_to", "first")
+    elif "go to second" in input.lower():
+        set_state_key("route_to", "second")
+    return input
+"""
+    start = start_node()
+    code = code_node(code_set)
+    router = state_key_router_node("route_to", ["first", "second"])
+    template_a = render_template_node("A {{ input }}")
+    template_b = render_template_node("B {{ input }}")
+    end = end_node()
+    nodes = [start, code, router, template_a, template_b, end]
+    edges = [
+        {"id": "start -> code", "source": start["id"], "target": code["id"]},
+        {"id": "code -> router", "source": code["id"], "target": router["id"]},
+        {
+            "id": "router -> A",
+            "source": router["id"],
+            "target": template_a["id"],
+            "sourceHandle": "output_0",
+        },
+        {
+            "id": "router -> B",
+            "source": router["id"],
+            "target": template_b["id"],
+            "sourceHandle": "output_1",
+        },
+        {"id": "A -> end", "source": template_a["id"], "target": end["id"]},
+        {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+    output = runnable.invoke(PipelineState(messages=["Go to FIRST"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "A Go to FIRST"
+    output = runnable.invoke(PipelineState(messages=["Go to Second"], experiment_session=experiment_session))
+    assert output["messages"][-1] == "B Go to Second"
 
 
 @contextmanager
