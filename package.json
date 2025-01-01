@@ -67,7 +67,7 @@
     "react-hotkeys-hook": "^4.5.1",
     "reactflow": "^11.11.4",
     "short-unique-id": "^5.2.0",
-    "tailwindcss": "^3.4.14",
+    "tailwindcss": "^3.4.17",
     "tom-select": "^2.3.1",
     "zustand": "^4.5.5"
   }
