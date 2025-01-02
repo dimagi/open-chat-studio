@@ -44,6 +44,7 @@ def test_running_pipeline_creates_run(pipeline: Pipeline, session: ExperimentSes
             pipeline.node_ids[0]: {"message": "foo"},
             pipeline.node_ids[1]: {"message": "foo"},
         },
+        shared_state={"outputs": {"end": "foo", "start": "foo"}, "user_input": "foo"},
     )
 
     assert len(run.log["entries"]) == 8
@@ -107,6 +108,8 @@ def test_running_failed_pipeline_logs_error(pipeline: Pipeline, session: Experim
     error_message = "Bad things are afoot"
 
     class FailingNode(PipelineNode):
+        name: str = "failure"
+
         def process(self, *args, **kwargs) -> RunnableLambda:
             raise Exception(error_message)
 

@@ -90,9 +90,10 @@ export default function Pipeline() {
         const data: NodeData = JSON.parse(
           event.dataTransfer.getData("nodedata")
         );
+        const newId = getNodeId(data.type);
+        data.params["name"] = newId;
         const flowType = data.flowType;
         delete data.flowType;
-        const newId = getNodeId(data.type);
 
         const newNode = {
           id: newId,

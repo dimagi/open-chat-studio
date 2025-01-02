@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import tiktoken
 from django.contrib.contenttypes.models import ContentType
@@ -73,7 +73,7 @@ class RenderTemplate(PipelineNode):
             content = all_variables(input)
         template = SandboxedEnvironment().from_string(self.template_string)
         output = template.render(content)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
 
 class LLMResponseMixin(BaseModel):
@@ -175,7 +175,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     def _process(self, input, node_id: str, **kwargs) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
-        return PipelineState.from_node_output(node_id=node_id, output=output.content)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output.content)
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
@@ -230,7 +230,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
         # Invoke runnable
         result = chat.invoke(input=input)
-        return PipelineState.from_node_output(node_id=node_id, output=result.output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
         return len(self.tools) > 0
@@ -258,7 +258,7 @@ class SendEmail(PipelineNode):
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
         )
-        return PipelineState.from_node_output(node_id=node_id, output=None)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=None)
 
 
 class Passthrough(PipelineNode):
@@ -269,18 +269,20 @@ class Passthrough(PipelineNode):
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         if self.logger:
             self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return PipelineState.from_node_output(node_id=node_id, output=input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=input)
 
 
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
+    name: str = "start"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
+    name: str = "end"
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
@@ -302,7 +304,7 @@ class BooleanNode(Passthrough):
 
 
 class RouterNode(Passthrough, HistoryMixin):
-    """Routes the input to one of the linked nodes"""
+    """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Router"))
 
@@ -360,6 +362,28 @@ class RouterNode(Passthrough, HistoryMixin):
         return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
 
 
+class StateKeyRouterNode(Passthrough):
+    """Routes the input to a linked node using the shared state of the pipeline"""
+
+    model_config = ConfigDict(json_schema_extra=NodeSchema(label="State Key Router"))
+
+    state_key: str
+    num_outputs: int = Field(2, json_schema_extra=UiSchema(widget=Widgets.none))
+    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
+
+    def _process_conditional(self, state: PipelineState, node_id=None):
+        try:
+            return state["shared_state"][self.state_key]
+        except KeyError:
+            raise PipelineNodeRunError(f"The key '{self.state_key}' is not defined in the shared state")
+
+    def get_output_map(self):
+        """Returns a mapping of the form:
+        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
+        """
+        return {f"output_{output_num}": keyword.lower() for output_num, keyword in enumerate(self.keywords)}
+
+
 class ExtractStructuredDataNodeMixin:
     def _prompt_chain(self, reference_data):
         template = (
@@ -399,7 +423,7 @@ class ExtractStructuredDataNodeMixin:
 
         self.post_extraction_hook(new_reference_data, state)
         output = json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_id=node_id, output=output)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=output)
 
     def post_extraction_hook(self, output, state):
         pass
@@ -612,6 +636,7 @@ class AssistantNode(PipelineNode):
         output = chain_output.output
 
         return PipelineState.from_node_output(
+            node_name=self.name,
             node_id=node_id,
             output=output,
             message_metadata={
@@ -635,6 +660,8 @@ DEFAULT_FUNCTION = """# You must define a main function, which takes the node in
 # Available functions:
 # - get_participant_data(key_name: str) -> str | None
 # - set_participant_data(key_name: str, data: Any) -> None
+# - get_state_key(key_name: str) -> str | None
+# - set_state_key(key_name: str, data: Any) -> None
 
 def main(input: str, **kwargs) -> str:
     return input
@@ -667,20 +694,22 @@ class CodeNode(PipelineNode):
             try:
                 main = custom_locals["main"]
             except KeyError:
-                raise SyntaxError("You must define a 'main' function")
+                raise SyntaxError(["You must define a 'main' function"])
 
             for name, item in custom_locals.items():
                 if name != "main" and inspect.isfunction(item):
                     raise SyntaxError(
-                        "You can only define a single function, 'main' at the top level. "
-                        "You may use nested functions inside that function if required"
+                        [
+                            "You can only define a single function, 'main' at the top level. "
+                            "You may use nested functions inside that function if required"
+                        ]
                     )
 
             if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
-                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
+                raise SyntaxError(["The main function should have the signature main(input, **kwargs) only."])
 
         except SyntaxError as exc:
-            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg})
+            raise PydanticCustomError("invalid_code", "{error}", {"error": ",".join(exc.msg)})
         return value
 
     def _process(self, input: str, state: PipelineState, node_id: str) -> PipelineState:
@@ -698,7 +727,7 @@ class CodeNode(PipelineNode):
             result = str(custom_locals[function_name](input))
         except Exception as exc:
             raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_id=node_id, output=result)
+        return PipelineState.from_node_output(node_name=self.name, node_id=node_id, output=result)
 
     def _get_custom_globals(self, state: PipelineState):
         from RestrictedPython.Eval import (
@@ -718,12 +747,14 @@ class CodeNode(PipelineNode):
                 "_write_": lambda x: x,
                 "get_participant_data": self._get_participant_data(state),
                 "set_participant_data": self._set_participant_data(state),
+                "get_state_key": self._get_state_key(state),
+                "set_state_key": self._set_state_key(state),
             }
         )
         return custom_globals
 
     def _set_participant_data(self, state: PipelineState):
-        def set_particpant_data(key_name: str, value: str) -> None:
+        def set_particpant_data(key_name: str, value: Any) -> None:
             content_type = ContentType.objects.get_for_model(Experiment)
             session = state["experiment_session"]
             participant_data, _ = ParticipantData.objects.get_or_create(
@@ -746,6 +777,20 @@ class CodeNode(PipelineNode):
             return participant_data.data.get(key_name)
 
         return get_particpant_data
+
+    def _get_state_key(self, state: PipelineState):
+        def get_state_key(key_name: str):
+            return state["shared_state"].get(key_name)
+
+        return get_state_key
+
+    def _set_state_key(self, state: PipelineState):
+        def set_state_key(key_name: str, value):
+            if key_name == "outputs":
+                raise PipelineNodeRunError("Cannot set the outputs key of the shared state")
+            state["shared_state"][key_name] = value
+
+        return set_state_key
 
     def _get_custom_builtins(self):
         allowed_modules = {

@@ -320,6 +320,18 @@ export function CodeModal(
       detail: "Sets participant data for the given key",
       boost: 1
     }),
+    set_state_key: snip("set_state_key(\"${key_name}\", ${data})", {
+      label: "set_state_key",
+      type: "keyword",
+      detail: "Sets the shared state to the given key. Overwrites the current value",
+      boost: 1
+    }),
+    get_state_key: snip("set_state_key(\"${key_name}\")", {
+        label: "get_state_key",
+        type: "keyword",
+        detail: "Gets the shared state for the given key",
+        boost: 1
+    }),
   }
   function pythonCompletions(context: CompletionContext) {
     const word = context.matchBefore(/\w*/)
@@ -360,6 +372,11 @@ export function CodeModal(
                 autocomplete: pythonCompletions
               })
             ]}
+            basicSetup={{
+                lineNumbers: true,
+                tabSize: 4,
+                indentOnInput: true,
+            }}
           />
         </div>
         <div className="flex flex-col">
