@@ -100,6 +100,13 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         null=True,
         blank=True,
     )
+    node = models.ForeignKey(
+        "pipelines.Node",
+        on_delete=models.CASCADE,
+        related_name="custom_action_operations",
+        null=True,
+        blank=True,
+    )
     custom_action = models.ForeignKey(CustomAction, on_delete=models.CASCADE)
     operation_id = models.CharField(max_length=255)
     _operation_schema = models.JSONField(default=dict)
@@ -110,8 +117,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                check=Q(experiment__isnull=False) | Q(assistant__isnull=False),
-                name="experiment_or_assistant_required",
+                check=Q(experiment__isnull=False) | Q(assistant__isnull=False) | Q(node__isnull=False),
+                name="experiment_or_assistant_or_node_required",
             ),
             models.UniqueConstraint(
                 fields=["experiment", "custom_action", "operation_id"],
