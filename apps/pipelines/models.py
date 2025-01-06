@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.custom_actions.form_utils import set_custom_actions
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -116,7 +117,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         # Set new nodes or update existing ones
         for node in nodes:
-            Node.objects.update_or_create(
+            created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
                 flow_id=node.id,
                 defaults={
@@ -125,6 +126,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     "label": node.data.label,
                 },
             )
+            created_node.update_from_params()
 
     def validate(self) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
@@ -343,6 +345,18 @@ class Node(BaseModel, VersionsMixin):
         if save:
             new_version.save()
         return new_version
+
+    def update_from_params(self):
+        """Callback to do DB related updates pertaining to the node params"""
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+        if self.type == LLMResponseWithPrompt.__name__:
+            custom_action_infos = []
+            for custom_action_operation in self.params["custom_actions"]:
+                custom_action_id, operation_id = custom_action_operation.split(":")
+                custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
+
+            set_custom_actions(self, custom_action_infos)
 
     def archive(self):
         """
