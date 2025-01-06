@@ -681,20 +681,18 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     if experiment != experiment.default_version:
         deployed_version = experiment.default_version.version_number
 
-    pipeline_chip = None
-    assistant_chip = None
+    bot_type_chip = None
     if pipeline := experiment.pipeline:
-        pipeline_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
+        bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
     elif assistant := experiment.assistant:
-        assistant_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+        bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
         {
             "active_tab": "experiments",
-            "pipeline_chip": pipeline_chip,
-            "assistant_chip": assistant_chip,
+            "bot_type_chip": bot_type_chip,
             "experiment": experiment,
             "user_sessions": user_sessions,
             "platforms": available_platforms,
