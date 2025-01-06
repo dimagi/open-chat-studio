@@ -351,7 +351,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def get_default(cls, team):
-        return cls.objects.get(team=team, is_default=True)
+        return cls.objects.get(team=team, is_default=True, working_version=None)
 
     def __str__(self):
         return self.name
