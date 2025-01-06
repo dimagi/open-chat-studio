@@ -12,6 +12,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
+from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.web.forms import set_form_fields_disabled
 
@@ -57,7 +58,8 @@ def create_team(request):
         if form.is_valid():
             team = form.save()
             team.save()
-            make_user_team_owner(team=team, user=request.user)
+            with current_team(team):
+                make_user_team_owner(team=team, user=request.user)
             return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
     else:
         form = TeamChangeForm()
