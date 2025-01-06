@@ -194,6 +194,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="The tools to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.agent_tools),
     )
+    custom_actions: list[str] = Field(
+        default_factory=list,
+        description="Custom actions to enable for the bot",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
+    )
 
     @field_validator("tools", mode="before")
     def check_prompt_variables(cls, value: str, info: FieldValidationInfo):

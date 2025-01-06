@@ -139,6 +139,7 @@ class OptionsSource(StrEnum):
     source_material = "source_material"
     assistant = "assistant"
     agent_tools = "agent_tools"
+    custom_actions = "custom_actions"
 
 
 class UiSchema(BaseModel):

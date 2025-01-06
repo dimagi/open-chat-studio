@@ -19,6 +19,7 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
+from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.experiments.models import AgentTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
@@ -134,6 +135,10 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         """
         return reverse("assistants:edit", args=[team.slug, assistant_id])
 
+    custom_action_operations = []
+    for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
+        custom_action_operations.extend(operations_disp)
+
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
         "LlmProviderModelId": [_option(provider.id, str(provider), provider.type) for provider in llm_provider_models],
@@ -153,6 +158,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             ]
         ),
         OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
+        OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
     }
 
 
