@@ -6,7 +6,7 @@ from django.db.models import functions
 from apps.events.models import ScheduledMessage, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.events")
 
 
 @shared_task(ignore_result=True)

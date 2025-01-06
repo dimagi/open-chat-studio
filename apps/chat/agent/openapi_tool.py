@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, create_model
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
-logger = logging.getLogger("tools")
+logger = logging.getLogger("ocs.tools")
 
 
 class ToolArtifact(BaseModel):

@@ -32,7 +32,7 @@ from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ocs.experiments")
 
 
 class VersionsObjectManagerMixin:

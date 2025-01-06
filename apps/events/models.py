@@ -18,7 +18,7 @@ from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.events")
 
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,

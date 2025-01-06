@@ -75,7 +75,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProv
 from apps.teams.models import Team
 from apps.utils.prompt import validate_prompt_variables
 
-logger = logging.getLogger("openai_sync")
+logger = logging.getLogger("ocs.openai_sync")
 
 
 class OpenAiSyncError(Exception):
