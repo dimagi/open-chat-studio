@@ -176,7 +176,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         output = ""
         with temporary_session(self.team, user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session)
+            input = PipelineState(messages=[input], experiment_session=session, pipeline_version=self.version_number)
             output = runnable.invoke(input)
             output = PipelineState(**output).json_safe()
         return output

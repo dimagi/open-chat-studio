@@ -214,6 +214,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
 
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
+        pipeline_version = state.get("pipeline_version")
         # Get runnable
         provider_model = self.get_llm_provider_model()
         chat_model = self.get_chat_model()
@@ -226,8 +227,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             chat_model=chat_model,
         )
 
-        # TODO: How do we handle versions?
-        node = Node.objects.filter(flow_id=node_id).first()
+        node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
         tools = get_node_tools(node, session)
         chat_adapter = ChatAdapter.for_pipeline(
             session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools

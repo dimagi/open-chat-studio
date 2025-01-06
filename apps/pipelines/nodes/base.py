@@ -31,6 +31,7 @@ class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
+    pipeline_version: str
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list | None = None
