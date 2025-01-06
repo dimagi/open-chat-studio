@@ -59,7 +59,7 @@
     "dompurify": "^3.2.2",
     "htmx.org": "^1.9.12",
     "js-cookie": "^3.0.5",
-    "js-tiktoken": "^1.0.15",
+    "js-tiktoken": "^1.0.16",
     "lodash": "^4.17.21",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
