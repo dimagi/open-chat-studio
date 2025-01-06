@@ -10,7 +10,6 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_string
 from langchain_core.prompts import (
-    ChatPromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
@@ -18,6 +17,7 @@ from langchain_core.prompts import (
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
+from apps.utils.prompt import OcsPromptTemplate
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
 
@@ -58,7 +58,7 @@ class BasicConversation(Conversation):
         self._build_chain()
 
     def _build_chain(self):
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = OcsPromptTemplate.from_messages(
             [
                 self.system_prompt,
                 MessagesPlaceholder(variable_name="history"),

@@ -10,7 +10,7 @@ from django.core.validators import validate_email
 from jinja2 import meta
 from jinja2.sandbox import SandboxedEnvironment
 from langchain_core.messages import BaseMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field, create_model, field_validator
@@ -39,7 +39,7 @@ from apps.service_providers.llm_service.runnables import (
     SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.prompt import PromptVars, validate_prompt_variables
+from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 
 
 class RenderTemplate(PipelineNode):
@@ -325,7 +325,7 @@ class RouterNode(Passthrough, HistoryMixin):
         return value[:num_outputs]  # Ensure the number of keywords matches the number of outputs
 
     def _process_conditional(self, state: PipelineState, node_id=None):
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = OcsPromptTemplate.from_messages(
             [("system", self.prompt), MessagesPlaceholder("history", optional=True), ("human", "{input}")]
         )
 

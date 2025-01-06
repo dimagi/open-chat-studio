@@ -1,6 +1,8 @@
+from typing import Any
+
 from django.db import models
 from django.forms import ValidationError
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
 from apps.experiments.models import AgentTools
 
@@ -64,3 +66,37 @@ def get_root_var(var: str) -> str:
     if var_root == var and "[" in var:
         var_root = var[: var.index("[")]
     return var_root
+
+
+class OcsPromptTemplate(ChatPromptTemplate):
+    """Custom prompt template that supports nested variables.
+
+    See `apps.service_providers.llm_service.prompt_context.SafeAccessWrapper`
+    """
+
+    def _validate_input(self, inner_input: Any) -> dict:
+        if not isinstance(inner_input, dict):
+            if len(self.input_variables) == 1:
+                var_name = self.input_variables[0]
+                inner_input = {var_name: inner_input}
+
+            else:
+                msg = f"Expected mapping type as input to {self.__class__.__name__}. " f"Received {type(inner_input)}."
+                raise TypeError(msg)
+
+        root_vars = {get_root_var(var) for var in self.input_variables}
+        missing = root_vars.difference(inner_input)
+        if missing:
+            msg = (
+                f"Input to {self.__class__.__name__} is missing variables {missing}. "
+                f" Expected: {self.input_variables}"
+                f" Received: {list(inner_input.keys())}"
+            )
+            example_key = missing.pop()
+            msg += (
+                f"\nNote: if you intended {{{example_key}}} to be part of the string"
+                " and not a variable, please escape it with double curly braces like: "
+                f"'{{{{{example_key}}}}}'."
+            )
+            raise KeyError(msg)
+        return inner_input
