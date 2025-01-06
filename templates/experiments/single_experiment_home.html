@@ -187,10 +187,8 @@
         {% endif %}
       </div>
     {% endif %}
-    {% if pipeline_chip %}
-      {% include 'generic/chip.html' with chip=pipeline_chip %}
-    {% elif assistant_chip %}
-      {% include 'generic/chip.html' with chip=assistant_chip %}
+    {% if bot_type_chip %}
+      {% include 'generic/chip.html' with chip=bot_type_chip %}
     {% endif %}
 
     {% if not can_make_child_routes %}
