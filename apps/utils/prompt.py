@@ -25,7 +25,7 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     to be used, otherwise a `ValidationError` is thrown.
     """
     prompt_text = form_data[prompt_key]
-    prompt_variables = set(PromptTemplate.from_template(prompt_text).input_variables)
+    prompt_variables = {get_root_var(var) for var in PromptTemplate.from_template(prompt_text).input_variables}
     unknown = prompt_variables - known_vars
     if unknown:
         raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
@@ -49,3 +49,18 @@ def validate_prompt_variables(form_data, prompt_key: str, known_vars: set):
     for var in prompt_variables:
         if prompt_text.count(f"{{{var}}}") > 1:
             raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+
+
+def get_root_var(var: str) -> str:
+    """Returns the root variable name from a nested variable name.
+    Only `participant_data` is supported.
+
+    See `apps.service_providers.llm_service.prompt_context.SafeAccessWrapper`
+    """
+    if not var.startswith(PromptVars.PARTICIPANT_DATA.value):
+        return var
+
+    var_root = var.split(".")[0]
+    if var_root == var and "[" in var:
+        var_root = var[: var.index("[")]
+    return var_root
