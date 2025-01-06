@@ -6,6 +6,7 @@ from uuid import uuid4
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
+from django.db.models import F
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -357,6 +358,15 @@ class Node(BaseModel, VersionsMixin):
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
+
+    def get_custom_action_operations(self) -> models.QuerySet:
+        if self.is_working_version:
+            # only include operations that are still enabled by the action
+            return self.custom_action_operations.select_related("custom_action").filter(
+                custom_action__allowed_operations__contains=[F("operation_id")]
+            )
+        else:
+            return self.custom_action_operations.select_related("custom_action")
 
     def archive(self):
         """

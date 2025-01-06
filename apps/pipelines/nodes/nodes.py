@@ -21,11 +21,12 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
+from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -224,8 +225,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
+
+        # TODO: How do we handle versions?
+        node = Node.objects.filter(flow_id=node_id).first()
+        tools = get_node_tools(node, session)
         chat_adapter = ChatAdapter.for_pipeline(
-            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model
+            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools
         )
         if self.tools_enabled():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -237,7 +242,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         return PipelineState.from_node_output(node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or len(self.custom_actions) > 0
 
 
 class SendEmail(PipelineNode):
