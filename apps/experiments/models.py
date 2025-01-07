@@ -60,6 +60,10 @@ class VersionsObjectManagerMixin:
             query = query.filter(is_archived=False)
         return query
 
+    def working_versions_queryset(self):
+        """Returns a queryset with only working versions"""
+        return self.get_queryset().filter(working_version=None)
+
 
 class PromptObjectManager(AuditingManager):
     pass
@@ -83,10 +87,6 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
             working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
         ).first()
         return experiment if experiment else family_member
-
-    def working_versions_queryset(self):
-        """Returns a queryset for all working experiments"""
-        return self.get_queryset().filter(working_version=None)
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -351,7 +351,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def get_default(cls, team):
-        return cls.objects.get(team=team, is_default=True)
+        return cls.objects.working_versions_queryset().get(team=team, is_default=True)
 
     def __str__(self):
         return self.name
