@@ -186,7 +186,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
 
         poll_scheduled_messages()
         assert len(caplog.records) == 1
-        expected_msg = f"An error occured while trying to send scheduled messsage {sm.id}. Error: Oops"
+        expected_msg = f"An error occurred while trying to send scheduled message {sm.id}. Error: Oops"
         assert caplog.records[0].msg == expected_msg
 
         assert sm.last_triggered_at is None
