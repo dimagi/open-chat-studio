@@ -254,13 +254,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         pipeline_version.version_number = version_number
         pipeline_version.save()
 
-        new_nodes = []
         for node in self.node_set.all():
-            node_version = node.create_new_version(save=False)
+            node_version = node.create_new_version()
             node_version.pipeline = pipeline_version
-            new_nodes.append(node_version)
-
-        Node.objects.bulk_create(new_nodes)
+            node_version.save(update_fields=["pipeline"])
 
         return pipeline_version
 
@@ -343,9 +340,14 @@ class Node(BaseModel, VersionsMixin):
                 assistant_version = assistant.create_new_version()
                 new_version.params["assistant_id"] = assistant_version.id
 
-        if save:
-            new_version.save()
+        new_version.save()
+        self._copy_custom_action_operations_to_new_version(new_version)
+
         return new_version
+
+    def _copy_custom_action_operations_to_new_version(self, new_version):
+        for operation in self.get_custom_action_operations():
+            operation.create_new_version(new_node=new_version)
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
