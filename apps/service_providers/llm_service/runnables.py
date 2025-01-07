@@ -15,7 +15,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.messages.tool import ToolMessage, tool_call
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompt_values import PromptValue
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import MessagesPlaceholder
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -33,6 +33,7 @@ from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.utils.prompt import OcsPromptTemplate
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -201,7 +202,7 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     @property
     def prompt(self):
-        return ChatPromptTemplate.from_messages(
+        return OcsPromptTemplate.from_messages(
             [
                 ("system", self.adapter.get_prompt()),
                 MessagesPlaceholder("history", optional=True),
@@ -256,7 +257,7 @@ class AgentLLMChat(LLMChat):
     @property
     def prompt(self):
         prompt = super().prompt
-        return ChatPromptTemplate.from_messages(
+        return OcsPromptTemplate.from_messages(
             prompt.messages + [MessagesPlaceholder("agent_scratchpad", optional=True)]
         )
 
