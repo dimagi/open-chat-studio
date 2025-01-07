@@ -6,7 +6,6 @@ from uuid import uuid4
 import pydantic
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
-from django.db.models import F
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -14,6 +13,7 @@ from pydantic import ConfigDict
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
+from apps.custom_actions.models import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.logging import PipelineLoggingCallbackHandler
@@ -303,7 +303,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
 
-class Node(BaseModel, VersionsMixin):
+class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
@@ -322,7 +322,7 @@ class Node(BaseModel, VersionsMixin):
     def __str__(self):
         return self.flow_id
 
-    def create_new_version(self, save: bool = True):
+    def create_new_version(self):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
@@ -341,13 +341,9 @@ class Node(BaseModel, VersionsMixin):
                 new_version.params["assistant_id"] = assistant_version.id
 
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_node=new_version)
 
         return new_version
-
-    def _copy_custom_action_operations_to_new_version(self, new_version):
-        for operation in self.get_custom_action_operations():
-            operation.create_new_version(new_node=new_version)
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
@@ -360,15 +356,6 @@ class Node(BaseModel, VersionsMixin):
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
-
-    def get_custom_action_operations(self) -> models.QuerySet:
-        if self.is_working_version:
-            # only include operations that are still enabled by the action
-            return self.custom_action_operations.select_related("custom_action").filter(
-                custom_action__allowed_operations__contains=[F("operation_id")]
-            )
-        else:
-            return self.custom_action_operations.select_related("custom_action")
 
     def archive(self):
         """

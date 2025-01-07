@@ -13,7 +13,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +24,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.custom_actions.models import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
@@ -470,7 +471,7 @@ class AgentTools(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel, VersionsMixin):
+class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -750,7 +751,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
-        self._copy_custom_action_operations_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_experiment=new_version)
         self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
@@ -847,19 +848,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def _copy_trigger_to_new_version(self, trigger_queryset, new_version):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
-
-    def _copy_custom_action_operations_to_new_version(self, new_version):
-        for operation in self.get_custom_action_operations():
-            operation.create_new_version(new_experiment=new_version)
-
-    def get_custom_action_operations(self) -> models.QuerySet:
-        if self.is_working_version:
-            # only include operations that are still enabled by the action
-            return self.custom_action_operations.select_related("custom_action").filter(
-                custom_action__allowed_operations__contains=[F("operation_id")]
-            )
-        else:
-            return self.custom_action_operations.select_related("custom_action")
 
     @property
     def is_public(self) -> bool:
