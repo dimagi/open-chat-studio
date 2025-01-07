@@ -88,6 +88,7 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
+from apps.generics.help import render_field_help
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -186,16 +187,10 @@ class ExperimentVersionsTableView(SingleTableView, PermissionRequiredMixin):
 
 class ExperimentForm(forms.ModelForm):
     PROMPT_HELP_TEXT = """
-        <div class="tooltip" data-tip="
-            Available variables to include in your prompt: {source_material}, {participant_data}, and
-            {current_datetime}.
-            {source_material} should be included when there is source material linked to the experiment.
-            {participant_data} is optional.
-            {current_datetime} is only required when the bot is using a tool.
-        ">
-            <i class="text-xs fa fa-circle-question">
-            </i>
-        </div>
+        <p>Available variables to include in your prompt:</p>
+        <p>{source_material}: Must be included when there is source material linked to the experiment.</p>
+        <p>{participant_data}: Optional</p>
+        <p>{current_datetime}: Only required when the bot is using a tool</p>
     """
     type = forms.ChoiceField(
         choices=[
@@ -206,7 +201,7 @@ class ExperimentForm(forms.ModelForm):
         widget=forms.RadioSelect(attrs={"x-model": "type"}),
     )
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False, help_text=PROMPT_HELP_TEXT)
+    prompt_text = forms.CharField(widget=forms.Textarea(attrs={"rows": 6}), required=False)
     input_formatter = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     tools = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=AgentTools.choices, required=False)
@@ -295,6 +290,10 @@ class ExperimentForm(forms.ModelForm):
         # special template for dynamic select options
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+
+        self.fields["prompt_text"].help_text = render_field_help(
+            self.PROMPT_HELP_TEXT, docs_link="/concepts/prompt_variables/"
+        )
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []

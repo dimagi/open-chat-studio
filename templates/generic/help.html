@@ -1,24 +1,27 @@
-<div class="dropdown dropdown-right">
+{% comment %}
+Renders a help icon with the content shown on hover. This can be used directly or via the `apps.generics.help.render_field_help` function.
+
+Using directly:
+
+  {% blocktranslate asvar help_text %}The help text.{% endblocktranslate %}
+  {% include "generic/help.html" with help_content=help_text %}
+  
+Using via `render_field_help`:
+
+  render_field_help(help_content, docs_link="/relative/docs/link")
+      
+{% endcomment %}
+<div class="dropdown dropdown-right dropdown-hover dropdown-end">
   <div tabindex="0" role="button" class="btn btn-circle btn-ghost btn-xs text-info">
-    <svg
-      tabindex="0"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      class="h-4 w-4 stroke-current">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-    </svg>
+    <i class="text-xs fa-regular fa-circle-question"></i>
   </div>
   <div
     tabindex="0"
-    class="card compact dropdown-content bg-base-100 rounded-box z-[1] w-64 shadow">
+    class="card compact dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-[1] w-64 shadow">
     <div tabindex="0" class="card-body">
       {% if help_title %}<h2 class="card-title">{{ help_title }}</h2>{% endif %}
       <p>{{ help_content }}</p>
+      {% if docs_link %}<p><a class="link" href="{{ docs_base_url }}/concepts/prompt_variables/" target="_blank">Learn more</a></p>{% endif %}
     </div>
   </div>
 </div>

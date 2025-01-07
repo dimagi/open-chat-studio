@@ -520,6 +520,7 @@ DOCUMENTATION_LINKS = {
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305312/Creating+a+Chatbot+Experiment",
 }
+DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://dimagi.github.io/open-chat-studio-docs")
 
 # Django rest framework config
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
