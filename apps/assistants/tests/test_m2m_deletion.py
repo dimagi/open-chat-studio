@@ -31,4 +31,5 @@ def test_deleting_assistant_with_files_multiple_references(caplog):
     remaining = File.objects.all()
     assert len(remaining) == 1
     assert remaining[0] == files[0]
+    # See apps.files.apps.FilesConfig.delete_orphaned_files
     assert str(files[0].id) in caplog.text
