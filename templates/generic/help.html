@@ -5,11 +5,11 @@ Using directly:
 
   {% blocktranslate asvar help_text %}The help text.{% endblocktranslate %}
   {% include "generic/help.html" with help_content=help_text %}
-  
+
 Using via `render_field_help`:
 
   render_field_help(help_content, docs_link="/relative/docs/link")
-      
+
 {% endcomment %}
 <div class="dropdown dropdown-right dropdown-hover dropdown-end">
   <div tabindex="0" role="button" class="btn btn-circle btn-ghost btn-xs text-info">
@@ -18,10 +18,8 @@ Using via `render_field_help`:
   <div
     tabindex="0"
     class="card compact dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-[1] w-64 shadow">
-    <div tabindex="0" class="card-body">
-      {% if help_title %}<h2 class="card-title">{{ help_title }}</h2>{% endif %}
-      <p>{{ help_content }}</p>
-      {% if docs_link %}<p><a class="link" href="{{ docs_base_url }}/concepts/prompt_variables/" target="_blank">Learn more</a></p>{% endif %}
+    <div tabindex="0" class="card-body font-medium">
+      <p>{{ help_content|safe }}</p>
     </div>
   </div>
 </div>

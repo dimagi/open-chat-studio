@@ -32,9 +32,15 @@ def render_field(form_field, **attrs):
 def render_text_input(form_field, **attrs):
     TEXT_INPUT_TEMPLATE = """
     <div class="form-control w-full" {% include "generic/attrs.html" with attrs=control_attrs %}>
-      <label class="label font-bold" for="{{ form_field.id_for_label }}">{{ form_field.label }}</label>
+      <label class="label font-bold" for="{{ form_field.id_for_label }}">
+      <div>
+        {{ form_field.label }}
+        {% if form_field.help_text %}
+        <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
+        {% endif %}
+      </div>
+      </label>
       {{ form_field }}
-      <small class="form-text text-muted">{{ form_field.help_text|safe }}</small>
       {{ form_field.errors }}
     </div>
     """
@@ -45,9 +51,15 @@ def render_text_input(form_field, **attrs):
 def render_select_input(form_field, **attrs):
     SELECT_INPUT_TEMPLATE = """
     <div class="form-control w-full" {% include "generic/attrs.html" with attrs=control_attrs %}>
-      <label class="label font-bold" for="{{ form_field.id_for_label }}">{{ form_field.label }}</label>
+      <label class="label font-bold" for="{{ form_field.id_for_label }}">
+      <div>
+        {{ form_field.label }}
+        {% if form_field.help_text %}
+        <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
+        {% endif %}
+      </div>
+      </label>
       {{ form_field }}
-      <small class="form-text text-muted">{{ form_field.help_text|safe }}</small>
       {{ form_field.errors }}
     </div>
     """
@@ -60,11 +72,15 @@ def render_checkbox_input(form_field, **attrs):
     <div class="form-control" {% include "generic/attrs.html" with attrs=control_attrs %}>
       <div class="form-check">
         <label class="label font-bold cursor-pointer">
-          <span class="label-text">{{ form_field.label }}</span> 
+        <div>
+          <span class="label-text">{{ form_field.label }}</span>
+          {% if form_field.help_text %}
+          <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
+          {% endif %}
+        </div>
           {{ form_field }}
         </label>
       </div>
-      <small class="form-text text-muted">{{ form_field.help_text|safe }}</small>
       {{ form_field.errors }}
     </div>
     """

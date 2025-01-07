@@ -9,18 +9,13 @@ from apps.custom_actions.form_utils import (
 )
 from apps.experiments.models import AgentTools
 from apps.files.forms import get_file_formset
+from apps.generics.help import render_field_help
 from apps.utils.prompt import validate_prompt_variables
 
 INSTRUCTIONS_HELP_TEXT = """
-    <div class="tooltip" data-tip="
-        Available variables to include in your prompt: {participant_data} and
-        {current_datetime}.
-        {participant_data} is optional.
-        {current_datetime} is only required when the bot is using a tool.
-    ">
-        <i class="text-xs fa fa-circle-question">
-        </i>
-    </div>
+    <p>Available variables to include in your prompt:</p>
+    <p>{participant_data}: Optional</p>
+    <p>{current_datetime}: Only required when the bot is using a tool</p>
 """
 
 
@@ -48,7 +43,6 @@ class OpenAiAssistantForm(forms.ModelForm):
             "allow_file_search_attachments": "Allow ad-hoc files to be uploaded for file search",
             "allow_code_interpreter_attachments": "Allow ad-hoc files to be uploaded for code interpreter",
         }
-        help_texts = {"instructions": INSTRUCTIONS_HELP_TEXT}
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -64,6 +58,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
+        self.fields["instructions"].help_text = render_field_help(INSTRUCTIONS_HELP_TEXT, "/concepts/prompt_variables/")
         initialize_form_for_custom_actions(request.team, self)
 
     def clean_custom_action_operations(self):

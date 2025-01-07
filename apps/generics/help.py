@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.template.loader import render_to_string
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
 
@@ -11,11 +11,13 @@ def render_field_help(help_content, docs_link=None):
         help_content (str): The help text.
         docs_link (str, optional): The relative URL to the documentation (relative to the documentation base URL)
     """
-    return render_to_string(
-        "generic/help.html",
-        {
-            "help_content": mark_safe(help_content),
-            "docs_link": docs_link,
-            "docs_base_url": settings.DOCUMENTATION_BASE_URL,
-        },
+    help_content = mark_safe(help_content)
+    if not docs_link:
+        return help_content
+
+    return format_html(
+        """{help_content}<p><a class="link" href="{docs_base_url}{doc_url}" target="_blank">Learn more</a></p>""",
+        docs_base_url=settings.DOCUMENTATION_BASE_URL,
+        doc_url=docs_link,
+        help_content=help_content,
     )
