@@ -247,7 +247,7 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
 
 
 def get_node_tools(node: Node, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
-    tools = get_tool_instances(node.params["tools"] or [], experiment_session)
+    tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
     tools.extend(get_custom_action_tools(node))
     return tools
 
