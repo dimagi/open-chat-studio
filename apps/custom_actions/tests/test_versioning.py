@@ -1,6 +1,7 @@
 import pytest
 
 from apps.custom_actions.models import CustomAction, CustomActionOperation
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 ACTION_SCHEMA = {
     "openapi": "3.0.0",
@@ -126,3 +127,18 @@ def test_versioning(custom_action, experiment):
 
     # versioned operation is not on the allowed list so it's not included in the new version
     assert not experiment2.custom_action_operations.filter(operation_id="pollen_get").exists()
+
+
+@pytest.mark.django_db()
+def test_versioning_with_node(custom_action):
+    """Test that the custom actions are also versioned when versioning the pipeline"""
+    pipeline = PipelineFactory()
+    node = NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={})
+    weather_get = CustomActionOperation.objects.create(
+        custom_action=custom_action, node=node, operation_id="weather_get"
+    )
+    pipeline.create_new_version()
+
+    assert node.versions.count() == 1
+    assert weather_get.versions.count() == 1
+    assert weather_get.versions.first().node == node.versions.first()

@@ -85,6 +85,7 @@ def test_full_email_sending_pipeline(get_llm_service, provider, provider_model, 
     state = PipelineState(
         messages=["Ice is not a liquid. When it is melted it turns into water."],
         experiment_session=ExperimentSessionFactory(),
+        pipeline_version=1,
     )
     create_runnable(pipeline, nodes).invoke(state)
     assert len(mail.outbox) == 1
@@ -151,7 +152,7 @@ def test_llm_with_prompt_response(
         end_node(),
     ]
     output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
+        PipelineState(messages=[user_input], experiment_session=experiment_session, pipeline_version=1)
     )["messages"][-1]
     expected_output = (
         f"Node 2: Node 1: Use this {source_material.material} to answer questions "

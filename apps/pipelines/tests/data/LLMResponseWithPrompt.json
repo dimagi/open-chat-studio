@@ -65,6 +65,16 @@
       "type": "array",
       "ui:optionsSource": "agent_tools",
       "ui:widget": "multiselect"
+    },
+    "custom_actions": {
+      "description": "Custom actions to enable for the bot",
+      "items": {
+        "type": "string"
+      },
+      "title": "Custom Actions",
+      "type": "array",
+      "ui:optionsSource": "custom_actions",
+      "ui:widget": "multiselect"
     }
   },
   "required": [

@@ -3,12 +3,12 @@ from typing import Self
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
-from django.db.models import F
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
+from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel
@@ -30,7 +30,7 @@ class OpenAiAssistantManager(VersionsObjectManagerMixin, AuditingManager):
     "top_p",
     audit_special_queryset_writes=True,
 )
-class OpenAiAssistant(BaseTeamModel, VersionsMixin):
+class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     ALLOWED_INSTRUCTIONS_VARIABLES = {"participant_data", "current_datetime"}
 
     assistant_id = models.CharField(max_length=255)
@@ -132,7 +132,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
 
             new_tool_resource.files.set(tool_resource.files.all())
 
-        self._copy_custom_action_operations_to_new_version(assistant_version)
+        self._copy_custom_action_operations_to_new_version(new_assistant=assistant_version)
 
         push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
         return assistant_version
@@ -159,19 +159,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin):
         if custom_actions.changed:
             changes.add("custom_actions")
         return changes
-
-    def _copy_custom_action_operations_to_new_version(self, new_version):
-        for operation in self.get_custom_action_operations():
-            operation.create_new_version(new_assistant=new_version)
-
-    def get_custom_action_operations(self) -> models.QuerySet:
-        if self.is_working_version:
-            # only include operations that are still enabled by the action
-            return self.custom_action_operations.select_related("custom_action").filter(
-                custom_action__allowed_operations__contains=[F("operation_id")]
-            )
-        else:
-            return self.custom_action_operations.select_related("custom_action")
 
     def archive(self):
         from apps.assistants.tasks import delete_openai_assistant_task

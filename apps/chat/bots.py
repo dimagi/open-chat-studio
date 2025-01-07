@@ -293,7 +293,12 @@ class PipelineBot:
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
         output: PipelineState = self.experiment.pipeline.invoke(
-            PipelineState(messages=[user_input], experiment_session=self.session, attachments=serializable_attachments),
+            PipelineState(
+                messages=[user_input],
+                experiment_session=self.session,
+                attachments=serializable_attachments,
+                pipeline_version=self.experiment.pipeline.version_number,
+            ),
             self.session,
         )
         self.ai_message_id = output["ai_message_id"]
