@@ -8,7 +8,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.custom_actions.models import CustomActionOperationMixin
+from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import VersionsMixin, VersionsObjectManagerMixin
 from apps.experiments.versioning import VersionField
 from apps.teams.models import BaseTeamModel

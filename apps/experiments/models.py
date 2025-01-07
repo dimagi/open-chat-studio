@@ -24,7 +24,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.custom_actions.models import CustomActionOperationMixin
+from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip

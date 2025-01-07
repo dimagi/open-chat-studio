@@ -4,7 +4,7 @@ from typing import Self
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import F, Q
+from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -178,18 +178,3 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         if self.operation_schema != new.operation_schema:
             changes.add("operation_schema")
         return changes
-
-
-class CustomActionOperationMixin:
-    def _copy_custom_action_operations_to_new_version(self, new_experiment=None, new_assistant=None, new_node=None):
-        for operation in self.get_custom_action_operations():
-            operation.create_new_version(new_experiment=new_experiment, new_assistant=new_assistant, new_node=new_node)
-
-    def get_custom_action_operations(self) -> models.QuerySet:
-        if self.is_working_version:
-            # only include operations that are still enabled by the action
-            return self.custom_action_operations.select_related("custom_action").filter(
-                custom_action__allowed_operations__contains=[F("operation_id")]
-            )
-        else:
-            return self.custom_action_operations.select_related("custom_action")
