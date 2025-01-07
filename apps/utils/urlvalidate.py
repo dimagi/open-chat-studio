@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from .ip_resolver import CannotResolveHost, resolve_to_ips
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ocs.utils")
 
 
 def validate_user_input_url(url, strict=True):

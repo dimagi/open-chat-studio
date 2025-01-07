@@ -1,4 +1,3 @@
-import logging
 from uuid import UUID
 
 from celery.app import shared_task
@@ -11,8 +10,6 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.web.meta import absolute_url
-
-logger = logging.getLogger(__name__)
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
 

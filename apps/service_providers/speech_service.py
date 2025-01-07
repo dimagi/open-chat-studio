@@ -16,7 +16,7 @@ from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
 from apps.experiments.models import SyntheticVoice
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ocs.speech")
 
 
 @dataclass

@@ -37,7 +37,7 @@ from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
-logger = logging.getLogger("runnables")
+logger = logging.getLogger("ocs.runnables")
 
 
 class GenerationError(Exception):
