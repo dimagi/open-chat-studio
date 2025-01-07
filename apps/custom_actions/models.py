@@ -157,10 +157,9 @@ class CustomActionOperation(BaseModel, VersionsMixin):
 
     @transaction.atomic()
     def create_new_version(self, new_experiment=None, new_assistant=None, new_node=None):
-        if not (new_experiment or new_assistant or new_node):
-            raise ValueError("Either new_experiment or new_assistant must be provided")
-
         action_holders = [new_experiment, new_assistant, new_node]
+        if not action_holders:
+            raise ValueError("Either new_experiment or new_assistant must be provided")
         if len([holder for holder in action_holders if holder is not None]) > 1:
             raise ValueError("Only one of new_experiment or new_assistant can be provided")
         new_instance = super().create_new_version(save=False)
