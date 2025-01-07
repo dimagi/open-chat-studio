@@ -212,6 +212,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message)
         return value
 
+    @field_validator("custom_actions", mode="before")
+    def validate_custom_actions(cls, value):
+        if value is None:
+            return []
+        return value
+
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
         pipeline_version = state.get("pipeline_version")

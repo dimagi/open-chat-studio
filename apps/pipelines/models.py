@@ -355,7 +355,7 @@ class Node(BaseModel, VersionsMixin):
 
         if self.type == LLMResponseWithPrompt.__name__:
             custom_action_infos = []
-            for custom_action_operation in self.params["custom_actions"]:
+            for custom_action_operation in self.params["custom_actions"] or []:
                 custom_action_id, operation_id = custom_action_operation.split(":")
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
