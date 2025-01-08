@@ -38,6 +38,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
+from apps.utils.prompt import get_root_var
 
 
 @pytest.mark.django_db()
@@ -165,6 +166,8 @@ def test_experiment_form_with_assistants(
         (["delete-reminder"], None, "{participant_data}", does_not_raise()),
         (["move-scheduled-message-date"], None, "{participant_data},{current_datetime}", does_not_raise()),
         (["update-user-data"], None, "{participant_data}", does_not_raise()),
+        (None, None, "{participant_data}", does_not_raise()),
+        (None, None, "{participant_data.name}", does_not_raise()),
     ],
 )
 def test_prompt_variable_validation(tools, source_material, prompt_str, expectation):
@@ -174,6 +177,23 @@ def test_prompt_variable_validation(tools, source_material, prompt_str, expectat
             prompt_key="prompt_text",
             known_vars={"source_material", "participant_data", "current_datetime"},
         )
+
+
+@pytest.mark.parametrize(
+    ("input_var", "expected_output"),
+    [
+        ("participant_data.name", "participant_data"),
+        ("participant_data[0]", "participant_data"),
+        ("participant_data", "participant_data"),
+        ("current_datetime", "current_datetime"),
+        ("source_material", "source_material"),
+        ("source_material.a", "source_material.a"),
+        ("other_var", "other_var"),
+        ("other_var[1]", "other_var[1]"),
+    ],
+)
+def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
+    assert get_root_var(input_var) == expected_output
 
 
 @pytest.mark.django_db()

@@ -24,11 +24,19 @@
               Archived
             </div>
           {% elif deployed_version %}
-            <div class="tooltip" data-tip="Current published version">
-              <a class="badge badge-success badge-sm"
-                 href="#versions">
-                v{{ deployed_version }}
-              </a>
+            <div class="flex flex-row gap-2">
+              <div class="tooltip" data-tip="Current published version">
+                <a class="badge badge-success badge-sm"
+                   href="#versions">
+                  v{{ deployed_version }}
+                </a>
+              </div>
+              <div
+                class="watchVersionChange"
+                hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
+                hx-trigger="load, version-changed"
+                hx-swap="innerHTML">
+              </div>
             </div>
           {% endif %}
         {% endflag %}
@@ -187,6 +195,9 @@
         {% endif %}
       </div>
     {% endif %}
+    {% if bot_type_chip %}
+      {% include 'generic/chip.html' with chip=bot_type_chip %}
+    {% endif %}
 
     {% if not can_make_child_routes %}
       <div class="my-4">
@@ -293,7 +304,8 @@
       <div role="tabpanel" class="tab-content" id="content-versions">
         <div class="app-card">
           <div id="versions-table"
-               hx-trigger="load,refetch-versions"
+               class="watchVersionChange"
+               hx-trigger="load, version-changed"
                hx-target="this"
                hx-get="{% url 'experiments:versions-list' request.team.slug experiment.id %}"
                hx-swap="innerHTML">

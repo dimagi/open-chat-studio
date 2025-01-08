@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, create_model
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
-logger = logging.getLogger("tools")
+logger = logging.getLogger("ocs.tools")
 
 
 class ToolArtifact(BaseModel):
@@ -91,7 +91,7 @@ class OpenAPIOperationExecutor:
                 return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
             except httpx.HTTPStatusError as e:
                 if e.response and e.response.status_code == 400:
-                    return {"error": "Bad Request", "details": e.response.text}
+                    raise ToolException(f"Bad request: {e.response.text}")
                 raise ToolException(f"Error making request: {str(e)}")
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}")

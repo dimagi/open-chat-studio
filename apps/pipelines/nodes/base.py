@@ -31,6 +31,7 @@ class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
+    pipeline_version: int
     ai_message_id: int | None = None
     message_metadata: dict | None = None
     attachments: list | None = None
@@ -121,6 +122,7 @@ class PipelineNode(BaseModel, ABC):
 
 class Widgets(StrEnum):
     expandable_text = "expandable_text"
+    code = "code"
     toggle = "toggle"
     select = "select"
     float = "float"
@@ -138,6 +140,7 @@ class OptionsSource(StrEnum):
     source_material = "source_material"
     assistant = "assistant"
     agent_tools = "agent_tools"
+    custom_actions = "custom_actions"
 
 
 class UiSchema(BaseModel):

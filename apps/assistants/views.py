@@ -234,6 +234,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
             response = render_to_string(
                 "assistants/partials/referenced_objects.html",
                 context={
+                    "object_name": "assistant",
                     "experiments": experiments,
                     "pipeline_nodes": pipeline_nodes,
                 },

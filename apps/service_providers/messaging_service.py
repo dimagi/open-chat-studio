@@ -24,7 +24,7 @@ from apps.chat.channels import MESSAGE_TYPES
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.messaging")
 
 
 class MessagingService(pydantic.BaseModel):

@@ -19,6 +19,7 @@ class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
     SAFETY_LAYER_RESPONSE = "safety_layer_response", _("Safety Layer Response")
     EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
+    RESPONSE_RATING = "response_rating", _("Response Rating")
 
 
 @audit_fields(
@@ -111,16 +112,25 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         tagged_items = CustomTaggedItem.objects.filter(
             content_type__model=self._meta.model_name, content_type__app_label=self._meta.app_label, object_id=self.id
         ).prefetch_related("tag", "user")
-        return [
-            {
-                "name": tagged_item.tag.name,
-                "id": tagged_item.tag.id,
-                "is_system_tag": tagged_item.tag.is_system_tag,
-                "category": tagged_item.tag.category,
-                "added_by": tagged_item.user.email if tagged_item.user else "System",
-            }
-            for tagged_item in tagged_items
-        ]
+        tags = []
+        for tagged_item in tagged_items:
+            if tagged_item.tag.is_system_tag:
+                added_by = "System"
+            elif tagged_item.user and tagged_item.user.email:
+                added_by = tagged_item.user.email
+            else:
+                added_by = "Participant"
+
+            tags.append(
+                {
+                    "name": tagged_item.tag.name,
+                    "id": tagged_item.tag.id,
+                    "is_system_tag": tagged_item.tag.is_system_tag,
+                    "category": tagged_item.tag.category,
+                    "added_by": added_by,
+                }
+            )
+        return tags
 
 
 class UserComment(BaseTeamModel):

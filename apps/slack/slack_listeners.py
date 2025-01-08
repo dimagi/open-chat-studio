@@ -23,7 +23,7 @@ from apps.slack.models import SlackInstallation
 from apps.slack.utils import make_session_external_id
 from apps.teams.utils import current_team
 
-logger = logging.getLogger("slack.events")
+logger = logging.getLogger("ocs.slack")
 
 
 def new_message(event, context: BoltContext):

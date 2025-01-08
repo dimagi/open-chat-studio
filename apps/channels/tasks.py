@@ -14,7 +14,7 @@ from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ocs.channels")
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)

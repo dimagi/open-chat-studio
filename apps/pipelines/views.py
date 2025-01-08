@@ -6,9 +6,10 @@ from celery_progress.backend import Progress
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, QuerySet
+from django.db.models import Count, QuerySet, Subquery
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
@@ -18,7 +19,8 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
-from apps.experiments.models import AgentTools, SourceMaterial
+from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.experiments.models import AgentTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.models import Pipeline, PipelineRun
 from apps.pipelines.nodes.base import OptionsSource
@@ -27,6 +29,8 @@ from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+from ..generics.chips import Chip
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -86,15 +90,37 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
     def delete(self, request, team_slug: str, pk: int):
         pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), id=pk, team=request.team)
-        pipeline.archive()
-        messages.success(request, f"{pipeline.name} deleted")
-        return HttpResponse()
+        if pipeline.archive():
+            messages.success(request, "Pipeline Archived")
+            return HttpResponse()
+        else:
+            experiments = [
+                Chip(label=experiment.name, url=experiment.get_absolute_url())
+                for experiment in pipeline.get_related_experiments_queryset()
+            ]
+
+            query = pipeline.get_static_trigger_experiment_ids()
+            static_trigger_experiments = [
+                Chip(label=experiment.name, url=experiment.get_absolute_url())
+                for experiment in Experiment.objects.filter(id__in=Subquery(query)).all()
+            ]
+
+            response = render_to_string(
+                "assistants/partials/referenced_objects.html",
+                context={
+                    "object_name": "pipeline",
+                    "experiments": experiments,
+                    "static_trigger_experiments": static_trigger_experiments,
+                },
+            )
+
+        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     """Returns the possible values for each input type"""
     source_materials = SourceMaterial.objects.filter(team=team).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(team=team, working_version=None).values("id", "name").all()
+    assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
 
     def _option(value, label, type_=None, edit_url: str | None = None):
         data = {"value": value, "label": label}
@@ -108,6 +134,10 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
         version
         """
         return reverse("assistants:edit", args=[team.slug, assistant_id])
+
+    custom_action_operations = []
+    for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
+        custom_action_operations.extend(operations_disp)
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
@@ -128,6 +158,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
             ]
         ),
         OptionsSource.agent_tools: [_option(AgentTools.value, AgentTools.label) for AgentTools in AgentTools],
+        OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
     }
 
 

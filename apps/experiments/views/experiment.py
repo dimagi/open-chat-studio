@@ -87,6 +87,7 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
+from apps.generics.chips import Chip
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -680,11 +681,18 @@ def single_experiment_home(request, team_slug: str, experiment_id: int):
     if experiment != experiment.default_version:
         deployed_version = experiment.default_version.version_number
 
+    bot_type_chip = None
+    if pipeline := experiment.pipeline:
+        bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
+    elif assistant := experiment.assistant:
+        bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
+
     return TemplateResponse(
         request,
         "experiments/single_experiment_home.html",
         {
             "active_tab": "experiments",
+            "bot_type_chip": bot_type_chip,
             "experiment": experiment,
             "user_sessions": user_sessions,
             "platforms": available_platforms,
@@ -1520,3 +1528,10 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
 
     context = {"version_details": experiment_version.version, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
+
+
+@login_and_team_required
+def get_release_status_badge(request, team_slug: str, experiment_id: int):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
+    return render(request, "experiments/components/unreleased_badge.html", context)

@@ -13,7 +13,8 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import FieldDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
-from django.db.models import BooleanField, Case, Count, F, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.db.models import BooleanField, Case, Count, OuterRef, Q, Subquery, UniqueConstraint, When
+from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -23,6 +24,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.annotations.models import Tag
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import Version, VersionField, differs
 from apps.generics.chips import Chip
@@ -31,7 +33,7 @@ from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ocs.experiments")
 
 
 class VersionsObjectManagerMixin:
@@ -59,6 +61,10 @@ class VersionsObjectManagerMixin:
             query = query.filter(is_archived=False)
         return query
 
+    def working_versions_queryset(self):
+        """Returns a queryset with only working versions"""
+        return self.get_queryset().filter(working_version=None)
+
 
 class PromptObjectManager(AuditingManager):
     pass
@@ -82,10 +88,6 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
             working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
         ).first()
         return experiment if experiment else family_member
-
-    def working_versions_queryset(self):
-        """Returns a queryset for all working experiments"""
-        return self.get_queryset().filter(working_version=None)
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -350,7 +352,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def get_default(cls, team):
-        return cls.objects.get(team=team, is_default=True)
+        return cls.objects.working_versions_queryset().get(team=team, is_default=True)
 
     def __str__(self):
         return self.name
@@ -469,7 +471,7 @@ class AgentTools(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel, VersionsMixin):
+class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -749,7 +751,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._copy_trigger_to_new_version(trigger_queryset=self.static_triggers, new_version=new_version)
         self._copy_trigger_to_new_version(trigger_queryset=self.timeout_triggers, new_version=new_version)
         self._copy_pipeline_to_new_version(new_version)
-        self._copy_custom_action_operations_to_new_version(new_version)
+        self._copy_custom_action_operations_to_new_version(new_experiment=new_version)
         self._copy_assistant_to_new_version(new_version)
 
         new_version.files.set(self.files.all())
@@ -764,18 +766,27 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         version = self.version
         if prev_version := self.latest_version:
-            version.compare(prev_version.version)
+            version.compare(prev_version.version, early_abort=True)
         return version.fields_changed
 
     @transaction.atomic()
     def archive(self):
+        """
+        Archive the experiment and all versions in the case where this is the working version. The linked assistant and
+        pipeline for the working version should not be archived.
+        """
         super().archive()
+        self.static_triggers.update(is_archived=True)
+
         if self.is_working_version:
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
-        elif self.assistant:
-            self.assistant.archive()
+        else:
+            if self.assistant:
+                self.assistant.archive()
+            elif self.pipeline:
+                self.pipeline.archive()
 
     def delete_experiment_channels(self):
         from apps.channels.models import ExperimentChannel
@@ -838,19 +849,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         for trigger in trigger_queryset.all():
             trigger.create_new_version(new_experiment=new_version)
 
-    def _copy_custom_action_operations_to_new_version(self, new_version):
-        for operation in self.get_custom_action_operations():
-            operation.create_new_version(new_experiment=new_version)
-
-    def get_custom_action_operations(self) -> models.QuerySet:
-        if self.is_working_version:
-            # only include operations that are still enabled by the action
-            return self.custom_action_operations.select_related("custom_action").filter(
-                custom_action__allowed_operations__contains=[F("operation_id")]
-            )
-        else:
-            return self.custom_action_operations.select_related("custom_action")
-
     @property
     def is_public(self) -> bool:
         """
@@ -907,7 +905,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
         def _format_assistant(assistant) -> str:
             if not assistant:
                 return ""
-            return assistant.name.split(f" v{assistant.version_number}")[0]
+            name = assistant.name.split(f" v{assistant.version_number}")[0]
+            template = get_template("generic/chip.html")
+            url = (
+                assistant.get_absolute_url()
+                if assistant.is_working_version
+                else assistant.working_version.get_absolute_url()
+            )
+            return template.render({"chip": Chip(label=name, url=url)})
 
         return Version(
             instance=self,
@@ -1151,7 +1156,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             description = f"{description} since {changed_fields} changed."
         return description
 
-    def compare_with_model(self, route: "ExperimentRoute", exclude_fields):
+    def compare_with_model(self, route: "ExperimentRoute", exclude_fields, early_abort=False):
         """
         When comparing two ExperimentRoute versions (with the same parents), consider the following:
 
@@ -1167,22 +1172,24 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         """
         is_same_family = self.get_working_version() == route.get_working_version()
         if not is_same_family:
-            return super().compare_with_model(route, exclude_fields)
+            return super().compare_with_model(route, exclude_fields, early_abort=early_abort)
 
         fields_to_exclude = exclude_fields.copy()
         fields_to_exclude.extend(["parent"])
 
         if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
-            return super().compare_with_model(route, fields_to_exclude)
+            return super().compare_with_model(route, fields_to_exclude, early_abort=early_abort)
 
         fields_to_exclude.append("child")
         # Compare all other fields first
-        results = list(super().compare_with_model(route, fields_to_exclude))
+        results = list(super().compare_with_model(route, fields_to_exclude, early_abort=early_abort))
+        if early_abort and results:
+            return set(results)
 
         # Now compare the children
         version1 = self.child.version
         version2 = route.child.version
-        version1.compare(version2)
+        version1.compare(version2, early_abort=early_abort)
         child_changes = [field.name for field in version1.fields if field.changed]
 
         results.extend(list(child_changes))

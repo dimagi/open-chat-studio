@@ -3,13 +3,17 @@ import React, {
   ChangeEventHandler,
   ReactNode,
   useId,
+  useEffect,
 } from "react";
 import { useState } from "react";
-import {TypedOption} from "../types/nodeParameterValues";
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from "@codemirror/lang-python";
+import { githubLight, githubDark } from "@uiw/codemirror-theme-github";
+import { TypedOption } from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {classNames, concatenate, getCachedData, getSelectOptions} from "../utils";
-import {NodeParams, PropertySchema} from "../types/nodeParams";
-import {Node, useUpdateNodeInternals} from "reactflow";
+import { classNames, concatenate, getCachedData, getSelectOptions } from "../utils";
+import { NodeParams, PropertySchema } from "../types/nodeParams";
+import { Node, useUpdateNodeInternals } from "reactflow";
 import DOMPurify from 'dompurify';
 
 export function getWidget(name: string) {
@@ -22,10 +26,12 @@ export function getWidget(name: string) {
       return RangeWidget
     case "expandable_text":
       return ExpandableTextWidget
+    case "code":
+      return CodeWidget
     case "select":
       return SelectWidget
-      case "multiselect":
-        return MultiSelectWidget
+    case "multiselect":
+      return MultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -140,7 +146,7 @@ function SelectWidget(props: WidgetParams) {
     setLink(selectedOption?.edit_url);
     props.updateParamValue(event);
   };
-  
+
 
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
@@ -164,13 +170,16 @@ function SelectWidget(props: WidgetParams) {
           </a>
         </div>
       )}
-    </div> 
+    </div>
   </InputField>
 }
 
 
 function MultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
+  if (options.length == 0) {
+    return <></>
+  }
   let selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
 
   const setNode = usePipelineStore((state) => state.setNode);
@@ -195,8 +204,8 @@ function MultiSelectWidget(props: WidgetParams) {
       selectedValues = selectedValues.filter((tool) => tool !== event.target.name)
     }
     setNode(props.nodeId, (old) => {
-        return getNewNodeData(old, selectedValues);
-      }
+      return getNewNodeData(old, selectedValues);
+    }
     );
   };
 
@@ -219,6 +228,126 @@ function MultiSelectWidget(props: WidgetParams) {
     </InputField>
   )
 }
+
+export function CodeWidget(props: WidgetParams) {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const setNode = usePipelineStore((state) => state.setNode);
+  const onChangeCallback = (value: string) => {
+    setNode(props.nodeId, (old) => ({
+      ...old,
+      data: {
+        ...old.data,
+        params: {
+          ...old.data.params,
+          [props.name]: value,
+        },
+      },
+    }));
+  };
+
+    useEffect(() => {
+        // Set dark / light mode
+     const mediaQuery: MediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
+     const handleChange = (event: MediaQueryListEvent): void => {
+       setIsDarkMode(event.matches);
+     };
+    setIsDarkMode(mediaQuery.matches);
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const modalId = useId();
+  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
+  const label = (
+    <>
+      {props.label}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div >
+    </>
+  )
+  return (
+    <>
+      <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
+        <div className="relative w-full">
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+            disabled={true}
+            rows={3}
+            wrap="off"
+            name={props.name}
+            value={props.paramValue}
+          ></textarea>
+          <div
+            className="absolute inset-0 cursor-pointer"
+            onClick={openModal}
+          ></div>
+        </div>
+      </InputField>
+      <CodeModal
+        modalId={modalId}
+        humanName={props.label}
+        value={concatenate(props.paramValue)}
+        onChange={onChangeCallback}
+        isDarkMode={isDarkMode}
+        inputError={props.inputError}
+      />
+    </>
+  );
+}
+
+
+export function CodeModal(
+  { modalId, humanName, value, onChange, isDarkMode, inputError }: {
+    modalId: string;
+    humanName: string;
+    value: string;
+    onChange: (value: string) => void;
+    isDarkMode: boolean;
+    inputError: string | undefined;
+  }) {
+  return (
+    <dialog
+      id={modalId}
+      className="modal nopan nodelete nodrag noflow nowheel"
+    >
+      <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+        <div className="flex-grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg bottom-2 capitalize">
+            {humanName}
+          </h4>
+          <CodeMirror
+            value={value}
+            onChange={onChange}
+            className="textarea textarea-bordered h-full w-full flex-grow"
+            height="100%"
+            width="100%"
+            theme={isDarkMode ? githubDark : githubLight}
+            extensions={[
+              python(),
+            ]}
+          />
+        </div>
+        <div className="flex flex-col">
+            <span className="text-red-500">{inputError}</span>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        {/* Allows closing the modal by clicking outside of it */}
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
 
 
 export function TextModal(

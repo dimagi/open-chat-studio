@@ -10,7 +10,7 @@ from apps.audit.transaction import get_audit_transaction_id
 from apps.teams.utils import get_current_team
 from apps.users.models import CustomUser
 
-log = logging.getLogger("audit")
+log = logging.getLogger("ocs.audit")
 
 
 class AuditContextProvider(SystemUserAuditor):

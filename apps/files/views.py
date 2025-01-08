@@ -15,7 +15,7 @@ from apps.files.forms import MultipleFileFieldForm
 from apps.files.models import File
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.files")
 
 
 class FileView(LoginAndTeamRequiredMixin, View):

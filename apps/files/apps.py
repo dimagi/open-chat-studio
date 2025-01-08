@@ -5,7 +5,7 @@ from django.db.models.signals import pre_delete
 
 from apps.utils.deletion import get_related_m2m_objects
 
-log = logging.getLogger("files")
+log = logging.getLogger("ocs.files")
 
 
 class FilesConfig(AppConfig):

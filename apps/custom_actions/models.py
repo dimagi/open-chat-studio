@@ -100,6 +100,13 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         null=True,
         blank=True,
     )
+    node = models.ForeignKey(
+        "pipelines.Node",
+        on_delete=models.CASCADE,
+        related_name="custom_action_operations",
+        null=True,
+        blank=True,
+    )
     custom_action = models.ForeignKey(CustomAction, on_delete=models.CASCADE)
     operation_id = models.CharField(max_length=255)
     _operation_schema = models.JSONField(default=dict)
@@ -110,8 +117,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                check=Q(experiment__isnull=False) | Q(assistant__isnull=False),
-                name="experiment_or_assistant_required",
+                check=Q(experiment__isnull=False) | Q(assistant__isnull=False) | Q(node__isnull=False),
+                name="experiment_or_assistant_or_node_required",
             ),
             models.UniqueConstraint(
                 fields=["experiment", "custom_action", "operation_id"],
@@ -149,14 +156,16 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment=None, new_assistant=None):
-        if not (new_experiment or new_assistant):
+    def create_new_version(self, new_experiment=None, new_assistant=None, new_node=None):
+        action_holders = [new_experiment, new_assistant, new_node]
+        if not action_holders:
             raise ValueError("Either new_experiment or new_assistant must be provided")
-        if new_experiment and new_assistant:
+        if len([holder for holder in action_holders if holder is not None]) > 1:
             raise ValueError("Only one of new_experiment or new_assistant can be provided")
         new_instance = super().create_new_version(save=False)
         new_instance.experiment = new_experiment
         new_instance.assistant = new_assistant
+        new_instance.node = new_node
         new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)
         new_instance.save()
         return new_instance
@@ -164,8 +173,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["experiment", "assistant", "_operation_schema"]
 
-    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
-        changes = super().compare_with_model(new, exclude_fields)
+    def compare_with_model(self, new: Self, exclude_fields: list[str], early_abort=False) -> set:
+        changes = super().compare_with_model(new, exclude_fields, early_abort=early_abort)
         if self.operation_schema != new.operation_schema:
             changes.add("operation_schema")
         return changes

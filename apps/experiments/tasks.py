@@ -20,7 +20,7 @@ from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
