@@ -137,8 +137,11 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
         return assistant_version
 
-    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
-        changes = super().compare_with_model(new, exclude_fields)
+    def compare_with_model(self, new: Self, exclude_fields: list[str], early_abort=False) -> set:
+        changes = super().compare_with_model(new, exclude_fields, early_abort=early_abort)
+        if early_abort and changes:
+            return changes
+
         new_name = new.name.split(f" v{new.version_number}")[0]
         if self.name != new_name:
             changes.add("name")
@@ -151,11 +154,16 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             exclude_fields = self.DEFAULT_EXCLUDED_KEYS + ["extra", "assistant"]
             for tool_type, resource in tool_resources.items():
                 new_resource = new_tool_resources[tool_type]
-                if tool_changes := resource.compare_with_model(new_resource, exclude_fields):
+                if tool_changes := resource.compare_with_model(new_resource, exclude_fields, early_abort=early_abort):
                     changes.update([f"tool_resources.{tool_type}.{change}" for change in tool_changes])
 
+        if early_abort and changes:
+            return changes
+
         custom_actions = VersionField("custom_actions", queryset=self.custom_action_operations.all())
-        custom_actions.compare(VersionField("custom_actions", queryset=new.custom_action_operations.all()))
+        custom_actions.compare(
+            VersionField("custom_actions", queryset=new.custom_action_operations.all()), early_abort=early_abort
+        )
         if custom_actions.changed:
             changes.add("custom_actions")
         return changes
