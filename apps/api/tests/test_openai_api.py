@@ -50,7 +50,7 @@ def api_key(team_with_users):
 )
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
-    mock_experiment_response.return_value = "I am fine, thank you."
+    mock_experiment_response.return_value = "So, this ain't the end, I saw you again today"
 
     base_url = f"{live_server.url}/api/openai/{experiment.public_id}"
 
@@ -64,6 +64,14 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hi, how are you?"},
+            {"role": "assistant", "content": "Lekker!"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Sing a song for me"},
+                    {"type": "text", "text": "Barracuda"},
+                ],
+            },
         ],
     )
 
@@ -71,8 +79,10 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
     session = ExperimentSession.objects.first()
     assert completion.id == session.external_id
     assert completion.model == experiment.llm_provider_model.name
-    assert completion.choices[0].message.content == "I am fine, thank you."
-    assert mock_experiment_response.call_args_list == [call(message="Hi, how are you?")]
+    assert completion.choices[0].message.content == "So, this ain't the end, I saw you again today"
+    assert mock_experiment_response.call_args_list == [call(message="Sing a song for me Barracuda")]
     assert [(m.message_type, m.content) for m in session.chat.messages.all()] == [
         ("system", "You are a helpful assistant."),
+        ("human", "Hi, how are you?"),
+        ("ai", "Lekker!"),
     ]
