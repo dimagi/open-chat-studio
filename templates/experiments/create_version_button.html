@@ -13,7 +13,7 @@
   </div>
 {% else %}
   <a class="btn btn-sm btn-outline btn-success" href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}"
-     {% if trigger_refresh %}x-init='htmx.trigger("#versions-table", "refetch-versions")'{% endif %}
+     {% if trigger_refresh %}x-init='htmx.trigger(".watchVersionChange", "version-changed")'{% endif %}
   >
     <i class="fa-regular fa-plus"></i> Create Version
   </a>

@@ -36,6 +36,7 @@ from .experiment import (  # noqa: F401
     generate_chat_export,
     get_export_download_link,
     get_message_response,
+    get_release_status_badge,
     poll_messages,
     send_invitation,
     set_default_experiment,

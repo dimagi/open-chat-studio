@@ -766,7 +766,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         version = self.version
         if prev_version := self.latest_version:
-            version.compare(prev_version.version)
+            version.compare(prev_version.version, early_abort=True)
         return version.fields_changed
 
     @transaction.atomic()
@@ -1156,7 +1156,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
             description = f"{description} since {changed_fields} changed."
         return description
 
-    def compare_with_model(self, route: "ExperimentRoute", exclude_fields):
+    def compare_with_model(self, route: "ExperimentRoute", exclude_fields, early_abort=False):
         """
         When comparing two ExperimentRoute versions (with the same parents), consider the following:
 
@@ -1172,22 +1172,24 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         """
         is_same_family = self.get_working_version() == route.get_working_version()
         if not is_same_family:
-            return super().compare_with_model(route, exclude_fields)
+            return super().compare_with_model(route, exclude_fields, early_abort=early_abort)
 
         fields_to_exclude = exclude_fields.copy()
         fields_to_exclude.extend(["parent"])
 
         if not (self.child == route.child.get_working_version() or self.child.get_working_version() == route.child):
-            return super().compare_with_model(route, fields_to_exclude)
+            return super().compare_with_model(route, fields_to_exclude, early_abort=early_abort)
 
         fields_to_exclude.append("child")
         # Compare all other fields first
-        results = list(super().compare_with_model(route, fields_to_exclude))
+        results = list(super().compare_with_model(route, fields_to_exclude, early_abort=early_abort))
+        if early_abort and results:
+            return set(results)
 
         # Now compare the children
         version1 = self.child.version
         version2 = route.child.version
-        version1.compare(version2)
+        version1.compare(version2, early_abort=early_abort)
         child_changes = [field.name for field in version1.fields if field.changed]
 
         results.extend(list(child_changes))

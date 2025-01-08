@@ -173,8 +173,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["experiment", "assistant", "_operation_schema"]
 
-    def compare_with_model(self, new: Self, exclude_fields: list[str]) -> set:
-        changes = super().compare_with_model(new, exclude_fields)
+    def compare_with_model(self, new: Self, exclude_fields: list[str], early_abort=False) -> set:
+        changes = super().compare_with_model(new, exclude_fields, early_abort=early_abort)
         if self.operation_schema != new.operation_schema:
             changes.add("operation_schema")
         return changes
