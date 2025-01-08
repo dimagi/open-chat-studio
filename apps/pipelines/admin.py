@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Pipeline, PipelineChatHistory, PipelineChatMessages, PipelineRun
+from .models import Node, Pipeline, PipelineChatHistory, PipelineChatMessages, PipelineRun
 
 
 class PipelineRunInline(admin.TabularInline):
@@ -8,9 +8,14 @@ class PipelineRunInline(admin.TabularInline):
     extra = 0
 
 
+class PipelineNodeInline(admin.TabularInline):
+    model = Node
+    extra = 0
+
+
 @admin.register(Pipeline)
 class PipelineAdmin(admin.ModelAdmin):
-    inlines = [PipelineRunInline]
+    inlines = [PipelineNodeInline, PipelineRunInline]
 
 
 class PipelineChatMessagesInline(admin.TabularInline):
