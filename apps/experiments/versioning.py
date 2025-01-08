@@ -135,8 +135,8 @@ class VersionField:
             else:
                 version_field.changed = self.changed = True
 
-        if early_abort and self.changed:
-            return
+            if early_abort and self.changed:
+                return
 
         for previous_record in previous_queryset.exclude(id__in=previous_record_version_ids):
             # A previous record missing from the current queryset means that something changed

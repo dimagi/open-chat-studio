@@ -1134,7 +1134,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
                 # Compare experimens using their `version` instances for a comprehensive comparison
                 child_version = self.child.version
                 latest_version = latest_child_version.version
-                child_version.compare(latest_version, early_abort=True)
+                child_version.compare(latest_version)
 
                 if not child_version.fields_changed:
                     new_child = latest_child_version
