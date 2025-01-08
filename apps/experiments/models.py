@@ -766,7 +766,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         version = self.version
         if prev_version := self.latest_version:
-            version.compare(prev_version.version)
+            version.compare(prev_version.version, early_abort=True)
         return version.fields_changed
 
     @transaction.atomic()
