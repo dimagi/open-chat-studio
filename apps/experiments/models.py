@@ -1182,7 +1182,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
 
         fields_to_exclude.append("child")
         # Compare all other fields first
-        results = list(super().compare_with_model(route, fields_to_exclude), early_abort=early_abort)
+        results = list(super().compare_with_model(route, fields_to_exclude, early_abort=early_abort))
         if early_abort and results:
             return set(results)
 
