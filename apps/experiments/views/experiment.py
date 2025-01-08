@@ -1528,3 +1528,10 @@ def experiment_version_details(request, team_slug: str, experiment_id: int, vers
 
     context = {"version_details": experiment_version.version, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
+
+
+@login_and_team_required
+def get_release_status_badge(request, team_slug: str, experiment_id: int):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    context = {"has_changes": experiment.compare_with_latest, "experiment": experiment}
+    return render(request, "experiments/components/unreleased_badge.html", context)
