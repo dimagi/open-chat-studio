@@ -44,7 +44,7 @@ class TestNode:
             assistant = assistant.create_new_version()
 
         pipeline = PipelineFactory()
-        NodeFactory(type="AssistantNode", pipeline=pipeline, params={"assistant_id": assistant.id})
+        NodeFactory(type="AssistantNode", pipeline=pipeline, params={"assistant_id": str(assistant.id)})
         assert pipeline.node_set.filter(type="AssistantNode").exists()
 
         pipeline.create_new_version()
@@ -57,11 +57,11 @@ class TestNode:
         node_version_assistant_id = node_version.params["assistant_id"]
 
         if versioned_assistant_linked:
-            assert original_node_assistant_id == node_version_assistant_id == assistant.id
+            assert original_node_assistant_id == node_version_assistant_id == str(assistant.id)
         else:
             assert original_node_assistant_id != node_version_assistant_id
-            assert original_node_assistant_id == assistant.id
-            assert node_version_assistant_id == assistant_version.id
+            assert original_node_assistant_id == str(assistant.id)
+            assert node_version_assistant_id == str(assistant_version.id)
 
 
 class TestPipeline:

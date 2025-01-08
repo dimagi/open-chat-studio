@@ -338,7 +338,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
             if not assistant.is_a_version:
                 assistant_version = assistant.create_new_version()
-                new_version.params["assistant_id"] = assistant_version.id
+                # convert to string to be consistent with values from the UI
+                new_version.params["assistant_id"] = str(assistant_version.id)
 
         new_version.save()
         self._copy_custom_action_operations_to_new_version(new_node=new_version)
