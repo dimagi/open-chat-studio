@@ -1,13 +1,16 @@
+import json
 import os
 from unittest.mock import call, patch
 
 import pytest
+from django.urls import reverse
 from openai import OpenAI
 from pytest_django.fixtures import live_server_helper
 
 from apps.api.models import UserAPIKey
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.tests.clients import ApiTestClient
 
 
 @pytest.fixture()
@@ -86,3 +89,32 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
         ("human", "Hi, how are you?"),
         ("ai", "Lekker!"),
     ]
+
+
+@pytest.mark.django_db()
+def test_unsupported_message_type(experiment):
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    url = reverse("api:openai-chat-completions", kwargs={"experiment_id": experiment.public_id})
+    data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "selfie!"},
+                    {"type": "image_url", "image_url": "https://example.com/image.jpg"},
+                ],
+            },
+        ]
+    }
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": None,
+            "message": "Only text messages are supported",
+            "param": None,
+            "type": "error",
+        }
+    }
