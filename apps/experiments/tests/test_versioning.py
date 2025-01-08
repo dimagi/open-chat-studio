@@ -77,6 +77,28 @@ class TestVersion:
         assert changed_field.changed is True
         assert changed_field.previous_field_version.raw_value == 0.2
 
+    def test_early_abort(self):
+        experiment = ExperimentFactory(name="One", temperature=0.1)
+        exp_version = experiment.create_new_version()
+
+        experiment.name = "Two"
+        experiment.temperature = 1
+        experiment.save()
+
+        working_version = experiment.version
+        version_version = exp_version.version
+
+        working_version.compare(version_version)
+        changed_fields = [field.name for field in working_version.fields if field.changed]
+        assert len(changed_fields) == 2
+
+        # Early abort should only detect one change
+        working_version = experiment.version
+        version_version = exp_version.version
+        working_version.compare(version_version, early_abort=True)
+        changed_fields = [field.name for field in working_version.fields if field.changed]
+        assert len(changed_fields) == 1
+
     def test_compare_querysets_with_equal_results(self):
         experiment = ExperimentFactory()
         queryset = Experiment.objects.filter(id=experiment.id)
