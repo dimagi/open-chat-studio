@@ -40,6 +40,7 @@ def test_differs():
     assert differs(True, False) is True
 
 
+@pytest.mark.django_db()
 class TestVersion:
     def test_compare(self):
         instance1 = ExperimentFactory.build(temperature=0.1)
@@ -76,7 +77,6 @@ class TestVersion:
         assert changed_field.changed is True
         assert changed_field.previous_field_version.raw_value == 0.2
 
-    @pytest.mark.django_db()
     def test_compare_querysets_with_equal_results(self):
         experiment = ExperimentFactory()
         queryset = Experiment.objects.filter(id=experiment.id)
@@ -89,7 +89,6 @@ class TestVersion:
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == experiment
 
-    @pytest.mark.django_db()
     def test_compare_querysets_with_results_of_differing_versions(self):
         experiment = ExperimentFactory()
         queryset = Experiment.objects.filter(id=experiment.id)
@@ -105,7 +104,6 @@ class TestVersion:
         assert queryset_result_version.raw_value == experiment
         assert queryset_result_version.previous_field_version.raw_value == new_version
 
-    @pytest.mark.django_db()
     def test_compare_querysets_with_different_results(self):
         """
         When comparing different querysets, we expect two result versions to be created. One for the current queryset
@@ -167,7 +165,6 @@ class TestVersion:
             if group.name == temerature_group_name:
                 assert group.has_changed_fields is True
 
-    @pytest.mark.django_db()
     def test_new_queryset_is_empty(self):
         """This tests the case where a queryset's previous results are not empty, but the current results are"""
         # Let's use experiment sessions as an example
