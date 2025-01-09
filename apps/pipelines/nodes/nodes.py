@@ -21,11 +21,12 @@ from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.datamodels import Attachment
+from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.models import Node, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -194,6 +195,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         description="The tools to enable for the bot",
         json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.agent_tools),
     )
+    custom_actions: list[str] = Field(
+        default_factory=list,
+        description="Custom actions to enable for the bot",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.custom_actions),
+    )
 
     @field_validator("tools", mode="before")
     def check_prompt_variables(cls, value: str, info: FieldValidationInfo):
@@ -206,8 +212,15 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             raise PydanticCustomError("invalid_prompt", e.error_dict["prompt"][0].message)
         return value
 
+    @field_validator("custom_actions", mode="before")
+    def validate_custom_actions(cls, value):
+        if value is None:
+            return []
+        return value
+
     def _process(self, input, state: PipelineState, node_id: str) -> PipelineState:
         session: ExperimentSession | None = state.get("experiment_session")
+        pipeline_version = state.get("pipeline_version")
         # Get runnable
         provider_model = self.get_llm_provider_model()
         chat_model = self.get_chat_model()
@@ -219,8 +232,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
             max_token_limit=provider_model.max_token_limit,
             chat_model=chat_model,
         )
+
+        node = Node.objects.get(flow_id=node_id, pipeline__version_number=pipeline_version)
+        tools = get_node_tools(node, session)
         chat_adapter = ChatAdapter.for_pipeline(
-            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model
+            session=session, node=self, llm_service=self.get_llm_service(), provider_model=provider_model, tools=tools
         )
         if self.tools_enabled():
             chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
@@ -232,7 +248,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin):
         return PipelineState.from_node_output(node_id=node_id, output=result.output)
 
     def tools_enabled(self) -> bool:
-        return len(self.tools) > 0
+        return len(self.tools) > 0 or len(self.custom_actions) > 0
 
 
 class SendEmail(PipelineNode):

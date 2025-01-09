@@ -178,6 +178,11 @@ urlpatterns = [
         views.rate_message,
         name="rate_message",
     ),
+    path(
+        "e/<int:experiment_id>/release_status_badge",
+        views.get_release_status_badge,
+        name="get_release_status_badge",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))

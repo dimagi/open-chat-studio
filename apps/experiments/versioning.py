@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     pass
 
 
-def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None) -> bool:
+def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None, early_abort=False) -> bool:
     """
     Compares the value (or attributes in the case of a Model) between `original` and `new`.
     Returns `True` if it differs and `False` if not.
@@ -21,7 +21,7 @@ def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = No
     """
     exclude_model_fields = exclude_model_fields or []
     if isinstance(original, VersioningMixin) and isinstance(new, VersioningMixin):
-        return bool(original.compare_with_model(new, exclude_model_fields))
+        return bool(original.compare_with_model(new, exclude_model_fields, early_abort=early_abort))
     return original != new
 
 
@@ -76,10 +76,15 @@ class VersionField:
             return self.to_display(self.raw_value)
         return self.raw_value or ""
 
-    def compare(self, previous_field_version: "VersionField"):
+    def compare(self, previous_field_version: "VersionField", early_abort=False):
+        """
+        Args:
+            previous_field_version (VersionField): The previous version field to compare against.
+            early_abort (bool): If True, the comparison will stop as soon as the first difference is found.
+        """
         self.previous_field_version = previous_field_version
         if self.is_queryset:
-            self._compare_queryset(previous_field_version.queryset)
+            self._compare_queryset(previous_field_version.queryset, early_abort=early_abort)
         else:
             exclude_fields = []
             current_val = self.raw_value
@@ -92,12 +97,12 @@ class VersionField:
                 else:
                     exclude_fields = current_val.get_fields_to_exclude()
 
-            if differs(current_val, previous_val, exclude_model_fields=exclude_fields):
+            if differs(current_val, previous_val, exclude_model_fields=exclude_fields, early_abort=early_abort):
                 self.changed = True
                 if isinstance(self.raw_value, str):
                     self._compute_character_level_diff()
 
-    def _compare_queryset(self, previous_queryset):
+    def _compare_queryset(self, previous_queryset, early_abort=False):
         """
         Compares two querysets by checking the differences between their results.
 
@@ -125,14 +130,19 @@ class VersionField:
                 # TODO: When comparing static trigger versions and only the action changed, it is not being picked up.
                 previous_record_version_ids.append(previous_record.id)
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
-                version_field.compare(prev_version_field)
+                version_field.compare(prev_version_field, early_abort=early_abort)
                 self.changed = self.changed or version_field.changed
             else:
                 version_field.changed = self.changed = True
 
+            if early_abort and self.changed:
+                return
+
         for previous_record in previous_queryset.exclude(id__in=previous_record_version_ids):
             # A previous record missing from the current queryset means that something changed
             self.changed = True
+            if early_abort:
+                return
             prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
             self.queryset_result_versions.append(version_field)
@@ -184,8 +194,14 @@ class Version:
             group_info.fields.append(field)
         return list(groups.values())
 
-    def compare(self, previous_version_details: "Version"):
-        """Compares the current instance with the previous version and updates the changed status of fields."""
+    def compare(self, previous_version_details: "Version", early_abort: bool = False):
+        """
+        Compares the current instance with the previous version and updates the changed status of fields.
+
+        Args:
+            previous_version_details (Version): The previous version details to compare against.
+            early_abort (bool): If True, the comparison will stop as soon as the first difference is found.
+        """
         previous_instance = previous_version_details.instance
 
         if type(previous_instance) != type(self.instance):  # noqa: E721
@@ -198,5 +214,7 @@ class Version:
 
         for field in self.fields:
             previous_field_version = previous_version_details.get_field(field.name)
-            field.compare(previous_field_version)
+            field.compare(previous_field_version, early_abort=early_abort)
             self.fields_changed = self.fields_changed or field.changed
+            if field.changed and early_abort:
+                return
