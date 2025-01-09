@@ -13,8 +13,7 @@ from apps.users.models import CustomUser
 @contextmanager
 def temporary_session(team: Team, user_id: int):
     """A temporary sesssion setup that is rolled back after the context exits."""
-    with current_team(team):
-        with transaction.atomic():
+    with current_team(team), transaction.atomic():
             user = CustomUser.objects.get(id=user_id)
             consent_form = ConsentForm.get_default(team)
             experiment = Experiment.objects.create(
