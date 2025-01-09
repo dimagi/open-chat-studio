@@ -14,20 +14,20 @@ from apps.users.models import CustomUser
 def temporary_session(team: Team, user_id: int):
     """A temporary sesssion setup that is rolled back after the context exits."""
     with current_team(team), transaction.atomic():
-            user = CustomUser.objects.get(id=user_id)
-            consent_form = ConsentForm.get_default(team)
-            experiment = Experiment.objects.create(
-                team=team, name="Temporary Experiment", owner=user, consent_form=consent_form
-            )
-            channel = ExperimentChannel.objects.get_team_web_channel(team)
-            chat = Chat.objects.create(team=team, name="Temporary Chat")
-            participant, _ = Participant.objects.get_or_create(user=user, team=team, platform=ChannelPlatform.WEB)
-            experiment_session = ExperimentSession.objects.create(
-                team=team,
-                experiment=experiment,
-                chat=chat,
-                experiment_channel=channel,
-                participant=participant,
-            )
-            yield experiment_session
-            transaction.set_rollback(True)
+        user = CustomUser.objects.get(id=user_id)
+        consent_form = ConsentForm.get_default(team)
+        experiment = Experiment.objects.create(
+            team=team, name="Temporary Experiment", owner=user, consent_form=consent_form
+        )
+        channel = ExperimentChannel.objects.get_team_web_channel(team)
+        chat = Chat.objects.create(team=team, name="Temporary Chat")
+        participant, _ = Participant.objects.get_or_create(user=user, team=team, platform=ChannelPlatform.WEB)
+        experiment_session = ExperimentSession.objects.create(
+            team=team,
+            experiment=experiment,
+            chat=chat,
+            experiment_channel=channel,
+            participant=participant,
+        )
+        yield experiment_session
+        transaction.set_rollback(True)
