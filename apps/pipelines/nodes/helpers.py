@@ -6,13 +6,14 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
+from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
 
 @contextmanager
 def temporary_session(team: Team, user_id: int):
     """A temporary sesssion setup that is rolled back after the context exits."""
-    with transaction.atomic():
+    with current_team(team), transaction.atomic():
         user = CustomUser.objects.get(id=user_id)
         consent_form = ConsentForm.get_default(team)
         experiment = Experiment.objects.create(
