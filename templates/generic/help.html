@@ -1,14 +1,11 @@
 {% comment %}
-Renders a help icon with the content shown on hover. This can be used directly or via the `apps.generics.help.render_field_help` function.
+Renders a help icon with the content shown on hover. This is mostly used in form field rendering but can
+also be used in other places.
 
 Using directly:
 
   {% blocktranslate asvar help_text %}The help text.{% endblocktranslate %}
   {% include "generic/help.html" with help_content=help_text %}
-
-Using via `render_field_help`:
-
-  render_field_help(help_content, docs_link="/relative/docs/link")
 
 {% endcomment %}
 <div class="dropdown dropdown-right dropdown-hover dropdown-end">
