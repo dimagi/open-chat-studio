@@ -9,7 +9,7 @@ from apps.custom_actions.form_utils import (
 )
 from apps.experiments.models import AgentTools
 from apps.files.forms import get_file_formset
-from apps.generics.help import render_field_help
+from apps.generics.help import render_help_with_link
 from apps.utils.prompt import validate_prompt_variables
 
 INSTRUCTIONS_HELP_TEXT = """
@@ -58,7 +58,9 @@ class OpenAiAssistantForm(forms.ModelForm):
         self.fields["builtin_tools"].widget.attrs = {
             "x-model.fill": "builtinTools",
         }
-        self.fields["instructions"].help_text = render_field_help(INSTRUCTIONS_HELP_TEXT, "/concepts/prompt_variables/")
+        self.fields["instructions"].help_text = render_help_with_link(
+            INSTRUCTIONS_HELP_TEXT, "/concepts/prompt_variables/"
+        )
         initialize_form_for_custom_actions(request.team, self)
 
     def clean_custom_action_operations(self):

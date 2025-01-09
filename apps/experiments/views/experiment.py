@@ -88,7 +88,7 @@ from apps.files.forms import get_file_formset
 from apps.files.models import File
 from apps.files.views import BaseAddFileHtmxView, BaseDeleteFileView
 from apps.generics.chips import Chip
-from apps.generics.help import render_field_help
+from apps.generics.help import render_help_with_link
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -291,8 +291,10 @@ class ExperimentForm(forms.ModelForm):
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
         self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
 
-        self.fields["prompt_text"].help_text = render_field_help(self.PROMPT_HELP_TEXT, "/concepts/prompt_variables/")
-        self.fields["type"].help_text = render_field_help("", "/concepts/experiment/")
+        self.fields["prompt_text"].help_text = render_help_with_link(
+            self.PROMPT_HELP_TEXT, "/concepts/prompt_variables/"
+        )
+        self.fields["type"].help_text = render_help_with_link("", "/concepts/experiment/")
 
     def clean_participant_allowlist(self):
         cleaned_identifiers = []
