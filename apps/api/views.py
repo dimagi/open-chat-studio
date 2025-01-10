@@ -1,5 +1,8 @@
+import base64
+import os
 import textwrap
 
+import requests
 from django.contrib.auth.decorators import permission_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -8,10 +11,11 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, mixins, status
-from rest_framework.decorators import api_view, renderer_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, renderer_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
+from rest_framework.views import Request
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView
@@ -24,6 +28,8 @@ from apps.api.serializers import (
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+
+VERIFY_CONNECT_ID_URL = "https://connectid.dimagi.com/o/userinfo"
 
 
 @extend_schema_view(
@@ -305,3 +311,26 @@ def file_content_view(request, pk: int):
         return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
     except FileNotFoundError:
         raise Http404()
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([])
+def generate_key(request: Request):
+    """Generates a key for a specific channel to use for secure communication"""
+    token = request.META["HTTP_AUTHORIZATION"]
+    response = requests.get(VERIFY_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    response.raise_for_status()
+    connectid = response.json().get("sub")
+    channel_id = request.data.get("channel_id")
+    try:
+        participant_data = ParticipantData.objects.get(
+            participant__identifier=connectid, system_metadata__channel_id=channel_id
+        )
+    except Participant.DoesNotExist:
+        raise Http404()
+
+    key = base64.b64encode(os.urandom(32)).decode("utf-8")
+    participant_data.encryption_key = key
+    participant_data.save(update_fields=["encryption_key"])
+    return Response({"key": key}, status=status.HTTP_200_OK)

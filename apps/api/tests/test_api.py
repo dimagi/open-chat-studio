@@ -1,14 +1,18 @@
+import base64
 import json
 import uuid
 
 import pytest
+import requests
+import responses
 from dateutil.relativedelta import relativedelta
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.experiments.models import Participant
+from apps.api.views import VERIFY_CONNECT_ID_URL
+from apps.experiments.models import Participant, ParticipantData
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -262,3 +266,59 @@ def test_update_participant_schedules(experiment):
         "time_period": "days",
     }
     assert updated_schedules[1].next_trigger_date == trigger_date3
+
+
+@pytest.mark.django_db()
+class TestConnectApis:
+    def _setup_participant(self, experiment, connect_id, channel_id):
+        participant = ParticipantFactory(team=experiment.team, identifier=connect_id)
+        return ParticipantData.objects.create(
+            team=experiment.team,
+            participant=participant,
+            content_object=experiment,
+            system_metadata={"channel_id": channel_id},
+        )
+
+    def _make_request(self, client, data):
+        token = uuid.uuid4()
+        url = reverse("api:commcare-connect:generate_key")
+        return client.post(
+            url, data=data, headers={"Authorization": f"Bearer {token}"}, content_type="application/json"
+        )
+
+    @responses.activate
+    def test_generate_key_success(self, client, experiment):
+        connect_id = uuid.uuid4().hex
+        channel_id = uuid.uuid4().hex
+        participant_data = self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+
+        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": connect_id})
+        responses.add(success_resp)
+
+        response = self._make_request(client=client, data={"channel_id": channel_id})
+
+        assert response.status_code == 200
+        base64_key = response.json()["key"]
+        assert base64.b64decode(base64_key) is not None
+        participant_data.refresh_from_db()
+        assert participant_data.encryption_key == base64_key
+
+    @responses.activate
+    def test_generate_key_cannot_the_find_user(self, client, experiment):
+        connect_id = uuid.uuid4().hex
+        channel_id = uuid.uuid4().hex
+        self._setup_participant(experiment, connect_id=connect_id, channel_id=channel_id)
+
+        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, json={"sub": "garbage"})
+        responses.add(success_resp)
+
+        response = self._make_request(client=client, data={"channel_id": channel_id})
+        assert response.status_code == 404
+
+    @responses.activate
+    def test_generate_key_fails_auth_at_connect(self, client):
+        success_resp = responses.Response(method="GET", url=VERIFY_CONNECT_ID_URL, status=401)
+        responses.add(success_resp)
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            self._make_request(client=client, data={})
