@@ -347,6 +347,7 @@ class TestConnectApis:
     def _get_request_headers(self, payload: dict) -> dict:
         msg = json.dumps(payload).encode("utf-8")
         key = settings.CONNECT_MESSAGING_SERVER_SECRET.encode()
+        digest = hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).digest()
         return {
-            "Authorization": hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).hexdigest(),
+            "X-MAC-DIGEST": base64.b64encode(digest),
         }
