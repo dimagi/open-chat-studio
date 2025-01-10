@@ -31,6 +31,7 @@
               </a>
             </div>
             <div
+              id="version-status-badge"
               class="watchVersionChange"
               hx-get="{% url 'experiments:get_release_status_badge' experiment.team.slug experiment.id %}"
               hx-trigger="load, version-changed"
